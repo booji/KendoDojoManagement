@@ -1,2 +1,2 @@
 # KendoDojoManagement
-Managing sessions, memebrs of a kendo dojo
+Managing sessions, members of a kendo dojo
