@@ -210,9 +210,9 @@ __marimo__/
 backend/.venv/
 
 # Node
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+node_modules/
+dist/
+.vite/
 
 # Env overrides (may contain real secrets)
 .env.local
