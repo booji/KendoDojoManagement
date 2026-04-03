@@ -1,0 +1,37 @@
+import {
+  LayoutDashboardIcon,
+  CalendarDaysIcon,
+  ClipboardListIcon,
+  UserIcon,
+  UsersIcon,
+  AwardIcon,
+  BarChartIcon,
+  SettingsIcon,
+  type LucideIcon,
+} from "lucide-react"
+
+export type NavItem = {
+  label: string
+  href: string
+  icon: LucideIcon
+}
+
+const MEMBER_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
+  { label: "Sessions", href: "/sessions", icon: CalendarDaysIcon },
+  { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
+  { label: "My Profile", href: "/profile", icon: UserIcon },
+]
+
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
+  { label: "Members", href: "/members", icon: UsersIcon },
+  { label: "Sessions", href: "/sessions", icon: CalendarDaysIcon },
+  { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
+  { label: "Grades", href: "/grades", icon: AwardIcon },
+  { label: "Reports", href: "/reports", icon: BarChartIcon },
+  { label: "Settings", href: "/settings", icon: SettingsIcon },
+]
+
+export const useNavItems = (role: "member" | "admin"): NavItem[] =>
+  role === "admin" ? ADMIN_NAV_ITEMS : MEMBER_NAV_ITEMS
