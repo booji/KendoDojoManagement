@@ -14,7 +14,6 @@ This file covers criterion 5 via browser tests, plus smoke-checks for the UI
 pages themselves.
 """
 
-import pytest
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
