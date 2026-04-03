@@ -34,6 +34,24 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
    .venv/bin/alembic upgrade head
    ```
 
+## Functional programming style
+- **Business logic lives in pure functions** — plain module-level functions, no side effects, no I/O
+- **Side effects at the edges only** — routers call pure functions, then write results via repos; pure functions never touch the DB or HTTP
+- **No classes except where the framework requires it** — SQLAlchemy models, `Abstract*Repository`, `Sql*Repository`, and `SQLAlchemyUnitOfWork` are the only permitted classes
+- **Immutable data in, immutable data out** — transform Pydantic models into new Pydantic models; never mutate an input argument
+- **No shared mutable state** — no module-level variables that change at runtime; configuration via dependency injection
+
+```python
+# Good — pure function, testable without DB
+def compute_membership_expiry(enrolled_on: date, months: int) -> date:
+    return enrolled_on + relativedelta(months=months)
+
+# Bad — business logic inside a route or repo method
+async def create_member(data: MemberCreate, repo: MemberRepo) -> Member:
+    data.expiry = data.enrolled_on + relativedelta(months=12)  # logic buried in I/O layer
+    return await repo.add(data)
+```
+
 ## Python style
 - `X | None` not `Optional[X]` — `list[X]` not `List[X]`
 - Ruff target `py313`, line-length `88`
