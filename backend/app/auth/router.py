@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy import update
 
 from app import config
+from app.auth.db_models import User
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import LoginRequest, RegisterRequest, UserClaims
+from app.auth.models import LoginRequest, RegisterRequest, ThemeUpdate, UserClaims
 from app.auth.service import login_user, register_user
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -49,6 +51,25 @@ async def me(
     claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
 ) -> UserClaims:
     return claims
+
+
+@router.patch("/me/theme", response_model=UserClaims)
+async def update_theme(
+    payload: ThemeUpdate,
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> UserClaims:
+    await uow.session.execute(
+        update(User).where(User.id == claims.sub).values(theme=payload.theme)
+    )
+    await uow.commit()
+    return UserClaims(
+        sub=claims.sub,
+        email=claims.email,
+        role=claims.role,
+        is_active=claims.is_active,
+        theme=payload.theme,
+    )
 
 
 @router.get("/admin-only", response_model=UserClaims)
