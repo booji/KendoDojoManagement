@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, useNavigate, Outlet } from "react-router-dom"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
+import { useTheme } from "@/hooks/useTheme"
 import AppShell from "@/components/AppShell"
 import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
@@ -19,10 +20,14 @@ import SettingsPage from "@/pages/SettingsPage"
 const AuthenticatedLayout = () => {
   const navigate = useNavigate()
   const [user, setUser] = useState<UserClaims | null>(null)
+  const { setTheme } = useTheme()
 
   useEffect(() => {
     getMe()
-      .then(setUser)
+      .then((me) => {
+        setUser(me)
+        setTheme(me.theme)
+      })
       .catch((err: unknown) => {
         if (isApiError(err) && (err.status === 401 || err.status === 403)) {
           navigate("/login", { replace: true })
@@ -30,6 +35,7 @@ const AuthenticatedLayout = () => {
           navigate("/login", { replace: true })
         }
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate])
 
   if (user === null) {
