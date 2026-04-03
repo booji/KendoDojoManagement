@@ -32,7 +32,7 @@ async def login_password(
         value=token_response.access_token,
         httponly=True,
         samesite="strict",
-        secure=False,  # set True in prod via config
+        secure=config.COOKIE_SECURE,
         max_age=60 * int(config.JWT_EXPIRE_MINUTES),
     )
     return {"detail": "logged in"}

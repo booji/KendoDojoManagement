@@ -16,12 +16,19 @@ const RegisterPage = () => {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -67,6 +74,18 @@ const RegisterPage = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 autoComplete="new-password"
               />

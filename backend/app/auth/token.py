@@ -27,9 +27,11 @@ def encode_token(claims: UserClaims) -> str:
 
 def decode_token(token: str) -> UserClaims:
     try:
-        token_obj = jwt.decode(token, _key())
+        token_obj = jwt.decode(token, _key(), algorithms=["HS256"])
         payload = token_obj.claims
-    except Exception as exc:
+        if int(payload["exp"]) < int(datetime.now(UTC).timestamp()):
+            raise ValueError("Token expired")
+    except (ValueError, KeyError) as exc:
         raise ValueError("Invalid or expired token") from exc
     return UserClaims(
         sub=payload["sub"],
