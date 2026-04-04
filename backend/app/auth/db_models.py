@@ -11,3 +11,4 @@ class User(UUIDBase):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")

@@ -33,6 +33,7 @@ async def register_user(
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
+        theme=user.theme,  # type: ignore[arg-type]
     )
 
 
@@ -59,5 +60,6 @@ async def login_user(payload: LoginRequest, uow: AbstractUnitOfWork) -> TokenRes
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
+        theme=user.theme,  # type: ignore[arg-type]
     )
     return TokenResponse(access_token=encode_token(claims))
