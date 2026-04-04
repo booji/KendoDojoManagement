@@ -3,7 +3,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # e2e tests require live servers — excluded from the default run
-addopts = "--ignore=tests/test_e2e_auth.py --ignore=tests/test_e2e_shell.py --ignore=tests/test_e2e_sessions.py"
+addopts = "--ignore=tests/test_e2e_auth.py --ignore=tests/test_e2e_shell.py --ignore=tests/test_e2e_sessions.py --ignore=tests/test_e2e_docker.py"
 
 [tool.ruff]
 line-length = 88
