@@ -10,6 +10,7 @@ import SessionsPage from "@/pages/SessionsPage"
 import AttendancePage from "@/pages/AttendancePage"
 import ProfilePage from "@/pages/ProfilePage"
 import MembersPage from "@/pages/MembersPage"
+import MemberDetailPage from "@/pages/MemberDetailPage"
 import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
@@ -57,6 +58,7 @@ const App = () => (
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/members" element={<MembersPage />} />
+        <Route path="/members/:id" element={<MemberDetailPage />} />
         <Route path="/grades" element={<GradesPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

@@ -1,3 +1,559 @@
-const MembersPage = () => <h1>Members</h1>
+import { useEffect, useState, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
+import { listMembers, createMember } from "@/api/members"
+import type { MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
+import { isApiError } from "@/api/auth"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { PlusIcon, SearchIcon } from "lucide-react"
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+const STATUS_CLASSES: Record<MembershipStatus, string> = {
+  active: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300",
+  inactive: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400",
+  suspended: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400",
+}
+
+const StatusBadge = ({ status }: { status: MembershipStatus }) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
+    aria-label={`Status: ${status}`}
+  >
+    {status.charAt(0).toUpperCase() + status.slice(1)}
+  </span>
+)
+
+// ── Role / Minor badges ───────────────────────────────────────────────────────
+
+const RoleBadges = ({ member }: { member: MemberResponse }) => (
+  <div className="flex flex-wrap gap-1">
+    {member.is_minor && (
+      <Badge
+        className="bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300"
+        aria-label="Minor — parental consent required"
+      >
+        Minor
+      </Badge>
+    )}
+    {member.is_coach && (
+      <Badge variant="secondary" aria-label="Coach">
+        Coach
+      </Badge>
+    )}
+    {member.is_first_aider && (
+      <Badge variant="outline" aria-label="First Aider">
+        First Aider
+      </Badge>
+    )}
+  </div>
+)
+
+// ── Add Member modal ──────────────────────────────────────────────────────────
+
+type AddMemberFormState = {
+  email: string
+  full_name: string
+  dob: string
+  join_date: string
+  membership_status: MembershipStatus
+  is_coach: boolean
+  is_first_aider: boolean
+  emergency_contact_name: string
+  emergency_contact_phone: string
+  federation_number: string
+  parental_consent_obtained: boolean
+}
+
+const defaultFormState = (): AddMemberFormState => ({
+  email: "",
+  full_name: "",
+  dob: "",
+  join_date: new Date().toISOString().slice(0, 10),
+  membership_status: "active",
+  is_coach: false,
+  is_first_aider: false,
+  emergency_contact_name: "",
+  emergency_contact_phone: "",
+  federation_number: "",
+  parental_consent_obtained: false,
+})
+
+type AddMemberDialogProps = {
+  open: boolean
+  onClose: () => void
+  onCreated: (member: MemberResponse) => void
+}
+
+const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => {
+  const [form, setForm] = useState<AddMemberFormState>(defaultFormState)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setForm(defaultFormState())
+      setError(null)
+      onClose()
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSaving(true)
+    try {
+      const payload: CreateMemberRequest = {
+        email: form.email,
+        full_name: form.full_name,
+        dob: form.dob,
+        join_date: form.join_date,
+        membership_status: form.membership_status,
+        is_coach: form.is_coach,
+        is_first_aider: form.is_first_aider,
+        emergency_contact_name: form.emergency_contact_name || null,
+        emergency_contact_phone: form.emergency_contact_phone || null,
+        federation_number: form.federation_number || null,
+        parental_consent_obtained: form.parental_consent_obtained,
+      }
+      const created = await createMember(payload)
+      onCreated(created)
+      setForm(defaultFormState())
+    } catch (err) {
+      setError(isApiError(err) ? err.message : "Failed to create member")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = <K extends keyof AddMemberFormState>(key: K, value: AddMemberFormState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }))
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Add Member</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} id="add-member-form" className="space-y-4 py-2">
+          {/* Name */}
+          <div className="space-y-1">
+            <Label htmlFor="full_name">Full name *</Label>
+            <Input
+              id="full_name"
+              value={form.full_name}
+              onChange={(e) => set("full_name", e.target.value)}
+              required
+              aria-required="true"
+              placeholder="Jane Smith"
+            />
+          </div>
+
+          {/* Email */}
+          <div className="space-y-1">
+            <Label htmlFor="email">Email *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              required
+              aria-required="true"
+              placeholder="jane@example.com"
+            />
+          </div>
+
+          {/* DOB */}
+          <div className="space-y-1">
+            <Label htmlFor="dob">Date of birth *</Label>
+            <Input
+              id="dob"
+              type="date"
+              value={form.dob}
+              onChange={(e) => set("dob", e.target.value)}
+              required
+              aria-required="true"
+            />
+          </div>
+
+          {/* Join date */}
+          <div className="space-y-1">
+            <Label htmlFor="join_date">Join date *</Label>
+            <Input
+              id="join_date"
+              type="date"
+              value={form.join_date}
+              onChange={(e) => set("join_date", e.target.value)}
+              required
+              aria-required="true"
+            />
+          </div>
+
+          {/* Status */}
+          <div className="space-y-1">
+            <Label htmlFor="membership_status_trigger">Status</Label>
+            <Select
+              value={form.membership_status}
+              onValueChange={(v) => set("membership_status", v as MembershipStatus)}
+            >
+              <SelectTrigger
+                id="membership_status_trigger"
+                className="w-full"
+                aria-label="Membership status"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Federation number */}
+          <div className="space-y-1">
+            <Label htmlFor="federation_number">Federation number</Label>
+            <Input
+              id="federation_number"
+              value={form.federation_number}
+              onChange={(e) => set("federation_number", e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+
+          {/* Emergency contact */}
+          <div className="space-y-1">
+            <Label htmlFor="emergency_contact_name">Emergency contact name</Label>
+            <Input
+              id="emergency_contact_name"
+              value={form.emergency_contact_name}
+              onChange={(e) => set("emergency_contact_name", e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="emergency_contact_phone">Emergency contact phone</Label>
+            <Input
+              id="emergency_contact_phone"
+              type="tel"
+              value={form.emergency_contact_phone}
+              onChange={(e) => set("emergency_contact_phone", e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+
+          {/* Checkboxes */}
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={form.is_coach}
+                onChange={(e) => set("is_coach", e.target.checked)}
+                aria-label="Is coach"
+              />
+              Coach
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={form.is_first_aider}
+                onChange={(e) => set("is_first_aider", e.target.checked)}
+                aria-label="Is first aider"
+              />
+              First Aider
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={form.parental_consent_obtained}
+                onChange={(e) => set("parental_consent_obtained", e.target.checked)}
+                aria-label="Parental consent obtained"
+              />
+              Parental consent obtained
+            </label>
+          </div>
+
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+
+        <DialogFooter>
+          <Button
+            type="submit"
+            form="add-member-form"
+            disabled={saving}
+            size="lg"
+          >
+            {saving ? "Saving…" : "Create"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Member row (desktop table row) ────────────────────────────────────────────
+
+type MemberRowProps = {
+  member: MemberResponse
+  onClick: () => void
+}
+
+const MemberRow = ({ member, onClick }: MemberRowProps) => (
+  <tr
+    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    onClick={onClick}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
+    tabIndex={0}
+    role="row"
+    aria-label={`View ${member.full_name}`}
+  >
+    <td className="py-3 pl-4 pr-2 font-medium">
+      <div className="flex flex-col gap-0.5">
+        <span>{member.full_name}</span>
+        <span className="text-xs text-muted-foreground">{member.email}</span>
+      </div>
+    </td>
+    <td className="py-3 px-2">
+      <StatusBadge status={member.membership_status} />
+    </td>
+    <td className="py-3 px-2 hidden sm:table-cell">
+      <RoleBadges member={member} />
+    </td>
+    <td className="py-3 pl-2 pr-4 text-sm text-muted-foreground hidden md:table-cell">
+      {new Date(member.join_date).toLocaleDateString("default", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}
+    </td>
+  </tr>
+)
+
+// ── Member card (mobile) ──────────────────────────────────────────────────────
+
+const MemberCard = ({ member, onClick }: MemberRowProps) => (
+  <Card
+    className="cursor-pointer hover:ring-ring/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    onClick={onClick}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
+    tabIndex={0}
+    role="button"
+    aria-label={`View ${member.full_name}`}
+  >
+    <CardContent className="py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-medium truncate">{member.full_name}</p>
+          <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            <StatusBadge status={member.membership_status} />
+            <RoleBadges member={member} />
+          </div>
+        </div>
+        <span className="text-xs text-muted-foreground shrink-0">
+          {new Date(member.join_date).toLocaleDateString("default", {
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+      </div>
+    </CardContent>
+  </Card>
+)
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+const MembersPage = () => {
+  const navigate = useNavigate()
+  const [members, setMembers] = useState<MemberResponse[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<MembershipStatus | "all">("all")
+  const [addOpen, setAddOpen] = useState(false)
+
+  const load = useCallback(() => {
+    setError(null)
+    const params = {
+      ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+      ...(search.trim() ? { search: search.trim() } : {}),
+    }
+    listMembers(params)
+      .then(setMembers)
+      .catch((err: unknown) => {
+        setError(isApiError(err) ? err.message : "Failed to load members")
+      })
+  }, [statusFilter, search])
+
+  // Load on filter/search change (debounced for search)
+  useEffect(() => {
+    const timer = setTimeout(load, search ? 300 : 0)
+    return () => clearTimeout(timer)
+  }, [load, search])
+
+  const handleCreated = (member: MemberResponse) => {
+    setAddOpen(false)
+    setMembers((prev) => (prev !== null ? [member, ...prev] : [member]))
+  }
+
+  return (
+    <div className="px-4 py-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl font-semibold">Members</h1>
+        <Button
+          size="lg"
+          onClick={() => setAddOpen(true)}
+          aria-label="Add member"
+        >
+          <PlusIcon aria-hidden="true" />
+          <span className="hidden sm:inline">Add member</span>
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-6">
+        <div className="relative flex-1">
+          <SearchIcon
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+            aria-hidden="true"
+          />
+          <Input
+            className="pl-8"
+            placeholder="Search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search members"
+          />
+        </div>
+
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as MembershipStatus | "all")}
+        >
+          <SelectTrigger aria-label="Filter by status" className="w-full sm:w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="suspended">Suspended</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Error */}
+      {error !== null && (
+        <p className="text-sm text-destructive mb-4" role="alert">
+          {error}
+        </p>
+      )}
+
+      {/* Loading */}
+      {members === null && error === null && (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {/* Empty */}
+      {members !== null && members.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-sm text-muted-foreground">No members found</p>
+          {(search !== "" || statusFilter !== "all") && (
+            <Button
+              variant="link"
+              className="mt-2"
+              onClick={() => { setSearch(""); setStatusFilter("all") }}
+              aria-label="Clear filters"
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Desktop table */}
+      {members !== null && members.length > 0 && (
+        <>
+          {/* Hidden on mobile */}
+          <div className="hidden sm:block rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+            <table
+              className="w-full text-sm"
+              role="table"
+              aria-label="Members list"
+            >
+              <thead className="bg-muted/50">
+                <tr role="row">
+                  <th className="py-2.5 pl-4 pr-2 text-left font-medium text-muted-foreground" scope="col">Name</th>
+                  <th className="py-2.5 px-2 text-left font-medium text-muted-foreground" scope="col">Status</th>
+                  <th className="py-2.5 px-2 text-left font-medium text-muted-foreground hidden sm:table-cell" scope="col">Roles</th>
+                  <th className="py-2.5 pl-2 pr-4 text-left font-medium text-muted-foreground hidden md:table-cell" scope="col">Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((m) => (
+                  <MemberRow
+                    key={m.id}
+                    member={m}
+                    onClick={() => navigate(`/members/${m.id}`)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <ul className="sm:hidden space-y-3" aria-label="Members list">
+            {members.map((m) => (
+              <li key={m.id}>
+                <MemberCard
+                  member={m}
+                  onClick={() => navigate(`/members/${m.id}`)}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <AddMemberDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={handleCreated}
+      />
+    </div>
+  )
+}
 
 export default MembersPage

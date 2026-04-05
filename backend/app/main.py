@@ -7,11 +7,13 @@ from sqlalchemy import insert, select
 
 # Import all models so their tables are registered with Base.metadata
 import app.auth.db_models  # noqa: F401
+import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
 from app.auth.router import router as auth_router
 from app.config import DATABASE_URL
 from app.db.base import Base
 from app.db.engine import engine
+from app.members.router import router as members_router
 from app.routers.health import router as health_router
 from app.sessions.db_models import SessionType
 from app.sessions.router import router as sessions_router
@@ -38,3 +40,4 @@ app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(sessions_router)
+app.include_router(members_router)
