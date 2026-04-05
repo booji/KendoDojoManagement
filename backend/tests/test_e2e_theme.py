@@ -251,7 +251,6 @@ def test_toggle_is_keyboard_navigable_with_visible_focus(page: Page) -> None:
     assert focused_label is not None and "Switch to" in focused_label
 
     # Activate with Space — should toggle the theme to the next value.
-    before_dark = _is_dark(page)
     page.keyboard.press("Space")
     page.wait_for_timeout(300)
     after_label = _current_theme_button_label(page)

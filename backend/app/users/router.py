@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
@@ -13,12 +14,23 @@ from app.members.dependencies import get_member_repo
 from app.members.models import MemberResponse, SelfUpdateMemberRequest
 from app.members.repository import AbstractMemberRepository
 from app.members.router import _to_response
+from app.users.dependencies import get_user_prefs_repo
+from app.users.preferences_repository import AbstractUserPrefsRepo
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_PrefsRepo = Annotated[AbstractUserPrefsRepo, Depends(get_user_prefs_repo)]
+
+
+class _PreferencesResponse(BaseModel):
+    theme: Literal["light", "dark", "system"]
+
+
+class _PreferencesUpdate(BaseModel):
+    theme: Literal["light", "dark", "system"]
 
 
 # ---------------------------------------------------------------------------
@@ -90,3 +102,34 @@ async def put_my_member(
     record = await repo.update(record["id"], data)
     await uow.commit()
     return _to_response(record)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# GET /users/me/preferences — returns caller's saved preferences
+# ---------------------------------------------------------------------------
+
+
+@router.get("/me/preferences")
+async def get_my_preferences(
+    claims: _Member,
+    repo: _PrefsRepo,
+) -> _PreferencesResponse:
+    theme = await repo.get_theme(claims.sub)
+    return _PreferencesResponse(theme=theme or "system")
+
+
+# ---------------------------------------------------------------------------
+# PUT /users/me/preferences — saves preferences and returns them
+# ---------------------------------------------------------------------------
+
+
+@router.put("/me/preferences")
+async def put_my_preferences(
+    payload: _PreferencesUpdate,
+    claims: _Member,
+    repo: _PrefsRepo,
+    uow: _UoW,
+) -> _PreferencesResponse:
+    theme = await repo.set_theme(claims.sub, payload.theme)
+    await uow.commit()
+    return _PreferencesResponse(theme=theme)
