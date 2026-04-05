@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+from datetime import date
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
+from app.auth.models import UserClaims
+from app.db.unit_of_work import AbstractUnitOfWork
+from app.dependencies import get_uow
+from app.members.dependencies import get_member_repo
+from app.members.models import CreateMemberRequest, MemberResponse, UpdateMemberRequest
+from app.members.repository import AbstractMemberRepository
+
+router = APIRouter(tags=["members"])
+
+_Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
+_UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
+_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+
+
+def _compute_is_minor(dob: str) -> bool:
+    """Return True if the person is under 18 years old as of today."""
+    birth = date.fromisoformat(dob) if isinstance(dob, str) else dob
+    today = date.today()
+    age = today.year - birth.year - (
+        (today.month, today.day) < (birth.month, birth.day)
+    )
+    return age < 18
+
+
+def _to_response(record: dict[str, Any]) -> MemberResponse:
+    dob = record.get("dob", "")
+    is_minor = _compute_is_minor(dob) if dob else False
+    return MemberResponse(
+        id=record["id"],
+        email=record["email"],
+        full_name=record["full_name"],
+        join_date=str(record.get("join_date", "")),
+        membership_status=record["membership_status"],
+        is_coach=record["is_coach"],
+        is_first_aider=record["is_first_aider"],
+        emergency_contact_name=record.get("emergency_contact_name"),
+        emergency_contact_phone=record.get("emergency_contact_phone"),
+        federation_number=record.get("federation_number"),
+        parental_consent_obtained=record.get("parental_consent_obtained", False),
+        is_minor=is_minor,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /members — admin only
+# ---------------------------------------------------------------------------
+
+
+@router.post("/members", status_code=status.HTTP_201_CREATED)
+async def create_member(
+    payload: CreateMemberRequest,
+    _claims: _Admin,
+    repo: _Repo,
+    uow: _UoW,
+) -> MemberResponse:
+    data = payload.model_dump()
+    # Convert date fields to ISO strings for storage
+    data["dob"] = data["dob"].isoformat()
+    data["join_date"] = data["join_date"].isoformat()
+    try:
+        record = await repo.add(data)
+        await uow.commit()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    return _to_response(record)
+
+
+# ---------------------------------------------------------------------------
+# GET /members — admin only, with optional status and search filters
+# ---------------------------------------------------------------------------
+
+
+@router.get("/members")
+async def list_members(
+    _claims: _Admin,
+    repo: _Repo,
+    status: str | None = None,
+    search: str | None = None,
+) -> list[MemberResponse]:
+    records = await repo.list(status=status, search=search)
+    return [_to_response(r) for r in records]
+
+
+# ---------------------------------------------------------------------------
+# GET /members/{id} — admin sees any; member sees own only
+# ---------------------------------------------------------------------------
+
+
+@router.get("/members/{member_id}")
+async def get_member(
+    member_id: str,
+    claims: _Member,
+    repo: _Repo,
+) -> MemberResponse:
+    record = await repo.get(member_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    # Admins may see any member; non-admins may only see their own profile
+    if claims.role != "admin":
+        user_id = record.get("user_id")
+        if user_id != claims.sub:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            )
+    return _to_response(record)
+
+
+# ---------------------------------------------------------------------------
+# PUT /members/{id} — admin only, partial update
+# ---------------------------------------------------------------------------
+
+
+@router.put("/members/{member_id}")
+async def update_member(
+    member_id: str,
+    payload: UpdateMemberRequest,
+    _claims: _Admin,
+    repo: _Repo,
+    uow: _UoW,
+) -> MemberResponse:
+    data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "dob" in data and hasattr(data["dob"], "isoformat"):
+        data["dob"] = data["dob"].isoformat()
+    if "join_date" in data and hasattr(data["join_date"], "isoformat"):
+        data["join_date"] = data["join_date"].isoformat()
+    record = await repo.update(member_id, data)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    await uow.commit()
+    return _to_response(record)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /members/{id} — admin only, deactivates (soft delete)
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/members/{member_id}")
+async def deactivate_member(
+    member_id: str,
+    _claims: _Admin,
+    repo: _Repo,
+    uow: _UoW,
+) -> MemberResponse:
+    record = await repo.deactivate(member_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    await uow.commit()
+    return _to_response(record)

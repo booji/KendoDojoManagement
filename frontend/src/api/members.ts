@@ -1,0 +1,169 @@
+import type { ApiError } from "@/api/auth"
+
+export type MembershipStatus = "active" | "inactive" | "suspended"
+
+export type MemberResponse = {
+  id: string
+  email: string
+  full_name: string
+  join_date: string
+  membership_status: MembershipStatus
+  is_coach: boolean
+  is_first_aider: boolean
+  emergency_contact_name: string | null
+  emergency_contact_phone: string | null
+  federation_number: string | null
+  parental_consent_obtained: boolean
+  is_minor: boolean
+}
+
+export type CreateMemberRequest = {
+  email: string
+  full_name: string
+  dob: string
+  join_date: string
+  membership_status?: MembershipStatus
+  is_coach?: boolean
+  is_first_aider?: boolean
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
+  federation_number?: string | null
+  parental_consent_obtained?: boolean
+}
+
+export type UpdateMemberRequest = {
+  email?: string
+  full_name?: string
+  dob?: string
+  join_date?: string
+  membership_status?: MembershipStatus
+  is_coach?: boolean
+  is_first_aider?: boolean
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
+  federation_number?: string | null
+  parental_consent_obtained?: boolean
+}
+
+export type ListMembersParams = {
+  status?: MembershipStatus
+  search?: string
+}
+
+const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {
+  let message = defaultMessage
+  try {
+    const body = (await res.json()) as { detail?: string }
+    if (body.detail) message = body.detail
+  } catch {
+    // ignore parse errors
+  }
+  throw { status: res.status, message } satisfies ApiError
+}
+
+export const listMembers = async (
+  params?: ListMembersParams
+): Promise<MemberResponse[]> => {
+  const url = new URL("/api/members", window.location.origin)
+  if (params?.status !== undefined) url.searchParams.set("status", params.status)
+  if (params?.search !== undefined) url.searchParams.set("search", params.search)
+
+  const res = await fetch(url.toString(), { credentials: "include" })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load members")
+  }
+
+  return res.json() as Promise<MemberResponse[]>
+}
+
+export const getMember = async (id: string): Promise<MemberResponse> => {
+  const res = await fetch(`/api/members/${id}`, { credentials: "include" })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 404) {
+    await throwApiError(res, "Member not found")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load member")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
+export const createMember = async (
+  data: CreateMemberRequest
+): Promise<MemberResponse> => {
+  const res = await fetch("/api/members", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 409) {
+    await throwApiError(res, "Email already registered")
+  }
+  if (res.status === 422) {
+    await throwApiError(res, "Invalid member data")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to create member")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
+export const updateMember = async (
+  id: string,
+  data: UpdateMemberRequest
+): Promise<MemberResponse> => {
+  const res = await fetch(`/api/members/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 404) {
+    await throwApiError(res, "Member not found")
+  }
+  if (res.status === 422) {
+    await throwApiError(res, "Invalid member data")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to update member")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
+export const deactivateMember = async (id: string): Promise<MemberResponse> => {
+  const res = await fetch(`/api/members/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 404) {
+    await throwApiError(res, "Member not found")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to deactivate member")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}

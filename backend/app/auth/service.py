@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.db_models import User
@@ -12,11 +12,19 @@ from app.db.unit_of_work import AbstractUnitOfWork
 async def register_user(
     payload: RegisterRequest, uow: AbstractUnitOfWork
 ) -> UserClaims:
-    """UoW is already entered by the FastAPI dependency — do not re-enter."""
+    """UoW is already entered by the FastAPI dependency — do not re-enter.
+
+    The first user to register on a fresh instance is promoted to admin
+    automatically (self-hosted single-dojo pattern).
+    """
+    count_result = await uow.session.execute(select(func.count()).select_from(User))
+    is_first_user = count_result.scalar_one() == 0
+    role = "admin" if is_first_user else "member"
+
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
-        role="member",
+        role=role,
         is_active=True,
     )
     uow.session.add(user)

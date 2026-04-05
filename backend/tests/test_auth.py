@@ -44,7 +44,8 @@ def clear_overrides():
 
 
 @pytest.mark.anyio
-async def test_register_creates_account(db_client) -> None:
+async def test_register_first_user_becomes_admin(db_client) -> None:
+    """First registration on a fresh instance gets admin role."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         response = await c.post(
             "/auth/register/password",
@@ -53,10 +54,26 @@ async def test_register_creates_account(db_client) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["email"] == "musashi@example.com"
-    assert body["role"] == "member"
+    assert body["role"] == "admin"
     assert "sub" in body
     assert "password" not in body
     assert "hashed_password" not in body
+
+
+@pytest.mark.anyio
+async def test_register_subsequent_user_is_member(db_client) -> None:
+    """Second and later registrations get member role."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.post(
+            "/auth/register/password",
+            json={"email": "first@example.com", "password": "Str0ng!Pass"},
+        )
+        response = await c.post(
+            "/auth/register/password",
+            json={"email": "musashi@example.com", "password": "Str0ng!Pass"},
+        )
+    assert response.status_code == 201
+    assert response.json()["role"] == "member"
 
 
 @pytest.mark.anyio
