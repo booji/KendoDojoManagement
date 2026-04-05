@@ -14,6 +14,8 @@ class AbstractMemberRepository(Protocol):
 
     async def get_by_email(self, email: str) -> dict[str, Any] | None: ...
 
+    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None: ...
+
     async def add(self, data: dict[str, Any]) -> dict[str, Any]: ...
 
     async def update(
@@ -61,6 +63,13 @@ class SqlMemberRepository:
     async def get_by_email(self, email: str) -> dict[str, Any] | None:
         result = await self._session.execute(
             select(Member).where(Member.email == email)
+        )
+        obj = result.scalar_one_or_none()
+        return _to_dict(obj) if obj else None
+
+    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(Member).where(Member.user_id == user_id)
         )
         obj = result.scalar_one_or_none()
         return _to_dict(obj) if obj else None
