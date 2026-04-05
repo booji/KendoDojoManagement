@@ -21,6 +21,11 @@ class UserClaims(BaseModel):
     email: str
     role: Literal["admin", "member"]
     is_active: bool
+    theme: Literal["light", "dark", "system"] = "system"
+
+
+class ThemeUpdate(BaseModel):
+    theme: Literal["light", "dark", "system"]
 
 
 class TokenResponse(BaseModel):

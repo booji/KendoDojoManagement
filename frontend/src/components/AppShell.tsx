@@ -1,7 +1,9 @@
 import { Link, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { useNavItems } from "@/hooks/useNavItems"
+import { useTheme } from "@/hooks/useTheme"
 import BottomTabBar from "@/components/BottomTabBar"
+import ThemeToggle from "@/components/ThemeToggle"
 import {
   SidebarProvider,
   Sidebar,
@@ -39,6 +41,7 @@ const DojoLogo = () => (
 const AppShell = ({ role, children }: AppShellProps) => {
   const navItems = useNavItems(role)
   const { pathname } = useLocation()
+  const { theme, setTheme } = useTheme()
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
@@ -88,8 +91,9 @@ const AppShell = ({ role, children }: AppShellProps) => {
             </SidebarGroup>
           </SidebarContent>
 
-          {/* Footer placeholder — theme toggle will be added in issue #14 */}
-          <SidebarFooter />
+          <SidebarFooter>
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+          </SidebarFooter>
         </Sidebar>
 
         <SidebarInset>
