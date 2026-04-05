@@ -13,7 +13,6 @@ navigation, sidebar visibility).  AC6 is marked with an explanatory comment.
 import os
 import uuid
 
-import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import BrowserContext, Page, expect
 

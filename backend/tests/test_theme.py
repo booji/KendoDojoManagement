@@ -20,7 +20,7 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture
-async def _engine():
+async def _theme_engine():
     eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -29,15 +29,15 @@ async def _engine():
 
 
 @pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
+async def db_client(_theme_engine):
+    factory = async_sessionmaker(_theme_engine, expire_on_commit=False)
 
     async def _override():
         async with SQLAlchemyUnitOfWork(factory) as uow:
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield _engine
+    yield _theme_engine
     app.dependency_overrides.clear()
 
 

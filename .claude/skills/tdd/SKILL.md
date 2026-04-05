@@ -76,8 +76,38 @@ def test_check_in_button_visible_on_mobile(page: Page):
     expect(page.get_by_role("button", name="Check In")).to_be_visible()
 ```
 
+### xfail lifecycle — critical
+
+`xfail(strict=True)` is a **temporary red-phase marker only**. It must be removed and replaced with real assertions once implementation is done.
+
+| Phase | What to do |
+|-------|-----------|
+| Red (TDD agent) | Write stub with `@pytest.mark.xfail(strict=True, reason="not implemented")` and a `pytest.fail("not implemented")` body |
+| Green (after implementation) | Remove `xfail`, replace body with real Playwright assertions against the live UI |
+| QA agent | Any test still carrying `xfail` is **not done** — promote it or escalate |
+
+A stub that stays `xfail` forever provides zero protection. The point of the stub is to reserve the test slot; the QA agent's job is to fill it with real assertions.
+
+**Red phase stub:**
+```python
+@pytest.mark.xfail(strict=True, reason="not implemented")
+def test_user_can_register(page: Page) -> None:
+    pytest.fail("not implemented")
+```
+
+**Promoted real test (QA phase):**
+```python
+def test_user_can_register(page: Page) -> None:
+    page.goto("http://localhost:5173/register")
+    page.get_by_label("Email").fill("newuser@example.com")
+    page.get_by_label("Password").fill("Str0ng!Pass")
+    page.get_by_label("Confirm password").fill("Str0ng!Pass")
+    page.get_by_role("button", name="Register").click()
+    expect(page).to_have_url("http://localhost:5173/login")
+```
+
 ### Rules
 - Browser tests assert **observable UI behaviour** — visible text, button states, navigation — not implementation details
 - One browser test per acceptance criterion from the issue; do not write exhaustive UI tests
-- Run with: `.venv/bin/pytest backend/tests/test_e2e_*.py --headed=false -q`
-- If the UI isn't built yet, write the test stub with `pytest.mark.xfail(strict=True)` so it fails correctly in red phase
+- Run with: `. .venv/bin/activate && pytest backend/tests/test_e2e_*.py --headed=false -q` from `backend/`
+- Never leave `xfail` stubs in place after implementation — promote or escalate
