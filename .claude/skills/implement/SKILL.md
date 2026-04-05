@@ -10,14 +10,21 @@ All subagents run on the **sonnet** model. On any agent failure: retry once with
 
 ---
 
-## Step 1 — Read the issue
+## Step 1 — Read the issue and create a branch
 
 ```bash
 gh issue view <number>
 gh issue view 1   # PRD for full context
 ```
 
-Read both before spawning any agent. Extract **acceptance criteria** as a numbered list — these drive the TDD agent.
+Read both before touching any code. Extract **acceptance criteria** as a numbered list — these drive the TDD agent.
+
+Then create and switch to a feature branch:
+```bash
+git checkout -b feat/issue-<number>
+```
+
+All subsequent work (by you and all subagents) happens on this branch. Never commit to `main` directly.
 
 ---
 
@@ -123,18 +130,60 @@ Fire both Agent tool calls in the same message.
 ```
 You are the QA agent for KendoDojoManagement.
 
-Read the skill at .claude/skills/tdd/SKILL.md for all rules and conventions, especially the Playwright section.
+Read the skill at .claude/skills/tdd/SKILL.md for all rules and conventions, especially the Playwright section and the xfail lifecycle.
 
-Both servers are running:
-  - Backend: http://localhost:8000
-  - Frontend: http://localhost:5173
+## Step 1 — Run unit/integration tests
+```bash
+cd /home/pip/KendoDojoManagement/backend
+. .venv/bin/activate
+pytest -q --ignore=tests/test_e2e_*.py
+```
 
-Your job:
-1. Run all unit/integration tests: cd backend && . .venv/bin/activate && pytest -q
-2. Run all Playwright browser tests: pytest backend/tests/test_e2e_*.py --headed=false -q
-3. Remove xfail markers from any browser tests that now pass
+## Step 2 — Start servers for e2e tests
 
-Report full pytest output. If any test fails, report the failure and do NOT mark the work as done.
+Start both servers as background processes and wait until they are ready:
+```bash
+cd /home/pip/KendoDojoManagement/backend
+. .venv/bin/activate
+uvicorn app.main:app --port 8000 &
+BACKEND_PID=$!
+
+cd /home/pip/KendoDojoManagement/frontend
+npm run dev -- --port 5173 &
+FRONTEND_PID=$!
+
+# Wait for backend
+for i in $(seq 1 20); do
+  curl -sf http://localhost:8000/health && break
+  sleep 1
+done
+
+# Wait for frontend
+for i in $(seq 1 20); do
+  curl -sf http://localhost:5173 && break
+  sleep 1
+done
+```
+
+## Step 3 — Promote xfail stubs and run e2e tests
+
+For each file matching `backend/tests/test_e2e_*.py`:
+1. Read the file
+2. For every test still marked `@pytest.mark.xfail`: replace the stub body with real Playwright assertions that verify the acceptance criterion against the live UI at http://localhost:5173
+3. Run the promoted tests: `pytest backend/tests/test_e2e_*.py --headed=false -q`
+
+## Step 4 — Tear down servers
+```bash
+kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+```
+
+## Report
+- Unit test output (step 1)
+- Which xfail stubs were promoted and what assertions were added
+- e2e test output (step 3)
+- Any test that could not be promoted — explain why and escalate
+
+If any test fails (unit or e2e), do NOT mark the work as done.
 ```
 
 ### Security agent prompt:
@@ -180,8 +229,17 @@ Wait for both. Collect all findings.
 
 ### Open a PR (always, even if there are findings):
 
+Tell the user to push the branch:
+```
+Please run: ! git push origin feat/issue-<number>
+Then I will open the PR.
+```
+
+Wait for confirmation, then open the PR:
 ```bash
 gh pr create \
+  --base main \
+  --head feat/issue-<number> \
   --title "feat: <brief description> (#<number>)" \
   --body "$(cat <<'EOF'
 ## Issue
