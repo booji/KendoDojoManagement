@@ -36,6 +36,16 @@ class UpdateMemberRequest(BaseModel):
     parental_consent_obtained: bool | None = None
 
 
+class SelfUpdateMemberRequest(BaseModel):
+    """Fields a member may update on their own profile (no admin-only fields)."""
+
+    full_name: str | None = None
+    dob: date | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_phone: str | None = None
+    federation_number: str | None = None
+
+
 class MemberResponse(BaseModel):
     id: str
     email: str
