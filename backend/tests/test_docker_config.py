@@ -3,6 +3,7 @@ File-based tests for Production Docker Compose configuration (Issue #5).
 No live Docker required — these inspect files on disk.
 """
 
+import re as _re
 from pathlib import Path
 
 import pytest
@@ -153,8 +154,6 @@ def test_env_example_contains(var_name: str):
 # ---------------------------------------------------------------------------
 # No hardcoded secrets in docker-compose.yml
 # ---------------------------------------------------------------------------
-
-import re as _re
 
 # Env var keys whose values are expected to be fully interpolated (no literal secrets).
 # DATABASE_URL is allowed to be a compound string containing protocol prefixes
