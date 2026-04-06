@@ -41,3 +41,24 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: LenientEmail
     password: str
+
+
+class PasskeyBeginRequest(BaseModel):
+    email: LenientEmail
+
+
+class PasskeyCredentialResponse(BaseModel):
+    id: str
+    rawId: str
+    response: dict
+    type: str
+
+
+class PasskeyRegisterCompleteRequest(BaseModel):
+    email: LenientEmail
+    credential: PasskeyCredentialResponse
+
+
+class PasskeyLoginCompleteRequest(BaseModel):
+    email: LenientEmail
+    credential: PasskeyCredentialResponse
