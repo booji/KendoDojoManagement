@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { BrowserRouter, Routes, Route, useNavigate, Outlet } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletContext } from "react-router-dom"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
@@ -15,6 +15,9 @@ import MemberDetailPage from "@/pages/MemberDetailPage"
 import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
+import AdminSettingsPage from "@/pages/AdminSettingsPage"
+
+type LayoutContext = { user: UserClaims }
 
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
@@ -43,9 +46,15 @@ const AuthenticatedLayout = () => {
 
   return (
     <AppShell role={user.role}>
-      <Outlet />
+      <Outlet context={{ user } satisfies LayoutContext} />
     </AppShell>
   )
+}
+
+// Wraps admin-only routes — redirects non-admins to /.
+const RequireAdmin = () => {
+  const { user } = useOutletContext<LayoutContext>()
+  return user.role === "admin" ? <Outlet context={{ user } satisfies LayoutContext} /> : <Navigate to="/" replace />
 }
 
 const App = () => (
@@ -62,11 +71,16 @@ const App = () => (
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/members" element={<MembersPage />} />
-        <Route path="/members/:id" element={<MemberDetailPage />} />
-        <Route path="/grades" element={<GradesPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+
+        {/* Admin-only routes */}
+        <Route element={<RequireAdmin />}>
+          <Route path="/members" element={<MembersPage />} />
+          <Route path="/members/:id" element={<MemberDetailPage />} />
+          <Route path="/grades" element={<GradesPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/admin/settings" element={<AdminSettingsPage />} />
+        </Route>
       </Route>
     </Routes>
   </BrowserRouter>
