@@ -1,3 +1,5 @@
-const ProfilePage = () => <h1>My Profile</h1>
+import { Navigate } from "react-router-dom"
+
+const ProfilePage = () => <Navigate to="/settings" replace />
 
 export default ProfilePage

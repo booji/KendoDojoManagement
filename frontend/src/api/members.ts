@@ -149,6 +149,56 @@ export const updateMember = async (
   return res.json() as Promise<MemberResponse>
 }
 
+export type MyMemberUpdateRequest = {
+  full_name?: string
+  dob?: string
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
+  federation_number?: string | null
+}
+
+export const getMyMember = async (): Promise<MemberResponse | null> => {
+  const res = await fetch("/api/users/me/member", { credentials: "include" })
+
+  if (res.status === 404) {
+    return null
+  }
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load your member details")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
+export const updateMyMember = async (
+  data: MyMemberUpdateRequest
+): Promise<MemberResponse> => {
+  const res = await fetch("/api/users/me/member", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 409) {
+    await throwApiError(res, "Member record conflict — please contact support")
+  }
+  if (res.status === 422) {
+    await throwApiError(res, "Invalid data — please check your inputs")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to save your details")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
 export const deactivateMember = async (id: string): Promise<MemberResponse> => {
   const res = await fetch(`/api/members/${id}`, {
     method: "DELETE",
