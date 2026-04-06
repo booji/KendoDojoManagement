@@ -136,7 +136,7 @@ async def register_passkey_complete(
         credential=_to_registration_credential(payload.credential),
         expected_challenge=expected_challenge,
         expected_rp_id=config.WEBAUTHN_RP_ID,
-        expected_origin=config.WEBAUTHN_ORIGIN,
+        expected_origin=config.WEBAUTHN_ORIGINS,
     )
 
     passkey = PasskeyCredential(
@@ -233,7 +233,7 @@ async def login_passkey_complete(
         credential=_to_authentication_credential(payload.credential),
         expected_challenge=expected_challenge,
         expected_rp_id=config.WEBAUTHN_RP_ID,
-        expected_origin=config.WEBAUTHN_ORIGIN,
+        expected_origin=config.WEBAUTHN_ORIGINS,
         credential_public_key=stored_cred.public_key,
         credential_current_sign_count=stored_cred.sign_count,
     )
