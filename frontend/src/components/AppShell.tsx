@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { useNavItems } from "@/hooks/useNavItems"
-import { useTheme } from "@/hooks/useTheme"
+import { useThemeContext } from "@/contexts/ThemeProvider"
 import BottomTabBar from "@/components/BottomTabBar"
 import ThemeToggle from "@/components/ThemeToggle"
 import {
@@ -41,7 +41,7 @@ const DojoLogo = () => (
 const AppShell = ({ role, children }: AppShellProps) => {
   const navItems = useNavItems(role)
   const { pathname } = useLocation()
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme } = useThemeContext()
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)

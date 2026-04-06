@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
+import { useThemeContext } from "@/contexts/ThemeProvider"
+import type { Theme } from "@/contexts/ThemeProvider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -42,6 +44,7 @@ type LoadState =
   | { status: "error"; message: string }
 
 const SettingsPage = () => {
+  const { theme, setTheme } = useThemeContext()
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" })
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -213,6 +216,32 @@ const SettingsPage = () => {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="font-heading text-base leading-snug font-medium">Appearance</h2>
+        </CardHeader>
+        <CardContent>
+          <div role="group" aria-label="Theme" className="flex gap-2 flex-wrap">
+            {(["light", "system", "dark"] as const).map((t: Theme) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTheme(t)}
+                aria-pressed={theme === t}
+                className={[
+                  "rounded-md px-4 py-2 text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  theme === t
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-border hover:bg-accent hover:text-accent-foreground",
+                ].join(" ")}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>
