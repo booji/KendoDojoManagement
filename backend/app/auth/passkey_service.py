@@ -6,11 +6,18 @@ import webauthn
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from webauthn import options_to_json
-from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+from webauthn.helpers.structs import (
+    AuthenticationCredential,
+    AuthenticatorAssertionResponse,
+    AuthenticatorAttestationResponse,
+    PublicKeyCredentialDescriptor,
+    RegistrationCredential,
+)
 
 from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.models import (
+    PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     TokenResponse,
@@ -24,13 +31,45 @@ _NOT_FOUND = HTTPException(
 )
 
 
-def _decode_challenge(challenge_str: str) -> bytes:
-    padded = challenge_str + "=" * (4 - len(challenge_str) % 4)
+def _b64d(s: str) -> bytes:
+    """Decode a base64url string (with or without padding) to bytes."""
+    padded = s + "=" * (4 - len(s) % 4)
     return base64.urlsafe_b64decode(padded)
 
 
 def _encode_challenge(challenge: bytes) -> str:
     return base64.urlsafe_b64encode(challenge).rstrip(b"=").decode()
+
+
+# _decode_challenge kept as alias so existing callers still work
+_decode_challenge = _b64d
+
+
+def _to_registration_credential(c: PasskeyCredentialResponse) -> RegistrationCredential:
+    resp = c.response
+    return RegistrationCredential(
+        id=c.id,
+        raw_id=_b64d(c.rawId),
+        response=AuthenticatorAttestationResponse(
+            client_data_json=_b64d(resp["clientDataJSON"]),
+            attestation_object=_b64d(resp["attestationObject"]),
+        ),
+    )
+
+
+def _to_authentication_credential(
+    c: PasskeyCredentialResponse,
+) -> AuthenticationCredential:
+    resp = c.response
+    return AuthenticationCredential(
+        id=c.id,
+        raw_id=_b64d(c.rawId),
+        response=AuthenticatorAssertionResponse(
+            client_data_json=_b64d(resp["clientDataJSON"]),
+            authenticator_data=_b64d(resp["authenticatorData"]),
+            signature=_b64d(resp["signature"]),
+        ),
+    )
 
 
 async def _get_or_create_user(email: str, uow: AbstractUnitOfWork) -> User:
@@ -94,7 +133,7 @@ async def register_passkey_complete(
     expected_challenge = _decode_challenge(user.pending_challenge)
 
     verified = webauthn.verify_registration_response(
-        credential=payload.credential,
+        credential=_to_registration_credential(payload.credential),
         expected_challenge=expected_challenge,
         expected_rp_id=config.WEBAUTHN_RP_ID,
         expected_origin=config.WEBAUTHN_ORIGIN,
@@ -191,7 +230,7 @@ async def login_passkey_complete(
     expected_challenge = _decode_challenge(user.pending_challenge)
 
     verified = webauthn.verify_authentication_response(
-        credential=payload.credential,
+        credential=_to_authentication_credential(payload.credential),
         expected_challenge=expected_challenge,
         expected_rp_id=config.WEBAUTHN_RP_ID,
         expected_origin=config.WEBAUTHN_ORIGIN,
