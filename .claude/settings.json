@@ -29,6 +29,24 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pytest-on-edit.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/e2e-on-test-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/e2e-on-test-edit.sh"
+          }
+        ]
       }
     ]
   }

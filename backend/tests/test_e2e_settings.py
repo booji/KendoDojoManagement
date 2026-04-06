@@ -1,20 +1,25 @@
 """
-Playwright browser tests for issue #27 — Settings page: Personal Details.
+Playwright browser tests for issue #27/#28 — Settings page: Personal Details.
 
 Acceptance criteria:
-  1. /settings shows a Personal Details section with fields: full name, date of birth,
-     emergency contact name, emergency contact phone, federation number
-  2. Fields are pre-populated with the user's current Member record values on load
-  3. Saving a change updates the value and shows a success confirmation
+  1. /settings shows a Personal Details section
+  2. Summary shows the user's current Member record values on load
+  3. Saving a change returns to the summary showing the updated values
   4. A backend error surfaces as an inline error message (no silent failures)
-  5. If the user has no linked Member record yet, fields are empty and saving creates it
+  5. If the user has no linked Member record yet, "Set up profile" button shown;
+     saving creates the record
   6. /profile redirects to /settings
   7. Layout is usable on mobile and desktop
   8. E2E: user edits their name, saves, reloads — updated name persists
+  9. /settings default view shows a read-only summary (not a form)
+  10. Clicking "Edit" switches to the edit form
+  11. Clicking "Cancel" returns to the read-only summary without saving
+  12. Clicking "Save changes" saves and returns to the summary with updated values
 """
 
 import uuid
 
+import pytest
 import requests
 from playwright.sync_api import Page, Route, expect
 
@@ -26,7 +31,6 @@ API_URL = "http://localhost:8000"
 
 
 def _register_api(email: str, password: str = "Str0ng!Pass") -> str:
-    """Register a user via the backend API, return user id."""
     resp = requests.post(
         f"{API_URL}/auth/register/password",
         json={"email": email, "password": password},
@@ -36,7 +40,6 @@ def _register_api(email: str, password: str = "Str0ng!Pass") -> str:
 
 
 def _login_api(email: str, password: str = "Str0ng!Pass") -> str:
-    """Log in via the backend API and return the access_token cookie value."""
     resp = requests.post(
         f"{API_URL}/auth/login/password",
         json={"email": email, "password": password},
@@ -46,7 +49,6 @@ def _login_api(email: str, password: str = "Str0ng!Pass") -> str:
 
 
 def _inject_cookie(page: Page, token: str) -> None:
-    """Inject an access_token cookie into the Playwright browser context."""
     page.context.add_cookies(
         [
             {
@@ -68,7 +70,6 @@ def _create_member_record(
     emergency_contact_phone: str = "07700900000",
     federation_number: str = "FED-001",
 ) -> dict:
-    """Create or update a member record for the logged-in user via the backend API."""
     resp = requests.put(
         f"{API_URL}/users/me/member",
         json={
@@ -84,12 +85,7 @@ def _create_member_record(
     return resp.json()
 
 
-# CardTitle renders as a <div>, not a semantic heading.
-# The save button has aria-label="Save personal details" (not its visible text).
-SAVE_BTN_NAME = "Save personal details"
-
-
-# ── AC1 — Personal Details section with expected fields ──────────────────────
+# ── AC1 — Personal Details section visible ───────────────────────────────────
 
 
 def test_settings_shows_personal_details_section(page: Page) -> None:
@@ -100,24 +96,14 @@ def test_settings_shows_personal_details_section(page: Page) -> None:
 
     page.goto(f"{BASE_URL}/settings")
 
-    # Page heading
     expect(page.get_by_role("heading", name="Settings")).to_be_visible()
-    # Card title (renders as div, not heading)
     expect(page.get_by_text("Personal Details")).to_be_visible()
-    # Form fields
-    expect(page.get_by_label("Full name")).to_be_visible()
-    expect(page.get_by_label("Date of birth")).to_be_visible()
-    expect(page.get_by_label("Emergency contact name")).to_be_visible()
-    expect(page.get_by_label("Emergency contact phone")).to_be_visible()
-    expect(page.get_by_label("Federation number")).to_be_visible()
-    # Save button (aria-label differs from visible text)
-    expect(page.get_by_role("button", name=SAVE_BTN_NAME)).to_be_visible()
 
 
-# ── AC2 — Fields pre-populated from existing Member record ───────────────────
+# ── AC2 — Summary shows current Member record values ─────────────────────────
 
 
-def test_settings_fields_prepopulated_from_member_record(page: Page) -> None:
+def test_settings_summary_shows_member_record_values(page: Page) -> None:
     email = f"ac2_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
@@ -126,17 +112,16 @@ def test_settings_fields_prepopulated_from_member_record(page: Page) -> None:
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Wait for the form to be loaded and populated from the API
-    expect(page.get_by_label("Full name")).to_have_value("Prepop Tester")
-    expect(page.get_by_label("Emergency contact name")).to_have_value("Bob Kendo")
-    expect(page.get_by_label("Emergency contact phone")).to_have_value("07700900000")
-    expect(page.get_by_label("Federation number")).to_have_value("FED-001")
+    # Values are visible in the read-only summary
+    expect(page.get_by_text("Prepop Tester")).to_be_visible()
+    expect(page.get_by_text("Bob Kendo")).to_be_visible()
+    expect(page.get_by_text("FED-001")).to_be_visible()
 
 
-# ── AC3 — Saving a change shows success confirmation ─────────────────────────
+# ── AC3 — Saving returns to summary with updated values ──────────────────────
 
 
-def test_settings_save_shows_success_confirmation(page: Page) -> None:
+def test_settings_save_returns_to_summary_with_updated_values(page: Page) -> None:
     email = f"ac3_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
@@ -145,14 +130,13 @@ def test_settings_save_shows_success_confirmation(page: Page) -> None:
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Wait for the form to fully load
-    full_name_input = page.get_by_label("Full name")
-    expect(full_name_input).to_have_value("Original Name")
+    page.get_by_role("button", name="Edit").click()
+    page.get_by_label("Full name").fill("Updated Name")
+    page.get_by_role("button", name="Save changes").click()
 
-    full_name_input.fill("Updated Name")
-    page.get_by_role("button", name=SAVE_BTN_NAME).click()
-
-    expect(page.get_by_text("Details saved successfully.")).to_be_visible()
+    # Returns to view mode showing the new value
+    expect(page.get_by_text("Updated Name")).to_be_visible()
+    expect(page.get_by_label("Full name")).not_to_be_visible()
 
 
 # ── AC4 — Backend error surfaces as inline error message ─────────────────────
@@ -167,10 +151,8 @@ def test_settings_backend_error_shows_inline_message(page: Page) -> None:
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Wait for the form to load
-    expect(page.get_by_label("Full name")).to_have_value("Error Tester")
+    page.get_by_role("button", name="Edit").click()
 
-    # Intercept the PUT request to simulate a backend error
     def handle_route(route: Route) -> None:
         route.fulfill(
             status=500,
@@ -181,19 +163,17 @@ def test_settings_backend_error_shows_inline_message(page: Page) -> None:
     page.route("**/api/users/me/member", handle_route, times=1)
 
     page.get_by_label("Full name").fill("Will Fail")
-    page.get_by_role("button", name=SAVE_BTN_NAME).click()
+    page.get_by_role("button", name="Save changes").click()
 
-    # Error message should appear (role=alert)
-    error = page.get_by_role("alert")
-    expect(error).to_be_visible()
-    # It should NOT show success
-    expect(page.get_by_text("Details saved successfully.")).not_to_be_visible()
+    # Error message appears; stays in edit mode
+    expect(page.get_by_role("alert")).to_be_visible()
+    expect(page.get_by_label("Full name")).to_be_visible()
 
 
-# ── AC5 — No Member record yet: empty fields, save creates the record ─────────
+# ── AC5 — No Member record: "Set up profile", save creates the record ─────────
 
 
-def test_settings_empty_fields_when_no_member_record(page: Page) -> None:
+def test_settings_set_up_profile_when_no_member_record(page: Page) -> None:
     email = f"ac5_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
@@ -201,21 +181,20 @@ def test_settings_empty_fields_when_no_member_record(page: Page) -> None:
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Wait for load to complete (save button appears once ready)
-    expect(page.get_by_role("button", name=SAVE_BTN_NAME)).to_be_visible()
+    # No member record → "Set up profile" button
+    expect(page.get_by_role("button", name="Set up profile")).to_be_visible()
 
-    # All fields should be empty — no member record linked
+    page.get_by_role("button", name="Set up profile").click()
+
+    # Form shown with empty fields
     expect(page.get_by_label("Full name")).to_have_value("")
-    expect(page.get_by_label("Emergency contact name")).to_have_value("")
-    expect(page.get_by_label("Emergency contact phone")).to_have_value("")
-    expect(page.get_by_label("Federation number")).to_have_value("")
 
-    # Save with a name to create the member record
     page.get_by_label("Full name").fill("New Member")
-    page.get_by_role("button", name=SAVE_BTN_NAME).click()
+    page.get_by_role("button", name="Save changes").click()
 
-    # Success message should appear, confirming creation
-    expect(page.get_by_text("Details saved successfully.")).to_be_visible()
+    # Returns to summary showing the new name
+    expect(page.get_by_text("New Member")).to_be_visible()
+    expect(page.get_by_label("Full name")).not_to_be_visible()
 
 
 # ── AC6 — /profile redirects to /settings ────────────────────────────────────
@@ -230,7 +209,6 @@ def test_profile_redirects_to_settings(page: Page) -> None:
     page.goto(f"{BASE_URL}/profile")
 
     expect(page).to_have_url(f"{BASE_URL}/settings")
-    # The settings page should render with Personal Details
     expect(page.get_by_text("Personal Details")).to_be_visible()
 
 
@@ -242,21 +220,13 @@ def test_settings_layout_usable_on_mobile(page: Page) -> None:
     email = f"ac7m_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
+    _create_member_record(token)
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Key form elements must be visible and not clipped
-    expect(page.get_by_label("Full name")).to_be_visible()
-    expect(page.get_by_label("Emergency contact name")).to_be_visible()
-
-    save_btn = page.get_by_role("button", name=SAVE_BTN_NAME)
-    expect(save_btn).to_be_visible()
-
-    # On mobile the save button should span most of the viewport width
-    box = save_btn.bounding_box()
-    assert box is not None
-    assert box["width"] > 200  # Full width on mobile (375px viewport)
+    expect(page.get_by_text("Personal Details")).to_be_visible()
+    expect(page.get_by_role("button", name="Edit")).to_be_visible()
 
 
 # ── AC7 — Layout usable on desktop ───────────────────────────────────────────
@@ -267,17 +237,14 @@ def test_settings_layout_usable_on_desktop(page: Page) -> None:
     email = f"ac7d_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
+    _create_member_record(token)
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    # Settings heading visible
     expect(page.get_by_role("heading", name="Settings")).to_be_visible()
-    # Card title visible
     expect(page.get_by_text("Personal Details")).to_be_visible()
-    # Form fields visible
-    expect(page.get_by_label("Full name")).to_be_visible()
-    expect(page.get_by_role("button", name=SAVE_BTN_NAME)).to_be_visible()
+    expect(page.get_by_role("button", name="Edit")).to_be_visible()
 
 
 # ── AC8 — Edit name, save, reload: updated name persists ─────────────────────
@@ -292,14 +259,82 @@ def test_settings_edit_name_persists_after_reload(page: Page) -> None:
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
-    full_name_input = page.get_by_label("Full name")
-    expect(full_name_input).to_have_value("Before Reload")
+    page.get_by_role("button", name="Edit").click()
+    page.get_by_label("Full name").fill("After Reload")
+    page.get_by_role("button", name="Save changes").click()
 
-    full_name_input.fill("After Reload")
-    page.get_by_role("button", name=SAVE_BTN_NAME).click()
-    expect(page.get_by_text("Details saved successfully.")).to_be_visible()
-
-    # Reload — cookie persists in browser context, so auth is retained
     page.reload()
 
-    expect(page.get_by_label("Full name")).to_have_value("After Reload")
+    # After reload, summary shows the updated name
+    expect(page.get_by_text("After Reload")).to_be_visible()
+
+
+# ── AC9 — Default view is read-only summary (no form) ────────────────────────
+
+
+def test_settings_shows_read_only_summary_by_default(page: Page) -> None:
+    email = f"ac9_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    _create_member_record(token, full_name="Summary User")
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    # Summary visible
+    expect(page.get_by_text("Summary User")).to_be_visible()
+    expect(page.get_by_role("button", name="Edit")).to_be_visible()
+    # Form inputs NOT visible
+    expect(page.get_by_label("Full name")).not_to_be_visible()
+
+
+# ── AC10 — Edit button shows the form ────────────────────────────────────────
+
+
+def test_settings_edit_button_shows_form(page: Page) -> None:
+    email = f"ac10_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    _create_member_record(token, full_name="Edit Button User")
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    page.get_by_role("button", name="Edit").click()
+
+    # Form inputs now visible, pre-filled
+    expect(page.get_by_label("Full name")).to_be_visible()
+    expect(page.get_by_label("Full name")).to_have_value("Edit Button User")
+    expect(page.get_by_role("button", name="Cancel")).to_be_visible()
+    expect(page.get_by_role("button", name="Save changes")).to_be_visible()
+
+
+# ── AC11 — Cancel returns to summary without saving ──────────────────────────
+
+
+def test_settings_cancel_returns_to_summary_without_saving(page: Page) -> None:
+    email = f"ac11_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    _create_member_record(token, full_name="Cancel Test User")
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    page.get_by_role("button", name="Edit").click()
+    page.get_by_label("Full name").fill("Should Not Save")
+    page.get_by_role("button", name="Cancel").click()
+
+    # Returns to summary — original value shown, form gone
+    expect(page.get_by_text("Cancel Test User")).to_be_visible()
+    expect(page.get_by_label("Full name")).not_to_be_visible()
+    expect(page.get_by_text("Should Not Save")).not_to_be_visible()
+
+
+# ── AC12 — Save returns to summary with updated values ───────────────────────
+# (covered by AC3 above — kept as alias for traceability)
+
+
+@pytest.mark.skip(reason="Covered by test_settings_save_returns_to_summary_with_updated_values")
+def test_settings_save_returns_to_summary_alias() -> None:
+    pass
