@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react"
 import { getSessions, getSessionTypes } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
+import { getMe } from "@/api/auth"
+import { checkIn, getCheckinToken } from "@/api/attendance"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 // Returns the Monday of the week containing the given date (local time)
 const startOfWeek = (date: Date): Date => {
@@ -47,18 +51,136 @@ const formatDate = (iso: string): string => {
   return date.toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short" })
 }
 
+// Per-session check-in UI state
+type CheckinState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success" }
+  | { kind: "error"; message: string }
+
+type ShareState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "url"; url: string }
+  | { kind: "error"; message: string }
+
+type SessionCardActionsProps = {
+  session: SessionInstance
+  isAdmin: boolean
+}
+
+const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
+  const [checkinState, setCheckinState] = useState<CheckinState>({ kind: "idle" })
+  const [shareState, setShareState] = useState<ShareState>({ kind: "idle" })
+
+  const handleCheckIn = async () => {
+    setCheckinState({ kind: "loading" })
+    try {
+      await checkIn(session.id)
+      setCheckinState({ kind: "success" })
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to check in"
+      setCheckinState({ kind: "error", message })
+    }
+  }
+
+  const handleShare = async () => {
+    setShareState({ kind: "loading" })
+    try {
+      const tokenData = await getCheckinToken(session.id)
+      const url = `${window.location.origin}/checkin/${tokenData.token}`
+      setShareState({ kind: "url", url })
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to get check-in link"
+      setShareState({ kind: "error", message })
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/* Check-in button — full width, thumb-friendly */}
+      {checkinState.kind === "success" ? (
+        <div
+          className="flex items-center justify-center w-full min-h-[48px] rounded-md bg-green-100 text-green-800 font-medium text-sm dark:bg-green-900/30 dark:text-green-300"
+          role="status"
+          aria-live="polite"
+        >
+          Checked in!
+        </div>
+      ) : (
+        <Button
+          size="lg"
+          className="w-full min-h-[48px]"
+          onClick={handleCheckIn}
+          disabled={checkinState.kind === "loading"}
+          aria-label="Check in to this session"
+        >
+          {checkinState.kind === "loading" ? "Checking in…" : "Check In"}
+        </Button>
+      )}
+      {checkinState.kind === "error" && (
+        <p className="text-xs text-destructive" role="alert">
+          {checkinState.message}
+        </p>
+      )}
+
+      {/* Admin-only: share check-in link */}
+      {isAdmin && (
+        <>
+          {shareState.kind === "url" ? (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Share this check-in link:</p>
+              <Input
+                readOnly
+                value={shareState.url}
+                aria-label="Check-in link"
+                onFocus={(e) => e.target.select()}
+                className="text-xs"
+              />
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleShare}
+              disabled={shareState.kind === "loading"}
+              aria-label="Share check-in link for this session"
+            >
+              {shareState.kind === "loading" ? "Getting link…" : "Share check-in link"}
+            </Button>
+          )}
+          {shareState.kind === "error" && (
+            <p className="text-xs text-destructive" role="alert">
+              {shareState.message}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 const SessionsPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
   const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
+  const [role, setRole] = useState<"admin" | "member" | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([getSessions(), getSessionTypes()])
-      .then(([fetchedSessions, fetchedTypes]) => {
+    Promise.all([getSessions(), getSessionTypes(), getMe()])
+      .then(([fetchedSessions, fetchedTypes, me]) => {
         setSessions(fetchedSessions)
         setTypeMap(
           new Map(fetchedTypes.map((t: SessionType) => [t.id, t.name]))
         )
+        setRole(me.role)
       })
       .catch(() => {
         setError("Failed to load sessions. Please try again.")
@@ -94,6 +216,7 @@ const SessionsPage = () => {
   }
 
   const groups = groupByWeek(sessions)
+  const isAdmin = role === "admin"
 
   return (
     <div className="px-4 py-6 space-y-8 max-w-2xl mx-auto">
@@ -142,6 +265,9 @@ const SessionsPage = () => {
                           )}
                         </div>
                       </div>
+                      {!cancelled && (
+                        <SessionCardActions session={session} isAdmin={isAdmin} />
+                      )}
                     </CardContent>
                   </Card>
                 </li>

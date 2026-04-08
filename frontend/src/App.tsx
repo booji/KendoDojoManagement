@@ -16,6 +16,7 @@ import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
+import CheckinPage from "@/pages/CheckinPage"
 
 type LayoutContext = { user: UserClaims }
 
@@ -72,6 +73,7 @@ const App = () => (
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/checkin/:token" element={<CheckinPage />} />
 
         {/* Admin-only routes */}
         <Route element={<RequireAdmin />}>

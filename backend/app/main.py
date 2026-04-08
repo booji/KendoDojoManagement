@@ -5,11 +5,14 @@ from uuid import uuid4
 from fastapi import FastAPI
 from sqlalchemy import insert, select
 
+import app.attendance.db_models  # noqa: F401
+
 # Import all models so their tables are registered with Base.metadata
 import app.auth.db_models  # noqa: F401
 import app.grades.db_models  # noqa: F401
 import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
+from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
 from app.db.base import Base
 from app.db.engine import engine
@@ -44,3 +47,4 @@ app.include_router(sessions_router)
 app.include_router(members_router)
 app.include_router(users_router)
 app.include_router(grades_router)
+app.include_router(attendance_router)
