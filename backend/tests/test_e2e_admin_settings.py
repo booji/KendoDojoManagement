@@ -15,7 +15,6 @@ import pathlib
 import sqlite3 as _sqlite3
 import uuid
 
-import pytest
 import requests
 from playwright.sync_api import Page, expect
 
