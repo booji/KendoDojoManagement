@@ -31,6 +31,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
+from app.members.dependencies import get_member_repo
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,6 +39,9 @@ from app.main import app
 
 _ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
 _MEMBER = UserClaims(sub="member-uuid", email="member@dojo.test", role="member", is_active=True)
+_OTHER_MEMBER = UserClaims(
+    sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
+)
 
 
 def _admin_override():
@@ -46,6 +50,10 @@ def _admin_override():
 
 def _member_override():
     return _MEMBER
+
+
+def _other_member_override():
+    return _OTHER_MEMBER
 
 
 def _member_token() -> str:
@@ -110,9 +118,72 @@ class StubAttendanceRepo:
         self, session_id: str, member_id: str
     ) -> dict[str, Any] | None:
         for r in self._store:
-            if r["session_id"] == session_id and r["member_id"] == member_id:
+            if r["session_id"] == session_id and r.get("member_id") == member_id:
                 return r
         return None
+
+    async def admin_mark_attended(
+        self,
+        session_id: str,
+        member_id: str,
+        recorded_by: str,
+    ) -> dict[str, Any]:
+        record = {
+            "id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "member_id": member_id,
+            "visitor_name": None,
+            "checked_in_at": datetime.now(UTC).isoformat(),
+            "recorded_by": recorded_by,
+        }
+        self._store.append(record)
+        return record
+
+    async def remove_attendance(self, session_id: str, member_id: str) -> bool:
+        for i, r in enumerate(self._store):
+            if r["session_id"] == session_id and r.get("member_id") == member_id:
+                self._store.pop(i)
+                return True
+        return False
+
+    async def add_visitor(
+        self,
+        session_id: str,
+        visitor_name: str,
+        recorded_by: str,
+    ) -> dict[str, Any]:
+        record = {
+            "id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "member_id": None,
+            "visitor_name": visitor_name,
+            "checked_in_at": datetime.now(UTC).isoformat(),
+            "recorded_by": recorded_by,
+        }
+        self._store.append(record)
+        return record
+
+    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
+        return [r for r in self._store if r.get("member_id") == member_id]
+
+
+class StubMemberRepo:
+    """Minimal stub for AbstractMemberRepository — only implements get_by_user_id."""
+
+    def __init__(self, own_member_id: str | None = None) -> None:
+        # Maps user_id -> member record dict
+        self._by_user_id: dict[str, dict[str, Any]] = {}
+        if own_member_id is not None:
+            # Pre-seed so that any user_id lookup returns a record with the given member id
+            self._seed_user_id = own_member_id
+        else:
+            self._seed_user_id = None
+
+    def seed_member(self, user_id: str, member_id: str) -> None:
+        self._by_user_id[user_id] = {"id": member_id, "email": "stub@test.com"}
+
+    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
+        return self._by_user_id.get(user_id)
 
 
 class StubCheckinTokenRepo:
@@ -423,3 +494,345 @@ async def test_member_cannot_list_attendance(
         )
 
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC1 — POST /sessions/{id}/attendance (admin marks member attended)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_mark_attended_returns_201(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/attendance",
+            json={"member_id": "some-member-uuid"},
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session_id"] == session["id"]
+    assert body["member_id"] == "some-member-uuid"
+    assert body["recorded_by"] == _ADMIN.sub
+
+
+@pytest.mark.anyio
+async def test_admin_mark_attended_nonexistent_session_returns_404(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    fake_id = str(uuid.uuid4())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{fake_id}/attendance",
+            json={"member_id": "some-member-uuid"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_admin_mark_attended_missing_member_id_returns_422(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/attendance",
+            json={},
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_member_cannot_admin_mark_attended(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/attendance",
+            json={"member_id": "some-member-uuid"},
+            cookies={"access_token": _member_token()},
+        )
+
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC2 — DELETE /sessions/{id}/attendance/{member_id}
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_remove_attendance_returns_204(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    await attendance_repo.admin_mark_attended(session["id"], "some-member-uuid", "admin-uuid")
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.delete(
+            f"/sessions/{session['id']}/attendance/some-member-uuid"
+        )
+
+    assert response.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_admin_remove_attendance_not_found_returns_404(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.delete(
+            f"/sessions/{session['id']}/attendance/nonexistent-member"
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_member_cannot_remove_attendance(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.delete(
+            f"/sessions/{session['id']}/attendance/some-member-uuid",
+            cookies={"access_token": _member_token()},
+        )
+
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC3 — POST /sessions/{id}/visitors (admin adds visitor)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_add_visitor_returns_201(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/visitors",
+            json={"visitor_name": "John Guest"},
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session_id"] == session["id"]
+    assert body["visitor_name"] == "John Guest"
+    assert body["member_id"] is None
+
+
+@pytest.mark.anyio
+async def test_admin_add_visitor_nonexistent_session_returns_404(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    fake_id = str(uuid.uuid4())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{fake_id}/visitors",
+            json={"visitor_name": "John Guest"},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_admin_add_visitor_missing_name_returns_422(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/visitors",
+            json={},
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_member_cannot_add_visitor(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/visitors",
+            json={"visitor_name": "John Guest"},
+            cookies={"access_token": _member_token()},
+        )
+
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC4 — GET /sessions/{id}/attendance returns members AND visitors
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_session_attendance_includes_visitors(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    await attendance_repo.admin_mark_attended(session["id"], "member-1", "admin-uuid")
+    await attendance_repo.add_visitor(session["id"], "Visitor One", "admin-uuid")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/sessions/{session['id']}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+
+    member_records = [r for r in body if r.get("member_id") is not None]
+    visitor_records = [r for r in body if r.get("member_id") is None]
+
+    assert len(member_records) == 1
+    assert len(visitor_records) == 1
+    assert visitor_records[0]["visitor_name"] == "Visitor One"
+
+
+@pytest.mark.anyio
+async def test_attendance_record_has_visitor_name_field(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    """Each record in the list exposes visitor_name (nullable) for the new AttendanceReadV2 shape."""
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    await attendance_repo.admin_mark_attended(session["id"], "member-1", "admin-uuid")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/sessions/{session['id']}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    # member records have visitor_name=null
+    assert "visitor_name" in body[0]
+    assert body[0]["visitor_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC5 — GET /members/{id}/attendance (member's history)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_can_get_any_member_attendance_history(
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override  # admin satisfies REQUIRE_MEMBER
+    # Admin bypasses the user→member lookup; still need a stub for the dep
+    member_repo = StubMemberRepo()
+    app.dependency_overrides[get_member_repo] = lambda: member_repo
+
+    # Seed attendance records for a member
+    session_id = str(uuid.uuid4())
+    await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
+    await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/members/{_MEMBER.sub}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+    assert len(body) == 2
+    assert all(r["member_id"] == _MEMBER.sub for r in body)
+
+
+@pytest.mark.anyio
+async def test_member_can_get_own_attendance_history(
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    # Stub the member repo: _MEMBER.sub (user UUID) resolves to a member record
+    # whose id also equals _MEMBER.sub (matches the URL parameter)
+    member_repo = StubMemberRepo()
+    member_repo.seed_member(user_id=_MEMBER.sub, member_id=_MEMBER.sub)
+    app.dependency_overrides[get_member_repo] = lambda: member_repo
+
+    session_id = str(uuid.uuid4())
+    await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/members/{_MEMBER.sub}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+    assert len(body) == 1
+
+
+# ---------------------------------------------------------------------------
+# Issue #10 AC6 — Member cannot access another member's attendance history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_member_cannot_get_other_member_attendance_history(
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    app.dependency_overrides[REQUIRE_MEMBER] = _other_member_override
+    # _OTHER_MEMBER's user_id resolves to a different member id, not _MEMBER.sub
+    member_repo = StubMemberRepo()
+    member_repo.seed_member(user_id=_OTHER_MEMBER.sub, member_id=_OTHER_MEMBER.sub)
+    app.dependency_overrides[get_member_repo] = lambda: member_repo
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/members/{_MEMBER.sub}/attendance")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get(f"/members/{_MEMBER.sub}/attendance")
+
+    assert response.status_code == 401
