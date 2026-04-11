@@ -18,6 +18,7 @@ from app.db.base import Base
 from app.db.engine import engine
 from app.grades.router import router as grades_router
 from app.members.router import router as members_router
+from app.reports.router import router as reports_router
 from app.routers.health import router as health_router
 from app.sessions.db_models import SessionType
 from app.sessions.router import router as sessions_router
@@ -48,3 +49,4 @@ app.include_router(members_router)
 app.include_router(users_router)
 app.include_router(grades_router)
 app.include_router(attendance_router)
+app.include_router(reports_router)
