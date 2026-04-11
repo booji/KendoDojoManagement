@@ -23,6 +23,18 @@ class AbstractAttendanceRepository(Protocol):
         self, session_id: str, member_id: str
     ) -> dict[str, Any] | None: ...
 
+    async def admin_mark_attended(
+        self, session_id: str, member_id: str, recorded_by: str
+    ) -> dict[str, Any]: ...
+
+    async def remove_attendance(self, session_id: str, member_id: str) -> bool: ...
+
+    async def add_visitor(
+        self, session_id: str, visitor_name: str, recorded_by: str
+    ) -> dict[str, Any]: ...
+
+    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]: ...
+
 
 @runtime_checkable
 class AbstractCheckinTokenRepository(Protocol):
@@ -41,6 +53,7 @@ def _attendance_to_dict(obj: Attendance) -> dict[str, Any]:
         "id": obj.id,
         "session_id": obj.session_id,
         "member_id": obj.member_id,
+        "visitor_name": obj.visitor_name,
         "checked_in_at": obj.checked_in_at,
         "recorded_by": obj.recorded_by,
     }
@@ -96,6 +109,54 @@ class SqlAttendanceRepository:
         )
         obj = result.scalar_one_or_none()
         return _attendance_to_dict(obj) if obj else None
+
+    async def admin_mark_attended(
+        self, session_id: str, member_id: str, recorded_by: str
+    ) -> dict[str, Any]:
+        obj = Attendance(
+            session_id=session_id,
+            member_id=member_id,
+            visitor_name=None,
+            checked_in_at=datetime.now(UTC).isoformat(),
+            recorded_by=recorded_by,
+        )
+        self._session.add(obj)
+        await self._session.flush()
+        return _attendance_to_dict(obj)
+
+    async def remove_attendance(self, session_id: str, member_id: str) -> bool:
+        result = await self._session.execute(
+            select(Attendance).where(
+                Attendance.session_id == session_id,
+                Attendance.member_id == member_id,
+            )
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return False
+        await self._session.delete(obj)
+        await self._session.flush()
+        return True
+
+    async def add_visitor(
+        self, session_id: str, visitor_name: str, recorded_by: str
+    ) -> dict[str, Any]:
+        obj = Attendance(
+            session_id=session_id,
+            member_id=None,
+            visitor_name=visitor_name,
+            checked_in_at=datetime.now(UTC).isoformat(),
+            recorded_by=recorded_by,
+        )
+        self._session.add(obj)
+        await self._session.flush()
+        return _attendance_to_dict(obj)
+
+    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            select(Attendance).where(Attendance.member_id == member_id)
+        )
+        return [_attendance_to_dict(row) for row in result.scalars().all()]
 
 
 class SqlCheckinTokenRepository:

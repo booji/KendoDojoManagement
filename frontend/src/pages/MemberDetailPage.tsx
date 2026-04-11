@@ -6,6 +6,8 @@ import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
 import { promoteMember, getGradeHistory } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
+import { getMemberAttendanceHistory } from "@/api/attendance"
+import type { AttendanceRecord } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -417,6 +419,83 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
   )
 }
 
+// ── Attendance history card ───────────────────────────────────────────────────
+
+type AttendanceHistoryCardProps = {
+  memberId: string
+}
+
+const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
+  const [records, setRecords] = useState<AttendanceRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    getMemberAttendanceHistory(memberId)
+      .then(setRecords)
+      .catch((err: unknown) => {
+        setError(isApiError(err) ? err.message : "Failed to load attendance history")
+      })
+  }, [memberId])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Attendance History</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {error !== null ? (
+          <p className="text-sm text-destructive" role="alert">{error}</p>
+        ) : records === null ? (
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-3/4" />
+          </div>
+        ) : records.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No attendance records yet</p>
+        ) : (
+          <div>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              aria-controls="attendance-history-list"
+            >
+              {open ? (
+                <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
+              )}
+              {open ? "Hide" : "Show"} attendance ({records.length} sessions)
+            </button>
+
+            {open && (
+              <ol
+                id="attendance-history-list"
+                className="mt-2 space-y-1 border-l-2 border-border pl-3"
+              >
+                {records.map((record) => (
+                  <li key={record.id} className="text-sm">
+                    <span className="font-mono text-xs">{record.session_id.slice(0, 8)}…</span>
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {new Date(record.checked_in_at).toLocaleDateString("default", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const MemberDetailPage = () => {
@@ -657,6 +736,8 @@ const MemberDetailPage = () => {
           </Card>
 
           <GradeCard memberId={member.id} isAdmin={isAdmin} />
+
+          <AttendanceHistoryCard memberId={member.id} />
         </>
       )}
 

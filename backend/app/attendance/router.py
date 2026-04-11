@@ -3,14 +3,19 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.attendance.dependencies import (
     get_attendance_repo,
     get_checkin_token_repo,
     get_session_instance_repo,
 )
-from app.attendance.models import AttendanceRead, CheckinTokenRead
+from app.attendance.models import (
+    AddVisitorRequest,
+    AttendanceRead,
+    CheckinTokenRead,
+    MarkAttendedRequest,
+)
 from app.attendance.repository import (
     AbstractAttendanceRepository,
     AbstractCheckinTokenRepository,
@@ -20,6 +25,8 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.members.dependencies import get_member_repo
+from app.members.repository import AbstractMemberRepository
 
 router = APIRouter(tags=["attendance"])
 
@@ -33,6 +40,7 @@ _SessRepo = Annotated[
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 
 
 @router.post("/sessions/{session_id}/checkin")
@@ -132,4 +140,88 @@ async def list_session_attendance(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     records = await attendance_repo.list_for_session(session_id)
+    return [AttendanceRead(**r) for r in records]
+
+
+@router.post("/sessions/{session_id}/attendance", status_code=status.HTTP_201_CREATED)
+async def admin_mark_attended(
+    session_id: str,
+    body: MarkAttendedRequest,
+    current_user: _Admin,
+    session_repo: _SessRepo,
+    attendance_repo: _AttRepo,
+    uow: _UoW,
+) -> AttendanceRead:
+    session = await session_repo.get(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+    record = await attendance_repo.admin_mark_attended(
+        session_id, body.member_id, current_user.sub
+    )
+    await uow.commit()
+    return AttendanceRead(**record)
+
+
+@router.delete(
+    "/sessions/{session_id}/attendance/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def remove_attendance(
+    session_id: str,
+    member_id: str,
+    _claims: _Admin,
+    attendance_repo: _AttRepo,
+    uow: _UoW,
+) -> Response:
+    removed = await attendance_repo.remove_attendance(session_id, member_id)
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found"
+        )
+    await uow.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/sessions/{session_id}/visitors", status_code=status.HTTP_201_CREATED)
+async def add_visitor(
+    session_id: str,
+    body: AddVisitorRequest,
+    current_user: _Admin,
+    session_repo: _SessRepo,
+    attendance_repo: _AttRepo,
+    uow: _UoW,
+) -> AttendanceRead:
+    session = await session_repo.get(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+    record = await attendance_repo.add_visitor(
+        session_id, body.visitor_name, current_user.sub
+    )
+    await uow.commit()
+    return AttendanceRead(**record)
+
+
+@router.get("/members/{member_id}/attendance")
+async def get_member_attendance_history(
+    member_id: str,
+    current_user: _Member,
+    attendance_repo: _AttRepo,
+    member_repo: _MemberRepo,
+) -> list[AttendanceRead]:
+    if current_user.role != "admin":
+        # Resolve the calling user's own member record to compare by member UUID
+        # (current_user.sub is a user UUID; member_id is a member record UUID)
+        own_member = await member_repo.get_by_user_id(current_user.sub)
+        own_member_id = own_member["id"] if own_member is not None else None
+        if own_member_id != member_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot access another member's attendance history",
+            )
+    records = await attendance_repo.list_for_member(member_id)
     return [AttendanceRead(**r) for r in records]

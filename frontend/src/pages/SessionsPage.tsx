@@ -2,11 +2,20 @@ import { useEffect, useState } from "react"
 import { getSessions, getSessionTypes } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { getMe } from "@/api/auth"
-import { checkIn, getCheckinToken } from "@/api/attendance"
+import {
+  checkIn,
+  getCheckinToken,
+  getSessionAttendance,
+  markAttended,
+  removeAttendance,
+  addVisitor,
+} from "@/api/attendance"
+import type { AttendanceRecord } from "@/api/attendance"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 // Returns the Monday of the week containing the given date (local time)
 const startOfWeek = (date: Date): Date => {
@@ -161,11 +170,261 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
               {shareState.message}
             </p>
           )}
+
+          <SessionAttendancePanel sessionId={session.id} />
         </>
       )}
     </div>
   )
 }
+
+// ── Session attendance panel (admin only) ─────────────────────────────────────
+
+type AttendancePanelState =
+  | { kind: "closed" }
+  | { kind: "loading" }
+  | { kind: "loaded"; records: AttendanceRecord[] }
+  | { kind: "error"; message: string }
+
+type SessionAttendancePanelProps = {
+  sessionId: string
+}
+
+const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
+  const [panel, setPanel] = useState<AttendancePanelState>({ kind: "closed" })
+  const [memberIdInput, setMemberIdInput] = useState("")
+  const [markingError, setMarkingError] = useState<string | null>(null)
+  const [marking, setMarking] = useState(false)
+  const [visitorInput, setVisitorInput] = useState("")
+  const [addingVisitor, setAddingVisitor] = useState(false)
+  const [visitorError, setVisitorError] = useState<string | null>(null)
+
+  const open = panel.kind !== "closed"
+
+  const load = async () => {
+    setPanel({ kind: "loading" })
+    try {
+      const records = await getSessionAttendance(sessionId)
+      setPanel({ kind: "loaded", records })
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to load attendance"
+      setPanel({ kind: "error", message })
+    }
+  }
+
+  const toggle = () => {
+    if (open) {
+      setPanel({ kind: "closed" })
+    } else {
+      void load()
+    }
+  }
+
+  const handleRemove = async (memberId: string) => {
+    try {
+      await removeAttendance(sessionId, memberId)
+      setPanel((prev) =>
+        prev.kind === "loaded"
+          ? { kind: "loaded", records: prev.records.filter((r) => r.member_id !== memberId) }
+          : prev
+      )
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to remove"
+      setMarkingError(message)
+    }
+  }
+
+  const handleMarkAttended = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const id = memberIdInput.trim()
+    if (!id) return
+    setMarkingError(null)
+    setMarking(true)
+    try {
+      const record = await markAttended(sessionId, id)
+      setPanel((prev) =>
+        prev.kind === "loaded"
+          ? { kind: "loaded", records: [...prev.records, record] }
+          : prev
+      )
+      setMemberIdInput("")
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to mark attended"
+      setMarkingError(message)
+    } finally {
+      setMarking(false)
+    }
+  }
+
+  const handleAddVisitor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = visitorInput.trim()
+    if (!name) return
+    setVisitorError(null)
+    setAddingVisitor(true)
+    try {
+      const record = await addVisitor(sessionId, name)
+      setPanel((prev) =>
+        prev.kind === "loaded"
+          ? { kind: "loaded", records: [...prev.records, record] }
+          : prev
+      )
+      setVisitorInput("")
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to add visitor"
+      setVisitorError(message)
+    } finally {
+      setAddingVisitor(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 border-t pt-3">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-controls="attendance-panel"
+      >
+        <span>Attendance</span>
+        {open ? (
+          <ChevronUpIcon className="h-4 w-4" aria-hidden="true" />
+        ) : (
+          <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
+        )}
+      </button>
+
+      {open && (
+        <div id="attendance-panel" className="mt-3 space-y-4">
+          {panel.kind === "loading" && (
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-3/4" />
+            </div>
+          )}
+
+          {panel.kind === "error" && (
+            <p className="text-xs text-destructive" role="alert">{panel.message}</p>
+          )}
+
+          {panel.kind === "loaded" && (
+            <>
+              {panel.records.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No attendees yet</p>
+              ) : (
+                <ul className="space-y-1" aria-label="Attendance list">
+                  {panel.records.map((record) => (
+                    <li
+                      key={record.id}
+                      className="flex items-center justify-between gap-2 text-xs"
+                    >
+                      <span className="truncate font-mono min-w-0">
+                        {record.visitor_name !== null
+                          ? record.visitor_name
+                          : record.member_id !== null
+                            ? record.member_id.slice(0, 8) + "…"
+                            : "Unknown"}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {record.visitor_name !== null && (
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                            Visitor
+                          </span>
+                        )}
+                        {record.member_id !== null && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => void handleRemove(record.member_id!)}
+                            aria-label={`Remove attendance for ${record.member_id?.slice(0, 8)}`}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Mark member attended */}
+              <form onSubmit={(e) => void handleMarkAttended(e)} className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Mark member attended
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Member ID"
+                    value={memberIdInput}
+                    onChange={(e) => setMemberIdInput(e.target.value)}
+                    className="min-h-[44px] flex-1 text-sm"
+                    aria-label="Member ID to mark attended"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={marking || memberIdInput.trim() === ""}
+                    className="min-h-[44px] shrink-0"
+                    aria-label="Mark member attended"
+                  >
+                    {marking ? "…" : "Mark Attended"}
+                  </Button>
+                </div>
+                {markingError !== null && (
+                  <p className="text-xs text-destructive" role="alert">{markingError}</p>
+                )}
+              </form>
+
+              {/* Add visitor */}
+              <form onSubmit={(e) => void handleAddVisitor(e)} className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Add visitor
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Visitor name"
+                    value={visitorInput}
+                    onChange={(e) => setVisitorInput(e.target.value)}
+                    className="min-h-[44px] flex-1 text-sm"
+                    aria-label="Visitor name"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={addingVisitor || visitorInput.trim() === ""}
+                    className="min-h-[44px] shrink-0"
+                    aria-label="Add visitor"
+                  >
+                    {addingVisitor ? "…" : "Add Visitor"}
+                  </Button>
+                </div>
+                {visitorError !== null && (
+                  <p className="text-xs text-destructive" role="alert">{visitorError}</p>
+                )}
+              </form>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Sessions page ─────────────────────────────────────────────────────────────
 
 const SessionsPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
