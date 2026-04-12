@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { getDojoSettings, updateDojoSettings, uploadDojoLogo } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
+import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -40,6 +41,7 @@ const isTooLight = (hex: string): boolean => {
 type SaveStatus = "idle" | "saving" | "saved" | "error"
 
 const DojoBrandingSection = () => {
+  const { refresh: refreshContext } = useDojoSettings()
   const [settings, setSettings] = useState<DojoSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -86,6 +88,7 @@ const DojoBrandingSection = () => {
     try {
       const updated = await updateDojoSettings({ dojo_name: dojoName })
       setSettings(updated)
+      refreshContext()
       setNameSaveStatus("saved")
       setTimeout(() => setNameSaveStatus("idle"), 2000)
     } catch (err: unknown) {
@@ -104,7 +107,7 @@ const DojoBrandingSection = () => {
     try {
       const updated = await updateDojoSettings({ primary_colour: primaryColour })
       setSettings(updated)
-      document.documentElement.style.setProperty("--primary", primaryColour)
+      refreshContext()
       setColourSaveStatus("saved")
       setTimeout(() => setColourSaveStatus("idle"), 2000)
     } catch (err: unknown) {
@@ -128,6 +131,7 @@ const DojoBrandingSection = () => {
     try {
       const result = await uploadDojoLogo(file)
       setLogoPreview(result.logo_url)
+      refreshContext()
       setLogoSaveStatus("saved")
       setTimeout(() => setLogoSaveStatus("idle"), 2000)
     } catch (err: unknown) {
