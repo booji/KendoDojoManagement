@@ -10,6 +10,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+// UserIcon used by MEMBER_NAV_ITEMS (My Profile)
+
 export type NavItem = {
   label: string
   href: string
@@ -25,13 +27,12 @@ const MEMBER_NAV_ITEMS: NavItem[] = [
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
+  { label: "Members", href: "/members", icon: UsersIcon },
   { label: "Sessions", href: "/sessions", icon: CalendarDaysIcon },
   { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
-  { label: "Settings", href: "/settings", icon: UserIcon },
-  { label: "Members", href: "/members", icon: UsersIcon },
   { label: "Grades", href: "/grades", icon: AwardIcon },
   { label: "Reports", href: "/reports", icon: BarChartIcon },
-  { label: "Admin Settings", href: "/admin/settings", icon: SettingsIcon },
+  { label: "Settings", href: "/admin/settings", icon: SettingsIcon },
 ]
 
 export const useNavItems = (role: "member" | "admin"): NavItem[] =>

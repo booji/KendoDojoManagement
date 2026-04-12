@@ -213,3 +213,137 @@ def test_sidebar_header_shows_my_dojo(admin_page: Page) -> None:
     sidebar = admin_page.locator("[data-slot='sidebar']")
     expect(sidebar).to_be_visible()
     expect(sidebar.get_by_text("My Dojo")).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Issue #12 E2E tests — promoted from xfail stubs
+# ---------------------------------------------------------------------------
+
+
+def test_admin_dashboard_shows_stat_cards(admin_page: Page) -> None:
+    """Issue #12: Admin dashboard displays active members, sessions this week,
+    and attendance rate stat cards."""
+    admin_page.set_viewport_size({"width": 1280, "height": 800})
+    # The dashboard is the root route — navigate there explicitly.
+    admin_page.goto(BASE_URL)
+    admin_page.wait_for_load_state("networkidle")
+
+    stats_grid = admin_page.locator("[aria-label='Dashboard statistics']")
+    expect(stats_grid).to_be_visible()
+
+    # Each stat card heading must be visible.
+    expect(admin_page.get_by_text("Active Members")).to_be_visible()
+    expect(admin_page.get_by_text("Sessions This Week")).to_be_visible()
+    expect(admin_page.get_by_text("Attendance Rate")).to_be_visible()
+    expect(admin_page.get_by_text("Attendance Trend")).to_be_visible()
+
+
+def test_member_dashboard_shows_next_session_and_calendar(member_page: Page) -> None:
+    """Issue #12: Member dashboard displays next session and a session calendar."""
+    member_page.set_viewport_size({"width": 1280, "height": 800})
+    member_page.goto(BASE_URL)
+    member_page.wait_for_load_state("networkidle")
+
+    # "Next Session" card title must be visible (exact match to avoid strict mode
+    # violations from partial matches against empty-state text).
+    expect(member_page.get_by_text("Next Session", exact=True)).to_be_visible()
+    # "Upcoming Sessions" card title must be visible.
+    expect(member_page.get_by_text("Upcoming Sessions", exact=True)).to_be_visible()
+
+
+def test_sidebar_renders_on_desktop_viewport(admin_page: Page) -> None:
+    """Issue #12: Sidebar navigation is present at 1280px wide desktop viewport."""
+    admin_page.set_viewport_size({"width": 1280, "height": 800})
+    sidebar = admin_page.locator("[data-slot='sidebar']")
+    expect(sidebar).to_be_visible()
+
+
+def test_bottom_tab_bar_renders_on_mobile_viewport(member_page: Page) -> None:
+    """Issue #12: Bottom tab bar navigation is present at 375px wide mobile viewport."""
+    member_page.set_viewport_size({"width": 375, "height": 667})
+    tab_bar = member_page.get_by_role("navigation", name="Main navigation")
+    expect(tab_bar).to_be_visible()
+
+
+def test_member_nav_excludes_restricted_sections(member_page: Page) -> None:
+    """Issue #12: Member nav does NOT contain Members, Grades, Reports, Settings links."""
+    member_page.set_viewport_size({"width": 1280, "height": 800})
+    sidebar = member_page.locator("[data-slot='sidebar']")
+    expect(sidebar).to_be_visible()
+
+    for label in ["Members", "Grades", "Reports", "Settings"]:
+        expect(sidebar.get_by_role("link", name=label)).not_to_be_attached()
+
+
+def test_admin_nav_contains_all_sections(admin_page: Page) -> None:
+    """Issue #12: Admin nav contains Dashboard, Members, Sessions, Attendance,
+    Grades, Reports, Settings."""
+    admin_page.set_viewport_size({"width": 1280, "height": 800})
+    sidebar = admin_page.locator("[data-slot='sidebar']")
+    expect(sidebar).to_be_visible()
+
+    for label in ["Dashboard", "Members", "Sessions", "Attendance", "Grades", "Reports", "Settings"]:
+        expect(sidebar.get_by_role("link", name=label)).to_be_visible()
+
+
+def test_theme_toggle_cycles_light_dark_system(admin_page: Page) -> None:
+    """Issue #12: Theme toggle cycles through themes and applies the correct
+    dark class to the html element when dark mode is selected.
+
+    The test is state-agnostic: it finds the current toggle button and cycles
+    until dark mode is reached, verifying the html.dark class is applied and
+    then removed on the next click.
+    """
+    admin_page.set_viewport_size({"width": 1280, "height": 800})
+    admin_page.wait_for_load_state("networkidle")
+
+    # Find the theme toggle button — it always has an aria-label "Switch to X theme".
+    toggle = admin_page.locator("button[aria-label^='Switch to']")
+    expect(toggle).to_be_visible()
+
+    # Cycle through all three states (at most 3 clicks) to reach dark mode.
+    reached_dark = False
+    for _ in range(3):
+        label: str = toggle.get_attribute("aria-label") or ""
+        if label == "Switch to dark theme":
+            # Current theme is light — click to go dark.
+            toggle.click()
+            admin_page.wait_for_function(
+                "() => document.documentElement.classList.contains('dark')"
+            )
+            html_classes: str = admin_page.evaluate(
+                "() => document.documentElement.className"
+            )
+            assert "dark" in html_classes, (
+                f"Expected 'dark' class after toggling to dark, got: {html_classes}"
+            )
+            # Click again (dark → system/light) — dark class should be removed.
+            toggle.click()
+            admin_page.wait_for_function(
+                "() => !document.documentElement.classList.contains('dark')"
+            )
+            html_classes = admin_page.evaluate(
+                "() => document.documentElement.className"
+            )
+            assert "dark" not in html_classes, (
+                f"Expected no 'dark' class after leaving dark mode, got: {html_classes}"
+            )
+            reached_dark = True
+            break
+        # Not at the right starting point — click once and try again.
+        toggle.click()
+        admin_page.wait_for_load_state("domcontentloaded")
+
+    assert reached_dark, "Theme toggle never entered dark mode within 3 clicks"
+
+
+def test_dojo_name_appears_in_sidebar_header(admin_page: Page) -> None:
+    """Issue #12: The configured dojo name is shown in the sidebar header.
+
+    The dojo name defaults to 'My Dojo' when no settings have been configured.
+    """
+    admin_page.set_viewport_size({"width": 1280, "height": 800})
+    sidebar = admin_page.locator("[data-slot='sidebar']")
+    expect(sidebar).to_be_visible()
+    # Default dojo name is 'My Dojo' (set in DojoSettingsProvider defaults).
+    expect(sidebar.get_by_text("My Dojo")).to_be_visible()

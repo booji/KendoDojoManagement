@@ -1,8 +1,10 @@
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import insert, select
 
 import app.attendance.db_models  # noqa: F401
@@ -12,8 +14,10 @@ import app.auth.db_models  # noqa: F401
 import app.grades.db_models  # noqa: F401
 import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
+import app.settings.models  # noqa: F401
 from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
+from app.dashboard.router import router as dashboard_router
 from app.db.base import Base
 from app.db.engine import engine
 from app.grades.router import router as grades_router
@@ -22,6 +26,7 @@ from app.reports.router import router as reports_router
 from app.routers.health import router as health_router
 from app.sessions.db_models import SessionType
 from app.sessions.router import router as sessions_router
+from app.settings.router import router as settings_router
 from app.users.router import router as users_router
 
 
@@ -50,3 +55,9 @@ app.include_router(users_router)
 app.include_router(grades_router)
 app.include_router(attendance_router)
 app.include_router(reports_router)
+app.include_router(settings_router)
+app.include_router(dashboard_router)
+
+_STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
+os.makedirs(_STATIC_DIR, exist_ok=True)
+app.mount("/static/logos", StaticFiles(directory=_STATIC_DIR), name="logos")

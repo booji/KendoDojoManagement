@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { useNavItems } from "@/hooks/useNavItems"
 import { useThemeContext } from "@/contexts/ThemeProvider"
+import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import BottomTabBar from "@/components/BottomTabBar"
 import ThemeToggle from "@/components/ThemeToggle"
 import {
@@ -28,15 +29,26 @@ type AppShellProps = {
   children: React.ReactNode
 }
 
-const DojoLogo = () => (
-  <div className="flex items-center gap-2 px-2 py-1">
-    <div
-      className="size-8 rounded-md bg-muted shrink-0"
-      aria-hidden="true"
-    />
-    <span className="font-semibold text-sm truncate">My Dojo</span>
-  </div>
-)
+const DojoLogo = () => {
+  const { dojoName, logoUrl } = useDojoSettings()
+  return (
+    <div className="flex items-center gap-2 px-2 py-1">
+      {logoUrl !== null ? (
+        <img
+          src={logoUrl}
+          alt={dojoName}
+          className="size-8 rounded-md object-cover shrink-0"
+        />
+      ) : (
+        <div
+          className="size-8 rounded-md bg-muted shrink-0"
+          aria-hidden="true"
+        />
+      )}
+      <span className="font-semibold text-sm truncate">{dojoName}</span>
+    </div>
+  )
+}
 
 const AppShell = ({ role, children }: AppShellProps) => {
   const navItems = useNavItems(role)
