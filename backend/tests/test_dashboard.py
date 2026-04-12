@@ -1,5 +1,5 @@
 """
-Unit/integration tests for issue #12 — Admin Dashboard endpoint.
+Unit/integration tests for issue #12 / #17 — Admin Dashboard endpoint.
 
 Uses StubRepository pattern — NO real DB.
 
@@ -8,8 +8,10 @@ Acceptance criteria covered here:
       attendance_rate, attendance_trend } — admin only
   7.  GET /dashboard/admin with member token → 403
   8.  GET /dashboard/admin returns correct active member count from DB
-  9.  attendance_trend is "positive" when current 30-day rate > previous 30-day rate
-  10. attendance_trend is "negative" when current 30-day rate < previous 30-day rate
+  9.  attendance_trend > 0.0 when current 30-day rate > previous 30-day rate
+  10. attendance_trend < 0.0 when current 30-day rate < previous 30-day rate
+  11. attendance_trend is a float
+  12. attendance_trend == 0.0 when both periods have no sessions
 """
 
 from __future__ import annotations
@@ -228,7 +230,7 @@ async def test_admin_dashboard_active_member_count_zero_when_no_members(
 
 
 # ---------------------------------------------------------------------------
-# AC9 — attendance_trend is "positive" when current 30-day rate > previous
+# AC9 — attendance_trend > 0.0 when current 30-day rate > previous
 # ---------------------------------------------------------------------------
 
 
@@ -236,7 +238,7 @@ async def test_admin_dashboard_active_member_count_zero_when_no_members(
 async def test_admin_dashboard_trend_positive_when_rate_improving(
     dashboard_repo: StubDashboardRepo,
 ) -> None:
-    """attendance_trend == 'positive' when the current 30-day rate exceeds the previous."""
+    """attendance_trend > 0.0 when the current 30-day rate exceeds the previous."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     member = dashboard_repo.seed_member(status="active")
@@ -253,11 +255,11 @@ async def test_admin_dashboard_trend_positive_when_rate_improving(
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
-    assert response.json()["attendance_trend"] == "positive"
+    assert response.json()["attendance_trend"] > 0.0
 
 
 # ---------------------------------------------------------------------------
-# AC10 — attendance_trend is "negative" when current 30-day rate < previous
+# AC10 — attendance_trend < 0.0 when current 30-day rate < previous
 # ---------------------------------------------------------------------------
 
 
@@ -265,7 +267,7 @@ async def test_admin_dashboard_trend_positive_when_rate_improving(
 async def test_admin_dashboard_trend_negative_when_rate_declining(
     dashboard_repo: StubDashboardRepo,
 ) -> None:
-    """attendance_trend == 'negative' when the current 30-day rate is below the previous."""
+    """attendance_trend < 0.0 when the current 30-day rate is below the previous."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     member = dashboard_repo.seed_member(status="active")
@@ -281,4 +283,44 @@ async def test_admin_dashboard_trend_negative_when_rate_declining(
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
-    assert response.json()["attendance_trend"] == "negative"
+    assert response.json()["attendance_trend"] < 0.0
+
+
+# ---------------------------------------------------------------------------
+# AC11 — attendance_trend is a float
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_dashboard_trend_is_float(
+    dashboard_repo: StubDashboardRepo,
+) -> None:
+    """attendance_trend must be a float (signed difference), not a string."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get("/dashboard/admin")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["attendance_trend"], float)
+
+
+# ---------------------------------------------------------------------------
+# AC12 — attendance_trend == 0.0 when both periods have no sessions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_admin_dashboard_trend_neutral_when_both_zero(
+    dashboard_repo: StubDashboardRepo,
+) -> None:
+    """attendance_trend == 0.0 when both the current and previous periods have no sessions."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    # No sessions seeded at all → both periods rate = 0.0, trend = 0.0
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get("/dashboard/admin")
+
+    assert response.status_code == 200
+    assert response.json()["attendance_trend"] == 0.0

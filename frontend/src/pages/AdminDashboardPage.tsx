@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -8,7 +9,7 @@ type AdminDashboard = {
   active_members: number
   sessions_this_week: number
   attendance_rate: number
-  attendance_trend: "positive" | "negative" | "neutral"
+  attendance_trend: number
 }
 
 const fetchAdminDashboard = async (): Promise<AdminDashboard> => {
@@ -19,14 +20,30 @@ const fetchAdminDashboard = async (): Promise<AdminDashboard> => {
   return res.json() as Promise<AdminDashboard>
 }
 
-const TrendIndicator = ({ trend }: { trend: AdminDashboard["attendance_trend"] }) => {
-  if (trend === "positive") {
-    return <span className="text-green-600 dark:text-green-400" aria-label="Trending up">▲</span>
+const TrendIndicator = ({ trend }: { trend: number }) => {
+  const pct = Math.round(Math.abs(trend) * 100)
+  if (trend > 0) {
+    return (
+      <span className="flex items-center gap-1 text-green-600 dark:text-green-400" aria-label={`Trending up ${pct}%`}>
+        <TrendingUp className="h-5 w-5" aria-hidden="true" />
+        <span>+{pct}%</span>
+      </span>
+    )
   }
-  if (trend === "negative") {
-    return <span className="text-red-600 dark:text-red-400" aria-label="Trending down">▼</span>
+  if (trend < 0) {
+    return (
+      <span className="flex items-center gap-1 text-red-600 dark:text-red-400" aria-label={`Trending down ${pct}%`}>
+        <TrendingDown className="h-5 w-5" aria-hidden="true" />
+        <span>-{pct}%</span>
+      </span>
+    )
   }
-  return <span className="text-muted-foreground" aria-label="Neutral trend">—</span>
+  return (
+    <span className="flex items-center gap-1 text-muted-foreground" aria-label="No change">
+      <Minus className="h-5 w-5" aria-hidden="true" />
+      <span>±0%</span>
+    </span>
+  )
 }
 
 const DashboardSkeletons = () => (
@@ -67,8 +84,15 @@ const AdminDashboardPage = () => {
   useEffect(() => {
     load()
     const interval = setInterval(load, 30_000)
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") load()
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -77,8 +101,8 @@ const AdminDashboardPage = () => {
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <Button
           size="lg"
-          onClick={() => void navigate("/sessions")}
-          aria-label="Go to sessions to create a new session"
+          onClick={() => void navigate("/sessions/new")}
+          aria-label="Create a new session"
           className="min-h-[44px]"
         >
           Create Session
