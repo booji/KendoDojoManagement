@@ -28,3 +28,27 @@ export const getSessionTypes = async (): Promise<SessionType[]> => {
   }
   return res.json() as Promise<SessionType[]>
 }
+
+export type SessionInstanceCreate = {
+  session_type_id: string
+  date: string // "YYYY-MM-DD"
+  start_time: string // "HH:MM"
+  duration_minutes: number
+  notes?: string | null
+}
+
+export const createSession = async (
+  payload: SessionInstanceCreate,
+): Promise<SessionInstance> => {
+  const res = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `Failed to create session: ${res.status}`)
+  }
+  return res.json() as Promise<SessionInstance>
+}

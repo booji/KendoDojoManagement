@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getSessions, getSessionTypes } from "@/api/sessions"
+import { getSessions, getSessionTypes, createSession } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { getMe } from "@/api/auth"
 import {
@@ -12,6 +12,21 @@ import {
 } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -424,10 +439,153 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
   )
 }
 
+// ── Create session dialog ──────────────────────────────────────────────────────
+
+type CreateDialogProps = {
+  sessionTypes: SessionType[]
+  onCreated: (session: SessionInstance) => void
+}
+
+const CreateSessionDialog = ({ sessionTypes, onCreated }: CreateDialogProps) => {
+  const [open, setOpen] = useState(false)
+  const [typeId, setTypeId] = useState("")
+  const [date, setDate] = useState("")
+  const [time, setTime] = useState("")
+  const [duration, setDuration] = useState("90")
+  const [notes, setNotes] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const reset = () => {
+    setTypeId("")
+    setDate("")
+    setTime("")
+    setDuration("90")
+    setNotes("")
+    setFormError(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    const mins = parseInt(duration, 10)
+    if (!typeId || !date || !time || isNaN(mins) || mins < 1) {
+      setFormError("All fields are required and duration must be positive.")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const created = await createSession({
+        session_type_id: typeId,
+        date,
+        start_time: time,
+        duration_minutes: mins,
+        notes: notes.trim() || null,
+      })
+      onCreated(created)
+      setOpen(false)
+      reset()
+    } catch (err: unknown) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to create session"
+      setFormError(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
+      <DialogTrigger render={<Button size="sm" />}>
+        New Session
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New session</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="session-type">Session type</Label>
+            <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
+              <SelectTrigger id="session-type" className="min-h-[44px]">
+                <SelectValue placeholder="Select type…" />
+              </SelectTrigger>
+              <SelectContent>
+                {sessionTypes.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="session-date">Date</Label>
+            <Input
+              id="session-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="min-h-[44px]"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="session-time">Start time</Label>
+            <Input
+              id="session-time"
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="min-h-[44px]"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="session-duration">Duration (minutes)</Label>
+            <Input
+              id="session-duration"
+              type="number"
+              min={1}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="min-h-[44px]"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="session-notes">Location / notes (optional)</Label>
+            <Input
+              id="session-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Main dojo"
+              className="min-h-[44px]"
+            />
+          </div>
+
+          {formError !== null && (
+            <p className="text-sm text-destructive" role="alert">{formError}</p>
+          )}
+
+          <Button type="submit" className="w-full min-h-[44px]" disabled={submitting}>
+            {submitting ? "Creating…" : "Create session"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── Sessions page ─────────────────────────────────────────────────────────────
 
 const SessionsPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
+  const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
   const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -436,6 +594,7 @@ const SessionsPage = () => {
     Promise.all([getSessions(), getSessionTypes(), getMe()])
       .then(([fetchedSessions, fetchedTypes, me]) => {
         setSessions(fetchedSessions)
+        setSessionTypes(fetchedTypes)
         setTypeMap(
           new Map(fetchedTypes.map((t: SessionType) => [t.id, t.name]))
         )
@@ -445,6 +604,18 @@ const SessionsPage = () => {
         setError("Failed to load sessions. Please try again.")
       })
   }, [])
+
+  const handleCreated = (session: SessionInstance) => {
+    setSessions((prev) =>
+      prev === null
+        ? [session]
+        : [...prev, session].sort(
+            (a, b) =>
+              new Date(a.scheduled_at).getTime() -
+              new Date(b.scheduled_at).getTime(),
+          ),
+    )
+  }
 
   if (error !== null) {
     return (
@@ -466,20 +637,22 @@ const SessionsPage = () => {
     )
   }
 
-  if (sessions.length === 0) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <p className="text-sm text-muted-foreground">No upcoming sessions</p>
-      </div>
-    )
-  }
-
-  const groups = groupByWeek(sessions)
   const isAdmin = role === "admin"
+  const groups = groupByWeek(sessions)
 
   return (
     <div className="px-4 py-6 space-y-8 max-w-2xl mx-auto">
-      <h1 className="text-xl font-semibold">Sessions</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold">Sessions</h1>
+        {isAdmin && (
+          <CreateSessionDialog sessionTypes={sessionTypes} onCreated={handleCreated} />
+        )}
+      </div>
+
+      {sessions.length === 0 && (
+        <p className="text-sm text-muted-foreground">No upcoming sessions.</p>
+      )}
+
       {groups.map((group) => (
         <section key={group.label}>
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
