@@ -107,6 +107,7 @@ const DojoBrandingSection = () => {
     try {
       const updated = await updateDojoSettings({ primary_colour: primaryColour })
       setSettings(updated)
+      document.documentElement.style.setProperty("--primary", primaryColour)
       refreshContext()
       setColourSaveStatus("saved")
       setTimeout(() => setColourSaveStatus("idle"), 2000)

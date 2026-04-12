@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletC
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
-import { DojoSettingsProvider } from "@/contexts/DojoSettingsProvider"
+import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
 import AdminDashboardPage from "@/pages/AdminDashboardPage"
 import MemberDashboardPage from "@/pages/MemberDashboardPage"
@@ -31,6 +31,7 @@ const DashboardRoute = () => {
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
 const AuthenticatedLayout = () => {
+  const { refresh } = useDojoSettings()
   const navigate = useNavigate()
   const [user, setUser] = useState<UserClaims | null>(null)
 
@@ -38,6 +39,7 @@ const AuthenticatedLayout = () => {
     getMe()
       .then((me) => {
         setUser(me)
+        refresh()
       })
       .catch((err: unknown) => {
         if (isApiError(err) && (err.status === 401 || err.status === 403)) {

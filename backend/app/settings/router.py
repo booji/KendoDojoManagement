@@ -10,6 +10,8 @@ from pydantic import BaseModel, field_validator
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.db.unit_of_work import AbstractUnitOfWork
+from app.dependencies import get_uow
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import AbstractDojoSettingsRepository
 from app.settings.wcag import passes_wcag_aa
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 _SettingsRepo = Annotated[
     AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)
 ]
+_UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
@@ -64,6 +67,7 @@ async def update_dojo_settings(
     payload: DojoSettingsUpdate,
     claims: _Admin,
     repo: _SettingsRepo,
+    uow: _UoW,
 ) -> dict[str, Any]:
     """Admin-only — update dojo name and/or primary colour."""
     if payload.primary_colour is not None:
@@ -78,6 +82,7 @@ async def update_dojo_settings(
     if payload.primary_colour is not None:
         data["primary_colour"] = payload.primary_colour
     settings = await repo.update(data)
+    await uow.commit()
     return {
         "dojo_name": settings["dojo_name"],
         "logo_url": settings["logo_url"],
@@ -89,6 +94,7 @@ async def update_dojo_settings(
 async def upload_logo(
     claims: _Admin,
     repo: _SettingsRepo,
+    uow: _UoW,
     file: UploadFile = File(...),
 ) -> dict[str, str]:
     """Admin-only — upload a dojo logo image."""
@@ -117,4 +123,5 @@ async def upload_logo(
         fh.write(contents)
     logo_url = f"/static/logos/{filename}"
     await repo.update({"logo_url": logo_url})
+    await uow.commit()
     return {"logo_url": logo_url}
