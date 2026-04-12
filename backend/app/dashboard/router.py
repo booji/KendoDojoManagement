@@ -32,12 +32,7 @@ async def admin_dashboard(
     current_rate = await repo.attendance_rate_for_period(current_start, today)
     prev_rate = await repo.attendance_rate_for_period(prev_start, prev_end)
 
-    if current_rate > prev_rate:
-        trend = "positive"
-    elif current_rate < prev_rate:
-        trend = "negative"
-    else:
-        trend = "neutral"
+    trend = round(current_rate - prev_rate, 4)
 
     return {
         "active_members": active_members,
