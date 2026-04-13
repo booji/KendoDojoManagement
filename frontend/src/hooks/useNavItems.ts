@@ -32,7 +32,8 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
   { label: "Grades", href: "/grades", icon: AwardIcon },
   { label: "Reports", href: "/reports", icon: BarChartIcon },
-  { label: "Settings", href: "/admin/settings", icon: SettingsIcon },
+  { label: "Settings", href: "/settings", icon: UserIcon },
+  { label: "Admin Settings", href: "/admin/settings", icon: SettingsIcon },
 ]
 
 export const useNavItems = (role: "member" | "admin"): NavItem[] =>
