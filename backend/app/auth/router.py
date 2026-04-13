@@ -1,10 +1,12 @@
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import update
 
 from app import config
 from app.auth.db_models import User
+from app.auth.dependencies import get_passkey_repo
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import (
     LoginRequest,
@@ -15,6 +17,7 @@ from app.auth.models import (
     ThemeUpdate,
     UserClaims,
 )
+from app.auth.passkey_repository import AbstractPasskeyRepository
 from app.auth.passkey_service import (
     login_passkey_begin,
     login_passkey_complete,
@@ -133,3 +136,58 @@ async def passkey_login_complete(
         max_age=60 * int(config.JWT_EXPIRE_MINUTES),
     )
     return {"detail": "logged in"}
+
+
+class _LabelUpdate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=255)
+
+
+def _passkey_to_response(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record["id"],
+        "label": record["label"],
+        "aaguid": record.get("aaguid"),
+        "created_at": record["created_at"],
+        "last_used_at": record.get("last_used_at"),
+    }
+
+
+@router.get("/passkeys")
+async def list_passkeys(
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+) -> list[dict[str, Any]]:
+    records = await repo.list_for_user(claims.sub)
+    return [_passkey_to_response(r) for r in records]
+
+
+@router.patch("/passkeys/{passkey_id}")
+async def update_passkey_label(
+    passkey_id: str,
+    payload: _LabelUpdate,
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+) -> dict[str, Any]:
+    record = await repo.get(passkey_id)
+    if record is None or record["user_id"] != claims.sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    updated = await repo.update_label(passkey_id, claims.sub, payload.label)
+    return _passkey_to_response(updated)  # type: ignore[arg-type]
+
+
+@router.delete("/passkeys/{passkey_id}", status_code=204)
+async def delete_passkey(
+    passkey_id: str,
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+) -> None:
+    record = await repo.get(passkey_id)
+    if record is None or record["user_id"] != claims.sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    count = await repo.count_for_user(claims.sub)
+    if count <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your only passkey",
+        )
+    await repo.delete(passkey_id, claims.sub)

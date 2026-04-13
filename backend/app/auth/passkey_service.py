@@ -15,6 +15,7 @@ from webauthn.helpers.structs import (
 )
 
 from app import config
+from app.auth.aaguid import label_from_aaguid
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.models import (
     PasskeyCredentialResponse,
@@ -140,11 +141,15 @@ async def register_passkey_complete(
         expected_origin=config.WEBAUTHN_ORIGIN,
     )
 
+    aaguid_raw = verified.aaguid
+    aaguid_str = str(aaguid_raw) if aaguid_raw is not None else None
     passkey = PasskeyCredential(
         user_id=user.id,
         credential_id=verified.credential_id,
         public_key=verified.credential_public_key,
         sign_count=verified.sign_count,
+        aaguid=aaguid_str,
+        label=label_from_aaguid(aaguid_str),
     )
     uow.session.add(passkey)
     user.pending_challenge = None
@@ -240,6 +245,7 @@ async def login_passkey_complete(
     )
 
     stored_cred.sign_count = verified.new_sign_count
+    stored_cred.last_used_at = datetime.now(UTC)
     user.pending_challenge = None
     await uow.commit()
 

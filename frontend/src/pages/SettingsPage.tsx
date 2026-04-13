@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
+import { listPasskeys, renamePasskey, deletePasskey } from "@/api/passkeys"
+import type { PasskeyRecord } from "@/api/passkeys"
 import { useThemeContext } from "@/contexts/ThemeProvider"
 import type { Theme } from "@/contexts/ThemeProvider"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Pencil, Trash2, Check, X } from "lucide-react"
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -93,6 +96,242 @@ const ProfileSummary = ({
             {member.is_coach && <Badge>Coach</Badge>}
             {member.is_first_aider && <Badge>First aider</Badge>}
             {member.is_minor && <Badge variant="secondary">Minor</Badge>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Date formatting ───────────────────────────────────────────────────────────
+
+const formatDate = (iso: string): string => {
+  const d = new Date(iso)
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+}
+
+// ── Passkey row ───────────────────────────────────────────────────────────────
+
+type PasskeyRowProps = {
+  passkey: PasskeyRecord
+  isOnly: boolean
+  onRename: (id: string, label: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}
+
+const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) => {
+  const [editing, setEditing] = useState(false)
+  const [labelDraft, setLabelDraft] = useState(passkey.label)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [rowError, setRowError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing) {
+      setLabelDraft(passkey.label)
+      setTimeout(() => inputRef.current?.focus(), 0)
+    }
+  }, [editing, passkey.label])
+
+  const handleSave = async () => {
+    const trimmed = labelDraft.trim()
+    if (!trimmed) return
+    setSaving(true)
+    setRowError(null)
+    try {
+      await onRename(passkey.id, trimmed)
+      setEditing(false)
+    } catch (err) {
+      setRowError(isApiError(err) ? err.message : "Failed to rename passkey")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setRowError(null)
+    try {
+      await onDelete(passkey.id)
+    } catch (err) {
+      setRowError(isApiError(err) ? err.message : "Failed to delete passkey")
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1 py-3 border-b last:border-b-0">
+      <div className="flex items-center gap-2 flex-wrap">
+        {editing ? (
+          <>
+            <Input
+              ref={inputRef}
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleSave()
+                if (e.key === "Escape") setEditing(false)
+              }}
+              className="h-8 text-sm flex-1 min-w-0"
+              disabled={saving}
+              aria-label="Passkey label"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleSave()}
+              disabled={saving || !labelDraft.trim()}
+              aria-label="Save label"
+              className="h-8 w-8 p-0"
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              aria-label="Cancel rename"
+              className="h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-medium flex-1">{passkey.label}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditing(true)}
+              aria-label="Rename passkey"
+              className="h-8 w-8 p-0"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleDelete()}
+              disabled={isOnly || deleting}
+              aria-label={isOnly ? "You need at least one passkey" : "Delete passkey"}
+              title={isOnly ? "You need at least one passkey" : undefined}
+              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      </div>
+      <div className="flex gap-4 flex-wrap">
+        <span className="text-xs text-muted-foreground">
+          Added {formatDate(passkey.created_at)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Last used: {passkey.last_used_at !== null ? formatDate(passkey.last_used_at) : "Never"}
+        </span>
+      </div>
+      {rowError !== null && (
+        <p className="text-xs text-destructive" role="alert">
+          {rowError}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Security card ─────────────────────────────────────────────────────────────
+
+type PasskeyLoadState =
+  | { status: "loading" }
+  | { status: "ready"; passkeys: PasskeyRecord[] }
+  | { status: "error"; message: string }
+
+const SecurityCard = () => {
+  const [state, setState] = useState<PasskeyLoadState>({ status: "loading" })
+
+  useEffect(() => {
+    listPasskeys()
+      .then((passkeys) => setState({ status: "ready", passkeys }))
+      .catch((err: unknown) => {
+        setState({
+          status: "error",
+          message: isApiError(err) ? err.message : "Failed to load passkeys",
+        })
+      })
+  }, [])
+
+  const handleRename = async (id: string, label: string) => {
+    if (state.status !== "ready") return
+    const prev = state.passkeys
+    // Optimistic update
+    setState({
+      status: "ready",
+      passkeys: prev.map((p) => (p.id === id ? { ...p, label } : p)),
+    })
+    try {
+      const updated = await renamePasskey(id, label)
+      setState({
+        status: "ready",
+        passkeys: prev.map((p) => (p.id === id ? updated : p)),
+      })
+    } catch (err) {
+      // Revert
+      setState({ status: "ready", passkeys: prev })
+      throw err
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (state.status !== "ready") return
+    const prev = state.passkeys
+    // Optimistic removal
+    setState({ status: "ready", passkeys: prev.filter((p) => p.id !== id) })
+    try {
+      await deletePasskey(id)
+    } catch (err) {
+      // Revert
+      setState({ status: "ready", passkeys: prev })
+      throw err
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Security</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {state.status === "loading" && (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+        {state.status === "error" && (
+          <p className="text-sm text-destructive" role="alert">
+            {state.message}
+          </p>
+        )}
+        {state.status === "ready" && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-3">Passkeys</p>
+            {state.passkeys.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No passkeys registered.</p>
+            ) : (
+              <div>
+                {state.passkeys.map((pk) => (
+                  <PasskeyRow
+                    key={pk.id}
+                    passkey={pk}
+                    isOnly={state.passkeys.length === 1}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -321,6 +560,8 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      <SecurityCard />
     </div>
   )
 }
