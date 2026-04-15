@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -6,7 +7,7 @@ from sqlalchemy import update
 
 from app import config
 from app.auth.db_models import User
-from app.auth.dependencies import get_passkey_repo
+from app.auth.dependencies import get_passkey_repo, get_recovery_repo
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import (
     LoginRequest,
@@ -24,6 +25,8 @@ from app.auth.passkey_service import (
     register_passkey_begin,
     register_passkey_complete,
 )
+from app.auth.recovery_repository import AbstractRecoveryRepository
+from app.auth.recovery_service import generate_recovery_codes, hash_codes
 from app.auth.service import login_user, register_user
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -180,14 +183,61 @@ async def delete_passkey(
     passkey_id: str,
     claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+    recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
 ) -> None:
     record = await repo.get(passkey_id)
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     count = await repo.count_for_user(claims.sub)
     if count <= 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your only passkey",
-        )
+        unused = await recovery_repo.count_unused(claims.sub)
+        if unused == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete your only passkey without recovery codes",
+            )
     await repo.delete(passkey_id, claims.sub)
+
+
+@router.post("/recovery/codes/generate", status_code=200)
+async def generate_codes(
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict[str, Any]:
+    if await recovery_repo.has_active_set(claims.sub):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Recovery codes already exist. Use regenerate to replace them.",
+        )
+    codes = generate_recovery_codes()
+    hashes = hash_codes(codes)
+    set_id = str(uuid.uuid4())
+    await recovery_repo.create_codes(claims.sub, hashes, set_id)
+    await uow.commit()
+    return {"codes": codes}
+
+
+@router.post("/recovery/codes/regenerate", status_code=200)
+async def regenerate_codes(
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict[str, Any]:
+    await recovery_repo.invalidate_all(claims.sub)
+    codes = generate_recovery_codes()
+    hashes = hash_codes(codes)
+    set_id = str(uuid.uuid4())
+    await recovery_repo.create_codes(claims.sub, hashes, set_id)
+    await uow.commit()
+    return {"codes": codes}
+
+
+@router.get("/recovery/codes/status", status_code=200)
+async def recovery_codes_status(
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
+) -> dict[str, Any]:
+    unused_count = await recovery_repo.count_unused(claims.sub)
+    has_set = await recovery_repo.has_active_set(claims.sub)
+    return {"unused_count": unused_count, "has_set": has_set}
