@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletContext } from "react-router-dom"
-import { getMe, isApiError } from "@/api/auth"
+import { getMe } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
+import { checkSetupAvailable } from "@/api/setup"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
@@ -19,6 +20,7 @@ import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
 import CheckinPage from "@/pages/CheckinPage"
+import SetupPage from "@/pages/SetupPage"
 
 type LayoutContext = { user: UserClaims }
 
@@ -41,12 +43,14 @@ const AuthenticatedLayout = () => {
         setUser(me)
         refresh()
       })
-      .catch((err: unknown) => {
-        if (isApiError(err) && (err.status === 401 || err.status === 403)) {
-          navigate("/login", { replace: true })
-        } else {
-          navigate("/login", { replace: true })
-        }
+      .catch(() => {
+        checkSetupAvailable()
+          .then((available) => {
+            navigate(available ? "/setup" : "/login", { replace: true })
+          })
+          .catch(() => {
+            navigate("/login", { replace: true })
+          })
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate])
@@ -76,6 +80,7 @@ const App = () => (
           {/* Public routes — no AppShell */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/setup" element={<SetupPage />} />
 
           {/* Authenticated routes — wrapped in AppShell */}
           <Route element={<AuthenticatedLayout />}>

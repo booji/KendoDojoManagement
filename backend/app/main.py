@@ -24,6 +24,7 @@ from app.grades.router import router as grades_router
 from app.members.router import router as members_router
 from app.reports.router import router as reports_router
 from app.routers.health import router as health_router
+from app.routers.setup import router as setup_router
 from app.sessions.db_models import SessionType
 from app.sessions.router import router as sessions_router
 from app.settings.router import router as settings_router
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 
 app.include_router(health_router)
+app.include_router(setup_router)
 app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(members_router)
