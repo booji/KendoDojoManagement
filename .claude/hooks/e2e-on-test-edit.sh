@@ -79,7 +79,7 @@ fi
 
 # ── Run only the edited e2e file ─────────────────────────────────────────────
 
-FULL_OUTPUT=$(cd "$BACKEND_DIR" && . .venv/bin/activate && pytest "$FILE_PATH" --headed=false -q 2>&1)
+FULL_OUTPUT=$(cd "$BACKEND_DIR" && . .venv/bin/activate && pytest "$FILE_PATH" -q 2>&1)
 PYTEST_EXIT=$?
 
 # ── Tear down only servers we started ────────────────────────────────────────
