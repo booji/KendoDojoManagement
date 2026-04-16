@@ -53,6 +53,23 @@ export const renamePasskey = async (id: string, label: string): Promise<PasskeyR
   return res.json() as Promise<PasskeyRecord>
 }
 
+export type SecurityStatus = {
+  passkey_count: number
+}
+
+export const getSecurityStatus = async (): Promise<SecurityStatus> => {
+  const res = await fetch("/api/auth/security-status", { credentials: "include" })
+
+  if (res.status === 401) {
+    await throwApiError(res, "Not authenticated")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load security status")
+  }
+
+  return res.json() as Promise<SecurityStatus>
+}
+
 export const deletePasskey = async (id: string): Promise<void> => {
   const res = await fetch(`/api/auth/passkeys/${id}`, {
     method: "DELETE",

@@ -21,6 +21,7 @@ from app.auth.models import (
     PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
+    PasskeyRegisterCompleteResponse,
     TokenResponse,
     UserClaims,
 )
@@ -78,9 +79,7 @@ async def _get_or_create_user(email: str, uow: AbstractUnitOfWork) -> User:
     result = await uow.session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if user is None:
-        count_result = await uow.session.execute(
-            select(func.count()).select_from(User)
-        )
+        count_result = await uow.session.execute(select(func.count()).select_from(User))
         is_first_user = count_result.scalar_one() == 0
         role = "admin" if is_first_user else "member"
         user = User(
@@ -113,10 +112,8 @@ async def register_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
 
 async def register_passkey_complete(
     payload: PasskeyRegisterCompleteRequest, uow: AbstractUnitOfWork
-) -> UserClaims:
-    result = await uow.session.execute(
-        select(User).where(User.email == payload.email)
-    )
+) -> PasskeyRegisterCompleteResponse:
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if user is None:
         raise _NOT_FOUND
@@ -141,6 +138,14 @@ async def register_passkey_complete(
         expected_origin=config.WEBAUTHN_ORIGIN,
     )
 
+    existing_count_result = await uow.session.execute(
+        select(func.count())
+        .select_from(PasskeyCredential)
+        .where(PasskeyCredential.user_id == user.id)
+    )
+    existing_count = existing_count_result.scalar_one()
+    show_nudge = existing_count == 0
+
     aaguid_raw = verified.aaguid
     aaguid_str = str(aaguid_raw) if aaguid_raw is not None else None
     passkey = PasskeyCredential(
@@ -155,12 +160,13 @@ async def register_passkey_complete(
     user.pending_challenge = None
     await uow.commit()
 
-    return UserClaims(
+    return PasskeyRegisterCompleteResponse(
         sub=user.id,
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
         theme=user.theme,  # type: ignore[arg-type]
+        show_nudge=show_nudge,
     )
 
 
@@ -178,8 +184,7 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
     options = webauthn.generate_authentication_options(
         rp_id=config.WEBAUTHN_RP_ID,
         allow_credentials=[
-            PublicKeyCredentialDescriptor(id=cred.credential_id)
-            for cred in credentials
+            PublicKeyCredentialDescriptor(id=cred.credential_id) for cred in credentials
         ],
     )
 
@@ -193,9 +198,7 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
 async def login_passkey_complete(
     payload: PasskeyLoginCompleteRequest, uow: AbstractUnitOfWork
 ) -> TokenResponse:
-    result = await uow.session.execute(
-        select(User).where(User.email == payload.email)
-    )
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if user is None:
         raise _NOT_FOUND

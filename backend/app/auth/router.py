@@ -14,6 +14,7 @@ from app.auth.models import (
     PasskeyBeginRequest,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
+    PasskeyRegisterCompleteResponse,
     RegisterRequest,
     ThemeUpdate,
     UserClaims,
@@ -111,8 +112,17 @@ async def passkey_register_begin(
 async def passkey_register_complete(
     payload: PasskeyRegisterCompleteRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> UserClaims:
+) -> PasskeyRegisterCompleteResponse:
     return await register_passkey_complete(payload, uow)
+
+
+@router.get("/security-status")
+async def security_status(
+    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+) -> dict[str, int]:
+    count = await repo.count_for_user(claims.sub)
+    return {"passkey_count": count}
 
 
 @router.post("/login/passkey/begin")

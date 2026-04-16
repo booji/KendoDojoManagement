@@ -88,8 +88,8 @@ class SqlPasskeyRepository:
 
     async def count_for_user(self, user_id: str) -> int:
         result = await self._session.execute(
-            select(func.count()).select_from(PasskeyCredential).where(
-                PasskeyCredential.user_id == user_id
-            )
+            select(func.count())
+            .select_from(PasskeyCredential)
+            .where(PasskeyCredential.user_id == user_id)
         )
         return result.scalar_one()

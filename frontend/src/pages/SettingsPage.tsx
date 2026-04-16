@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
-import { isApiError } from "@/api/auth"
-import { listPasskeys, renamePasskey, deletePasskey } from "@/api/passkeys"
+import { isApiError, getMe, performPasskeyRegistration } from "@/api/auth"
+import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
 import type { PasskeyRecord } from "@/api/passkeys"
-import {
-  getRecoveryStatus,
-  generateRecoveryCodes,
-  regenerateRecoveryCodes,
-} from "@/api/recovery"
 import { useThemeContext } from "@/contexts/ThemeProvider"
 import type { Theme } from "@/contexts/ThemeProvider"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Pencil, Trash2, Check, X } from "lucide-react"
+import { Pencil, Trash2, Check, X, ShieldAlert } from "lucide-react"
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -254,186 +249,37 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
   )
 }
 
-// ── Recovery codes dialog ─────────────────────────────────────────────────────
-
-const CodesDisplayDialog = ({
-  open,
-  codes,
-  onClose,
-}: {
-  open: boolean
-  codes: string[]
-  onClose: () => void
-}) => {
-  const [acknowledged, setAcknowledged] = useState(false)
-
-  const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen && acknowledged) onClose()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Your recovery codes</DialogTitle>
-          <DialogDescription>
-            Save these codes somewhere safe. They will not be shown again.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-2 font-mono text-sm">
-          {codes.map((code) => (
-            <span key={code} className="rounded bg-muted px-2 py-1 text-center">
-              {code}
-            </span>
-          ))}
-        </div>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={acknowledged}
-            onChange={(e) => setAcknowledged(e.target.checked)}
-            className="h-4 w-4"
-          />
-          I have saved my recovery codes
-        </label>
-        <DialogFooter>
-          <Button onClick={onClose} disabled={!acknowledged}>
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ── Recovery codes section (inside SecurityCard) ──────────────────────────────
-
-type RecoveryState =
-  | { status: "loading" }
-  | { status: "ready"; unused_count: number; has_set: boolean }
-  | { status: "error"; message: string }
-
-const RecoveryCodesSection = ({
-  onUnusedCountChange,
-}: {
-  onUnusedCountChange?: (count: number) => void
-}) => {
-  const [state, setState] = useState<RecoveryState>({ status: "loading" })
-  const [working, setWorking] = useState(false)
-  const [dialogCodes, setDialogCodes] = useState<string[]>([])
-  const [dialogOpen, setDialogOpen] = useState(false)
-
-  const refresh = () => {
-    getRecoveryStatus()
-      .then((s) => {
-        setState({ status: "ready", unused_count: s.unused_count, has_set: s.has_set })
-        onUnusedCountChange?.(s.unused_count)
-      })
-      .catch((err: unknown) => {
-        setState({
-          status: "error",
-          message: isApiError(err) ? err.message : "Failed to load recovery code status",
-        })
-      })
-  }
-
-  useEffect(refresh, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleGenerate = async () => {
-    setWorking(true)
-    try {
-      const result = await generateRecoveryCodes()
-      setDialogCodes(result.codes)
-      setDialogOpen(true)
-    } catch (err) {
-      setState({
-        status: "error",
-        message: isApiError(err) ? err.message : "Failed to generate recovery codes",
-      })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  const handleRegenerate = async () => {
-    setWorking(true)
-    try {
-      const result = await regenerateRecoveryCodes()
-      setDialogCodes(result.codes)
-      setDialogOpen(true)
-    } catch (err) {
-      setState({
-        status: "error",
-        message: isApiError(err) ? err.message : "Failed to regenerate recovery codes",
-      })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  const handleDialogClose = () => {
-    setDialogOpen(false)
-    refresh()
-  }
-
-  return (
-    <>
-      <div className="mt-6">
-        <p className="text-xs text-muted-foreground mb-3">Recovery codes</p>
-        {state.status === "loading" && <Skeleton className="h-8 w-40" />}
-        {state.status === "error" && (
-          <p className="text-sm text-destructive" role="alert">
-            {state.message}
-          </p>
-        )}
-        {state.status === "ready" && (
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              {state.has_set
-                ? `${state.unused_count} unused code${state.unused_count !== 1 ? "s" : ""}`
-                : "No recovery codes generated"}
-            </p>
-            {!state.has_set ? (
-              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={working}>
-                Generate codes
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={working}>
-                Regenerate
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-      <CodesDisplayDialog
-        open={dialogOpen}
-        codes={dialogCodes}
-        onClose={handleDialogClose}
-      />
-    </>
-  )
-}
-
 // ── Security card ─────────────────────────────────────────────────────────────
 
 type PasskeyLoadState =
   | { status: "loading" }
-  | { status: "ready"; passkeys: PasskeyRecord[] }
+  | { status: "ready"; passkeys: PasskeyRecord[]; passkeyCount: number }
   | { status: "error"; message: string }
 
 const SecurityCard = () => {
   const [state, setState] = useState<PasskeyLoadState>({ status: "loading" })
-  const [recoveryUnused, setRecoveryUnused] = useState(0)
+  const [addingPasskey, setAddingPasskey] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [nudgeOpen, setNudgeOpen] = useState(false)
+  const [addingFromNudge, setAddingFromNudge] = useState(false)
+  const [nudgeAddError, setNudgeAddError] = useState<string | null>(null)
 
-  useEffect(() => {
-    listPasskeys()
-      .then((passkeys) => setState({ status: "ready", passkeys }))
+  const loadData = () => {
+    Promise.all([listPasskeys(), getSecurityStatus()])
+      .then(([passkeys, status]) =>
+        setState({ status: "ready", passkeys, passkeyCount: status.passkey_count })
+      )
       .catch((err: unknown) => {
         setState({
           status: "error",
           message: isApiError(err) ? err.message : "Failed to load passkeys",
         })
       })
+  }
+
+  useEffect(() => {
+    loadData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRename = async (id: string, label: string) => {
@@ -441,18 +287,18 @@ const SecurityCard = () => {
     const prev = state.passkeys
     // Optimistic update
     setState({
-      status: "ready",
+      ...state,
       passkeys: prev.map((p) => (p.id === id ? { ...p, label } : p)),
     })
     try {
       const updated = await renamePasskey(id, label)
       setState({
-        status: "ready",
+        ...state,
         passkeys: prev.map((p) => (p.id === id ? updated : p)),
       })
     } catch (err) {
       // Revert
-      setState({ status: "ready", passkeys: prev })
+      setState({ ...state, passkeys: prev })
       throw err
     }
   }
@@ -460,57 +306,153 @@ const SecurityCard = () => {
   const handleDelete = async (id: string) => {
     if (state.status !== "ready") return
     const prev = state.passkeys
+    const prevCount = state.passkeyCount
     // Optimistic removal
-    setState({ status: "ready", passkeys: prev.filter((p) => p.id !== id) })
+    setState({ ...state, passkeys: prev.filter((p) => p.id !== id), passkeyCount: prevCount - 1 })
     try {
       await deletePasskey(id)
     } catch (err) {
       // Revert
-      setState({ status: "ready", passkeys: prev })
+      setState({ ...state, passkeys: prev, passkeyCount: prevCount })
       throw err
     }
   }
 
+  const handleAddPasskey = async () => {
+    setAddError(null)
+    setAddingPasskey(true)
+    try {
+      const me = await getMe()
+      const result = await performPasskeyRegistration(me.email)
+      // Reload passkeys and security status
+      loadData()
+      if (result.show_nudge) {
+        setNudgeOpen(true)
+      }
+    } catch (err) {
+      setAddError(isApiError(err) ? err.message : "Failed to register passkey")
+    } finally {
+      setAddingPasskey(false)
+    }
+  }
+
+  const handleNudgeAddPasskey = async () => {
+    setNudgeAddError(null)
+    setAddingFromNudge(true)
+    try {
+      const me = await getMe()
+      await performPasskeyRegistration(me.email)
+      // Reload after adding
+      loadData()
+      setNudgeOpen(false)
+    } catch (err) {
+      setNudgeAddError(isApiError(err) ? err.message : "Failed to register passkey")
+    } finally {
+      setAddingFromNudge(false)
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Security</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {state.status === "loading" && (
-          <div className="space-y-3">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        )}
-        {state.status === "error" && (
-          <p className="text-sm text-destructive" role="alert">
-            {state.message}
-          </p>
-        )}
-        {state.status === "ready" && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-3">Passkeys</p>
-            {state.passkeys.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No passkeys registered.</p>
-            ) : (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Security</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {state.status === "loading" && (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          )}
+          {state.status === "error" && (
+            <p className="text-sm text-destructive" role="alert">
+              {state.message}
+            </p>
+          )}
+          {state.status === "ready" && (
+            <div className="space-y-4">
+              {state.passkeyCount === 1 && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm"
+                >
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">
+                    You have 1 passkey — consider adding a backup in case you lose access to
+                    your device.
+                  </span>
+                </div>
+              )}
               <div>
-                {state.passkeys.map((pk) => (
-                  <PasskeyRow
-                    key={pk.id}
-                    passkey={pk}
-                    isOnly={state.passkeys.length === 1 && recoveryUnused === 0}
-                    onRename={handleRename}
-                    onDelete={handleDelete}
-                  />
-                ))}
+                <p className="text-xs text-muted-foreground mb-3">Passkeys</p>
+                {state.passkeys.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No passkeys registered.</p>
+                ) : (
+                  <div>
+                    {state.passkeys.map((pk) => (
+                      <PasskeyRow
+                        key={pk.id}
+                        passkey={pk}
+                        isOnly={state.passkeys.length === 1}
+                        onRename={handleRename}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            <RecoveryCodesSection onUnusedCountChange={setRecoveryUnused} />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              {addError !== null && (
+                <p className="text-sm text-destructive" role="alert">
+                  {addError}
+                </p>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleAddPasskey()}
+                disabled={addingPasskey}
+              >
+                {addingPasskey ? "Registering…" : "Add a passkey"}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={nudgeOpen} onOpenChange={setNudgeOpen}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Add a backup passkey</DialogTitle>
+            <DialogDescription>
+              If you lose access to your only passkey, you won&apos;t be able to log in.
+              Adding a second passkey on another device or password manager protects you
+              from being locked out.
+            </DialogDescription>
+          </DialogHeader>
+          {nudgeAddError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {nudgeAddError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setNudgeOpen(false)}
+              disabled={addingFromNudge}
+            >
+              Maybe later
+            </Button>
+            <Button
+              onClick={() => void handleNudgeAddPasskey()}
+              disabled={addingFromNudge}
+            >
+              {addingFromNudge ? "Registering…" : "Add another passkey"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

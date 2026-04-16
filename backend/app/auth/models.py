@@ -7,9 +7,7 @@ from pydantic import BaseModel, BeforeValidator
 def _validate_email(v: object) -> str:
     if not isinstance(v, str):
         raise ValueError("email must be a string")
-    result = _ev.validate_email(
-        v, check_deliverability=False, test_environment=True
-    )
+    result = _ev.validate_email(v, check_deliverability=False, test_environment=True)
     return result.normalized
 
 
@@ -62,3 +60,7 @@ class PasskeyRegisterCompleteRequest(BaseModel):
 class PasskeyLoginCompleteRequest(BaseModel):
     email: LenientEmail
     credential: PasskeyCredentialResponse
+
+
+class PasskeyRegisterCompleteResponse(UserClaims):
+    show_nudge: bool
