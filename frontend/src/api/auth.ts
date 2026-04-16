@@ -8,6 +8,7 @@ export type RegisterResponse = {
   email: string
   role: "admin" | "member"
   is_active: boolean
+  show_nudge: boolean
 }
 
 export type LoginRequest = {
