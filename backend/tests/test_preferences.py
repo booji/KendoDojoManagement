@@ -86,7 +86,9 @@ async def test_get_preferences_returns_system_when_no_preference(prefs_repo) -> 
     """A user with no saved theme preference gets {"theme": "system"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/preferences")
 
     assert response.status_code == 200
@@ -98,7 +100,9 @@ async def test_get_preferences_response_has_theme_key(prefs_repo) -> None:
     """Response body always contains the 'theme' key."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/preferences")
 
     assert "theme" in response.json()
@@ -114,7 +118,9 @@ async def test_put_preferences_dark_persists_and_returns_dark(prefs_repo) -> Non
     """PUT {"theme": "dark"} returns 200 with {"theme": "dark"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": "dark"})
 
     assert response.status_code == 200
@@ -126,7 +132,9 @@ async def test_put_preferences_light_persists_and_returns_light(prefs_repo) -> N
     """PUT {"theme": "light"} returns 200 with {"theme": "light"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": "light"})
 
     assert response.status_code == 200
@@ -134,14 +142,20 @@ async def test_put_preferences_light_persists_and_returns_light(prefs_repo) -> N
 
 
 @pytest.mark.anyio
-async def test_put_preferences_persisted_value_visible_in_subsequent_get(prefs_repo) -> None:
+async def test_put_preferences_persisted_value_visible_in_subsequent_get(
+    prefs_repo,
+) -> None:
     """Theme set via PUT is returned by subsequent GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.put("/users/me/preferences", json={"theme": "dark"})
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/preferences")
 
     assert response.status_code == 200
@@ -153,11 +167,15 @@ async def test_put_preferences_overwrites_previous_value(prefs_repo) -> None:
     """A second PUT overwrites the first preference."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.put("/users/me/preferences", json={"theme": "light"})
         await c.put("/users/me/preferences", json={"theme": "dark"})
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/preferences")
 
     assert response.json() == {"theme": "dark"}
@@ -168,7 +186,9 @@ async def test_put_preferences_system_round_trips(prefs_repo) -> None:
     """PUT {"theme": "system"} returns {"theme": "system"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": "system"})
 
     assert response.status_code == 200
@@ -185,7 +205,9 @@ async def test_put_preferences_invalid_theme_returns_422(prefs_repo) -> None:
     """An unrecognised theme value must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": "purple"})
 
     assert response.status_code == 422
@@ -196,7 +218,9 @@ async def test_put_preferences_empty_theme_returns_422(prefs_repo) -> None:
     """An empty string theme must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": ""})
 
     assert response.status_code == 422
@@ -207,7 +231,9 @@ async def test_put_preferences_missing_theme_key_returns_422(prefs_repo) -> None
     """A payload missing the 'theme' key must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={})
 
     assert response.status_code == 422
@@ -221,7 +247,9 @@ async def test_put_preferences_missing_theme_key_returns_422(prefs_repo) -> None
 @pytest.mark.anyio
 async def test_get_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     """No credentials → 401 on GET."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/preferences")
 
     assert response.status_code == 401
@@ -235,7 +263,9 @@ async def test_get_preferences_unauthenticated_returns_401(prefs_repo) -> None:
 @pytest.mark.anyio
 async def test_put_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     """No credentials → 401 on PUT."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/users/me/preferences", json={"theme": "dark"})
 
     assert response.status_code == 401

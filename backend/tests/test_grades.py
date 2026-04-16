@@ -32,7 +32,9 @@ from app.members.dependencies import get_member_repo  # noqa: F401 — will fail
 # Auth claim helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
+_ADMIN = UserClaims(
+    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+)
 _MEMBER_A = UserClaims(
     sub="member-a-uuid", email="member-a@dojo.test", role="member", is_active=True
 )
@@ -79,7 +81,7 @@ class StubMemberRepo:
 
     def __init__(self, members: list[dict[str, Any]] | None = None) -> None:
         self._store: dict[str, dict[str, Any]] = {}
-        for m in (members or [_MEMBER_A_RECORD, _MEMBER_B_RECORD]):
+        for m in members or [_MEMBER_A_RECORD, _MEMBER_B_RECORD]:
             self._store[m["id"]] = dict(m)
 
     async def get(self, member_id: str) -> dict[str, Any] | None:
@@ -97,7 +99,9 @@ class StubMemberRepo:
         self._store[new_id] = record
         return record
 
-    async def update(self, member_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    async def update(
+        self, member_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
         record = self._store.get(member_id)
         if record is None:
             return None
@@ -120,7 +124,8 @@ class StubMemberRepo:
         if search is not None:
             term = search.lower()
             results = [
-                r for r in results
+                r
+                for r in results
                 if term in r["full_name"].lower() or term in r["email"].lower()
             ]
         return results
@@ -237,9 +242,9 @@ def test_grade_enum_order() -> None:
     """Grade enum must define exactly 15 grades in the correct order."""
     grades = list(Grade)
     values = [g.value for g in grades]
-    assert values == EXPECTED_GRADE_ORDER, (
-        f"Grade order mismatch.\nExpected: {EXPECTED_GRADE_ORDER}\nGot:      {values}"
-    )
+    assert (
+        values == EXPECTED_GRADE_ORDER
+    ), f"Grade order mismatch.\nExpected: {EXPECTED_GRADE_ORDER}\nGot:      {values}"
     assert len(grades) == 15
 
 
@@ -247,9 +252,9 @@ def test_grade_display_names() -> None:
     """Every grade must expose a display_name with romanized name and kyu/dan helper."""
     for grade in Grade:
         expected = EXPECTED_DISPLAY_NAMES[grade.value]
-        assert grade.display_name == expected, (
-            f"{grade.value}: expected display_name={expected!r}, got {grade.display_name!r}"
-        )
+        assert (
+            grade.display_name == expected
+        ), f"{grade.value}: expected display_name={expected!r}, got {grade.display_name!r}"
     # Spot-check the helper text in kyu grades
     assert "6-kyu" in Grade.ROKKYUU.display_name
     assert "5-kyu" in Grade.GOKYUU.display_name
@@ -269,7 +274,9 @@ async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = "member-a-uuid"
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
     assert response.status_code == 200
@@ -286,7 +293,9 @@ async def test_promote_increments_grade(member_repo, grade_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = "member-a-uuid"
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(f"/members/{member_id}/promote")  # → Rokkyū
         response = await c.post(f"/members/{member_id}/promote")  # → Gokyū
 
@@ -311,7 +320,9 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
         promoted_at=datetime.now(UTC).isoformat(),
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
     assert response.status_code == 400
@@ -324,7 +335,9 @@ async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = "member-a-uuid"
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
     assert response.status_code == 200
@@ -372,7 +385,9 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
         promoted_at="2025-01-01T10:00:00+00:00",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
     assert response.status_code == 200
@@ -410,7 +425,9 @@ async def test_grade_history_own_member(member_repo, grade_repo) -> None:
         promoted_at="2024-01-01T10:00:00+00:00",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
     assert response.status_code == 200
@@ -434,7 +451,9 @@ async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> 
         promoted_at="2024-01-01T10:00:00+00:00",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{member_a_id}/grades")
 
     assert response.status_code == 403
@@ -455,7 +474,9 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
         promoted_at="2025-01-01T10:00:00+00:00",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
     assert response.status_code == 200

@@ -20,9 +20,7 @@ class SqlUserPrefsRepo:
         self._session = session
 
     async def get_theme(self, user_id: str) -> str | None:
-        row = await self._session.execute(
-            select(User.theme).where(User.id == user_id)
-        )
+        row = await self._session.execute(select(User.theme).where(User.id == user_id))
         value = row.scalar_one_or_none()
         # Treat the DB default "system" as the canonical "no preference set" value
         # but return it as-is; callers decide what None means.

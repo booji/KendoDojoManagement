@@ -81,7 +81,9 @@ def test_app_loads_with_system_theme_light(page: Page) -> None:
     page.emulate_media(color_scheme="light")
     token = _make_token()
     _goto_authenticated(page, token)
-    assert not _is_dark(page), "<html> should NOT have 'dark' class when OS prefers light"
+    assert not _is_dark(
+        page
+    ), "<html> should NOT have 'dark' class when OS prefers light"
 
 
 def test_app_loads_with_system_theme_dark(page: Page) -> None:
@@ -125,7 +127,9 @@ def test_theme_toggle_cycles_light_dark_system(page: Page) -> None:
     # Click 3: dark → system (OS is light → not dark)
     page.get_by_role("button", name="Switch to system theme").click()
     page.wait_for_timeout(300)
-    assert not _is_dark(page), "After click (→ system/light OS) should NOT have 'dark' class"
+    assert not _is_dark(
+        page
+    ), "After click (→ system/light OS) should NOT have 'dark' class"
     # Button should now say "Switch to light theme"
     expect(page.get_by_role("button", name="Switch to light theme")).to_be_visible()
 
@@ -151,7 +155,9 @@ def test_selecting_theme_applies_dark_class_immediately(page: Page) -> None:
     page.get_by_role("button", name="Switch to dark theme").click()
 
     # Check immediately without reload.
-    assert _is_dark(page), "<html> should have 'dark' class immediately after clicking dark"
+    assert _is_dark(
+        page
+    ), "<html> should have 'dark' class immediately after clicking dark"
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +217,9 @@ def test_theme_from_server_profile_applied_after_login(browser) -> None:
         token = _make_token()
         _goto_authenticated(page, token)
         # getMe() returns theme="system"; OS is light → not dark.
-        assert not _is_dark(page), (
-            "Fresh context with light OS preference should NOT have 'dark' class"
-        )
+        assert not _is_dark(
+            page
+        ), "Fresh context with light OS preference should NOT have 'dark' class"
     finally:
         page.close()
         context.close()
@@ -255,9 +261,9 @@ def test_toggle_is_keyboard_navigable_with_visible_focus(page: Page) -> None:
     page.wait_for_timeout(300)
     after_label = _current_theme_button_label(page)
     # The button label must have changed (i.e., theme cycled).
-    assert after_label != focused_label, (
-        "Space key should cycle the theme; button label did not change"
-    )
+    assert (
+        after_label != focused_label
+    ), "Space key should cycle the theme; button label did not change"
 
 
 # ---------------------------------------------------------------------------

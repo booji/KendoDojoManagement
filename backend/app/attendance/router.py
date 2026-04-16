@@ -31,9 +31,7 @@ from app.members.repository import AbstractMemberRepository
 router = APIRouter(tags=["attendance"])
 
 _AttRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
-_TokRepo = Annotated[
-    AbstractCheckinTokenRepository, Depends(get_checkin_token_repo)
-]
+_TokRepo = Annotated[AbstractCheckinTokenRepository, Depends(get_checkin_token_repo)]
 _SessRepo = Annotated[
     AbstractSessionInstanceRepository, Depends(get_session_instance_repo)
 ]

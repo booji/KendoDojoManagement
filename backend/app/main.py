@@ -39,9 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         result = await conn.execute(select(SessionType))
         if not result.fetchone():
             await conn.execute(
-                insert(SessionType).values(
-                    id=str(uuid4()), name="General Training"
-                )
+                insert(SessionType).values(id=str(uuid4()), name="General Training")
             )
     yield
 

@@ -327,7 +327,9 @@ def test_admin_can_view_any_member_attendance_history(page: Page) -> None:
     page.goto(f"{BASE_URL}/members/{member_id}")
 
     # The Attendance History card title (a <div data-slot="card-title">)
-    expect(page.locator('[data-slot="card-title"]', has_text="Attendance History")).to_be_visible()
+    expect(
+        page.locator('[data-slot="card-title"]', has_text="Attendance History")
+    ).to_be_visible()
 
     # Expand attendance history — button text is "Show attendance (1 sessions)"
     page.get_by_role("button", name="Show attendance").click()
@@ -393,7 +395,9 @@ def test_member_cannot_view_other_member_attendance_history(page: Page) -> None:
     # Target member (has attendance)
     target_email = f"target_ac6_{suffix}@test.com"
     _api_register(target_email, "testpass123")
-    target_member = _api_create_member(admin_cookies, target_email, f"Target AC6 {suffix}")
+    target_member = _api_create_member(
+        admin_cookies, target_email, f"Target AC6 {suffix}"
+    )
     target_member_id = target_member["id"]
     _api_mark_attended(admin_cookies, session_id, target_member_id)
 

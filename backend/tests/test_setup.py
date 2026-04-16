@@ -63,7 +63,9 @@ async def db_client(_engine):
 @pytest.mark.anyio
 async def test_get_setup_returns_200_when_no_users(db_client) -> None:
     """GET /setup returns 200 when the users table is empty (fresh instance)."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/setup")
     assert response.status_code == 200
 
@@ -86,7 +88,9 @@ async def test_get_setup_returns_404_when_users_exist(db_client) -> None:
             )
         )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/setup")
     assert response.status_code == 404
     # Must be a deliberate "setup already done" 404, not a generic route-not-found
@@ -99,7 +103,9 @@ async def test_get_setup_returns_404_when_users_exist(db_client) -> None:
 @pytest.mark.anyio
 async def test_get_setup_returns_404_after_first_user_registered(db_client) -> None:
     """GET /setup returns 404 once a user has been registered (AC6)."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         # Fresh instance: setup should be available
         before = await c.get("/setup")
         assert before.status_code == 200
@@ -119,9 +125,13 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
 
 
 @pytest.mark.anyio
-async def test_setup_passkey_begin_returns_challenge_on_fresh_instance(db_client) -> None:
+async def test_setup_passkey_begin_returns_challenge_on_fresh_instance(
+    db_client,
+) -> None:
     """POST /setup/passkey/begin returns 200 with WebAuthn challenge on fresh instance."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/setup/passkey/begin",
             json={"email": "admin@dojo.test"},
@@ -149,7 +159,9 @@ async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None
             )
         )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/setup/passkey/begin",
             json={"email": "newcomer@dojo.test"},
@@ -190,7 +202,9 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
     mock_verified.sign_count = 0
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.post(
                 "/setup/passkey/complete",
                 json={
@@ -252,7 +266,9 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
     mock_verified.sign_count = 0
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.post(
                 "/setup/passkey/complete",
                 json={

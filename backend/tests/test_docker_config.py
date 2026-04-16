@@ -22,6 +22,7 @@ REQUIREMENTS = ROOT / "backend" / "requirements.txt"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def load_compose() -> dict:
     with COMPOSE_FILE.open() as f:
         return yaml.safe_load(f)
@@ -31,40 +32,43 @@ def load_compose() -> dict:
 # docker-compose.yml — services
 # ---------------------------------------------------------------------------
 
+
 def test_compose_has_app_service():
     compose = load_compose()
-    assert "app" in compose.get("services", {}), (
-        "docker-compose.yml must define an 'app' service"
-    )
+    assert "app" in compose.get(
+        "services", {}
+    ), "docker-compose.yml must define an 'app' service"
 
 
 def test_compose_has_db_service():
     compose = load_compose()
-    assert "db" in compose.get("services", {}), (
-        "docker-compose.yml must define a 'db' service"
-    )
+    assert "db" in compose.get(
+        "services", {}
+    ), "docker-compose.yml must define a 'db' service"
 
 
 # ---------------------------------------------------------------------------
 # docker-compose.yml — named volume
 # ---------------------------------------------------------------------------
 
+
 def test_compose_has_named_postgres_volume():
     compose = load_compose()
     top_level_volumes = compose.get("volumes", {})
-    assert top_level_volumes, "docker-compose.yml must declare at least one named volume"
+    assert (
+        top_level_volumes
+    ), "docker-compose.yml must declare at least one named volume"
 
     db_service = compose["services"]["db"]
     db_volumes = db_service.get("volumes", [])
     volume_names = list(top_level_volumes.keys())
 
     mounted = any(
-        any(vol_name in str(v) for vol_name in volume_names)
-        for v in db_volumes
+        any(vol_name in str(v) for vol_name in volume_names) for v in db_volumes
     )
-    assert mounted, (
-        "The db service must mount a top-level named volume for postgres data"
-    )
+    assert (
+        mounted
+    ), "The db service must mount a top-level named volume for postgres data"
 
 
 # ---------------------------------------------------------------------------
@@ -88,9 +92,7 @@ def test_compose_app_service_env_includes(var_name: str):
         keys = [entry.split("=")[0] for entry in app_env]
     else:
         keys = list(app_env.keys())
-    assert var_name in keys, (
-        f"app service environment must include {var_name}"
-    )
+    assert var_name in keys, f"app service environment must include {var_name}"
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +114,7 @@ def test_compose_db_service_env_includes(var_name: str):
         keys = [entry.split("=")[0] for entry in db_env]
     else:
         keys = list(db_env.keys())
-    assert var_name in keys, (
-        f"db service environment must include {var_name}"
-    )
+    assert var_name in keys, f"db service environment must include {var_name}"
 
 
 # ---------------------------------------------------------------------------
@@ -146,9 +146,7 @@ def test_env_example_contains(var_name: str):
         for line in content.splitlines()
         if "=" in line and not line.strip().startswith("#")
     ]
-    assert var_name in defined_vars, (
-        f".env.example must document {var_name}"
-    )
+    assert var_name in defined_vars, f".env.example must document {var_name}"
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +200,14 @@ def test_compose_no_hardcoded_secret_values():
             )
 
     assert not violations, (
-        "Hardcoded secret values found in docker-compose.yml:\n"
-        + "\n".join(violations)
+        "Hardcoded secret values found in docker-compose.yml:\n" + "\n".join(violations)
     )
 
 
 # ---------------------------------------------------------------------------
 # asyncpg in requirements.txt
 # ---------------------------------------------------------------------------
+
 
 def test_asyncpg_in_requirements():
     content = REQUIREMENTS.read_text()
@@ -218,14 +216,15 @@ def test_asyncpg_in_requirements():
         for line in content.splitlines()
         if line.strip() and not line.startswith("#")
     ]
-    assert "asyncpg" in packages, (
-        "asyncpg must be listed in backend/requirements.txt for PostgreSQL async support"
-    )
+    assert (
+        "asyncpg" in packages
+    ), "asyncpg must be listed in backend/requirements.txt for PostgreSQL async support"
 
 
 # ---------------------------------------------------------------------------
 # App service depends on db with health condition (or has its own healthcheck)
 # ---------------------------------------------------------------------------
+
 
 def test_compose_app_depends_on_db_with_health_condition():
     compose = load_compose()
@@ -241,6 +240,6 @@ def test_compose_app_depends_on_db_with_health_condition():
 
     assert "db" in depends_on, "app service must declare depends_on: db"
     db_condition = depends_on["db"].get("condition")
-    assert db_condition == "service_healthy", (
-        f"app depends_on db condition must be 'service_healthy', got '{db_condition}'"
-    )
+    assert (
+        db_condition == "service_healthy"
+    ), f"app depends_on db condition must be 'service_healthy', got '{db_condition}'"

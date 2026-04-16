@@ -36,8 +36,12 @@ from app.sessions.dependencies import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
-_MEMBER = UserClaims(sub="member-uuid", email="member@dojo.test", role="member", is_active=True)
+_ADMIN = UserClaims(
+    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+)
+_MEMBER = UserClaims(
+    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
+)
 
 
 def _admin_override():
@@ -109,7 +113,8 @@ class StubSessionInstanceRepo:
     async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
         now = as_of or date.today()
         return [
-            s for s in self._store.values()
+            s
+            for s in self._store.values()
             if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
         ]
 
@@ -193,7 +198,9 @@ def instance_repo() -> StubSessionInstanceRepo:
 
 @pytest.mark.anyio
 async def test_get_session_types_returns_general_training_by_default(type_repo) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/session-types")
     assert response.status_code == 200
     names = [st["name"] for st in response.json()]
@@ -208,7 +215,9 @@ async def test_get_session_types_returns_general_training_by_default(type_repo) 
 @pytest.mark.anyio
 async def test_admin_can_create_session_type(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/session-types", json={"name": "Competition Prep"})
     assert response.status_code == 201
     body = response.json()
@@ -225,7 +234,9 @@ async def test_member_cannot_create_session_type(type_repo) -> None:
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/session-types",
             json={"name": "Should Fail"},
@@ -237,7 +248,9 @@ async def test_member_cannot_create_session_type(type_repo) -> None:
 @pytest.mark.anyio
 async def test_create_session_type_missing_name_returns_422(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/session-types", json={})
     assert response.status_code == 422
 
@@ -245,7 +258,9 @@ async def test_create_session_type_missing_name_returns_422(type_repo) -> None:
 @pytest.mark.anyio
 async def test_create_duplicate_session_type_returns_409(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post("/session-types", json={"name": "Keiko"})
         response = await c.post("/session-types", json={"name": "Keiko"})
     assert response.status_code == 409
@@ -253,7 +268,9 @@ async def test_create_duplicate_session_type_returns_409(type_repo) -> None:
 
 @pytest.mark.anyio
 async def test_create_session_type_unauthenticated_returns_401(type_repo) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/session-types", json={"name": "Shinai Kata"})
     assert response.status_code == 401
 
@@ -276,7 +293,9 @@ async def test_admin_can_create_session_template(type_repo, template_repo) -> No
         "recurrence": "weekly",
         "day_of_week": 1,  # Tuesday
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/sessions/templates", json=payload)
     assert response.status_code == 201
     body = response.json()
@@ -301,7 +320,9 @@ async def test_member_cannot_create_session_template(template_repo) -> None:
         "recurrence": "weekly",
         "day_of_week": 1,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/sessions/templates", json=payload, cookies={"access_token": token}
         )
@@ -309,9 +330,13 @@ async def test_member_cannot_create_session_template(template_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_create_session_template_missing_fields_returns_422(template_repo) -> None:
+async def test_create_session_template_missing_fields_returns_422(
+    template_repo,
+) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/sessions/templates", json={"title": "Incomplete"})
     assert response.status_code == 422
 
@@ -338,13 +363,17 @@ async def test_generate_creates_instances_up_to_horizon(
         "recurrence": "weekly",
         "day_of_week": 3,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         tmpl_resp = await c.post("/sessions/templates", json=template_payload)
     assert tmpl_resp.status_code == 201
     template_id = tmpl_resp.json()["id"]
 
     # Generate instances up to a horizon
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/templates/{template_id}/generate",
             json={"horizon": "2026-05-28"},
@@ -364,7 +393,9 @@ async def test_generate_nonexistent_template_returns_404(
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/templates/{fake_id}/generate",
             json={"horizon": "2026-06-01"},
@@ -388,7 +419,9 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
         "duration_minutes": 60,
         "notes": "Special summer session",
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 201
     body = response.json()
@@ -410,7 +443,9 @@ async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> N
         "start_time": "10:00",
         "duration_minutes": 60,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/sessions", json=payload, cookies={"access_token": token}
         )
@@ -420,7 +455,9 @@ async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> N
 @pytest.mark.anyio
 async def test_create_adhoc_session_missing_date_returns_422(instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/sessions",
             json={"session_type_id": str(uuid.uuid4()), "start_time": "10:00"},
@@ -434,7 +471,9 @@ async def test_create_adhoc_session_missing_date_returns_422(instance_repo) -> N
 
 
 @pytest.mark.anyio
-async def test_admin_can_cancel_session_instance(type_repo, template_repo, instance_repo) -> None:
+async def test_admin_can_cancel_session_instance(
+    type_repo, template_repo, instance_repo
+) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
 
@@ -445,13 +484,17 @@ async def test_admin_can_cancel_session_instance(type_repo, template_repo, insta
         "start_time": "19:00",
         "duration_minutes": 90,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         create_resp = await c.post("/sessions", json=create_payload)
     assert create_resp.status_code == 201
     instance_id = create_resp.json()["id"]
 
     # Cancel it
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         cancel_resp = await c.post(f"/sessions/{instance_id}/cancel")
     assert cancel_resp.status_code == 200
     body = cancel_resp.json()
@@ -477,13 +520,17 @@ async def test_cancelling_instance_does_not_affect_template(
         "recurrence": "weekly",
         "day_of_week": 3,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         tmpl_resp = await c.post("/sessions/templates", json=tmpl_payload)
     assert tmpl_resp.status_code == 201
     template_id = tmpl_resp.json()["id"]
 
     # Generate one instance
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         gen_resp = await c.post(
             f"/sessions/templates/{template_id}/generate",
             json={"horizon": "2026-08-13"},
@@ -494,11 +541,15 @@ async def test_cancelling_instance_does_not_affect_template(
     instance_id = instances[0]["id"]
 
     # Cancel the instance
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(f"/sessions/{instance_id}/cancel")
 
     # Template must still be retrievable and unmodified
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         tmpl_get_resp = await c.get(f"/sessions/templates/{template_id}")
     assert tmpl_get_resp.status_code == 200
     assert tmpl_get_resp.json()["id"] == template_id
@@ -508,7 +559,9 @@ async def test_cancelling_instance_does_not_affect_template(
 async def test_cancel_nonexistent_instance_returns_404(instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/sessions/{fake_id}/cancel")
     assert response.status_code == 404
 
@@ -520,7 +573,9 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
     # Create an instance first using admin override
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         create_resp = await c.post(
             "/sessions",
             json={
@@ -539,7 +594,9 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{instance_id}/cancel",
             cookies={"access_token": token},
@@ -553,7 +610,9 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
 
 
 @pytest.mark.anyio
-async def test_get_sessions_returns_upcoming_for_member(type_repo, instance_repo) -> None:
+async def test_get_sessions_returns_upcoming_for_member(
+    type_repo, instance_repo
+) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     # Seed a future session directly in the stub
     future_date = "2099-01-01"
@@ -565,7 +624,9 @@ async def test_get_sessions_returns_upcoming_for_member(type_repo, instance_repo
             "duration_minutes": 90,
         }
     )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/sessions")
     assert response.status_code == 200
     sessions = response.json()
@@ -575,7 +636,9 @@ async def test_get_sessions_returns_upcoming_for_member(type_repo, instance_repo
 
 @pytest.mark.anyio
 async def test_get_sessions_unauthenticated_returns_401(instance_repo) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/sessions")
     assert response.status_code == 401
 
@@ -596,7 +659,9 @@ async def test_get_sessions_excludes_cancelled(type_repo, instance_repo) -> None
     )
     await instance_repo.cancel(inst["id"])
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/sessions")
     assert response.status_code == 200
     sessions = response.json()

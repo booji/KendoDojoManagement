@@ -335,6 +335,8 @@ def test_settings_cancel_returns_to_summary_without_saving(page: Page) -> None:
 # (covered by AC3 above — kept as alias for traceability)
 
 
-@pytest.mark.skip(reason="Covered by test_settings_save_returns_to_summary_with_updated_values")
+@pytest.mark.skip(
+    reason="Covered by test_settings_save_returns_to_summary_with_updated_values"
+)
 def test_settings_save_returns_to_summary_alias() -> None:
     pass

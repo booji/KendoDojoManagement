@@ -98,9 +98,7 @@ async def setup_passkey_complete(
     # _get_or_create_user already sets role="admin" for the first user, but we
     # explicitly enforce it here so the invariant holds even if that logic changes.
     if claims.role != "admin":
-        result = await uow.session.execute(
-            select(User).where(User.id == claims.sub)
-        )
+        result = await uow.session.execute(select(User).where(User.id == claims.sub))
         user = result.scalar_one()
         user.role = "admin"
         await uow.commit()

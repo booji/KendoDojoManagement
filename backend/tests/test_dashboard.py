@@ -32,7 +32,9 @@ from app.main import app
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
+_ADMIN = UserClaims(
+    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+)
 _MEMBER = UserClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
@@ -99,9 +101,7 @@ class StubDashboardRepo:
             if start.isoformat() <= s["date"] <= end.isoformat()
         )
 
-    async def attendance_rate_for_period(
-        self, date_from: date, date_to: date
-    ) -> float:
+    async def attendance_rate_for_period(self, date_from: date, date_to: date) -> float:
         sessions_in_range = [
             s
             for s in self._sessions
@@ -110,9 +110,7 @@ class StubDashboardRepo:
         if not sessions_in_range:
             return 0.0
         session_ids = {s["id"] for s in sessions_in_range}
-        attended = sum(
-            1 for a in self._attendance if a["session_id"] in session_ids
-        )
+        attended = sum(1 for a in self._attendance if a["session_id"] in session_ids)
         active_count = await self.active_member_count()
         if active_count == 0:
             return 0.0
@@ -152,7 +150,9 @@ async def test_admin_dashboard_returns_expected_shape(
     """GET /dashboard/admin returns the four required stat keys."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -173,7 +173,9 @@ async def test_admin_dashboard_member_returns_403(
     dashboard_repo: StubDashboardRepo,
 ) -> None:
     """A member token must receive 403 from GET /dashboard/admin."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(
             "/dashboard/admin",
             cookies={"access_token": _member_token()},
@@ -187,7 +189,9 @@ async def test_admin_dashboard_unauthenticated_returns_401(
     dashboard_repo: StubDashboardRepo,
 ) -> None:
     """No token must receive 401 from GET /dashboard/admin."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 401
@@ -208,7 +212,9 @@ async def test_admin_dashboard_active_member_count_is_correct(
     dashboard_repo.seed_member(status="active")
     dashboard_repo.seed_member(status="inactive")  # must NOT be counted
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -222,7 +228,9 @@ async def test_admin_dashboard_active_member_count_zero_when_no_members(
     """active_members is 0 when the member table is empty."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -251,7 +259,9 @@ async def test_admin_dashboard_trend_positive_when_rate_improving(
     recent_session = dashboard_repo.seed_session(TODAY - timedelta(days=5))
     dashboard_repo.seed_attendance(recent_session["id"], member["id"])
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -279,7 +289,9 @@ async def test_admin_dashboard_trend_negative_when_rate_declining(
     # Current period (0-30 days ago): 1 session, no attendees → rate = 0
     dashboard_repo.seed_session(TODAY - timedelta(days=5))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -298,7 +310,9 @@ async def test_admin_dashboard_trend_is_float(
     """attendance_trend must be a float (signed difference), not a string."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200
@@ -319,7 +333,9 @@ async def test_admin_dashboard_trend_neutral_when_both_zero(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     # No sessions seeded at all → both periods rate = 0.0, trend = 0.0
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/dashboard/admin")
 
     assert response.status_code == 200

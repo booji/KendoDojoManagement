@@ -53,7 +53,9 @@ def clear_overrides():
 @pytest.mark.anyio
 async def test_patch_theme_light_returns_200(db_client) -> None:
     """Setting theme to 'light' returns 200 with updated UserClaims."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         # Register and log in to get a real user in the DB
         await c.post(
             "/auth/register/password",
@@ -80,7 +82,9 @@ async def test_patch_theme_light_returns_200(db_client) -> None:
 @pytest.mark.anyio
 async def test_patch_theme_dark_returns_200(db_client) -> None:
     """Setting theme to 'dark' returns 200 with updated UserClaims."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "theme-dark@dojo.test", "password": "Str0ng!Pass"},
@@ -104,7 +108,9 @@ async def test_patch_theme_dark_returns_200(db_client) -> None:
 @pytest.mark.anyio
 async def test_patch_theme_system_returns_200(db_client) -> None:
     """Setting theme to 'system' returns 200 with updated UserClaims."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "theme-system@dojo.test", "password": "Str0ng!Pass"},
@@ -131,7 +137,9 @@ async def test_patch_theme_system_returns_200(db_client) -> None:
 @pytest.mark.anyio
 async def test_patch_theme_invalid_value_returns_422(db_client) -> None:
     """An unrecognised theme value ('purple') must be rejected with 422."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "theme-bad@dojo.test", "password": "Str0ng!Pass"},
@@ -157,7 +165,9 @@ async def test_patch_theme_invalid_value_returns_422(db_client) -> None:
 @pytest.mark.anyio
 async def test_patch_theme_without_auth_returns_401() -> None:
     """Calling PATCH /auth/me/theme without a token must return 401."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.patch("/auth/me/theme", json={"theme": "dark"})
 
     assert response.status_code == 401
@@ -178,7 +188,9 @@ async def test_get_me_includes_theme_field() -> None:
     )
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/me")
 
     assert response.status_code == 200
@@ -199,7 +211,9 @@ async def test_get_me_theme_defaults_to_system() -> None:
     )
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/me")
 
     assert response.status_code == 200

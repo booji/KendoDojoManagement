@@ -14,7 +14,9 @@ from playwright.sync_api import Page
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="not implemented: no UI for self-update in this issue")
+@pytest.mark.xfail(
+    strict=True, reason="not implemented: no UI for self-update in this issue"
+)
 def test_member_can_view_own_profile_via_self_update_page(page: Page) -> None:
     pytest.fail("not implemented")
 
@@ -24,7 +26,9 @@ def test_member_can_view_own_profile_via_self_update_page(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="not implemented: no UI for self-update in this issue")
+@pytest.mark.xfail(
+    strict=True, reason="not implemented: no UI for self-update in this issue"
+)
 def test_member_can_update_own_profile_fields(page: Page) -> None:
     pytest.fail("not implemented")
 
@@ -34,6 +38,8 @@ def test_member_can_update_own_profile_fields(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="not implemented: no UI for self-update in this issue")
+@pytest.mark.xfail(
+    strict=True, reason="not implemented: no UI for self-update in this issue"
+)
 def test_member_onboarding_creates_profile(page: Page) -> None:
     pytest.fail("not implemented")

@@ -95,7 +95,9 @@ def test_admin_can_create_session_type_via_ui(page: Page) -> None:
         headers={**_api_headers(token), "Content-Type": "application/json"},
         data=json.dumps({"name": unique_name}),
     )
-    assert response.status == 201, f"Expected 201, got {response.status}: {response.text()}"
+    assert (
+        response.status == 201
+    ), f"Expected 201, got {response.status}: {response.text()}"
     body = response.json()
     assert body["name"] == unique_name
     assert "id" in body
@@ -160,15 +162,17 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     tmpl_resp = page.request.post(
         f"{API_URL}/sessions/templates",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "title": "E2E Template",
-            "start_date": "2099-08-07",  # Thursday
-            "start_time": "18:30",
-            "duration_minutes": 60,
-            "recurrence": "weekly",
-            "day_of_week": 3,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "title": "E2E Template",
+                "start_date": "2099-08-07",  # Thursday
+                "start_time": "18:30",
+                "duration_minutes": 60,
+                "recurrence": "weekly",
+                "day_of_week": 3,
+            }
+        ),
     )
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
@@ -214,14 +218,18 @@ def test_admin_can_create_adhoc_session_via_ui(page: Page) -> None:
     sess_resp = page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": "2099-09-10",
-            "start_time": "20:00",
-            "duration_minutes": 75,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": "2099-09-10",
+                "start_time": "20:00",
+                "duration_minutes": 75,
+            }
+        ),
     )
-    assert sess_resp.status == 201, f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    assert (
+        sess_resp.status == 201
+    ), f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
     body = sess_resp.json()
     assert body["status"] == "scheduled"
 
@@ -258,15 +266,17 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
     tmpl_resp = page.request.post(
         f"{API_URL}/sessions/templates",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "title": "Cancel Test Template",
-            "start_date": "2099-10-02",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-            "recurrence": "weekly",
-            "day_of_week": 3,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "title": "Cancel Test Template",
+                "start_date": "2099-10-02",
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "recurrence": "weekly",
+                "day_of_week": 3,
+            }
+        ),
     )
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
@@ -306,9 +316,9 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
     )
     assert sessions_resp.status == 200
     ids = [s["id"] for s in sessions_resp.json()]
-    assert instance_id not in ids, (
-        f"Cancelled session {instance_id} should not appear in upcoming list"
-    )
+    assert (
+        instance_id not in ids
+    ), f"Cancelled session {instance_id} should not appear in upcoming list"
 
 
 # ---------------------------------------------------------------------------
@@ -331,12 +341,14 @@ def test_authenticated_member_sees_upcoming_sessions_list(page: Page) -> None:
     page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": "2099-11-05",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": "2099-11-05",
+                "start_time": "19:00",
+                "duration_minutes": 90,
+            }
+        ),
     )
 
     # Visit the sessions page as a member
@@ -375,12 +387,14 @@ def test_session_list_renders_correctly_on_mobile(page: Page) -> None:
     page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": "2099-12-03",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": "2099-12-03",
+                "start_time": "19:00",
+                "duration_minutes": 90,
+            }
+        ),
     )
 
     member_token = _make_token("member")
@@ -407,12 +421,14 @@ def test_session_list_renders_correctly_on_desktop(page: Page) -> None:
     page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": "2099-12-10",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": "2099-12-10",
+                "start_time": "19:00",
+                "duration_minutes": 90,
+            }
+        ),
     )
 
     member_token = _make_token("member")

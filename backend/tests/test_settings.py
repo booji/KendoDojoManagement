@@ -29,7 +29,9 @@ from app.main import app
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
+_ADMIN = UserClaims(
+    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+)
 _MEMBER = UserClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
@@ -105,7 +107,9 @@ async def test_get_dojo_settings_returns_defaults_when_none_saved(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/settings/dojo")
 
     assert response.status_code == 200
@@ -123,7 +127,9 @@ async def test_get_dojo_settings_unauthenticated_returns_401(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """GET /settings/dojo without a token returns 401."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/settings/dojo")
 
     assert response.status_code == 401
@@ -141,7 +147,9 @@ async def test_put_dojo_settings_persists_dojo_name(
     """PUT /settings/dojo with a new dojo_name returns the updated value."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/settings/dojo",
             json={"dojo_name": "Tokyo Kendo Club"},
@@ -159,7 +167,9 @@ async def test_put_dojo_settings_dojo_name_visible_on_get(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.put("/settings/dojo", json={"dojo_name": "Osaka Dojo"})
         get_resp = await c.get("/settings/dojo")
 
@@ -175,7 +185,9 @@ async def test_put_dojo_settings_persists_primary_colour(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     # #1D4ED8 (blue-700) has >4.5:1 against white and dark background
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/settings/dojo",
             json={"primary_colour": "#1D4ED8"},
@@ -198,7 +210,9 @@ async def test_put_dojo_settings_rejects_low_contrast_colour(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     # #FFD700 (yellow) fails 4.5:1 against white
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/settings/dojo",
             json={"primary_colour": "#FFD700"},
@@ -215,7 +229,9 @@ async def test_put_dojo_settings_rejects_colour_failing_against_dark_bg(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     # Very light colour: near-white fails against dark background (#1A1A1A)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/settings/dojo",
             json={"primary_colour": "#F0F0F0"},
@@ -234,7 +250,9 @@ async def test_put_dojo_settings_member_returns_403(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A member token must receive 403 from PUT /settings/dojo."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/settings/dojo",
             json={"dojo_name": "Hacked Dojo"},
@@ -249,7 +267,9 @@ async def test_put_dojo_settings_unauthenticated_returns_401(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """No token must receive 401 from PUT /settings/dojo."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put("/settings/dojo", json={"dojo_name": "Any"})
 
     assert response.status_code == 401
@@ -263,7 +283,9 @@ async def test_put_dojo_settings_unauthenticated_returns_401(
 @pytest.mark.anyio
 async def test_post_settings_logo_member_returns_403() -> None:
     """A member token must receive 403 from POST /settings/logo."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/settings/logo",
             files={"file": ("logo.png", b"fake-png-bytes", "image/png")},
@@ -276,7 +298,9 @@ async def test_post_settings_logo_member_returns_403() -> None:
 @pytest.mark.anyio
 async def test_post_settings_logo_unauthenticated_returns_401() -> None:
     """No token must receive 401 from POST /settings/logo."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/settings/logo",
             files={"file": ("logo.png", b"fake-png-bytes", "image/png")},
