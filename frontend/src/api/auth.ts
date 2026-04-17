@@ -8,7 +8,7 @@ export type RegisterResponse = {
   email: string
   role: "admin" | "member"
   is_active: boolean
-  show_nudge: boolean
+  show_nudge?: boolean
 }
 
 export type LoginRequest = {
@@ -281,6 +281,29 @@ export const performPasskeyLogin = async (email: string): Promise<LoginResponse>
   }
 
   return loginPasskeyComplete(email, credentialData)
+}
+
+export const redeemRecoveryCode = async (
+  email: string,
+  code: string
+): Promise<{ access_token: string }> => {
+  const res = await fetch("/api/auth/recovery/redeem", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  })
+
+  if (res.status === 401) {
+    throw { status: 401, message: "Invalid or used recovery code" } satisfies ApiError
+  }
+  if (res.status === 429) {
+    throw { status: 429, message: "Account locked. Too many failed attempts." } satisfies ApiError
+  }
+  if (!res.ok) {
+    throw { status: res.status, message: "Recovery code redemption failed" } satisfies ApiError
+  }
+
+  return res.json() as Promise<{ access_token: string }>
 }
 
 export const updateTheme = async (theme: "light" | "dark" | "system"): Promise<UserClaims> => {
