@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import bcrypt
 import pytest
@@ -28,7 +27,6 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.db_models import RecoveryCode, User
-from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.base import Base
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
@@ -495,7 +493,6 @@ async def test_successful_attempt_after_prior_failures_resets_counter(
     db_client,
 ) -> None:
     """After a successful redemption, 4 new failures should NOT trigger 429."""
-    from app.auth.db_models import RecoveryAttempt  # red
 
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)

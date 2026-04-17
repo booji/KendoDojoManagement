@@ -49,3 +49,16 @@ class RecoveryCode(UUIDBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
+
+
+class RecoveryAttempt(UUIDBase):
+    __tablename__ = "recovery_attempts"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)

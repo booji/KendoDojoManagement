@@ -36,6 +36,12 @@ class AbstractRecoveryRepository(Protocol):
 
     async def get_all_for_user(self, user_id: str) -> list[dict[str, Any]]: ...
 
+    async def get_unused_codes_with_hash(
+        self, user_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    async def mark_used(self, code_id: str) -> None: ...
+
 
 class SqlRecoveryRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -94,3 +100,23 @@ class SqlRecoveryRepository:
             select(RecoveryCode).where(RecoveryCode.user_id == user_id)
         )
         return [_to_dict(obj) for obj in result.scalars().all()]
+
+    async def get_unused_codes_with_hash(self, user_id: str) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            select(RecoveryCode).where(
+                RecoveryCode.user_id == user_id,
+                RecoveryCode.used_at.is_(None),
+            )
+        )
+        return [
+            {**_to_dict(obj), "code_hash": obj.code_hash}
+            for obj in result.scalars().all()
+        ]
+
+    async def mark_used(self, code_id: str) -> None:
+        await self._session.execute(
+            update(RecoveryCode)
+            .where(RecoveryCode.id == code_id)
+            .values(used_at=datetime.now(UTC))
+        )
+        await self._session.flush()

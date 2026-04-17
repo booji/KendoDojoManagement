@@ -20,6 +20,7 @@ class UserClaims(BaseModel):
     role: Literal["admin", "member"]
     is_active: bool
     theme: Literal["light", "dark", "system"] = "system"
+    recovery_session: bool = False
 
 
 class ThemeUpdate(BaseModel):

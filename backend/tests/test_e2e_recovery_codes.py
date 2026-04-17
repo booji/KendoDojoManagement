@@ -206,7 +206,9 @@ def test_settings_security_shows_unused_code_count(page: Page) -> None:
     expect(page.get_by_text("No recovery codes generated").first).to_be_visible()
 
 
-def test_settings_security_shows_generate_button_when_no_codes_exist(page: Page) -> None:
+def test_settings_security_shows_generate_button_when_no_codes_exist(
+    page: Page,
+) -> None:
     """Settings > Security shows 'Generate codes' button when no recovery codes exist."""
     _register_and_login(page)
     page.goto(f"{BASE_URL}/settings")
@@ -246,7 +248,9 @@ def test_settings_security_shows_regenerate_button_when_codes_exist(page: Page) 
     strict=False,
     reason="Full flow requires WebAuthn passkey creation which cannot be driven headlessly",
 )
-def test_first_passkey_registration_prompts_recovery_code_generation(page: Page) -> None:
+def test_first_passkey_registration_prompts_recovery_code_generation(
+    page: Page,
+) -> None:
     """After first passkey is saved, user is prompted to generate recovery codes."""
     pytest.fail("WebAuthn passkey creation cannot be automated headlessly")
 
@@ -255,7 +259,9 @@ def test_first_passkey_registration_prompts_recovery_code_generation(page: Page)
     strict=False,
     reason="Full flow requires WebAuthn passkey creation which cannot be driven headlessly",
 )
-def test_first_passkey_registration_requires_acknowledgement_of_codes(page: Page) -> None:
+def test_first_passkey_registration_requires_acknowledgement_of_codes(
+    page: Page,
+) -> None:
     """User must acknowledge recovery codes before proceeding past the prompt."""
     pytest.fail("WebAuthn passkey creation cannot be automated headlessly")
 
@@ -271,7 +277,9 @@ def test_generated_codes_are_in_correct_format(page: Page) -> None:
     data = s.post(f"{API_URL}/auth/recovery/codes/generate").json()
     pattern = re.compile(r"^[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$")
     for code in data["codes"]:
-        assert pattern.match(code), f"Code {code!r} does not match xxxx-xxxx-xxxx format"
+        assert pattern.match(
+            code
+        ), f"Code {code!r} does not match xxxx-xxxx-xxxx format"
 
 
 def test_plaintext_codes_are_not_stored(page: Page) -> None:

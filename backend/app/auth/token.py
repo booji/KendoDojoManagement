@@ -38,4 +38,18 @@ def decode_token(token: str) -> UserClaims:
         email=payload["email"],
         role=payload["role"],
         is_active=payload["is_active"],
+        recovery_session=bool(payload.get("recovery_session", False)),
     )
+
+
+def encode_recovery_token(user_id: str, email: str) -> str:
+    expire = datetime.now(UTC) + timedelta(minutes=15)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "role": "member",
+        "is_active": True,
+        "recovery_session": True,
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode({"alg": "HS256"}, payload, _key())
