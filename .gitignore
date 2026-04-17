@@ -228,3 +228,6 @@ Thumbs.db
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Frontend src/lib should be tracked despite the lib/ rule above
+!frontend/src/lib/
