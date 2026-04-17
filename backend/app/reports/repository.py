@@ -43,9 +43,7 @@ class SqlReportRepository(AbstractReportRepository):
 
         rows = []
         for session in sessions:
-            count_stmt = select(func.count()).where(
-                Attendance.session_id == session.id
-            )
+            count_stmt = select(func.count()).where(Attendance.session_id == session.id)
             count_result = await self._session.execute(count_stmt)
             headcount = count_result.scalar() or 0
             rows.append(
@@ -77,12 +75,14 @@ class SqlReportRepository(AbstractReportRepository):
         if not session_ids:
             return []
 
-        att_stmt = select(
-            Attendance.member_id, func.count().label("cnt")
-        ).where(
-            Attendance.session_id.in_(session_ids),
-            Attendance.member_id.is_not(None),
-        ).group_by(Attendance.member_id)
+        att_stmt = (
+            select(Attendance.member_id, func.count().label("cnt"))
+            .where(
+                Attendance.session_id.in_(session_ids),
+                Attendance.member_id.is_not(None),
+            )
+            .group_by(Attendance.member_id)
+        )
 
         att_result = await self._session.execute(att_stmt)
         rows = []

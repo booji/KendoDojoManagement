@@ -95,7 +95,9 @@ class StubMemberRepo:
         self._store[new_id] = record
         return record
 
-    async def update(self, member_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    async def update(
+        self, member_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
         record = self._store.get(member_id)
         if record is None:
             return None
@@ -120,7 +122,8 @@ class StubMemberRepo:
         if search is not None:
             term = search.lower()
             results = [
-                r for r in results
+                r
+                for r in results
                 if term in r["full_name"].lower() or term in r["email"].lower()
             ]
         return results
@@ -155,7 +158,9 @@ async def test_get_my_member_returns_own_record(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/member")
 
     assert response.status_code == 200
@@ -170,7 +175,9 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
     """Member exists in auth but has no Member record yet."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/member")
 
     assert response.status_code == 404
@@ -179,7 +186,9 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
 @pytest.mark.anyio
 async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/member")
 
     assert response.status_code == 401
@@ -191,7 +200,9 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/member")
 
     assert response.status_code == 200
@@ -221,7 +232,9 @@ async def test_get_my_member_only_returns_own_record(member_repo) -> None:
     # Seed a record for another user — must not be returned
     await member_repo.add(_seed_record(email="other@dojo.test", user_id=_OTHER_SUB))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/users/me/member")
 
     # Caller has no linked record, should be 404
@@ -239,7 +252,9 @@ async def test_put_my_member_updates_full_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"full_name": "Updated Self Name"},
@@ -256,7 +271,9 @@ async def test_put_my_member_updates_dob(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     new_dob = "1985-03-20"
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"dob": new_dob},
@@ -274,7 +291,9 @@ async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={
@@ -295,7 +314,9 @@ async def test_put_my_member_updates_federation_number(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"federation_number": "FED-NEW-999"},
@@ -311,10 +332,14 @@ async def test_put_my_member_update_persists(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.put("/users/me/member", json={"full_name": "Persisted Name"})
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
@@ -324,7 +349,9 @@ async def test_put_my_member_update_persists(member_repo) -> None:
 @pytest.mark.anyio
 async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"full_name": "Hacker"},
@@ -339,7 +366,9 @@ async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_put_my_member_admin_only_field_is_rejected_or_ignored(member_repo) -> None:
+async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
+    member_repo,
+) -> None:
     """
     Sending is_coach (admin-only) via PUT /users/me/member must not apply the change.
     Either 422 (rejected) or 200 with the field unchanged are acceptable.
@@ -347,7 +376,9 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(member_repo
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(is_coach=False))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"is_coach": True},
@@ -360,14 +391,18 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(member_repo
 
 
 @pytest.mark.anyio
-async def test_put_my_member_membership_status_is_rejected_or_ignored(member_repo) -> None:
+async def test_put_my_member_membership_status_is_rejected_or_ignored(
+    member_repo,
+) -> None:
     """
     Sending membership_status (admin-only) via PUT /users/me/member must not apply the change.
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(membership_status="active"))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"membership_status": "inactive"},
@@ -384,7 +419,9 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(is_first_aider=False))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"is_first_aider": True},
@@ -396,12 +433,16 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
 
 
 @pytest.mark.anyio
-async def test_put_my_member_parental_consent_is_rejected_or_ignored(member_repo) -> None:
+async def test_put_my_member_parental_consent_is_rejected_or_ignored(
+    member_repo,
+) -> None:
     """parental_consent_obtained is an admin-only field."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(parental_consent_obtained=False))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={"parental_consent_obtained": True},
@@ -422,7 +463,9 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
     """First-save onboarding: PUT creates a new Member linked to claims.sub."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(
             "/users/me/member",
             json={
@@ -444,7 +487,9 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
     """A record created via PUT is immediately retrievable via GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.put(
             "/users/me/member",
             json={
@@ -453,7 +498,9 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
             },
         )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200

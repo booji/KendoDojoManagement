@@ -21,6 +21,8 @@ import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
 import CheckinPage from "@/pages/CheckinPage"
 import SetupPage from "@/pages/SetupPage"
+import RecoveryRedeemPage from "@/pages/RecoveryRedeemPage"
+import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 
 type LayoutContext = { user: UserClaims }
 
@@ -81,6 +83,8 @@ const App = () => (
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/setup" element={<SetupPage />} />
+          <Route path="/recovery/redeem" element={<RecoveryRedeemPage />} />
+          <Route path="/passkey/register" element={<PasskeyRegisterPage />} />
 
           {/* Authenticated routes — wrapped in AppShell */}
           <Route element={<AuthenticatedLayout />}>

@@ -68,6 +68,7 @@ def _register_and_login(page: Page) -> tuple[str, str]:
 
 def _mock_passkey_begin(page: Page) -> None:
     """Intercept the passkey-begin call so the browser never reaches the WebAuthn prompt."""
+
     def handle(route: Route) -> None:
         route.fulfill(
             status=200,
@@ -100,6 +101,7 @@ def _mock_passkey_begin(page: Page) -> None:
 
 def _mock_passkey_complete(page: Page, *, show_nudge: bool) -> None:
     """Intercept the passkey-complete call, returning show_nudge as requested."""
+
     def handle(route: Route) -> None:
         route.fulfill(
             status=201,
@@ -121,6 +123,7 @@ def _mock_passkey_complete(page: Page, *, show_nudge: bool) -> None:
 
 def _mock_security_status(page: Page, passkey_count: int) -> None:
     """Intercept security-status to return a controlled passkey_count."""
+
     def handle(route: Route) -> None:
         route.fulfill(
             status=200,
@@ -133,6 +136,7 @@ def _mock_security_status(page: Page, passkey_count: int) -> None:
 
 def _mock_passkeys_list(page: Page, passkeys: list[dict]) -> None:
     """Intercept the passkeys list endpoint."""
+
     def handle(route: Route) -> None:
         route.fulfill(
             status=200,

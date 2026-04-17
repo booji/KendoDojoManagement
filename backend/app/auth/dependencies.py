@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.auth.attempt_repository import AbstractAttemptRepository, SqlAttemptRepository
 from app.auth.passkey_repository import AbstractPasskeyRepository, SqlPasskeyRepository
 from app.auth.recovery_repository import (
     AbstractRecoveryRepository,
@@ -21,3 +22,9 @@ def get_recovery_repo(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> AbstractRecoveryRepository:
     return SqlRecoveryRepository(uow.session)
+
+
+def get_attempt_repo(
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> AbstractAttemptRepository:
+    return SqlAttemptRepository(uow.session)

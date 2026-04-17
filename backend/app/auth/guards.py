@@ -27,6 +27,8 @@ def require_role(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         if not claims.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        if claims.recovery_session:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         if role == "admin" and claims.role != "admin":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         return claims

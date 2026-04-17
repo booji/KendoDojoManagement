@@ -46,7 +46,9 @@ def clear_overrides():
 @pytest.mark.anyio
 async def test_register_first_user_becomes_admin(db_client) -> None:
     """First registration on a fresh instance gets admin role."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/register/password",
             json={"email": "musashi@example.com", "password": "Str0ng!Pass"},
@@ -63,7 +65,9 @@ async def test_register_first_user_becomes_admin(db_client) -> None:
 @pytest.mark.anyio
 async def test_register_subsequent_user_is_member(db_client) -> None:
     """Second and later registrations get member role."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "first@example.com", "password": "Str0ng!Pass"},
@@ -79,7 +83,9 @@ async def test_register_subsequent_user_is_member(db_client) -> None:
 @pytest.mark.anyio
 async def test_register_duplicate_email_returns_409(db_client) -> None:
     payload = {"email": "dupe@dojo.test", "password": "Str0ng!Pass"}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post("/auth/register/password", json=payload)
         response = await c.post("/auth/register/password", json=payload)
     assert response.status_code == 409
@@ -90,7 +96,9 @@ async def test_register_duplicate_email_returns_409(db_client) -> None:
 
 @pytest.mark.anyio
 async def test_login_returns_jwt(db_client) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "login@dojo.test", "password": "Str0ng!Pass"},
@@ -106,7 +114,9 @@ async def test_login_returns_jwt(db_client) -> None:
 
 @pytest.mark.anyio
 async def test_login_wrong_password_returns_401(db_client) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "badpass@dojo.test", "password": "Str0ng!Pass"},
@@ -120,7 +130,9 @@ async def test_login_wrong_password_returns_401(db_client) -> None:
 
 @pytest.mark.anyio
 async def test_login_unknown_email_returns_401(db_client) -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/login/password",
             json={"email": "nobody@dojo.test", "password": "whatever"},
@@ -135,7 +147,9 @@ async def test_login_deactivated_account_returns_403(db_client) -> None:
 
     from app.auth.db_models import User
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post(
             "/auth/register/password",
             json={"email": "inactive@dojo.test", "password": "Str0ng!Pass"},
@@ -147,7 +161,9 @@ async def test_login_deactivated_account_returns_403(db_client) -> None:
             update(User).where(User.id == user_id).values(is_active=False)
         )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/login/password",
             json={"email": "inactive@dojo.test", "password": "Str0ng!Pass"},
@@ -160,16 +176,22 @@ async def test_login_deactivated_account_returns_403(db_client) -> None:
 
 @pytest.mark.anyio
 async def test_protected_route_no_token_returns_401() -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/me")
     assert response.status_code == 401
 
 
 @pytest.mark.anyio
 async def test_protected_route_member_token_succeeds() -> None:
-    claims = UserClaims(sub="uuid-1", email="m@dojo.test", role="member", is_active=True)
+    claims = UserClaims(
+        sub="uuid-1", email="m@dojo.test", role="member", is_active=True
+    )
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/me")
     assert response.status_code == 200
     assert response.json()["email"] == "m@dojo.test"
@@ -179,9 +201,13 @@ async def test_protected_route_member_token_succeeds() -> None:
 async def test_admin_route_rejects_member_token() -> None:
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(sub="uuid-2", email="m@dojo.test", role="member", is_active=True)
+    member_claims = UserClaims(
+        sub="uuid-2", email="m@dojo.test", role="member", is_active=True
+    )
     token = encode_token(member_claims)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/admin-only", cookies={"access_token": token})
     assert response.status_code == 403
 
@@ -190,7 +216,9 @@ async def test_admin_route_rejects_member_token() -> None:
 async def test_admin_route_accepts_admin_token() -> None:
     claims = UserClaims(sub="uuid-3", email="a@dojo.test", role="admin", is_active=True)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/admin-only")
     assert response.status_code == 200
 
@@ -205,7 +233,9 @@ async def test_password_not_stored_in_plaintext(db_client) -> None:
 
     from app.auth.db_models import User
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "hash@dojo.test", "password": "MySecret123!"},

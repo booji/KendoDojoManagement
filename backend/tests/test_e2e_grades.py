@@ -90,10 +90,13 @@ _GRADE_CARD_TITLE = '[data-slot="card-title"]:has-text("Grade")'
 # AC1/AC5 — Grade card shows member's current grade
 # ---------------------------------------------------------------------------
 
+
 def test_grade_shown_on_member_detail(page: Page) -> None:
     """AC1/AC5: Member detail page shows the member's current grade."""
     _setup_admin(page)
-    member_id = _create_member_via_api("Grade Display Member", "grade_display@dojo.test")
+    member_id = _create_member_via_api(
+        "Grade Display Member", "grade_display@dojo.test"
+    )
     page.goto(f"{BASE_URL}/members/{member_id}")
     # Grade card title must be visible
     expect(page.locator(_GRADE_CARD_TITLE)).to_be_visible(timeout=8000)
@@ -105,29 +108,39 @@ def test_grade_shown_on_member_detail(page: Page) -> None:
 # AC2 — Promote button visible for admin
 # ---------------------------------------------------------------------------
 
+
 def test_promote_button_visible_for_admin(page: Page) -> None:
     """AC2: Promote button is visible on the member detail page for admins."""
     _setup_admin(page)
-    member_id = _create_member_via_api("Promote Button Member", "promote_button@dojo.test")
+    member_id = _create_member_via_api(
+        "Promote Button Member", "promote_button@dojo.test"
+    )
     page.goto(f"{BASE_URL}/members/{member_id}")
     # Wait for grade card to load (skeleton resolves to grade text)
     expect(page.locator(_GRADE_CARD_TITLE)).to_be_visible(timeout=8000)
-    expect(page.get_by_role("button", name="Promote member")).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="Promote member")).to_be_visible(
+        timeout=8000
+    )
 
 
 # ---------------------------------------------------------------------------
 # AC4/AC6 — Grade history toggle works
 # ---------------------------------------------------------------------------
 
+
 def test_grade_history_visible_to_member(page: Page) -> None:
     """AC4/AC6: Grade history toggle appears after a promotion and expands correctly."""
     _setup_admin(page)
-    member_id = _create_member_via_api("History Toggle Member", "history_toggle@dojo.test")
+    member_id = _create_member_via_api(
+        "History Toggle Member", "history_toggle@dojo.test"
+    )
     page.goto(f"{BASE_URL}/members/{member_id}")
 
     # Wait for grade card and Promote button to appear
     expect(page.locator(_GRADE_CARD_TITLE)).to_be_visible(timeout=8000)
-    expect(page.get_by_role("button", name="Promote member")).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="Promote member")).to_be_visible(
+        timeout=8000
+    )
 
     # Promote the member so there is at least one history entry
     page.get_by_role("button", name="Promote member").click()

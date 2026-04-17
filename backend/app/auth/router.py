@@ -1,15 +1,18 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app import config
+from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import User
-from app.auth.dependencies import get_passkey_repo, get_recovery_repo
+from app.auth.dependencies import get_attempt_repo, get_passkey_repo, get_recovery_repo
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import (
+    LenientEmail,
     LoginRequest,
     PasskeyBeginRequest,
     PasskeyLoginCompleteRequest,
@@ -29,6 +32,7 @@ from app.auth.passkey_service import (
 from app.auth.recovery_repository import AbstractRecoveryRepository
 from app.auth.recovery_service import generate_recovery_codes, hash_codes
 from app.auth.service import login_user, register_user
+from app.auth.token import encode_recovery_token
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 
@@ -251,3 +255,49 @@ async def recovery_codes_status(
     unused_count = await recovery_repo.count_unused(claims.sub)
     has_set = await recovery_repo.has_active_set(claims.sub)
     return {"unused_count": unused_count, "has_set": has_set}
+
+
+class _RedeemRequest(BaseModel):
+    email: LenientEmail
+    code: str = Field(..., min_length=1, max_length=128)
+
+
+@router.post("/recovery/redeem", status_code=200)
+async def redeem_recovery_code(
+    payload: _RedeemRequest,
+    request: Request,
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
+    attempt_repo: Annotated[AbstractAttemptRepository, Depends(get_attempt_repo)],
+) -> dict[str, str]:
+    ip = request.client.host if request.client else "unknown"
+
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    failures = await attempt_repo.count_failures_since_last_success(user.id)
+    if failures >= 5:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    codes = await recovery_repo.get_unused_codes_with_hash(user.id)
+    matched_id: str | None = None
+    for record in codes:
+        if bcrypt.checkpw(payload.code.encode(), record["code_hash"].encode()):
+            matched_id = record["id"]
+            break
+
+    if matched_id is None:
+        await attempt_repo.log_attempt(user.id, ip, success=False)
+        await uow.commit()
+        if failures + 1 >= 5:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    await recovery_repo.mark_used(matched_id)
+    await attempt_repo.log_attempt(user.id, ip, success=True)
+    await uow.commit()
+
+    token = encode_recovery_token(user_id=user.id, email=user.email)
+    return {"access_token": token, "token_type": "bearer"}

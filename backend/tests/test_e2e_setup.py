@@ -61,7 +61,9 @@ def _populate_instance() -> None:
         json={"email": "e2e_setup_seed@dojo.test", "password": "Str0ng!Pass1"},
         timeout=5,
     )
-    assert resp.status_code == 201, f"Seed registration failed: {resp.status_code} {resp.text}"
+    assert (
+        resp.status_code == 201
+    ), f"Seed registration failed: {resp.status_code} {resp.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -75,9 +77,9 @@ def fresh_db() -> None:
     _clear_users_and_credentials()
     # Verify the API now reports setup available (backend path, no /api prefix)
     r = requests.get(_SETUP_HEALTH_URL, timeout=5)
-    assert r.status_code == 200, (
-        f"Expected 200 from {_SETUP_HEALTH_URL} after clearing DB, got {r.status_code}"
-    )
+    assert (
+        r.status_code == 200
+    ), f"Expected 200 from {_SETUP_HEALTH_URL} after clearing DB, got {r.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +134,9 @@ def populated_db(fresh_db: None) -> None:
     _populate_instance()
     # Sanity-check: setup endpoint must now return 404
     r = requests.get(f"{API_URL}/api/setup", timeout=5)
-    assert r.status_code == 404, (
-        f"Expected 404 from /api/setup after seeding user, got {r.status_code}"
-    )
+    assert (
+        r.status_code == 404
+    ), f"Expected 404 from /api/setup after seeding user, got {r.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +144,9 @@ def populated_db(fresh_db: None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_setup_redirects_to_login_when_populated(page: Page, populated_db: None) -> None:
+def test_setup_redirects_to_login_when_populated(
+    page: Page, populated_db: None
+) -> None:
     """Visiting /setup on a populated instance redirects to /login."""
     page.context.clear_cookies()
     page.goto(f"{BASE_URL}/setup")
@@ -162,7 +166,9 @@ def test_setup_redirects_to_login_when_populated(page: Page, populated_db: None)
         "test infrastructure"
     ),
 )
-def test_setup_registration_redirects_to_dashboard_as_admin(page: Page, fresh_db: None) -> None:
+def test_setup_registration_redirects_to_dashboard_as_admin(
+    page: Page, fresh_db: None
+) -> None:
     """After successful passkey registration via setup, user lands on / as admin.
 
     This test is marked xfail(strict=False) because the WebAuthn credential-creation

@@ -45,7 +45,9 @@ def _get_token(playwright: Playwright) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_preferences_get_returns_system_theme_by_default(playwright: Playwright) -> None:
+def test_preferences_get_returns_system_theme_by_default(
+    playwright: Playwright,
+) -> None:
     token = _get_token(playwright)
     ctx = playwright.request.new_context(base_url=BASE_API)
 
@@ -60,7 +62,9 @@ def test_preferences_get_returns_system_theme_by_default(playwright: Playwright)
 # ---------------------------------------------------------------------------
 
 
-def test_preferences_put_dark_theme_persists_and_is_returned(playwright: Playwright) -> None:
+def test_preferences_put_dark_theme_persists_and_is_returned(
+    playwright: Playwright,
+) -> None:
     token = _get_token(playwright)
     ctx = playwright.request.new_context(base_url=BASE_API)
     auth = {"Cookie": f"access_token={token}"}

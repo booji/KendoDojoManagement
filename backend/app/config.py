@@ -4,9 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL", "sqlite+aiosqlite:///./kendo.db"
-)
+DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")
 
 JWT_SECRET: str = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM: str = "HS256"

@@ -58,7 +58,9 @@ async def db_client(_engine):
 @pytest.mark.anyio
 async def test_register_passkey_begin_returns_options(db_client) -> None:
     """POST /auth/register/passkey/begin returns 200 with publicKey.challenge."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
             json={"email": "musashi@dojo.test"},
@@ -76,7 +78,9 @@ async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> N
     """Calling begin for a new email creates a User row in the DB."""
     engine = db_client
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
             json={"email": "musashi@dojo.test"},
@@ -96,7 +100,9 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
     """If the user already exists (password-registered), begin returns 200 without duplicate."""
     engine = db_client
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         # First create via password route
         await c.post(
             "/auth/register/password",
@@ -130,6 +136,7 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
     user_id = str(uuid.uuid4())
     async with engine.begin() as conn:
         from sqlalchemy import insert
+
         await conn.execute(
             insert(User).values(
                 id=user_id,
@@ -148,7 +155,9 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
     mock_verified.sign_count = 0
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.post(
                 "/auth/register/passkey/complete",
                 json={
@@ -180,7 +189,9 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
 async def test_login_passkey_begin_returns_options(db_client) -> None:
     """POST /auth/login/passkey/begin with known email returns 200 with publicKey.challenge."""
     # First register a user
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "loginbegin@dojo.test", "password": "Str0ng!Pass"},
@@ -200,7 +211,9 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
 @pytest.mark.anyio
 async def test_login_passkey_begin_unknown_email_returns_404(db_client) -> None:
     """POST /auth/login/passkey/begin with unknown email returns 404."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/login/passkey/begin",
             json={"email": "nobody@dojo.test"},
@@ -223,6 +236,7 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
 
     async with engine.begin() as conn:
         from sqlalchemy import insert
+
         await conn.execute(
             insert(User).values(
                 id=user_id,
@@ -249,7 +263,9 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
     mock_verified.new_sign_count = 1
 
     with patch("webauthn.verify_authentication_response", return_value=mock_verified):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.post(
                 "/auth/login/passkey/complete",
                 json={
@@ -278,7 +294,9 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
 @pytest.mark.anyio
 async def test_password_login_still_works(db_client) -> None:
     """POST /auth/login/password still returns 200 after passkey code is added."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.post(
             "/auth/register/password",
             json={"email": "smoke@dojo.test", "password": "Str0ng!Pass"},

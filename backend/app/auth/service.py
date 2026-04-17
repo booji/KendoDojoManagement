@@ -47,9 +47,7 @@ async def register_user(
 
 async def login_user(payload: LoginRequest, uow: AbstractUnitOfWork) -> TokenResponse:
     """UoW is already entered by the FastAPI dependency — do not re-enter."""
-    result = await uow.session.execute(
-        select(User).where(User.email == payload.email)
-    )
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(payload.password, user.hashed_password):

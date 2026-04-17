@@ -146,9 +146,7 @@ class SqlSessionInstanceRepository:
         result = await self._session.execute(select(SessionInstance))
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
-    async def list_upcoming(
-        self, as_of: date | None = None
-    ) -> list[dict[str, Any]]:
+    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
         today = (as_of or date.today()).isoformat()
         result = await self._session.execute(
             select(SessionInstance).where(

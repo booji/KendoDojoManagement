@@ -38,8 +38,10 @@ def _get_db_path() -> Path:
 def _setup_admin(page: Page) -> None:
     """Register a user and promote to admin via DB, then log in via the browser."""
     # Register (ignore 409 if already exists)
-    r = httpx.post(f"{API_BASE}/auth/register/password",
-                   json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASS})
+    r = httpx.post(
+        f"{API_BASE}/auth/register/password",
+        json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASS},
+    )
     if r.status_code == 201:
         user_id = r.json()["sub"]
         db = _get_db_path()
@@ -58,8 +60,10 @@ def _setup_admin(page: Page) -> None:
 
 def _setup_member(page: Page) -> None:
     """Register a plain member and log in via the browser."""
-    httpx.post(f"{API_BASE}/auth/register/password",
-               json={"email": _MEMBER_EMAIL, "password": _MEMBER_PASS})
+    httpx.post(
+        f"{API_BASE}/auth/register/password",
+        json={"email": _MEMBER_EMAIL, "password": _MEMBER_PASS},
+    )
     page.goto(f"{BASE_URL}/login")
     page.get_by_label("Email").fill(_MEMBER_EMAIL)
     page.get_by_label("Password").fill(_MEMBER_PASS)
@@ -71,8 +75,10 @@ def _create_member_via_api(full_name: str, email: str) -> str:
     """Create a member via API using admin cookie; return member id."""
     client = httpx.Client()
     # Login as admin to get cookie
-    r = client.post(f"{API_BASE}/auth/login/password",
-                    json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASS})
+    r = client.post(
+        f"{API_BASE}/auth/login/password",
+        json={"email": _ADMIN_EMAIL, "password": _ADMIN_PASS},
+    )
     r.raise_for_status()
     r2 = client.post(
         f"{API_BASE}/members",
@@ -102,6 +108,7 @@ def _create_member_via_api(full_name: str, email: str) -> str:
 # AC3 — Admin can create a member via the UI
 # ---------------------------------------------------------------------------
 
+
 def test_admin_can_create_member_via_ui(page: Page) -> None:
     _setup_admin(page)
     page.goto(f"{BASE_URL}/members")
@@ -118,6 +125,7 @@ def test_admin_can_create_member_via_ui(page: Page) -> None:
 # AC4 — Admin sees full member profile
 # ---------------------------------------------------------------------------
 
+
 def test_admin_sees_full_member_profile(page: Page) -> None:
     _setup_admin(page)
     member_id = _create_member_via_api("Profile Test Member", "profile_test@dojo.test")
@@ -130,7 +138,11 @@ def test_admin_sees_full_member_profile(page: Page) -> None:
 # AC4 — Member can view own profile (redirect to own detail page)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=False, reason="member profile link requires member_id which is not yet surfaced in session")
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="member profile link requires member_id which is not yet surfaced in session",
+)
 def test_member_can_view_own_profile_only(page: Page) -> None:
     _setup_member(page)
     # Members can see /profile but member CRUD detail requires the member's UUID
@@ -141,6 +153,7 @@ def test_member_can_view_own_profile_only(page: Page) -> None:
 # ---------------------------------------------------------------------------
 # AC5 — Admin can update a member field via the UI
 # ---------------------------------------------------------------------------
+
 
 def test_admin_can_update_member_via_ui(page: Page) -> None:
     _setup_admin(page)
@@ -158,9 +171,12 @@ def test_admin_can_update_member_via_ui(page: Page) -> None:
 # AC6 — Admin can deactivate a member via UI
 # ---------------------------------------------------------------------------
 
+
 def test_admin_can_deactivate_member_via_ui(page: Page) -> None:
     _setup_admin(page)
-    member_id = _create_member_via_api("Deactivate Test Member", "deactivate_test@dojo.test")
+    member_id = _create_member_via_api(
+        "Deactivate Test Member", "deactivate_test@dojo.test"
+    )
     page.goto(f"{BASE_URL}/members/{member_id}")
     page.get_by_role("button", name="Deactivate", exact=True).click()
     # Confirm dialog
@@ -172,6 +188,7 @@ def test_admin_can_deactivate_member_via_ui(page: Page) -> None:
 # AC7 — Member list filter by status
 # ---------------------------------------------------------------------------
 
+
 def test_member_list_filter_by_status(page: Page) -> None:
     _setup_admin(page)
     _create_member_via_api("Filter Status Member", "filter_status@dojo.test")
@@ -182,12 +199,15 @@ def test_member_list_filter_by_status(page: Page) -> None:
     expect(page.get_by_text("Filter Status Member").first).to_be_visible(timeout=8000)
     page.get_by_role("combobox").click()
     page.get_by_role("option", name="Inactive").first.click()
-    expect(page.get_by_text("Filter Status Member").first).not_to_be_visible(timeout=5000)
+    expect(page.get_by_text("Filter Status Member").first).not_to_be_visible(
+        timeout=5000
+    )
 
 
 # ---------------------------------------------------------------------------
 # AC7 — Member list search
 # ---------------------------------------------------------------------------
+
 
 def test_member_list_search_by_name_or_email(page: Page) -> None:
     _setup_admin(page)
@@ -204,18 +224,22 @@ def test_member_list_search_by_name_or_email(page: Page) -> None:
 # AC8 — Mobile viewport renders member list
 # ---------------------------------------------------------------------------
 
+
 def test_member_list_renders_on_mobile(page: Page) -> None:
     page.set_viewport_size({"width": 375, "height": 812})
     _setup_admin(page)
     _create_member_via_api("Mobile Test Member", "mobile_test@dojo.test")
     page.goto(f"{BASE_URL}/members")
     # On mobile the card renders as role="button" with the member name in the label.
-    expect(page.get_by_role("button", name="View Mobile Test Member")).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="View Mobile Test Member")).to_be_visible(
+        timeout=8000
+    )
 
 
 # ---------------------------------------------------------------------------
 # AC8 — Desktop viewport renders member detail
 # ---------------------------------------------------------------------------
+
 
 def test_member_detail_renders_on_desktop(page: Page) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})

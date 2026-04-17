@@ -70,18 +70,22 @@ def _get_or_create_session_type(page: Page, token: str) -> tuple[str, str]:
     return data[0]["id"], data[0]["name"]
 
 
-def _create_session(page: Page, token: str, date: str, start_time: str = "19:00") -> str:
+def _create_session(
+    page: Page, token: str, date: str, start_time: str = "19:00"
+) -> str:
     """Create an ad-hoc session and return its id."""
     type_id, _ = _get_or_create_session_type(page, token)
     resp = page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(token), "Content-Type": "application/json"},
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": date,
-            "start_time": start_time,
-            "duration_minutes": 60,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": date,
+                "start_time": start_time,
+                "duration_minutes": 60,
+            }
+        ),
     )
     assert resp.status == 201, f"create session failed: {resp.status} {resp.text()}"
     return resp.json()["id"]
@@ -158,9 +162,9 @@ def test_checkin_to_cancelled_session_shows_error(page: Page) -> None:
     page.wait_for_load_state("networkidle")
     buttons_after = page.get_by_role("button", name="Check In").count()
     # The cancelled session contributed one Check In button; it should now be gone
-    assert buttons_after < buttons_before, (
-        f"Expected fewer Check In buttons after cancel ({buttons_after} vs {buttons_before})"
-    )
+    assert (
+        buttons_after < buttons_before
+    ), f"Expected fewer Check In buttons after cancel ({buttons_after} vs {buttons_before})"
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +254,9 @@ def test_admin_can_view_attendance_list_via_ui(page: Page) -> None:
         f"{API_URL}/sessions/{session_id}/checkin",
         headers=_api_headers(member_token),
     )
-    assert checkin_resp.status == 200, f"checkin failed: {checkin_resp.status} {checkin_resp.text()}"
+    assert (
+        checkin_resp.status == 200
+    ), f"checkin failed: {checkin_resp.status} {checkin_resp.text()}"
 
     # Admin retrieves the attendance list
     att_resp = page.request.get(
@@ -287,6 +293,6 @@ def test_checkin_ui_is_thumb_friendly_on_mobile(page: Page) -> None:
     # Verify the button height is at least 48px (thumb-friendly)
     bounding_box = check_in_btn.bounding_box()
     assert bounding_box is not None
-    assert bounding_box["height"] >= 48, (
-        f"Check In button height {bounding_box['height']}px is less than 48px min"
-    )
+    assert (
+        bounding_box["height"] >= 48
+    ), f"Check In button height {bounding_box['height']}px is less than 48px min"

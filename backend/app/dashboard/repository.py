@@ -39,9 +39,7 @@ class StubDashboardRepository(AbstractDashboardRepository):
     async def sessions_this_week(self) -> int:
         return self._sessions_this_week_count
 
-    async def attendance_rate_for_period(
-        self, date_from: date, date_to: date
-    ) -> float:
+    async def attendance_rate_for_period(self, date_from: date, date_to: date) -> float:
         return self._attendance_rate
 
 
@@ -75,9 +73,7 @@ class SqlDashboardRepository(AbstractDashboardRepository):
         )
         return result.scalar() or 0
 
-    async def attendance_rate_for_period(
-        self, date_from: date, date_to: date
-    ) -> float:
+    async def attendance_rate_for_period(self, date_from: date, date_to: date) -> float:
         from sqlalchemy import func, select
 
         from app.attendance.db_models import Attendance

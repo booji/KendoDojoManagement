@@ -137,36 +137,36 @@ def test_passkey_credential_model_has_label_field() -> None:
     """PasskeyCredential must have a label column."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(PasskeyCredential, "label"), (
-        "PasskeyCredential.label is missing — add it to the model"
-    )
+    assert hasattr(
+        PasskeyCredential, "label"
+    ), "PasskeyCredential.label is missing — add it to the model"
 
 
 def test_passkey_credential_model_has_aaguid_field() -> None:
     """PasskeyCredential must have an aaguid column (nullable)."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(PasskeyCredential, "aaguid"), (
-        "PasskeyCredential.aaguid is missing — add it to the model"
-    )
+    assert hasattr(
+        PasskeyCredential, "aaguid"
+    ), "PasskeyCredential.aaguid is missing — add it to the model"
 
 
 def test_passkey_credential_model_has_created_at_field() -> None:
     """PasskeyCredential must have a created_at column."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(PasskeyCredential, "created_at"), (
-        "PasskeyCredential.created_at is missing — add it to the model"
-    )
+    assert hasattr(
+        PasskeyCredential, "created_at"
+    ), "PasskeyCredential.created_at is missing — add it to the model"
 
 
 def test_passkey_credential_model_has_last_used_at_field() -> None:
     """PasskeyCredential must have a last_used_at column (nullable)."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(PasskeyCredential, "last_used_at"), (
-        "PasskeyCredential.last_used_at is missing — add it to the model"
-    )
+    assert hasattr(
+        PasskeyCredential, "last_used_at"
+    ), "PasskeyCredential.last_used_at is missing — add it to the model"
 
 
 # ---------------------------------------------------------------------------
@@ -183,9 +183,9 @@ def test_jwt_expire_minutes_default_is_480(monkeypatch) -> None:
     import app.config as cfg
 
     importlib.reload(cfg)
-    assert cfg.JWT_EXPIRE_MINUTES == 480, (
-        f"Expected JWT_EXPIRE_MINUTES=480, got {cfg.JWT_EXPIRE_MINUTES}"
-    )
+    assert (
+        cfg.JWT_EXPIRE_MINUTES == 480
+    ), f"Expected JWT_EXPIRE_MINUTES=480, got {cfg.JWT_EXPIRE_MINUTES}"
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +202,9 @@ async def test_list_passkeys_returns_caller_passkeys_only(passkey_repo) -> None:
     passkey_repo._seed(_USER_A.sub, label="Phone Face ID")
     passkey_repo._seed(_USER_B.sub, label="Other user key")  # must NOT appear
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/passkeys")
 
     assert response.status_code == 200
@@ -224,7 +226,9 @@ async def test_list_passkeys_response_fields(passkey_repo) -> None:
         last_used_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/passkeys")
 
     assert response.status_code == 200
@@ -242,7 +246,9 @@ async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
     passkey_repo._seed(_USER_A.sub)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/passkeys")
 
     assert response.status_code == 200
@@ -253,7 +259,9 @@ async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
 @pytest.mark.anyio
 async def test_list_passkeys_requires_authentication() -> None:
     """GET /auth/passkeys returns 401 when no token is provided."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/passkeys")
     assert response.status_code == 401
 
@@ -263,7 +271,9 @@ async def test_list_passkeys_empty_for_new_user(passkey_repo) -> None:
     """GET /auth/passkeys returns an empty list when user has no passkeys."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get("/auth/passkeys")
 
     assert response.status_code == 200
@@ -282,10 +292,10 @@ async def test_patch_passkey_label_succeeds(passkey_repo) -> None:
     record = passkey_repo._seed(_USER_A.sub, label="Old Label")
     pk_id = record["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        response = await c.patch(
-            f"/auth/passkeys/{pk_id}", json={"label": "New Label"}
-        )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.patch(f"/auth/passkeys/{pk_id}", json={"label": "New Label"})
 
     assert response.status_code == 200
     assert response.json()["label"] == "New Label"
@@ -298,7 +308,9 @@ async def test_patch_passkey_label_is_persisted(passkey_repo) -> None:
     record = passkey_repo._seed(_USER_A.sub, label="Original")
     pk_id = record["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         await c.patch(f"/auth/passkeys/{pk_id}", json={"label": "Renamed"})
         list_resp = await c.get("/auth/passkeys")
 
@@ -315,7 +327,9 @@ async def test_patch_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     record = passkey_repo._seed(_USER_B.sub, label="User B Key")  # owned by B
     pk_id = record["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.patch(
             f"/auth/passkeys/{pk_id}", json={"label": "Stolen Label"}
         )
@@ -329,10 +343,10 @@ async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
     random_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        response = await c.patch(
-            f"/auth/passkeys/{random_id}", json={"label": "Ghost"}
-        )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.patch(f"/auth/passkeys/{random_id}", json={"label": "Ghost"})
 
     assert response.status_code == 404
 
@@ -341,10 +355,10 @@ async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
 async def test_patch_passkey_requires_authentication() -> None:
     """PATCH /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        response = await c.patch(
-            f"/auth/passkeys/{random_id}", json={"label": "X"}
-        )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.patch(f"/auth/passkeys/{random_id}", json={"label": "X"})
     assert response.status_code == 401
 
 
@@ -361,7 +375,9 @@ async def test_delete_passkey_succeeds(passkey_repo) -> None:
     record2 = passkey_repo._seed(_USER_A.sub, label="Delete Me")
     pk_id = record2["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
     assert response.status_code == 204
@@ -378,7 +394,9 @@ async def test_delete_last_passkey_returns_400(passkey_repo) -> None:
     record = passkey_repo._seed(_USER_A.sub, label="Only Key")
     pk_id = record["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
     assert response.status_code == 400
@@ -391,7 +409,9 @@ async def test_delete_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     record = passkey_repo._seed(_USER_B.sub, label="User B Key")
     pk_id = record["id"]
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
     assert response.status_code == 404
@@ -403,7 +423,9 @@ async def test_delete_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
     random_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/auth/passkeys/{random_id}")
 
     assert response.status_code == 404
@@ -413,7 +435,9 @@ async def test_delete_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
 async def test_delete_passkey_requires_authentication() -> None:
     """DELETE /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/auth/passkeys/{random_id}")
     assert response.status_code == 401
 

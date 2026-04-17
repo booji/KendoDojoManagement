@@ -25,8 +25,8 @@ def _compute_is_minor(dob: str) -> bool:
     """Return True if the person is under 18 years old as of today."""
     birth = date.fromisoformat(dob) if isinstance(dob, str) else dob
     today = date.today()
-    age = today.year - birth.year - (
-        (today.month, today.day) < (birth.month, birth.day)
+    age = (
+        today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
     )
     return age < 18
 

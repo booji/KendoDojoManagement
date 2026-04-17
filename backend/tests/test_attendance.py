@@ -37,8 +37,12 @@ from app.members.dependencies import get_member_repo
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True)
-_MEMBER = UserClaims(sub="member-uuid", email="member@dojo.test", role="member", is_active=True)
+_ADMIN = UserClaims(
+    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+)
+_MEMBER = UserClaims(
+    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
+)
 _OTHER_MEMBER = UserClaims(
     sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
 )
@@ -262,7 +266,9 @@ async def test_member_can_checkin_to_session(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/sessions/{session['id']}/checkin")
 
     assert response.status_code == 200
@@ -281,7 +287,9 @@ async def test_unauthenticated_checkin_returns_401(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/sessions/{session['id']}/checkin")
 
     assert response.status_code == 401
@@ -295,7 +303,9 @@ async def test_checkin_nonexistent_session_returns_404(
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     fake_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/sessions/{fake_id}/checkin")
 
     assert response.status_code == 404
@@ -314,7 +324,9 @@ async def test_member_cannot_checkin_to_cancelled_session(
     session = session_repo.seed(cancelled=True)
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/sessions/{session['id']}/checkin")
 
     assert response.status_code == 409
@@ -333,7 +345,9 @@ async def test_admin_can_generate_checkin_token(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{session['id']}/checkin-token")
 
     assert response.status_code == 200
@@ -350,7 +364,9 @@ async def test_member_cannot_generate_checkin_token(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(
             f"/sessions/{session['id']}/checkin-token",
             cookies={"access_token": _member_token()},
@@ -367,7 +383,9 @@ async def test_generate_token_for_nonexistent_session(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{fake_id}/checkin-token")
 
     assert response.status_code == 404
@@ -389,7 +407,9 @@ async def test_member_can_checkin_via_token(
     token_record = await token_repo.create(session["id"], expires_at)
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/checkin/{token_record['token']}")
 
     assert response.status_code == 200
@@ -410,7 +430,9 @@ async def test_unauthenticated_token_checkin_returns_401(
     expires_at = datetime.now(UTC) + timedelta(minutes=15)
     token_record = await token_repo.create(session["id"], expires_at)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/checkin/{token_record['token']}")
 
     assert response.status_code == 401
@@ -431,7 +453,9 @@ async def test_expired_token_returns_410(
     expired = token_repo.seed_expired(session["id"])
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(f"/checkin/{expired['token']}")
 
     assert response.status_code == 410
@@ -445,7 +469,9 @@ async def test_invalid_token_returns_404(
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/checkin/this-token-does-not-exist")
 
     assert response.status_code == 404
@@ -468,7 +494,9 @@ async def test_admin_can_list_session_attendance(
     await attendance_repo.check_in(session["id"], "member-1", "self")
     await attendance_repo.check_in(session["id"], "member-2", "self")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{session['id']}/attendance")
 
     assert response.status_code == 200
@@ -487,7 +515,9 @@ async def test_member_cannot_list_attendance(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(
             f"/sessions/{session['id']}/attendance",
             cookies={"access_token": _member_token()},
@@ -509,7 +539,9 @@ async def test_admin_mark_attended_returns_201(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",
             json={"member_id": "some-member-uuid"},
@@ -530,7 +562,9 @@ async def test_admin_mark_attended_nonexistent_session_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{fake_id}/attendance",
             json={"member_id": "some-member-uuid"},
@@ -547,7 +581,9 @@ async def test_admin_mark_attended_missing_member_id_returns_422(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",
             json={},
@@ -563,7 +599,9 @@ async def test_member_cannot_admin_mark_attended(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",
             json={"member_id": "some-member-uuid"},
@@ -584,10 +622,14 @@ async def test_admin_remove_attendance_returns_204(
     attendance_repo: StubAttendanceRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
-    await attendance_repo.admin_mark_attended(session["id"], "some-member-uuid", "admin-uuid")
+    await attendance_repo.admin_mark_attended(
+        session["id"], "some-member-uuid", "admin-uuid"
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(
             f"/sessions/{session['id']}/attendance/some-member-uuid"
         )
@@ -603,7 +645,9 @@ async def test_admin_remove_attendance_not_found_returns_404(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(
             f"/sessions/{session['id']}/attendance/nonexistent-member"
         )
@@ -618,7 +662,9 @@ async def test_member_cannot_remove_attendance(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(
             f"/sessions/{session['id']}/attendance/some-member-uuid",
             cookies={"access_token": _member_token()},
@@ -640,7 +686,9 @@ async def test_admin_add_visitor_returns_201(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/visitors",
             json={"visitor_name": "John Guest"},
@@ -661,7 +709,9 @@ async def test_admin_add_visitor_nonexistent_session_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{fake_id}/visitors",
             json={"visitor_name": "John Guest"},
@@ -678,7 +728,9 @@ async def test_admin_add_visitor_missing_name_returns_422(
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/visitors",
             json={},
@@ -694,7 +746,9 @@ async def test_member_cannot_add_visitor(
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/visitors",
             json={"visitor_name": "John Guest"},
@@ -720,7 +774,9 @@ async def test_session_attendance_includes_visitors(
     await attendance_repo.admin_mark_attended(session["id"], "member-1", "admin-uuid")
     await attendance_repo.add_visitor(session["id"], "Visitor One", "admin-uuid")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{session['id']}/attendance")
 
     assert response.status_code == 200
@@ -746,7 +802,9 @@ async def test_attendance_record_has_visitor_name_field(
 
     await attendance_repo.admin_mark_attended(session["id"], "member-1", "admin-uuid")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{session['id']}/attendance")
 
     assert response.status_code == 200
@@ -766,7 +824,9 @@ async def test_attendance_record_has_visitor_name_field(
 async def test_admin_can_get_any_member_attendance_history(
     attendance_repo: StubAttendanceRepo,
 ) -> None:
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override  # admin satisfies REQUIRE_MEMBER
+    app.dependency_overrides[REQUIRE_MEMBER] = (
+        _admin_override  # admin satisfies REQUIRE_MEMBER
+    )
     # Admin bypasses the user→member lookup; still need a stub for the dep
     member_repo = StubMemberRepo()
     app.dependency_overrides[get_member_repo] = lambda: member_repo
@@ -776,7 +836,9 @@ async def test_admin_can_get_any_member_attendance_history(
     await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
     await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{_MEMBER.sub}/attendance")
 
     assert response.status_code == 200
@@ -800,7 +862,9 @@ async def test_member_can_get_own_attendance_history(
     session_id = str(uuid.uuid4())
     await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{_MEMBER.sub}/attendance")
 
     assert response.status_code == 200
@@ -824,7 +888,9 @@ async def test_member_cannot_get_other_member_attendance_history(
     member_repo.seed_member(user_id=_OTHER_MEMBER.sub, member_id=_OTHER_MEMBER.sub)
     app.dependency_overrides[get_member_repo] = lambda: member_repo
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{_MEMBER.sub}/attendance")
 
     assert response.status_code == 403
@@ -832,7 +898,9 @@ async def test_member_cannot_get_other_member_attendance_history(
 
 @pytest.mark.anyio
 async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/members/{_MEMBER.sub}/attendance")
 
     assert response.status_code == 401
