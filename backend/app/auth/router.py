@@ -259,7 +259,7 @@ async def recovery_codes_status(
 
 class _RedeemRequest(BaseModel):
     email: LenientEmail
-    code: str
+    code: str = Field(..., min_length=1, max_length=128)
 
 
 @router.post("/recovery/redeem", status_code=200)
@@ -274,7 +274,7 @@ async def redeem_recovery_code(
 
     result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
-    if user is None:
+    if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     failures = await attempt_repo.count_failures_since_last_success(user.id)
