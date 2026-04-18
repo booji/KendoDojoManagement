@@ -5,7 +5,9 @@ from fastapi import Depends
 from app.auth.attempt_repository import AbstractAttemptRepository, SqlAttemptRepository
 from app.auth.passkey_repository import AbstractPasskeyRepository, SqlPasskeyRepository
 from app.auth.recovery_repository import (
+    AbstractAdminTokenRepository,
     AbstractRecoveryRepository,
+    SqlAdminTokenRepository,
     SqlRecoveryRepository,
 )
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -28,3 +30,9 @@ def get_attempt_repo(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> AbstractAttemptRepository:
     return SqlAttemptRepository(uow.session)
+
+
+def get_admin_token_repo(
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> AbstractAdminTokenRepository:
+    return SqlAdminTokenRepository(uow.session)
