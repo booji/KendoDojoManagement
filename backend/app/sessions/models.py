@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionTypeCreate(BaseModel):
@@ -19,8 +19,12 @@ class SessionTemplateCreate(BaseModel):
     start_time: str  # "HH:MM"
     duration_minutes: int
     recurrence: str = "weekly"
-    day_of_week: int  # 0=Monday … 6=Sunday
+    day_of_week: int | None = None  # kept for backwards compat; nullable
     location: str | None = None
+    recurrence_days: list[int] = []
+    interval_weeks: int = Field(default=1, ge=1)
+    info: str | None = None
+    coach_notes: str | None = None
 
 
 class SessionTemplateRead(BaseModel):
@@ -31,8 +35,12 @@ class SessionTemplateRead(BaseModel):
     start_time: str
     duration_minutes: int
     recurrence: str
-    day_of_week: int
+    day_of_week: int | None = None
     location: str | None = None
+    recurrence_days: list[int] = []
+    interval_weeks: int = 1
+    info: str | None = None
+    coach_notes: str | None = None
 
 
 class SessionInstanceCreate(BaseModel):
@@ -42,6 +50,10 @@ class SessionInstanceCreate(BaseModel):
     duration_minutes: int
     notes: str | None = None
     template_id: str | None = None
+    location: str | None = None
+    info: str | None = None
+    coach_notes: str | None = None
+    checkin_url: str | None = None
 
 
 class SessionInstanceRead(BaseModel):
@@ -53,6 +65,10 @@ class SessionInstanceRead(BaseModel):
     notes: str | None = None
     template_id: str | None = None
     cancelled: bool = False
+    location: str | None = None
+    info: str | None = None
+    coach_notes: str | None = None
+    checkin_url: str | None = None
 
 
 class GenerateRequest(BaseModel):
