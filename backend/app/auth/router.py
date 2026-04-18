@@ -9,7 +9,12 @@ from sqlalchemy import select, update
 from app import config
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import User
-from app.auth.dependencies import get_attempt_repo, get_passkey_repo, get_recovery_repo
+from app.auth.dependencies import (
+    get_admin_token_repo,
+    get_attempt_repo,
+    get_passkey_repo,
+    get_recovery_repo,
+)
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import (
     LenientEmail,
@@ -29,8 +34,19 @@ from app.auth.passkey_service import (
     register_passkey_begin,
     register_passkey_complete,
 )
-from app.auth.recovery_repository import AbstractRecoveryRepository
-from app.auth.recovery_service import generate_recovery_codes, hash_codes
+from app.auth.recovery_repository import (
+    AbstractAdminTokenRepository,
+    AbstractRecoveryRepository,
+)
+from app.auth.recovery_service import (
+    admin_token_expiry,
+    check_admin_token,
+    generate_admin_token_plaintext,
+    generate_recovery_codes,
+    hash_admin_token,
+    hash_codes,
+    is_admin_token_valid,
+)
 from app.auth.service import login_user, register_user
 from app.auth.token import encode_recovery_token
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -269,6 +285,9 @@ async def redeem_recovery_code(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     attempt_repo: Annotated[AbstractAttemptRepository, Depends(get_attempt_repo)],
+    admin_token_repo: Annotated[
+        AbstractAdminTokenRepository, Depends(get_admin_token_repo)
+    ],
 ) -> dict[str, str]:
     ip = request.client.host if request.client else "unknown"
 
@@ -281,6 +300,7 @@ async def redeem_recovery_code(
     if failures >= 5:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
+    # Try recovery codes first
     codes = await recovery_repo.get_unused_codes_with_hash(user.id)
     matched_id: str | None = None
     for record in codes:
@@ -288,16 +308,65 @@ async def redeem_recovery_code(
             matched_id = record["id"]
             break
 
-    if matched_id is None:
-        await attempt_repo.log_attempt(user.id, ip, success=False)
+    if matched_id is not None:
+        await recovery_repo.mark_used(matched_id)
+        await attempt_repo.log_attempt(user.id, ip, success=True)
         await uow.commit()
-        if failures + 1 >= 5:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        token = encode_recovery_token(user_id=user.id, email=user.email)
+        return {"access_token": token, "token_type": "bearer"}
 
-    await recovery_repo.mark_used(matched_id)
-    await attempt_repo.log_attempt(user.id, ip, success=True)
+    # Try admin tokens
+    admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
+    matched_admin_id: str | None = None
+    for record in admin_tokens:
+        if check_admin_token(payload.code, record["token_hash"]):
+            if is_admin_token_valid(record):
+                matched_admin_id = record["id"]
+            break
+
+    if matched_admin_id is not None:
+        await admin_token_repo.mark_admin_token_used(matched_admin_id)
+        await attempt_repo.log_attempt(user.id, ip, success=True)
+        await uow.commit()
+        token = encode_recovery_token(user_id=user.id, email=user.email)
+        return {"access_token": token, "token_type": "bearer"}
+
+    await attempt_repo.log_attempt(user.id, ip, success=False)
     await uow.commit()
+    if failures + 1 >= 5:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    token = encode_recovery_token(user_id=user.id, email=user.email)
-    return {"access_token": token, "token_type": "bearer"}
+
+class _AdminTokenRequest(BaseModel):
+    user_id: str = Field(..., min_length=1)
+
+
+@router.post("/recovery/admin-token", status_code=200)
+async def generate_admin_token(
+    payload: _AdminTokenRequest,
+    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    admin_token_repo: Annotated[
+        AbstractAdminTokenRepository, Depends(get_admin_token_repo)
+    ],
+) -> dict[str, str]:
+    result = await uow.session.execute(
+        select(User).where(User.id == payload.user_id)
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    plaintext = generate_admin_token_plaintext()
+    token_hash = hash_admin_token(plaintext)
+    expires_at = admin_token_expiry()
+
+    await admin_token_repo.create_admin_token(
+        user_id=payload.user_id,
+        created_by_id=claims.sub,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+    await uow.commit()
+    return {"token": plaintext}

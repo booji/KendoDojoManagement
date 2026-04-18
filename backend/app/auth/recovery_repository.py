@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import RecoveryCode
+from app.auth.db_models import AdminRecoveryToken, RecoveryCode
 
 
 def _to_dict(obj: RecoveryCode) -> dict[str, Any]:
@@ -117,6 +117,79 @@ class SqlRecoveryRepository:
         await self._session.execute(
             update(RecoveryCode)
             .where(RecoveryCode.id == code_id)
+            .values(used_at=datetime.now(UTC))
+        )
+        await self._session.flush()
+
+
+# ── Admin recovery token protocol + implementation ────────────────────────────
+
+
+def _admin_token_to_dict(obj: AdminRecoveryToken) -> dict[str, Any]:
+    return {
+        "id": obj.id,
+        "user_id": obj.user_id,
+        "created_by_id": obj.created_by_id,
+        "token_hash": obj.token_hash,
+        "expires_at": obj.expires_at,
+        "used_at": obj.used_at,
+        "created_at": obj.created_at,
+    }
+
+
+@runtime_checkable
+class AbstractAdminTokenRepository(Protocol):
+    async def create_admin_token(
+        self,
+        user_id: str,
+        created_by_id: str | None,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> dict[str, Any]: ...
+
+    async def get_unused_admin_tokens_for_user(
+        self, user_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    async def mark_admin_token_used(self, token_id: str) -> None: ...
+
+
+class SqlAdminTokenRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create_admin_token(
+        self,
+        user_id: str,
+        created_by_id: str | None,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> dict[str, Any]:
+        obj = AdminRecoveryToken(
+            user_id=user_id,
+            created_by_id=created_by_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+        self._session.add(obj)
+        await self._session.flush()
+        return _admin_token_to_dict(obj)
+
+    async def get_unused_admin_tokens_for_user(
+        self, user_id: str
+    ) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            select(AdminRecoveryToken).where(
+                AdminRecoveryToken.user_id == user_id,
+                AdminRecoveryToken.used_at.is_(None),
+            )
+        )
+        return [_admin_token_to_dict(obj) for obj in result.scalars().all()]
+
+    async def mark_admin_token_used(self, token_id: str) -> None:
+        await self._session.execute(
+            update(AdminRecoveryToken)
+            .where(AdminRecoveryToken.id == token_id)
             .values(used_at=datetime.now(UTC))
         )
         await self._session.flush()

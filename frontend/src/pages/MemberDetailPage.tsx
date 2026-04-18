@@ -28,7 +28,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { ArrowLeftIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { ArrowLeftIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, ClipboardCopyIcon, CheckIcon } from "lucide-react"
+import { generateAdminRecoveryToken } from "@/api/recovery"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -496,6 +497,135 @@ const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
   )
 }
 
+// ── Recovery token card ───────────────────────────────────────────────────────
+
+type RecoveryTokenCardProps = {
+  memberId: string
+  memberName: string
+}
+
+const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [tokenOpen, setTokenOpen] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const handleConfirm = async () => {
+    setError(null)
+    setGenerating(true)
+    try {
+      const result = await generateAdminRecoveryToken(memberId)
+      setToken(result.token)
+      setConfirmOpen(false)
+      setTokenOpen(true)
+    } catch (err) {
+      setError(isApiError(err) ? err.message : "Failed to generate recovery token")
+      setConfirmOpen(false)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleCopy = async () => {
+    if (token === null) return
+    try {
+      await navigator.clipboard.writeText(token)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard API not available
+    }
+  }
+
+  const handleTokenClose = () => {
+    setTokenOpen(false)
+    setToken(null)
+    setCopied(false)
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Recovery</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Generate a one-time recovery token to give to {memberName} if they are locked out of their account.
+          </p>
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">{error}</p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setError(null); setConfirmOpen(true) }}
+            aria-label={`Generate recovery token for ${memberName}`}
+          >
+            Generate recovery token
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={confirmOpen} onOpenChange={(o) => { if (!o) setConfirmOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate recovery token?</DialogTitle>
+            <DialogDescription>
+              This will create a one-time recovery token for {memberName}. The token will only be shown once — share it with the member in person.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={generating} aria-label="Cancel">
+              Cancel
+            </Button>
+            <Button onClick={handleConfirm} disabled={generating} aria-label="Generate token">
+              {generating ? "Generating…" : "Generate token"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tokenOpen} onOpenChange={(o) => { if (!o) handleTokenClose() }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recovery token</DialogTitle>
+            <DialogDescription>
+              This token will not be shown again. Share it with the member in person.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-md bg-muted px-4 py-3 font-mono text-sm break-all select-all" aria-label="Recovery token">
+              {token}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              aria-label="Copy token to clipboard"
+              className="w-full sm:w-auto"
+            >
+              {copied ? (
+                <><CheckIcon className="mr-1.5 h-4 w-4" aria-hidden="true" />Copied</>
+              ) : (
+                <><ClipboardCopyIcon className="mr-1.5 h-4 w-4" aria-hidden="true" />Copy to clipboard</>
+              )}
+            </Button>
+            <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2" role="note">
+              Warning: This token will not be shown again. Store it securely and share it with the member in person.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleTokenClose} aria-label="Close">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const MemberDetailPage = () => {
@@ -738,6 +868,10 @@ const MemberDetailPage = () => {
           <GradeCard memberId={member.id} isAdmin={isAdmin} />
 
           <AttendanceHistoryCard memberId={member.id} />
+
+          {isAdmin && (
+            <RecoveryTokenCard memberId={member.id} memberName={member.full_name} />
+          )}
         </>
       )}
 
