@@ -119,12 +119,45 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
+class StubRecoveryRepo:
+    """Minimal stub for AbstractRecoveryRepository — returns no recovery codes."""
+
+    def __init__(self, unused_count: int = 0) -> None:
+        self._unused_count = unused_count
+
+    async def count_unused(self, user_id: str) -> int:  # noqa: ARG002
+        return self._unused_count
+
+    async def create_codes(self, user_id: str, hashed_codes: list, set_id: str) -> list:  # noqa: ARG002
+        return []
+
+    async def has_active_set(self, user_id: str) -> bool:  # noqa: ARG002
+        return False
+
+    async def invalidate_all(self, user_id: str) -> None:  # noqa: ARG002
+        return
+
+    async def get_all_for_user(self, user_id: str) -> list:  # noqa: ARG002
+        return []
+
+    async def get_unused_codes_with_hash(self, user_id: str) -> list:  # noqa: ARG002
+        return []
+
+    async def mark_used(self, code_id: str) -> None:  # noqa: ARG002
+        return
+
+
 @pytest.fixture()
 def passkey_repo() -> StubPasskeyRepo:
-    from app.auth.dependencies import get_passkey_repo  # red: does not exist yet
+    from app.auth.dependencies import (  # red: does not exist yet
+        get_passkey_repo,
+        get_recovery_repo,
+    )
 
     repo = StubPasskeyRepo()
+    recovery_repo = StubRecoveryRepo()
     app.dependency_overrides[get_passkey_repo] = lambda: repo
+    app.dependency_overrides[get_recovery_repo] = lambda: recovery_repo
     return repo
 
 
