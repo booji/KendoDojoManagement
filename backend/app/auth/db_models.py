@@ -62,3 +62,20 @@ class RecoveryAttempt(UUIDBase):
     )
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
+class AdminRecoveryToken(UUIDBase):
+    __tablename__ = "admin_recovery_tokens"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+    created_by_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
