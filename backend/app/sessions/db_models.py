@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase
@@ -23,8 +23,14 @@ class SessionTemplate(UUIDBase):
     recurrence: Mapped[str] = mapped_column(
         String(20), nullable=False, default="weekly"
     )
-    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    day_of_week: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recurrence_days: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SessionInstance(UUIDBase):
@@ -41,3 +47,7 @@ class SessionInstance(UUIDBase):
         String(36), ForeignKey("session_templates.id"), nullable=True
     )
     cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checkin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

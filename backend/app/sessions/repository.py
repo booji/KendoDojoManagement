@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any, Protocol, runtime_checkable
 
@@ -39,6 +40,12 @@ class AbstractSessionInstanceRepository(Protocol):
         self, as_of: date | None = None
     ) -> list[dict[str, Any]]: ...
 
+    async def list_in_range(
+        self, from_date: date, to_date: date
+    ) -> list[dict[str, Any]]: ...
+
+    async def latest_date_for_template(self, template_id: str) -> date | None: ...
+
     async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
 
 
@@ -47,6 +54,16 @@ def _type_to_dict(obj: SessionType) -> dict[str, Any]:
 
 
 def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
+    raw_days = obj.recurrence_days
+    if raw_days is None:
+        recurrence_days: list[int] = []
+    elif isinstance(raw_days, str):
+        try:
+            recurrence_days = json.loads(raw_days)
+        except json.JSONDecodeError:
+            recurrence_days = []
+    else:
+        recurrence_days = raw_days  # type: ignore[assignment]
     return {
         "id": obj.id,
         "session_type_id": obj.session_type_id,
@@ -57,6 +74,10 @@ def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
         "recurrence": obj.recurrence,
         "day_of_week": obj.day_of_week,
         "location": obj.location,
+        "recurrence_days": recurrence_days,
+        "interval_weeks": obj.interval_weeks if obj.interval_weeks is not None else 1,
+        "info": obj.info,
+        "coach_notes": obj.coach_notes,
     }
 
 
@@ -68,13 +89,17 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "session_type_id": obj.session_type_id,
         "scheduled_at": scheduled_at,
         "duration_minutes": obj.duration_minutes,
-        "location": obj.notes,  # notes doubles as location until schema is extended
+        "location": obj.location,
         "template_id": obj.template_id,
         "status": "cancelled" if obj.cancelled else "scheduled",
         # Keep raw fields for internal / admin use
         "date": obj.date,
         "start_time": obj.start_time,
         "cancelled": obj.cancelled,
+        "notes": obj.notes,
+        "info": obj.info,
+        "coach_notes": obj.coach_notes,
+        "checkin_url": obj.checkin_url,
     }
 
 
@@ -108,7 +133,13 @@ class SqlSessionTemplateRepository:
         self._session = session
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        obj = SessionTemplate(**data)
+        # Serialize recurrence_days list to JSON string for storage
+        serialized = dict(data)
+        if "recurrence_days" in serialized and isinstance(
+            serialized["recurrence_days"], list
+        ):
+            serialized["recurrence_days"] = json.dumps(serialized["recurrence_days"])
+        obj = SessionTemplate(**serialized)
         self._session.add(obj)
         await self._session.flush()
         return _template_to_dict(obj)
@@ -155,6 +186,30 @@ class SqlSessionInstanceRepository:
             )
         )
         return [_instance_to_dict(row) for row in result.scalars().all()]
+
+    async def list_in_range(
+        self, from_date: date, to_date: date
+    ) -> list[dict[str, Any]]:
+        from_iso = from_date.isoformat()
+        to_iso = to_date.isoformat()
+        result = await self._session.execute(
+            select(SessionInstance).where(
+                SessionInstance.date >= from_iso,
+                SessionInstance.date <= to_iso,
+                SessionInstance.cancelled.is_(False),
+            )
+        )
+        return [_instance_to_dict(row) for row in result.scalars().all()]
+
+    async def latest_date_for_template(self, template_id: str) -> date | None:
+        result = await self._session.execute(
+            select(SessionInstance.date).where(
+                SessionInstance.template_id == template_id,
+                SessionInstance.cancelled.is_(False),
+            )
+        )
+        dates = [date.fromisoformat(row) for row in result.scalars().all()]
+        return max(dates) if dates else None
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
         result = await self._session.execute(

@@ -65,12 +65,12 @@ async def test_patch_theme_light_returns_200(db_client) -> None:
             "/auth/login/password",
             json={"email": "theme-light@dojo.test", "password": "Str0ng!Pass"},
         )
-        cookies = login.cookies
+        token = login.cookies["access_token"]
 
         response = await c.patch(
             "/auth/me/theme",
             json={"theme": "light"},
-            cookies=cookies,
+            cookies={"access_token": token},
         )
 
     assert response.status_code == 200
@@ -93,12 +93,12 @@ async def test_patch_theme_dark_returns_200(db_client) -> None:
             "/auth/login/password",
             json={"email": "theme-dark@dojo.test", "password": "Str0ng!Pass"},
         )
-        cookies = login.cookies
+        token = login.cookies["access_token"]
 
         response = await c.patch(
             "/auth/me/theme",
             json={"theme": "dark"},
-            cookies=cookies,
+            cookies={"access_token": token},
         )
 
     assert response.status_code == 200
@@ -119,12 +119,12 @@ async def test_patch_theme_system_returns_200(db_client) -> None:
             "/auth/login/password",
             json={"email": "theme-system@dojo.test", "password": "Str0ng!Pass"},
         )
-        cookies = login.cookies
+        token = login.cookies["access_token"]
 
         response = await c.patch(
             "/auth/me/theme",
             json={"theme": "system"},
-            cookies=cookies,
+            cookies={"access_token": token},
         )
 
     assert response.status_code == 200
@@ -148,12 +148,12 @@ async def test_patch_theme_invalid_value_returns_422(db_client) -> None:
             "/auth/login/password",
             json={"email": "theme-bad@dojo.test", "password": "Str0ng!Pass"},
         )
-        cookies = login.cookies
+        token = login.cookies["access_token"]
 
         response = await c.patch(
             "/auth/me/theme",
             json={"theme": "purple"},
-            cookies=cookies,
+            cookies={"access_token": token},
         )
 
     assert response.status_code == 422
