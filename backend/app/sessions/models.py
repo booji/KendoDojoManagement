@@ -73,3 +73,23 @@ class SessionInstanceRead(BaseModel):
 
 class GenerateRequest(BaseModel):
     horizon: str  # "YYYY-MM-DD" — generate instances up to this date
+
+
+class SessionInstanceUpdate(BaseModel):
+    location: str | None = None
+    info: str | None = None
+    coach_notes: str | None = None
+    start_time: str | None = None
+    duration_minutes: int | None = None
+
+
+class SessionTemplateUpdate(BaseModel):
+    location: str | None = None
+    info: str | None = None
+    coach_notes: str | None = None
+    start_time: str | None = None
+    duration_minutes: int | None = None
+    title: str | None = None
+    session_type_id: str | None = None
+    recurrence_days: list[int] | None = None
+    interval_weeks: int | None = None

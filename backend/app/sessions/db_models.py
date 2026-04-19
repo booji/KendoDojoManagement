@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase
@@ -31,6 +31,7 @@ class SessionTemplate(UUIDBase):
     interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     info: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class SessionInstance(UUIDBase):

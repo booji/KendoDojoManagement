@@ -18,7 +18,9 @@ from app.sessions.models import (
     GenerateRequest,
     SessionInstanceCreate,
     SessionInstanceRead,
+    SessionInstanceUpdate,
     SessionTemplateCreate,
+    SessionTemplateUpdate,
     SessionTypeCreate,
 )
 from app.sessions.repository import (
@@ -173,20 +175,30 @@ async def cancel_session_instance(
     return _normalize_instance(record)
 
 
+def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{**r, "coach_notes": None} for r in records]
+
+
 @router.get("/sessions")
 async def list_upcoming_sessions(
-    _claims: _Member,
+    claims: _Member,
     repo: _InstRepo,
     template_repo: _TmplRepo,
     uow: _UoW,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
 ) -> list[dict[str, Any]]:
+    is_admin = claims.role == "admin"
+
+    def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized = [_normalize_instance(r) for r in rows]
+        return normalized if is_admin else _strip_coach_notes(normalized)
+
     if from_date is not None and to_date is not None:
         if hasattr(repo, "list_in_range"):
             rows = await repo.list_in_range(from_date, to_date)
-            return [_normalize_instance(r) for r in rows]
-        return [_normalize_instance(r) for r in await repo.list_upcoming()]
+            return _finalize(rows)
+        return _finalize(await repo.list_upcoming())
 
     # Rolling extension: check each template and extend if needed
     if hasattr(repo, "latest_date_for_template"):
@@ -211,4 +223,85 @@ async def list_upcoming_sessions(
         if new_instances:
             await uow.commit()
 
-    return [_normalize_instance(r) for r in await repo.list_upcoming()]
+    return _finalize(await repo.list_upcoming())
+
+
+@router.get("/sessions/{instance_id}")
+async def get_session_instance(
+    instance_id: str,
+    claims: _Member,
+    repo: _InstRepo,
+) -> dict[str, Any]:
+    record = await repo.get(instance_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    result = _normalize_instance(record)
+    if claims.role != "admin":
+        result["coach_notes"] = None
+    return result
+
+
+@router.put("/sessions/{instance_id}")
+async def update_session_instance(
+    instance_id: str,
+    payload: SessionInstanceUpdate,
+    _claims: _Admin,
+    repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    record = await repo.update(instance_id, data)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    await uow.commit()
+    return _normalize_instance(record)
+
+
+@router.patch("/sessions/templates/{template_id}")
+async def update_session_template(
+    template_id: str,
+    payload: SessionTemplateUpdate,
+    _claims: _Admin,
+    template_repo: _TmplRepo,
+    instance_repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    template = await template_repo.update(template_id, data)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+    today = date.today()
+    horizon = today + timedelta(days=90)
+    await instance_repo.delete_future_for_template(template_id, today)
+    instance_data_list = generate_instances(template, horizon, set())
+    for inst_data in instance_data_list:
+        await instance_repo.add(inst_data)
+    await uow.commit()
+    return template
+
+
+@router.delete("/sessions/templates/{template_id}")
+async def delete_session_template(
+    template_id: str,
+    _claims: _Admin,
+    template_repo: _TmplRepo,
+    instance_repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    template = await template_repo.deactivate(template_id)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+    today = date.today()
+    await instance_repo.cancel_future_for_template(template_id, today)
+    await uow.commit()
+    return template
