@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react"
-import { getSessions, getSessionTypes, createSession } from "@/api/sessions"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import rehypeSanitize from "rehype-sanitize"
+import {
+  getSessions,
+  getSessionTypes,
+  createSession,
+  createSessionTemplate,
+  createSessionType,
+} from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { getMe } from "@/api/auth"
 import {
@@ -30,6 +39,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 // Returns the Monday of the week containing the given date (local time)
@@ -439,73 +450,278 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
   )
 }
 
+// ── Markdown preview field ─────────────────────────────────────────────────────
+
+type MarkdownFieldProps = {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  preview: boolean
+  onTogglePreview: () => void
+  placeholder?: string
+}
+
+const MarkdownField = ({
+  id,
+  label,
+  value,
+  onChange,
+  preview,
+  onTogglePreview,
+  placeholder,
+}: MarkdownFieldProps) => (
+  <div className="space-y-1.5">
+    <div className="flex items-center justify-between gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <button
+        type="button"
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+        onClick={onTogglePreview}
+      >
+        {preview ? "Edit" : "Preview"}
+      </button>
+    </div>
+    {preview ? (
+      <div className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm prose prose-sm max-w-none">
+        {value.trim() ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{value}</ReactMarkdown>
+        ) : (
+          <span className="text-muted-foreground italic">Nothing to preview</span>
+        )}
+      </div>
+    ) : (
+      <Textarea
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-[80px]"
+      />
+    )}
+  </div>
+)
+
+// ── Day-of-week selector ───────────────────────────────────────────────────────
+
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+type DayPickerProps = {
+  selected: number[]
+  onChange: (days: number[]) => void
+}
+
+const DayPicker = ({ selected, onChange }: DayPickerProps) => (
+  <div className="flex flex-wrap gap-3" role="group" aria-label="Recurrence days">
+    {DAY_LABELS.map((label, idx) => {
+      const checked = selected.includes(idx)
+      return (
+        <label
+          key={idx}
+          className="flex items-center gap-1.5 cursor-pointer select-none min-h-[44px]"
+        >
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(v) => {
+              if (v) {
+                onChange([...selected, idx].sort((a, b) => a - b))
+              } else {
+                onChange(selected.filter((d) => d !== idx))
+              }
+            }}
+          />
+          <span className="text-sm">{label}</span>
+        </label>
+      )
+    })}
+  </div>
+)
+
 // ── Create session dialog ──────────────────────────────────────────────────────
 
 type CreateDialogProps = {
   sessionTypes: SessionType[]
   onCreated: (session: SessionInstance) => void
+  onRefresh: () => void
 }
 
-const CreateSessionDialog = ({ sessionTypes, onCreated }: CreateDialogProps) => {
+const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialogProps) => {
   const [open, setOpen] = useState(false)
+  const [isRecurring, setIsRecurring] = useState(false)
+
+  // Session type
   const [typeId, setTypeId] = useState("")
-  const [date, setDate] = useState("")
+  const [newTypeName, setNewTypeName] = useState("")
+  const [showNewTypeInput, setShowNewTypeInput] = useState(false)
+  const [creatingType, setCreatingType] = useState(false)
+  const [localTypes, setLocalTypes] = useState<SessionType[]>(sessionTypes)
+
+  // Common fields
   const [time, setTime] = useState("")
   const [duration, setDuration] = useState("90")
-  const [notes, setNotes] = useState("")
+  const [location, setLocation] = useState("")
+  const [info, setInfo] = useState("")
+  const [coachNotes, setCoachNotes] = useState("")
+  const [infoPreview, setInfoPreview] = useState(false)
+  const [coachNotesPreview, setCoachNotesPreview] = useState(false)
+
+  // One-off
+  const [date, setDate] = useState("")
+
+  // Recurring
+  const [recurringTitle, setRecurringTitle] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [selectedDays, setSelectedDays] = useState<number[]>([])
+  const [intervalWeeks, setIntervalWeeks] = useState<1 | 2>(1)
+
+  // Form state
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Keep localTypes in sync when prop changes (e.g. initial load)
+  useEffect(() => {
+    setLocalTypes(sessionTypes)
+  }, [sessionTypes])
+
   const reset = () => {
+    setIsRecurring(false)
     setTypeId("")
-    setDate("")
+    setNewTypeName("")
+    setShowNewTypeInput(false)
+    setCreatingType(false)
     setTime("")
     setDuration("90")
-    setNotes("")
+    setLocation("")
+    setInfo("")
+    setCoachNotes("")
+    setInfoPreview(false)
+    setCoachNotesPreview(false)
+    setDate("")
+    setRecurringTitle("")
+    setStartDate("")
+    setSelectedDays([])
+    setIntervalWeeks(1)
+    setSubmitting(false)
     setFormError(null)
+  }
+
+  const handleAddType = async () => {
+    const name = newTypeName.trim()
+    if (!name) return
+    setCreatingType(true)
+    try {
+      const newType = await createSessionType(name)
+      setLocalTypes((prev) => [...prev, newType])
+      setTypeId(newType.id)
+      setNewTypeName("")
+      setShowNewTypeInput(false)
+    } catch (err) {
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to create session type"
+      setFormError(message)
+    } finally {
+      setCreatingType(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+
     const mins = parseInt(duration, 10)
-    if (!typeId || !date || !time || isNaN(mins) || mins < 1) {
-      setFormError("All fields are required and duration must be positive.")
+    if (!typeId) {
+      setFormError("Please select a session type.")
       return
     }
-    setSubmitting(true)
-    try {
-      const created = await createSession({
-        session_type_id: typeId,
-        date,
-        start_time: time,
-        duration_minutes: mins,
-        notes: notes.trim() || null,
-      })
-      onCreated(created)
-      setOpen(false)
-      reset()
-    } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "Failed to create session"
-      setFormError(message)
-    } finally {
-      setSubmitting(false)
+    if (!time) {
+      setFormError("Start time is required.")
+      return
+    }
+    if (isNaN(mins) || mins < 1) {
+      setFormError("Duration must be a positive number.")
+      return
+    }
+
+    if (!isRecurring) {
+      if (!date) {
+        setFormError("Date is required.")
+        return
+      }
+      setSubmitting(true)
+      try {
+        const created = await createSession({
+          session_type_id: typeId,
+          date,
+          start_time: time,
+          duration_minutes: mins,
+          location: location.trim() || null,
+          info: info.trim() || null,
+          coach_notes: coachNotes.trim() || null,
+        })
+        onCreated(created)
+        setOpen(false)
+        reset()
+      } catch (err) {
+        const message =
+          typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to create session"
+        setFormError(message)
+      } finally {
+        setSubmitting(false)
+      }
+    } else {
+      if (!startDate) {
+        setFormError("Start date is required.")
+        return
+      }
+      if (selectedDays.length === 0) {
+        setFormError("Select at least one day of the week.")
+        return
+      }
+      setSubmitting(true)
+      try {
+        await createSessionTemplate({
+          session_type_id: typeId,
+          title: recurringTitle.trim() || "Recurring session",
+          start_date: startDate,
+          start_time: time,
+          duration_minutes: mins,
+          recurrence_days: selectedDays,
+          interval_weeks: intervalWeeks,
+          location: location.trim() || null,
+          info: info.trim() || null,
+          coach_notes: coachNotes.trim() || null,
+        })
+        onRefresh()
+        setOpen(false)
+        reset()
+      } catch (err) {
+        const message =
+          typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to create session template"
+        setFormError(message)
+      } finally {
+        setSubmitting(false)
+      }
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
       <DialogTrigger render={<Button size="sm" />}>
-        New Session
+        Create Session
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New session</DialogTitle>
+          <DialogTitle>Create Session</DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-2">
+
+          {/* Session type */}
           <div className="space-y-1.5">
             <Label htmlFor="session-type">Session type</Label>
             <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
@@ -513,25 +729,111 @@ const CreateSessionDialog = ({ sessionTypes, onCreated }: CreateDialogProps) => 
                 <SelectValue placeholder="Select type…" />
               </SelectTrigger>
               <SelectContent>
-                {sessionTypes.map((t) => (
+                {localTypes.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {showNewTypeInput ? (
+              <div className="flex gap-2 mt-1">
+                <Input
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  placeholder="New type name"
+                  className="min-h-[44px] flex-1 text-sm"
+                  aria-label="New session type name"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      void handleAddType()
+                    }
+                    if (e.key === "Escape") {
+                      setShowNewTypeInput(false)
+                      setNewTypeName("")
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-[44px] shrink-0"
+                  onClick={() => void handleAddType()}
+                  disabled={creatingType || newTypeName.trim() === ""}
+                >
+                  {creatingType ? "Adding…" : "Add"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-[44px] shrink-0"
+                  onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
+                onClick={() => setShowNewTypeInput(true)}
+              >
+                Add new type…
+              </button>
+            )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="session-date">Date</Label>
-            <Input
-              id="session-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="min-h-[44px]"
-              required
+          {/* Recurring toggle */}
+          <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+            <Checkbox
+              checked={isRecurring}
+              onCheckedChange={(v) => setIsRecurring(v)}
             />
-          </div>
+            <span className="text-sm font-medium">Recurring session</span>
+          </label>
 
+          {/* One-off: date */}
+          {!isRecurring && (
+            <div className="space-y-1.5">
+              <Label htmlFor="session-date">Date</Label>
+              <Input
+                id="session-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="min-h-[44px]"
+              />
+            </div>
+          )}
+
+          {/* Recurring: title, start date, days, interval */}
+          {isRecurring && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="recurring-title">Template title (optional)</Label>
+                <Input
+                  id="recurring-title"
+                  value={recurringTitle}
+                  onChange={(e) => setRecurringTitle(e.target.value)}
+                  placeholder="e.g. Monday evening practice"
+                  className="min-h-[44px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="start-date">Start date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="min-h-[44px]"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Start time */}
           <div className="space-y-1.5">
             <Label htmlFor="session-time">Start time</Label>
             <Input
@@ -540,10 +842,10 @@ const CreateSessionDialog = ({ sessionTypes, onCreated }: CreateDialogProps) => 
               value={time}
               onChange={(e) => setTime(e.target.value)}
               className="min-h-[44px]"
-              required
             />
           </div>
 
+          {/* Duration */}
           <div className="space-y-1.5">
             <Label htmlFor="session-duration">Duration (minutes)</Label>
             <Input
@@ -553,27 +855,74 @@ const CreateSessionDialog = ({ sessionTypes, onCreated }: CreateDialogProps) => 
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               className="min-h-[44px]"
-              required
             />
           </div>
 
+          {/* Recurring: days + interval */}
+          {isRecurring && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Days of week</Label>
+                <DayPicker selected={selectedDays} onChange={setSelectedDays} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="interval-weeks">Recurrence</Label>
+                <Select
+                  value={String(intervalWeeks)}
+                  onValueChange={(v) => setIntervalWeeks(v === "2" ? 2 : 1)}
+                >
+                  <SelectTrigger id="interval-weeks" className="min-h-[44px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Weekly</SelectItem>
+                    <SelectItem value="2">Bi-weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          {/* Location */}
           <div className="space-y-1.5">
-            <Label htmlFor="session-notes">Location / notes (optional)</Label>
+            <Label htmlFor="session-location">Location (optional)</Label>
             <Input
-              id="session-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              id="session-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Main dojo"
               className="min-h-[44px]"
             />
           </div>
+
+          {/* Info (markdown) */}
+          <MarkdownField
+            id="session-info"
+            label="Info (optional, markdown)"
+            value={info}
+            onChange={setInfo}
+            preview={infoPreview}
+            onTogglePreview={() => setInfoPreview((p) => !p)}
+            placeholder="Session info visible to members…"
+          />
+
+          {/* Coach notes (markdown) */}
+          <MarkdownField
+            id="session-coach-notes"
+            label="Coach notes (optional, markdown)"
+            value={coachNotes}
+            onChange={setCoachNotes}
+            preview={coachNotesPreview}
+            onTogglePreview={() => setCoachNotesPreview((p) => !p)}
+            placeholder="Internal notes for coaches…"
+          />
 
           {formError !== null && (
             <p className="text-sm text-destructive" role="alert">{formError}</p>
           )}
 
           <Button type="submit" className="w-full min-h-[44px]" disabled={submitting}>
-            {submitting ? "Creating…" : "Create session"}
+            {submitting ? "Creating…" : "Create Session"}
           </Button>
         </form>
       </DialogContent>
@@ -617,6 +966,12 @@ const SessionsPage = () => {
     )
   }
 
+  const refreshSessions = () => {
+    getSessions().then(setSessions).catch(() => {
+      setError("Failed to refresh sessions.")
+    })
+  }
+
   if (error !== null) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
@@ -645,7 +1000,11 @@ const SessionsPage = () => {
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Sessions</h1>
         {isAdmin && (
-          <CreateSessionDialog sessionTypes={sessionTypes} onCreated={handleCreated} />
+          <CreateSessionDialog
+            sessionTypes={sessionTypes}
+            onCreated={handleCreated}
+            onRefresh={refreshSessions}
+          />
         )}
       </div>
 
