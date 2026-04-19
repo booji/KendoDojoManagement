@@ -27,6 +27,12 @@ class AbstractSessionTemplateRepository(Protocol):
 
     async def list(self) -> list[dict[str, Any]]: ...
 
+    async def update(
+        self, template_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None: ...
+
+    async def deactivate(self, template_id: str) -> dict[str, Any] | None: ...
+
 
 @runtime_checkable
 class AbstractSessionInstanceRepository(Protocol):
@@ -47,6 +53,18 @@ class AbstractSessionInstanceRepository(Protocol):
     async def latest_date_for_template(self, template_id: str) -> date | None: ...
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
+
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None: ...
+
+    async def cancel_future_for_template(
+        self, template_id: str, as_of_date: date
+    ) -> list[dict[str, Any]]: ...
+
+    async def delete_future_for_template(
+        self, template_id: str, as_of_date: date
+    ) -> int: ...
 
 
 def _type_to_dict(obj: SessionType) -> dict[str, Any]:
@@ -78,6 +96,7 @@ def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
         "interval_weeks": obj.interval_weeks if obj.interval_weeks is not None else 1,
         "info": obj.info,
         "coach_notes": obj.coach_notes,
+        "is_active": obj.is_active,
     }
 
 
@@ -155,6 +174,31 @@ class SqlSessionTemplateRepository:
         result = await self._session.execute(select(SessionTemplate))
         return [_template_to_dict(row) for row in result.scalars().all()]
 
+    async def update(
+        self, template_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionTemplate).where(SessionTemplate.id == template_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        for key, value in data.items():
+            setattr(obj, key, value)
+        await self._session.flush()
+        return _template_to_dict(obj)
+
+    async def deactivate(self, template_id: str) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionTemplate).where(SessionTemplate.id == template_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        obj.is_active = False
+        await self._session.flush()
+        return _template_to_dict(obj)
+
 
 class SqlSessionInstanceRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -221,3 +265,49 @@ class SqlSessionInstanceRepository:
         obj.cancelled = True
         await self._session.flush()
         return _instance_to_dict(obj)
+
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionInstance).where(SessionInstance.id == instance_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        for key, value in data.items():
+            setattr(obj, key, value)
+        await self._session.flush()
+        return _instance_to_dict(obj)
+
+    async def cancel_future_for_template(
+        self, template_id: str, as_of_date: date
+    ) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            select(SessionInstance).where(
+                SessionInstance.template_id == template_id,
+                SessionInstance.date >= as_of_date.isoformat(),
+                SessionInstance.cancelled.is_(False),
+            )
+        )
+        rows = result.scalars().all()
+        for obj in rows:
+            obj.cancelled = True
+        await self._session.flush()
+        return [_instance_to_dict(obj) for obj in rows]
+
+    async def delete_future_for_template(
+        self, template_id: str, as_of_date: date
+    ) -> int:
+        result = await self._session.execute(
+            select(SessionInstance).where(
+                SessionInstance.template_id == template_id,
+                SessionInstance.date >= as_of_date.isoformat(),
+            )
+        )
+        rows = result.scalars().all()
+        count = len(rows)
+        for obj in rows:
+            await self._session.delete(obj)
+        await self._session.flush()
+        return count
