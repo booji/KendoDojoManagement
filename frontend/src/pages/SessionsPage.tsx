@@ -65,7 +65,7 @@ const groupByWeek = (
 ): { label: string; sessions: SessionInstance[] }[] => {
   const map = new Map<string, { label: string; sessions: SessionInstance[] }>()
   for (const s of sessions) {
-    const date = new Date(s.scheduled_at)
+    const date = new Date(`${s.date}T${s.start_time}`)
     const monday = startOfWeek(date)
     const key = monday.toISOString()
     if (!map.has(key)) {
@@ -76,14 +76,13 @@ const groupByWeek = (
   return Array.from(map.values())
 }
 
-const formatTime = (iso: string): string => {
-  const date = new Date(iso)
-  return date.toLocaleTimeString("default", { hour: "2-digit", minute: "2-digit" })
+const formatTime = (startTime: string): string => {
+  return startTime
 }
 
-const formatDate = (iso: string): string => {
-  const date = new Date(iso)
-  return date.toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short" })
+const formatDate = (date: string): string => {
+  const d = new Date(`${date}T00:00:00`)
+  return d.toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short" })
 }
 
 // Per-session check-in UI state
@@ -960,8 +959,8 @@ const SessionsPage = () => {
         ? [session]
         : [...prev, session].sort(
             (a, b) =>
-              new Date(a.scheduled_at).getTime() -
-              new Date(b.scheduled_at).getTime(),
+              new Date(`${a.date}T${a.start_time}`).getTime() -
+              new Date(`${b.date}T${b.start_time}`).getTime(),
           ),
     )
   }
@@ -1019,7 +1018,7 @@ const SessionsPage = () => {
           </h2>
           <ul className="space-y-3">
             {group.sessions.map((session) => {
-              const cancelled = session.status === "cancelled"
+              const cancelled = session.cancelled
               return (
                 <li key={session.id}>
                   <Card
@@ -1039,8 +1038,8 @@ const SessionsPage = () => {
                               {typeMap.get(session.session_type_id) ?? "Unknown"}
                             </p>
                             <p className="text-sm text-muted-foreground mt-0.5">
-                              {formatDate(session.scheduled_at)}&nbsp;&middot;&nbsp;
-                              {formatTime(session.scheduled_at)}&nbsp;&middot;&nbsp;
+                              {formatDate(session.date)}&nbsp;&middot;&nbsp;
+                              {formatTime(session.start_time)}&nbsp;&middot;&nbsp;
                               {session.duration_minutes} min
                             </p>
                             {session.location !== null && (

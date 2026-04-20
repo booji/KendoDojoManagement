@@ -6,13 +6,25 @@ export type SessionType = {
 export type SessionInstance = {
   id: string
   session_type_id: string
-  scheduled_at: string
+  date: string
+  start_time: string
   duration_minutes: number
   location: string | null
   template_id: string | null
-  status: "scheduled" | "cancelled"
+  cancelled: boolean
+  notes: string | null
   info: string | null
   coach_notes: string | null
+  checkin_url: string | null
+}
+
+export type SessionInstanceUpdate = {
+  date: string
+  start_time: string
+  duration_minutes: number
+  location: string | null
+  notes: string | null
+  info: string | null
 }
 
 export const getSessions = async (): Promise<SessionInstance[]> => {
@@ -29,6 +41,51 @@ export const getSessionTypes = async (): Promise<SessionType[]> => {
     throw new Error(`Failed to fetch session types: ${res.status}`)
   }
   return res.json() as Promise<SessionType[]>
+}
+
+export const getSession = async (id: string): Promise<SessionInstance> => {
+  const res = await fetch(`/api/sessions/${id}`, { credentials: "include" })
+  if (!res.ok) {
+    throw new Error(`Failed to fetch session: ${res.status}`)
+  }
+  return res.json() as Promise<SessionInstance>
+}
+
+export const updateSession = async (
+  id: string,
+  payload: Partial<SessionInstanceUpdate>,
+): Promise<SessionInstance> => {
+  const res = await fetch(new Request(`${location.origin}/api/sessions/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  }))
+  if (!res.ok) {
+    throw new Error(`Failed to update session: ${res.status}`)
+  }
+  return res.json() as Promise<SessionInstance>
+}
+
+export const cancelSession = async (id: string): Promise<SessionInstance> => {
+  const res = await fetch(new Request(`${location.origin}/api/sessions/${id}/cancel`, {
+    method: "POST",
+    credentials: "include",
+  }))
+  if (!res.ok) {
+    throw new Error(`Failed to cancel session: ${res.status}`)
+  }
+  return res.json() as Promise<SessionInstance>
+}
+
+export const deleteTemplate = async (templateId: string): Promise<void> => {
+  const res = await fetch(new Request(`${location.origin}/api/sessions/templates/${templateId}`, {
+    method: "DELETE",
+    credentials: "include",
+  }))
+  if (!res.ok) {
+    throw new Error(`Failed to delete template: ${res.status}`)
+  }
 }
 
 export type SessionInstanceCreate = {

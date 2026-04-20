@@ -14,10 +14,10 @@ export type CheckinToken = {
 }
 
 export const checkIn = async (sessionId: string): Promise<AttendanceRecord> => {
-  const res = await fetch(`/api/sessions/${sessionId}/checkin`, {
+  const res = await fetch(new Request(`${location.origin}/api/sessions/${sessionId}/checkin`, {
     method: "POST",
     credentials: "include",
-  })
+  }))
   if (!res.ok) {
     const status = res.status
     if (status === 404) throw { status, message: "Session not found" }

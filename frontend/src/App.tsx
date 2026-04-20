@@ -23,6 +23,7 @@ import CheckinPage from "@/pages/CheckinPage"
 import SetupPage from "@/pages/SetupPage"
 import RecoveryRedeemPage from "@/pages/RecoveryRedeemPage"
 import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
+import SessionDetailPage from "@/pages/SessionDetailPage"
 
 type LayoutContext = { user: UserClaims }
 
@@ -90,6 +91,7 @@ const App = () => (
           <Route element={<AuthenticatedLayout />}>
             <Route path="/" element={<DashboardRoute />} />
             <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/sessions/:id" element={<SessionDetailPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
