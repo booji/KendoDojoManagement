@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { getDojoSettings, updateDojoSettings, uploadDojoLogo } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
+import { getSessionTypes, updateSessionTypeColour } from "@/api/sessions"
+import type { SessionType } from "@/api/sessions"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -282,6 +284,114 @@ const DojoBrandingSection = () => {
   )
 }
 
+// ── Session Types section ─────────────────────────────────────────────────────
+
+const SessionTypesSection = () => {
+  const [sessionTypes, setSessionTypes] = useState<SessionType[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveErrors, setSaveErrors] = useState<Record<string, string | null>>({})
+  const [saveStatuses, setSaveStatuses] = useState<Record<string, SaveStatus>>({})
+
+  useEffect(() => {
+    getSessionTypes()
+      .then((types) => {
+        setSessionTypes(types)
+      })
+      .catch((err: unknown) => {
+        const msg =
+          typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to load session types"
+        setLoadError(msg)
+      })
+  }, [])
+
+  const handleColourChange = async (id: string, colour: string) => {
+    setSaveStatuses((prev) => ({ ...prev, [id]: "saving" }))
+    setSaveErrors((prev) => ({ ...prev, [id]: null }))
+    try {
+      const updated = await updateSessionTypeColour(id, colour)
+      setSessionTypes((prev) =>
+        prev !== null ? prev.map((t) => (t.id === id ? updated : t)) : prev
+      )
+      setSaveStatuses((prev) => ({ ...prev, [id]: "saved" }))
+      setTimeout(() => setSaveStatuses((prev) => ({ ...prev, [id]: "idle" })), 2000)
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to save"
+      setSaveErrors((prev) => ({ ...prev, [id]: msg }))
+      setSaveStatuses((prev) => ({ ...prev, [id]: "error" }))
+    }
+  }
+
+  if (sessionTypes === null && loadError === null) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    )
+  }
+
+  if (loadError !== null) {
+    return (
+      <p className="text-sm text-destructive" role="alert">
+        {loadError}
+      </p>
+    )
+  }
+
+  if (sessionTypes !== null && sessionTypes.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">No session types configured.</p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {(sessionTypes ?? []).map((t) => {
+        const status = saveStatuses[t.id] ?? "idle"
+        const error = saveErrors[t.id] ?? null
+        return (
+          <div key={t.id} className="space-y-1">
+            <Label htmlFor={`session-type-colour-${t.id}`}>{t.name}</Label>
+            <div className="flex gap-2 items-center">
+              <Input
+                id={`session-type-colour-${t.id}`}
+                type="color"
+                value={t.colour ?? "#4F46E5"}
+                onChange={(e) => void handleColourChange(t.id, e.target.value)}
+                aria-label={`Colour for ${t.name}`}
+                className="h-11 w-16 cursor-pointer rounded-md border border-input p-1 shrink-0"
+              />
+              <span className="text-sm font-mono text-muted-foreground">
+                {t.colour ?? "default"}
+              </span>
+              {status === "saving" && (
+                <span className="text-sm text-muted-foreground ml-auto" aria-live="polite">
+                  Saving…
+                </span>
+              )}
+              {status === "saved" && (
+                <span className="text-sm text-green-600 dark:text-green-400 ml-auto" aria-live="polite">
+                  Saved!
+                </span>
+              )}
+            </div>
+            {error !== null && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const AdminSettingsPage = () => (
@@ -296,6 +406,16 @@ const AdminSettingsPage = () => (
         Dojo Branding
       </h2>
       <DojoBrandingSection />
+    </section>
+
+    <section aria-labelledby="session-types-heading">
+      <h2
+        id="session-types-heading"
+        className="text-base font-semibold mb-4 pb-2 border-b border-border"
+      >
+        Session Type Colours
+      </h2>
+      <SessionTypesSection />
     </section>
   </div>
 )

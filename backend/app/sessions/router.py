@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
@@ -14,6 +14,7 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
+from app.sessions.ical import build_ical
 from app.sessions.models import (
     GenerateRequest,
     SessionInstanceCreate,
@@ -22,6 +23,8 @@ from app.sessions.models import (
     SessionTemplateCreate,
     SessionTemplateUpdate,
     SessionTypeCreate,
+    SessionTypeRead,
+    SessionTypeUpdate,
 )
 from app.sessions.repository import (
     AbstractSessionInstanceRepository,
@@ -56,7 +59,32 @@ _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
 @router.get("/session-types")
 async def list_session_types(repo: _TypeRepo) -> list[dict[str, Any]]:
-    return await repo.list()
+    rows = await repo.list()
+    return [SessionTypeRead.model_validate(r).model_dump() for r in rows]
+
+
+@router.put("/session-types/{type_id}")
+async def update_session_type(
+    type_id: str,
+    payload: SessionTypeUpdate,
+    _claims: _Admin,
+    repo: _TypeRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    result = await repo.update(type_id, payload.colour)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
+        )
+    await uow.commit()
+    return result
+
+
+@router.get("/sessions/ical")
+async def get_sessions_ical(repo: _InstRepo) -> Response:
+    sessions = await repo.list_upcoming()
+    content = build_ical(sessions)
+    return Response(content=content, media_type="text/calendar; charset=utf-8")
 
 
 @router.post("/session-types", status_code=status.HTTP_201_CREATED)

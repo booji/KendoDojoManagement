@@ -68,25 +68,35 @@ const parseHour = (time: string): number => {
 
 type SessionChipProps = {
   session: SessionInstance
+  sessionType: SessionType | undefined
   label: string
   isAdmin: boolean
   compact?: boolean
 }
 
-const SessionChip = ({ session, label, isAdmin, compact = false }: SessionChipProps) => {
+const SessionChip = ({ session, sessionType, label, isAdmin, compact = false }: SessionChipProps) => {
   const navigate = useNavigate()
   const cancelled = session.cancelled && isAdmin
+  const colour = sessionType?.colour ?? null
+
+  const colourStyle =
+    !cancelled && colour !== null
+      ? { backgroundColor: colour + "26", color: colour }
+      : undefined
 
   return (
     <button
       type="button"
       onClick={() => void navigate(`/sessions/${session.id}`)}
       data-session-id={session.id}
+      style={colourStyle}
       className={[
         "w-full text-left rounded px-1.5 py-0.5 text-xs leading-tight truncate transition-colors",
         cancelled
           ? "bg-muted text-muted-foreground line-through opacity-70"
-          : "bg-primary/10 text-primary hover:bg-primary/20",
+          : colour === null
+            ? "bg-primary/10 text-primary hover:bg-primary/20"
+            : "",
         compact ? "text-[10px]" : "",
       ]
         .filter(Boolean)
@@ -103,7 +113,7 @@ const SessionChip = ({ session, label, isAdmin, compact = false }: SessionChipPr
 type MonthGridProps = {
   anchor: Date
   byDate: Map<string, SessionInstance[]>
-  typeMap: Map<string, string>
+  typeMap: Map<string, SessionType>
   isAdmin: boolean
 }
 
@@ -161,7 +171,8 @@ const MonthGrid = ({ anchor, byDate, typeMap, isAdmin }: MonthGridProps) => {
                 <SessionChip
                   key={s.id}
                   session={s}
-                  label={typeMap.get(s.session_type_id) ?? "Session"}
+                  sessionType={typeMap.get(s.session_type_id)}
+                  label={typeMap.get(s.session_type_id)?.name ?? "Session"}
                   isAdmin={isAdmin}
                   compact
                 />
@@ -187,7 +198,7 @@ const HOUR_HEIGHT_PX = 60
 type WeekGridProps = {
   anchor: Date
   byDate: Map<string, SessionInstance[]>
-  typeMap: Map<string, string>
+  typeMap: Map<string, SessionType>
   isAdmin: boolean
 }
 
@@ -269,7 +280,14 @@ const WeekGrid = ({ anchor, byDate, typeMap, isAdmin }: WeekGridProps) => {
                   20
                 )
                 const cancelled = s.cancelled && isAdmin
-                const label = typeMap.get(s.session_type_id) ?? "Session"
+                const sessionType = typeMap.get(s.session_type_id)
+                const label = sessionType?.name ?? "Session"
+                const colour = sessionType?.colour ?? null
+
+                const colourStyle =
+                  !cancelled && colour !== null
+                    ? { top, height, backgroundColor: colour + "26", color: colour }
+                    : { top, height }
 
                 if (startHour < GRID_START_HOUR || startHour >= GRID_END_HOUR) return null
 
@@ -279,13 +297,15 @@ const WeekGrid = ({ anchor, byDate, typeMap, isAdmin }: WeekGridProps) => {
                     type="button"
                     onClick={() => void navigate(`/sessions/${s.id}`)}
                     data-session-id={s.id}
-                    style={{ top, height }}
+                    style={colourStyle}
                     className={[
                       "absolute left-0.5 right-0.5 rounded px-1 text-[10px] leading-tight overflow-hidden text-left",
                       "transition-colors",
                       cancelled
                         ? "bg-muted text-muted-foreground line-through opacity-70"
-                        : "bg-primary/10 text-primary hover:bg-primary/20",
+                        : colour === null
+                          ? "bg-primary/10 text-primary hover:bg-primary/20"
+                          : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -309,7 +329,7 @@ const WeekGrid = ({ anchor, byDate, typeMap, isAdmin }: WeekGridProps) => {
 
 type AgendaViewProps = {
   sessions: SessionInstance[]
-  typeMap: Map<string, string>
+  typeMap: Map<string, SessionType>
   isAdmin: boolean
 }
 
@@ -348,7 +368,7 @@ const AgendaView = ({ sessions, typeMap, isAdmin }: AgendaViewProps) => {
           <ul className="space-y-2">
             {group.items.map((s) => {
               const cancelled = s.cancelled && isAdmin
-              const label = typeMap.get(s.session_type_id) ?? "Session"
+              const label = typeMap.get(s.session_type_id)?.name ?? "Session"
               return (
                 <li key={s.id}>
                   <button
@@ -393,7 +413,7 @@ const AgendaView = ({ sessions, typeMap, isAdmin }: AgendaViewProps) => {
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "loaded"; sessions: SessionInstance[]; typeMap: Map<string, string> }
+  | { kind: "loaded"; sessions: SessionInstance[]; typeMap: Map<string, SessionType> }
 
 const CalendarView = ({ isAdmin }: CalendarViewProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>("month")
@@ -419,7 +439,7 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
     setLoadState({ kind: "loading" })
     Promise.all([getSessionsForRange(from, to), getSessionTypes()])
       .then(([sessions, types]: [SessionInstance[], SessionType[]]) => {
-        const typeMap = new Map<string, string>(types.map((t) => [t.id, t.name]))
+        const typeMap = new Map<string, SessionType>(types.map((t) => [t.id, t]))
         setLoadState({ kind: "loaded", sessions, typeMap })
       })
       .catch((err: unknown) => {
@@ -451,7 +471,7 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
         })()
 
   const sessions = loadState.kind === "loaded" ? loadState.sessions : []
-  const typeMap = loadState.kind === "loaded" ? loadState.typeMap : new Map<string, string>()
+  const typeMap = loadState.kind === "loaded" ? loadState.typeMap : new Map<string, SessionType>()
   const byDate = groupByDate(sessions)
 
   return (
