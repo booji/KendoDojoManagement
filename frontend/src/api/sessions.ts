@@ -170,3 +170,17 @@ export const createSessionType = async (name: string): Promise<SessionType> => {
   }
   return res.json() as Promise<SessionType>
 }
+
+export const getSessionsForRange = async (
+  from: string,
+  to: string,
+): Promise<SessionInstance[]> => {
+  const params = new URLSearchParams({ from, to })
+  const res = await fetch(`/api/sessions?${params.toString()}`, {
+    credentials: "include",
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sessions: ${res.status}`)
+  }
+  return res.json() as Promise<SessionInstance[]>
+}

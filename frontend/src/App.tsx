@@ -6,8 +6,7 @@ import { checkSetupAvailable } from "@/api/setup"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
-import AdminDashboardPage from "@/pages/AdminDashboardPage"
-import MemberDashboardPage from "@/pages/MemberDashboardPage"
+import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
 import SessionsPage from "@/pages/SessionsPage"
@@ -26,12 +25,6 @@ import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 import SessionDetailPage from "@/pages/SessionDetailPage"
 
 type LayoutContext = { user: UserClaims }
-
-// Renders the correct dashboard based on user role
-const DashboardRoute = () => {
-  const { user } = useOutletContext<LayoutContext>()
-  return user.role === "admin" ? <AdminDashboardPage /> : <MemberDashboardPage />
-}
 
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
@@ -89,7 +82,7 @@ const App = () => (
 
           {/* Authenticated routes — wrapped in AppShell */}
           <Route element={<AuthenticatedLayout />}>
-            <Route path="/" element={<DashboardRoute />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/sessions/:id" element={<SessionDetailPage />} />
             <Route path="/attendance" element={<AttendancePage />} />

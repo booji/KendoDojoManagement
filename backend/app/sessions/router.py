@@ -179,6 +179,10 @@ def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "coach_notes": None} for r in records]
 
 
+def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in records if not r.get("cancelled")]
+
+
 @router.get("/sessions")
 async def list_upcoming_sessions(
     claims: _Member,
@@ -192,7 +196,9 @@ async def list_upcoming_sessions(
 
     def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized = [_normalize_instance(r) for r in rows]
-        return normalized if is_admin else _strip_coach_notes(normalized)
+        if is_admin:
+            return normalized
+        return _strip_coach_notes(_strip_cancelled(normalized))
 
     if from_date is not None and to_date is not None:
         if hasattr(repo, "list_in_range"):

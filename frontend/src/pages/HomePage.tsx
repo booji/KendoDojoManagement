@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
+import CalendarView from "@/components/CalendarView"
 
 const HomePage = () => {
   const navigate = useNavigate()
@@ -24,8 +25,8 @@ const HomePage = () => {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <h1 className="text-2xl font-semibold">Welcome, {user.email}</h1>
+    <div className="flex flex-col h-screen">
+      <CalendarView isAdmin={user.role === "admin"} />
     </div>
   )
 }
