@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { getDojoSettings, updateDojoSettings, uploadDojoLogo } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
-import { getSessionTypes, updateSessionTypeColour } from "@/api/sessions"
+import { getSessionTypes, updateSessionTypeColour, createSessionType } from "@/api/sessions"
 import type { SessionType } from "@/api/sessions"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import { Button } from "@/components/ui/button"
@@ -291,6 +291,9 @@ const SessionTypesSection = () => {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveErrors, setSaveErrors] = useState<Record<string, string | null>>({})
   const [saveStatuses, setSaveStatuses] = useState<Record<string, SaveStatus>>({})
+  const [newName, setNewName] = useState("")
+  const [addStatus, setAddStatus] = useState<"idle" | "saving" | "error">("idle")
+  const [addError, setAddError] = useState<string | null>(null)
 
   useEffect(() => {
     getSessionTypes()
@@ -305,6 +308,27 @@ const SessionTypesSection = () => {
         setLoadError(msg)
       })
   }, [])
+
+  const handleAddSessionType = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = newName.trim()
+    if (!name) return
+    setAddStatus("saving")
+    setAddError(null)
+    try {
+      const created = await createSessionType(name)
+      setSessionTypes((prev) => (prev !== null ? [...prev, created] : [created]))
+      setNewName("")
+      setAddStatus("idle")
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to add session type"
+      setAddError(msg)
+      setAddStatus("error")
+    }
+  }
 
   const handleColourChange = async (id: string, colour: string) => {
     setSaveStatuses((prev) => ({ ...prev, [id]: "saving" }))
@@ -343,9 +367,31 @@ const SessionTypesSection = () => {
     )
   }
 
+  const addForm = (
+    <form onSubmit={(e) => void handleAddSessionType(e)} className="flex gap-2 items-start pt-2">
+      <Input
+        value={newName}
+        onChange={(e) => setNewName(e.target.value)}
+        placeholder="New session type name"
+        aria-label="New session type name"
+        className="flex-1"
+        disabled={addStatus === "saving"}
+      />
+      <Button type="submit" disabled={addStatus === "saving" || newName.trim() === ""}>
+        {addStatus === "saving" ? "Adding…" : "Add"}
+      </Button>
+      {addError !== null && (
+        <p className="text-sm text-destructive" role="alert">{addError}</p>
+      )}
+    </form>
+  )
+
   if (sessionTypes !== null && sessionTypes.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">No session types configured.</p>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">No session types configured.</p>
+        {addForm}
+      </div>
     )
   }
 
@@ -388,6 +434,7 @@ const SessionTypesSection = () => {
           </div>
         )
       })}
+      {addForm}
     </div>
   )
 }
@@ -413,7 +460,7 @@ const AdminSettingsPage = () => (
         id="session-types-heading"
         className="text-base font-semibold mb-4 pb-2 border-b border-border"
       >
-        Session Type Colours
+        Session Types
       </h2>
       <SessionTypesSection />
     </section>
