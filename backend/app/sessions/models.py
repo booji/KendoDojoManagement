@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SessionTypeCreate(BaseModel):
@@ -10,6 +12,18 @@ class SessionTypeCreate(BaseModel):
 class SessionTypeRead(BaseModel):
     id: str
     name: str
+    colour: str | None = None
+
+
+class SessionTypeUpdate(BaseModel):
+    colour: str | None = None
+
+    @field_validator("colour")
+    @classmethod
+    def validate_hex_colour(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+            raise ValueError("colour must be a 6-digit hex string e.g. #ff5733")
+        return v
 
 
 class SessionTemplateCreate(BaseModel):

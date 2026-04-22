@@ -18,6 +18,10 @@ class AbstractSessionTypeRepository(Protocol):
 
     async def list(self) -> list[dict[str, Any]]: ...
 
+    async def update(
+        self, type_id: str, colour: str | None
+    ) -> dict[str, Any] | None: ...
+
 
 @runtime_checkable
 class AbstractSessionTemplateRepository(Protocol):
@@ -68,7 +72,7 @@ class AbstractSessionInstanceRepository(Protocol):
 
 
 def _type_to_dict(obj: SessionType) -> dict[str, Any]:
-    return {"id": obj.id, "name": obj.name}
+    return {"id": obj.id, "name": obj.name, "colour": obj.colour}
 
 
 def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
@@ -145,6 +149,17 @@ class SqlSessionTypeRepository:
     async def list(self) -> list[dict[str, Any]]:
         result = await self._session.execute(select(SessionType))
         return [_type_to_dict(row) for row in result.scalars().all()]
+
+    async def update(self, type_id: str, colour: str | None) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionType).where(SessionType.id == type_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        obj.colour = colour
+        await self._session.flush()
+        return _type_to_dict(obj)
 
 
 class SqlSessionTemplateRepository:
@@ -240,7 +255,6 @@ class SqlSessionInstanceRepository:
             select(SessionInstance).where(
                 SessionInstance.date >= from_iso,
                 SessionInstance.date <= to_iso,
-                SessionInstance.cancelled.is_(False),
             )
         )
         return [_instance_to_dict(row) for row in result.scalars().all()]

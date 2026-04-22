@@ -1,6 +1,7 @@
 export type SessionType = {
   id: string
   name: string
+  colour: string | null
 }
 
 export type SessionInstance = {
@@ -183,4 +184,15 @@ export const getSessionsForRange = async (
     throw new Error(`Failed to fetch sessions: ${res.status}`)
   }
   return res.json() as Promise<SessionInstance[]>
+}
+
+export const updateSessionTypeColour = async (id: string, colour: string | null): Promise<SessionType> => {
+  const res = await fetch(`/api/session-types/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ colour }),
+  })
+  if (!res.ok) throw new Error(`Failed to update session type colour: ${res.status}`)
+  return res.json() as Promise<SessionType>
 }
