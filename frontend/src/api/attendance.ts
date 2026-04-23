@@ -5,6 +5,7 @@ export type AttendanceRecord = {
   visitor_name: string | null
   checked_in_at: string
   recorded_by: string
+  display_name: string | null
 }
 
 export type CheckinToken = {

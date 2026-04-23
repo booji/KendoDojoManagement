@@ -9,22 +9,18 @@ import { cn } from "@/lib/utils"
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
 
-const formatDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString("default", {
+const formatDate = (date: string): string =>
+  new Date(`${date}T00:00:00`).toLocaleDateString("default", {
     weekday: "short",
     day: "numeric",
     month: "short",
     year: "numeric",
   })
 
-const formatTime = (iso: string): string =>
-  new Date(iso).toLocaleTimeString("default", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+const formatTime = (startTime: string): string => startTime
 
-const isToday = (iso: string): boolean => {
-  const d = new Date(iso)
+const isToday = (date: string): boolean => {
+  const d = new Date(`${date}T00:00:00`)
   const now = new Date()
   return (
     d.getFullYear() === now.getFullYear() &&
@@ -35,7 +31,7 @@ const isToday = (iso: string): boolean => {
 
 // A session is "active" if it's scheduled today and not cancelled
 const isActiveToday = (session: SessionInstance): boolean =>
-  session.status !== "cancelled" && isToday(session.scheduled_at)
+  !session.cancelled && isToday(session.date)
 
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
@@ -60,19 +56,22 @@ type CheckinStatus =
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-const SessionBadge = ({ iso }: { iso: string }) => (
-  <div
-    className="flex flex-col items-center justify-center rounded-lg bg-muted px-3 py-2 min-w-[56px] shrink-0"
-    aria-hidden="true"
-  >
-    <span className="text-xs font-medium text-muted-foreground uppercase">
-      {new Date(iso).toLocaleDateString("default", { month: "short" })}
-    </span>
-    <span className="text-xl font-bold tabular-nums leading-tight">
-      {new Date(iso).getDate()}
-    </span>
-  </div>
-)
+const SessionBadge = ({ date }: { date: string }) => {
+  const d = new Date(`${date}T00:00:00`)
+  return (
+    <div
+      className="flex flex-col items-center justify-center rounded-lg bg-muted px-3 py-2 min-w-[56px] shrink-0"
+      aria-hidden="true"
+    >
+      <span className="text-xs font-medium text-muted-foreground uppercase">
+        {d.toLocaleDateString("default", { month: "short" })}
+      </span>
+      <span className="text-xl font-bold tabular-nums leading-tight">
+        {d.getDate()}
+      </span>
+    </div>
+  )
+}
 
 const DashboardSkeletons = () => (
   <div className="space-y-4" aria-busy="true" aria-label="Loading dashboard">
@@ -97,7 +96,7 @@ const MonthCalendar = ({ sessions, year, month }: MonthCalendarProps) => {
   // Build a set of day numbers that have sessions in this month
   const sessionDaySet = new Set<number>()
   for (const s of sessions) {
-    const d = new Date(s.scheduled_at)
+    const d = new Date(`${s.date}T00:00:00`)
     if (d.getFullYear() === year && d.getMonth() === month) {
       sessionDaySet.add(d.getDate())
     }
@@ -191,13 +190,13 @@ const MemberDashboardPage = () => {
         const upcoming = data
           .filter(
             (s) =>
-              s.status !== "cancelled" &&
-              new Date(s.scheduled_at) >= new Date(Date.now() - 24 * 60 * 60 * 1000),
+              !s.cancelled &&
+              new Date(`${s.date}T${s.start_time}`) >= new Date(Date.now() - 24 * 60 * 60 * 1000),
           )
           .sort(
             (a, b) =>
-              new Date(a.scheduled_at).getTime() -
-              new Date(b.scheduled_at).getTime(),
+              new Date(`${a.date}T${a.start_time}`).getTime() -
+              new Date(`${b.date}T${b.start_time}`).getTime(),
           )
         setSessions(upcoming)
         setTypeMap(new Map(types.map((t) => [t.id, t.name])))
@@ -258,16 +257,16 @@ const MemberDashboardPage = () => {
                 </p>
               ) : (
                 <div className="flex items-center gap-3">
-                  <SessionBadge iso={nextSession.scheduled_at} />
+                  <SessionBadge date={nextSession.date} />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">
                       {typeMap.get(nextSession.session_type_id) ?? "Session"}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(nextSession.scheduled_at)}
+                      {formatDate(nextSession.date)}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {formatTime(nextSession.scheduled_at)}&nbsp;&middot;&nbsp;
+                      {formatTime(nextSession.start_time)}&nbsp;&middot;&nbsp;
                       {nextSession.duration_minutes}&nbsp;min
                       {nextSession.location !== null &&
                         `\u00a0\u00b7\u00a0${nextSession.location}`}
