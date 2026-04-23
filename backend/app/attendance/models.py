@@ -8,6 +8,7 @@ class AttendanceRead(BaseModel):
     visitor_name: str | None = None
     checked_in_at: str
     recorded_by: str
+    display_name: str | None = None
 
 
 class CheckinTokenRead(BaseModel):

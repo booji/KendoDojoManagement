@@ -904,3 +904,58 @@ async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
         response = await c.get(f"/members/{_MEMBER.sub}/attendance")
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Issue #79 — GET /sessions/{id}/attendance includes display_name
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_attendance_list_includes_display_name_for_member(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    """AC1+AC2: member records have display_name = member's full_name."""
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    # Stub returns display_name when present in the dict
+    record = await attendance_repo.admin_mark_attended(
+        session["id"], "member-1", "admin-uuid"
+    )
+    # Patch the stored record with a display_name (simulating the JOIN result)
+    record["display_name"] = "Alice Kendo"
+    attendance_repo._store[-1] = record
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/sessions/{session['id']}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["display_name"] == "Alice Kendo"
+
+
+@pytest.mark.anyio
+async def test_attendance_list_display_name_null_for_visitor(
+    session_repo: StubSessionInstanceRepo,
+    attendance_repo: StubAttendanceRepo,
+) -> None:
+    """AC3: visitor records have display_name = null."""
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    await attendance_repo.add_visitor(session["id"], "Drop-in Guest", "admin-uuid")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/sessions/{session['id']}/attendance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["display_name"] is None
