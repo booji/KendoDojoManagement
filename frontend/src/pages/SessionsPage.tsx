@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeSanitize from "rehype-sanitize"
@@ -932,11 +933,13 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 // ── Sessions page ─────────────────────────────────────────────────────────────
 
 const SessionsPage = () => {
+  const navigate = useNavigate()
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
   const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [icalCopied, setIcalCopied] = useState(false)
 
   useEffect(() => {
     Promise.all([getSessions(), getSessionTypes(), getMe()])
@@ -968,6 +971,15 @@ const SessionsPage = () => {
   const refreshSessions = () => {
     getSessions().then(setSessions).catch(() => {
       setError("Failed to refresh sessions.")
+    })
+  }
+
+  const icalUrl = `${window.location.origin}/api/sessions/ical`
+
+  const handleCopyIcal = () => {
+    navigator.clipboard.writeText(icalUrl).then(() => {
+      setIcalCopied(true)
+      setTimeout(() => setIcalCopied(false), 2000)
     })
   }
 
@@ -1007,6 +1019,32 @@ const SessionsPage = () => {
         )}
       </div>
 
+      {role !== null && (
+        <Card>
+          <CardContent className="py-4 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Subscribe in Google Calendar, Apple Calendar, or Outlook using this URL
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={icalUrl}
+                className="text-xs font-mono"
+                aria-label="iCal feed URL"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyIcal}
+                className="shrink-0"
+              >
+                {icalCopied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {sessions.length === 0 && (
         <p className="text-sm text-muted-foreground">No upcoming sessions.</p>
       )}
@@ -1022,9 +1060,8 @@ const SessionsPage = () => {
               return (
                 <li key={session.id}>
                   <Card
-                    className={
-                      cancelled ? "opacity-60" : undefined
-                    }
+                    className={`cursor-pointer${cancelled ? " opacity-60" : ""}`}
+                    onClick={() => navigate(`/sessions/${session.id}`)}
                   >
                     <CardContent className="py-3">
                       <div
@@ -1056,7 +1093,9 @@ const SessionsPage = () => {
                         </div>
                       </div>
                       {!cancelled && (
-                        <SessionCardActions session={session} isAdmin={isAdmin} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <SessionCardActions session={session} isAdmin={isAdmin} />
+                        </div>
                       )}
                     </CardContent>
                   </Card>
