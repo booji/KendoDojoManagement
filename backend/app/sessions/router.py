@@ -40,6 +40,7 @@ def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply SessionInstanceRead defaults to fill in any missing optional fields."""
     return SessionInstanceRead.model_validate(raw).model_dump()
 
+
 _TypeRepo = Annotated[AbstractSessionTypeRepository, Depends(get_session_type_repo)]
 _TmplRepo = Annotated[
     AbstractSessionTemplateRepository, Depends(get_session_template_repo)
@@ -81,9 +82,11 @@ async def update_session_type(
 
 
 @router.get("/sessions/ical")
-async def get_sessions_ical(repo: _InstRepo) -> Response:
+async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
     sessions = await repo.list_upcoming()
-    content = build_ical(sessions)
+    types = {t["id"]: t["name"] for t in await type_repo.list()}
+    enriched = [{**s, "title": types.get(s["session_type_id"], "")} for s in sessions]
+    content = build_ical(enriched)
     return Response(content=content, media_type="text/calendar; charset=utf-8")
 
 
