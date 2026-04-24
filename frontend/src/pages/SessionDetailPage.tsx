@@ -317,9 +317,7 @@ const SessionDetailPage = () => {
               <ul className="space-y-1" aria-label="Attendance list">
                 {attendance.map((record) => (
                   <li key={record.id} className="text-sm font-mono">
-                    {record.visitor_name !== null
-                      ? record.visitor_name
-                      : record.member_id ?? "Unknown"}
+                    {record.visitor_name ?? record.display_name ?? "Unknown"}
                   </li>
                 ))}
               </ul>

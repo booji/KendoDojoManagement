@@ -157,6 +157,21 @@ async def cancel_session_instance(
     return record
 
 
+@router.get("/sessions/{instance_id}")
+async def get_session_instance(
+    instance_id: str,
+    _claims: _Member,
+    repo: _InstRepo,
+) -> dict[str, Any]:
+    record = await repo.get(instance_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    return record
+
+
 @router.get("/sessions")
 async def list_upcoming_sessions(
     _claims: _Member,
