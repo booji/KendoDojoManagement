@@ -727,7 +727,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
               <SelectTrigger id="session-type" className="min-h-[44px]">
                 <SelectValue placeholder="Select type…">
-                  {typeId ? (sessionTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
+                  {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
