@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import rehypeSanitize from "rehype-sanitize"
 import { getSession, updateSession, cancelSession, deleteTemplate } from "@/api/sessions"
 import type { SessionInstance, SessionInstanceUpdate } from "@/api/sessions"
@@ -257,7 +258,7 @@ const SessionDetailPage = () => {
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Info</p>
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{session.info}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{session.info}</ReactMarkdown>
           </div>
         </div>
       )}
@@ -304,7 +305,7 @@ const SessionDetailPage = () => {
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Coach Notes</p>
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{session.coach_notes}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{session.coach_notes}</ReactMarkdown>
               </div>
             </div>
           )}
