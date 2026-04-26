@@ -26,6 +26,7 @@ export type SessionInstanceUpdate = {
   location: string | null
   notes: string | null
   info: string | null
+  coach_notes: string | null
 }
 
 export const getSessions = async (): Promise<SessionInstance[]> => {

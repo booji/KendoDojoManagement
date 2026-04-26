@@ -11,7 +11,60 @@ import type { AttendanceRecord } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+
+// ── MarkdownField ─────────────────────────────────────────────────────────────
+
+type MarkdownFieldProps = {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  preview: boolean
+  onTogglePreview: () => void
+  placeholder?: string
+}
+
+const MarkdownField = ({
+  id,
+  label,
+  value,
+  onChange,
+  preview,
+  onTogglePreview,
+  placeholder,
+}: MarkdownFieldProps) => (
+  <div className="space-y-1.5">
+    <div className="flex items-center justify-between gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <button
+        type="button"
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+        onClick={onTogglePreview}
+      >
+        {preview ? "Edit" : "Preview"}
+      </button>
+    </div>
+    {preview ? (
+      <div className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm prose prose-sm max-w-none">
+        {value.trim() ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{value}</ReactMarkdown>
+        ) : (
+          <span className="text-muted-foreground italic">Nothing to preview</span>
+        )}
+      </div>
+    ) : (
+      <Textarea
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-[80px]"
+      />
+    )}
+  </div>
+)
 
 // ── Edit form ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +80,10 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
   const [durationMinutes, setDurationMinutes] = useState(String(session.duration_minutes))
   const [location, setLocation] = useState(session.location ?? "")
   const [notes, setNotes] = useState(session.notes ?? "")
+  const [info, setInfo] = useState(session.info ?? "")
+  const [infoPreview, setInfoPreview] = useState(false)
+  const [coachNotes, setCoachNotes] = useState(session.coach_notes ?? "")
+  const [coachNotesPreview, setCoachNotesPreview] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,6 +98,8 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
         duration_minutes: parseInt(durationMinutes, 10),
         location: location.trim() || null,
         notes: notes.trim() || null,
+        info: info.trim() || null,
+        coach_notes: coachNotes.trim() || null,
       }
       const updated = await updateSession(session.id, payload)
       onSave(updated)
@@ -109,6 +168,24 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
           className="min-h-[44px]"
         />
       </div>
+      <MarkdownField
+        id="edit-info"
+        label="Info (optional, markdown)"
+        value={info}
+        onChange={setInfo}
+        preview={infoPreview}
+        onTogglePreview={() => setInfoPreview(p => !p)}
+        placeholder="Session info visible to members…"
+      />
+      <MarkdownField
+        id="edit-coach-notes"
+        label="Coach notes (optional, markdown)"
+        value={coachNotes}
+        onChange={setCoachNotes}
+        preview={coachNotesPreview}
+        onTogglePreview={() => setCoachNotesPreview(p => !p)}
+        placeholder="Internal notes for coaches…"
+      />
       {error !== null && (
         <p className="text-sm text-destructive" role="alert">{error}</p>
       )}
