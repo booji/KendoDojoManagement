@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/popover"
 import { CalendarIcon } from "lucide-react"
 import SessionCardList from "@/components/SessionCardList"
+import CalendarView from "@/components/CalendarView"
 
 // ── Markdown preview field ─────────────────────────────────────────────────────
 
@@ -572,12 +573,15 @@ const ICalButton = ({ icalUrl }: ICalButtonProps) => {
 
 // ── Sessions page ─────────────────────────────────────────────────────────────
 
+type PageView = "list" | "calendar"
+
 const SessionsPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
   const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pageView, setPageView] = useState<PageView>("list")
 
   useEffect(() => {
     Promise.all([getSessions(), getSessionTypes(), getMe()])
@@ -637,11 +641,30 @@ const SessionsPage = () => {
   const isAdmin = role === "admin"
 
   return (
-    <div className="px-4 py-6 space-y-8 max-w-2xl mx-auto">
+    <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-8 max-w-2xl mx-auto"}>
       {/* Page toolbar */}
-      <div className="flex items-center justify-between gap-4">
+      <div className={pageView === "calendar" ? "flex items-center justify-between gap-4 px-4 py-3 border-b shrink-0" : "flex items-center justify-between gap-4"}>
         <h1 className="text-xl font-semibold">Sessions</h1>
         <div className="flex items-center gap-2">
+          {/* List / Calendar toggle — desktop only */}
+          <div className="hidden md:flex items-center gap-1">
+            <Button
+              variant={pageView === "list" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPageView("list")}
+              aria-pressed={pageView === "list"}
+            >
+              List
+            </Button>
+            <Button
+              variant={pageView === "calendar" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setPageView("calendar")}
+              aria-pressed={pageView === "calendar"}
+            >
+              Calendar
+            </Button>
+          </div>
           {role !== null && <ICalButton icalUrl={icalUrl} />}
           {isAdmin && (
             <CreateSessionDialog
@@ -653,12 +676,16 @@ const SessionsPage = () => {
         </div>
       </div>
 
-      <SessionCardList
-        sessions={sessions}
-        typeMap={typeMap}
-        role={role}
-        sessionTypes={sessionTypes}
-      />
+      {pageView === "calendar" ? (
+        <CalendarView isAdmin={isAdmin} />
+      ) : (
+        <SessionCardList
+          sessions={sessions}
+          typeMap={typeMap}
+          role={role}
+          sessionTypes={sessionTypes}
+        />
+      )}
     </div>
   )
 }

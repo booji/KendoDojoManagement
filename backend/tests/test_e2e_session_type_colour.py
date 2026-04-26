@@ -157,7 +157,7 @@ def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
     # Browser converts hex to rgb(), so check the style is non-empty
     # (inline colour applied) rather than matching the hex string literally.
     style = chip.get_attribute("style") or ""
-    assert style != "", f"Expected chip to have inline colour style, got empty style"
+    assert style != "", "Expected chip to have inline colour style, got empty style"
 
     # Cleanup
     _reset_colour(page, admin_token, type_id)

@@ -17,7 +17,6 @@ import json
 import os
 import uuid
 
-import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
@@ -403,7 +402,7 @@ def test_home_dashboard_uses_calendar_and_fetches_range(page: Page) -> None:
 
     # At least one range request was made
     assert len(requests_seen) > 0, (
-        f"Expected at least one /sessions?from=...&to=... request, got none."
+        "Expected at least one /sessions?from=...&to=... request, got none."
     )
 
 
