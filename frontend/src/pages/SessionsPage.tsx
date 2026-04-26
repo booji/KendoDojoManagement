@@ -358,11 +358,7 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
                       className="flex items-center justify-between gap-2 text-xs"
                     >
                       <span className="truncate font-mono min-w-0">
-                        {record.visitor_name !== null
-                          ? record.visitor_name
-                          : record.member_id !== null
-                            ? record.member_id.slice(0, 8) + "…"
-                            : "Unknown"}
+                        {record.visitor_name ?? record.display_name ?? "Unknown"}
                       </span>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {record.visitor_name !== null && (
@@ -376,7 +372,7 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
                             size="sm"
                             className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                             onClick={() => void handleRemove(record.member_id!)}
-                            aria-label={`Remove attendance for ${record.member_id?.slice(0, 8)}`}
+                            aria-label={`Remove attendance for ${record.display_name ?? record.member_id?.slice(0, 8)}`}
                           >
                             Remove
                           </Button>
@@ -727,7 +723,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
               <SelectTrigger id="session-type" className="min-h-[44px]">
                 <SelectValue placeholder="Select type…">
-                  {typeId ? (sessionTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
+                  {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>

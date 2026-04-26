@@ -214,6 +214,21 @@ def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in records if not r.get("cancelled")]
 
 
+@router.get("/sessions/{instance_id}")
+async def get_session_instance(
+    instance_id: str,
+    _claims: _Member,
+    repo: _InstRepo,
+) -> dict[str, Any]:
+    record = await repo.get(instance_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    return record
+
+
 @router.get("/sessions")
 async def list_upcoming_sessions(
     claims: _Member,

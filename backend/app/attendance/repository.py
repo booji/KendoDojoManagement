@@ -4,10 +4,11 @@ import secrets
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.attendance.db_models import Attendance, CheckinToken
+from app.members.db_models import Member
 from app.sessions.db_models import SessionInstance
 
 
@@ -94,9 +95,20 @@ class SqlAttendanceRepository:
 
     async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
         result = await self._session.execute(
-            select(Attendance).where(Attendance.session_id == session_id)
+            select(Attendance, Member.full_name)
+            .outerjoin(
+                Member,
+                or_(
+                    Attendance.member_id == Member.id,
+                    Attendance.member_id == Member.user_id,
+                ),
+            )
+            .where(Attendance.session_id == session_id)
         )
-        return [_attendance_to_dict(row) for row in result.scalars().all()]
+        return [
+            {**_attendance_to_dict(row.Attendance), "display_name": row.full_name}
+            for row in result.all()
+        ]
 
     async def get_by_session_member(
         self, session_id: str, member_id: str
