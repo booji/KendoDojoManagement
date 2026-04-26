@@ -83,6 +83,8 @@ class SessionInstanceRead(BaseModel):
     info: str | None = None
     coach_notes: str | None = None
     checkin_url: str | None = None
+    attendance_count: int = 0
+    is_checked_in: bool = False
 
 
 class GenerateRequest(BaseModel):

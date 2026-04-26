@@ -5,6 +5,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app.attendance.dependencies import get_attendance_repo
+from app.attendance.repository import AbstractAttendanceRepository
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -51,6 +53,7 @@ _InstRepo = Annotated[
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_AttendanceRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
 
 
 # ---------------------------------------------------------------------------
@@ -214,19 +217,33 @@ def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in records if not r.get("cancelled")]
 
 
-@router.get("/sessions/{instance_id}")
-async def get_session_instance(
-    instance_id: str,
-    _claims: _Member,
-    repo: _InstRepo,
-) -> dict[str, Any]:
-    record = await repo.get(instance_id)
-    if record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session instance not found",
-        )
-    return record
+async def _enrich_with_attendance(
+    rows: list[dict[str, Any]],
+    attendance_repo: AbstractAttendanceRepository,
+    member_id: str,
+) -> list[dict[str, Any]]:
+    """Enrich session rows with attendance_count and is_checked_in."""
+    session_ids = [r["id"] for r in rows]
+    if not session_ids:
+        return rows
+
+    # Gather attendance for all sessions concurrently via individual calls
+    counts: dict[str, int] = {}
+    checked_in: set[str] = set()
+    for sid in session_ids:
+        records = await attendance_repo.list_for_session(sid)
+        counts[sid] = len(records)
+        if any(r.get("member_id") == member_id for r in records):
+            checked_in.add(sid)
+
+    return [
+        {
+            **r,
+            "attendance_count": counts.get(r["id"], 0),
+            "is_checked_in": r["id"] in checked_in,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/sessions")
@@ -234,14 +251,16 @@ async def list_upcoming_sessions(
     claims: _Member,
     repo: _InstRepo,
     template_repo: _TmplRepo,
+    attendance_repo: _AttendanceRepo,
     uow: _UoW,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
 ) -> list[dict[str, Any]]:
     is_admin = claims.role == "admin"
 
-    def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        normalized = [_normalize_instance(r) for r in rows]
+    async def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        enriched = await _enrich_with_attendance(rows, attendance_repo, claims.sub)
+        normalized = [_normalize_instance(r) for r in enriched]
         if is_admin:
             return normalized
         return _strip_coach_notes(_strip_cancelled(normalized))
@@ -249,8 +268,8 @@ async def list_upcoming_sessions(
     if from_date is not None and to_date is not None:
         if hasattr(repo, "list_in_range"):
             rows = await repo.list_in_range(from_date, to_date)
-            return _finalize(rows)
-        return _finalize(await repo.list_upcoming())
+            return await _finalize(rows)
+        return await _finalize(await repo.list_upcoming())
 
     # Rolling extension: check each template and extend if needed
     if hasattr(repo, "latest_date_for_template"):
@@ -275,7 +294,7 @@ async def list_upcoming_sessions(
         if new_instances:
             await uow.commit()
 
-    return _finalize(await repo.list_upcoming())
+    return await _finalize(await repo.list_upcoming())
 
 
 @router.get("/sessions/{instance_id}")

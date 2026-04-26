@@ -105,7 +105,9 @@ type SessionCardActionsProps = {
 }
 
 const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
-  const [checkinState, setCheckinState] = useState<CheckinState>({ kind: "idle" })
+  const [checkinState, setCheckinState] = useState<CheckinState>(
+    session.is_checked_in ? { kind: "success" } : { kind: "idle" }
+  )
   const [shareState, setShareState] = useState<ShareState>({ kind: "idle" })
 
   const handleCheckIn = async () => {
@@ -138,7 +140,7 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
   }
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="space-y-2">
       {/* Check-in button — full width, thumb-friendly */}
       {checkinState.kind === "success" ? (
         <div
@@ -146,7 +148,7 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
           role="status"
           aria-live="polite"
         >
-          Checked in!
+          Checked in
         </div>
       ) : (
         <Button
@@ -711,11 +713,76 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
       <DialogTrigger render={<Button size="sm" />}>
         Create Session
       </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Session</DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-2">
+
+          {/* Session type */}
+          <div className="space-y-1.5">
+            <Label htmlFor="session-type">Session type</Label>
+            <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
+              <SelectTrigger id="session-type" className="min-h-[44px]">
+                <SelectValue placeholder="Select type…">
+                  {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {localTypes.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {showNewTypeInput ? (
+              <div className="flex gap-2 mt-1">
+                <Input
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  placeholder="New type name"
+                  className="min-h-[44px] flex-1 text-sm"
+                  aria-label="New session type name"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      void handleAddType()
+                    }
+                    if (e.key === "Escape") {
+                      setShowNewTypeInput(false)
+                      setNewTypeName("")
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-[44px] shrink-0"
+                  onClick={() => void handleAddType()}
+                  disabled={creatingType || newTypeName.trim() === ""}
+                >
+                  {creatingType ? "Adding…" : "Add"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-[44px] shrink-0"
+                  onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
+                onClick={() => setShowNewTypeInput(true)}
+              >
+                Add new type…
+              </button>
+            )}
+          </div>
 
           {/* Recurring toggle */}
           <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
@@ -726,141 +793,74 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             <span className="text-sm font-medium">Recurring session</span>
           </label>
 
-          {/* Recurring: template title (full-width) */}
-          {isRecurring && (
+          {/* One-off: date */}
+          {!isRecurring && (
             <div className="space-y-1.5">
-              <Label htmlFor="recurring-title">Template title (optional)</Label>
+              <Label htmlFor="session-date">Date</Label>
               <Input
-                id="recurring-title"
-                value={recurringTitle}
-                onChange={(e) => setRecurringTitle(e.target.value)}
-                placeholder="e.g. Monday evening practice"
+                id="session-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
                 className="min-h-[44px]"
               />
             </div>
           )}
 
-          {/* Session type + Date grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="session-type">Session type</Label>
-              <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
-                <SelectTrigger id="session-type" className="min-h-[44px]">
-                  <SelectValue placeholder="Select type…">
-                    {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {localTypes.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {showNewTypeInput ? (
-                <div className="flex gap-2 mt-1">
-                  <Input
-                    value={newTypeName}
-                    onChange={(e) => setNewTypeName(e.target.value)}
-                    placeholder="New type name"
-                    className="min-h-[44px] flex-1 text-sm"
-                    aria-label="New session type name"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        void handleAddType()
-                      }
-                      if (e.key === "Escape") {
-                        setShowNewTypeInput(false)
-                        setNewTypeName("")
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="min-h-[44px] shrink-0"
-                    onClick={() => void handleAddType()}
-                    disabled={creatingType || newTypeName.trim() === ""}
-                  >
-                    {creatingType ? "Adding…" : "Add"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-[44px] shrink-0"
-                    onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
-                  onClick={() => setShowNewTypeInput(true)}
-                >
-                  Add new type…
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              {isRecurring ? (
-                <>
-                  <Label htmlFor="start-date">Start date</Label>
-                  <Input
-                    id="start-date"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="min-h-[44px]"
-                  />
-                </>
-              ) : (
-                <>
-                  <Label htmlFor="session-date">Date</Label>
-                  <Input
-                    id="session-date"
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="min-h-[44px]"
-                  />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Start time + Duration grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="session-time">Start time</Label>
-              <Input
-                id="session-time"
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="min-h-[44px]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="session-duration">Duration (minutes)</Label>
-              <Input
-                id="session-duration"
-                type="number"
-                min={1}
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="min-h-[44px]"
-              />
-            </div>
-          </div>
-
-          {/* Recurring: days + interval grid */}
+          {/* Recurring: title, start date, days, interval */}
           {isRecurring && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="recurring-title">Template title (optional)</Label>
+                <Input
+                  id="recurring-title"
+                  value={recurringTitle}
+                  onChange={(e) => setRecurringTitle(e.target.value)}
+                  placeholder="e.g. Monday evening practice"
+                  className="min-h-[44px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="start-date">Start date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="min-h-[44px]"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Start time */}
+          <div className="space-y-1.5">
+            <Label htmlFor="session-time">Start time</Label>
+            <Input
+              id="session-time"
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="min-h-[44px]"
+            />
+          </div>
+
+          {/* Duration */}
+          <div className="space-y-1.5">
+            <Label htmlFor="session-duration">Duration (minutes)</Label>
+            <Input
+              id="session-duration"
+              type="number"
+              min={1}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="min-h-[44px]"
+            />
+          </div>
+
+          {/* Recurring: days + interval */}
+          {isRecurring && (
+            <>
               <div className="space-y-1.5">
                 <Label>Days of week</Label>
                 <DayPicker selected={selectedDays} onChange={setSelectedDays} />
@@ -880,10 +880,10 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+            </>
           )}
 
-          {/* Location (full-width) */}
+          {/* Location */}
           <div className="space-y-1.5">
             <Label htmlFor="session-location">Location (optional)</Label>
             <Input
@@ -895,7 +895,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             />
           </div>
 
-          {/* Info (full-width markdown) */}
+          {/* Info (markdown) */}
           <MarkdownField
             id="session-info"
             label="Info (optional, markdown)"
@@ -906,7 +906,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             placeholder="Session info visible to members…"
           />
 
-          {/* Coach notes (full-width markdown) */}
+          {/* Coach notes (markdown) */}
           <MarkdownField
             id="session-coach-notes"
             label="Coach notes (optional, markdown)"
@@ -993,7 +993,7 @@ const SessionsPage = () => {
 
   if (sessions === null) {
     return (
-      <div className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+      <div className="px-4 py-6 space-y-4 max-w-5xl mx-auto">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-20 w-full rounded-xl" />
         <Skeleton className="h-20 w-full rounded-xl" />
@@ -1007,7 +1007,7 @@ const SessionsPage = () => {
   const groups = groupByWeek(sessions)
 
   return (
-    <div className="px-4 py-6 space-y-8 max-w-2xl mx-auto">
+    <div className="px-4 py-6 space-y-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Sessions</h1>
         {isAdmin && (
@@ -1064,39 +1064,55 @@ const SessionsPage = () => {
                     onClick={() => navigate(`/sessions/${session.id}`)}
                   >
                     <CardContent className="py-3">
-                      <div
-                        className={
-                          cancelled ? "line-through text-muted-foreground" : undefined
-                        }
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">
-                              {typeMap.get(session.session_type_id) ?? "Unknown"}
-                            </p>
-                            <p className="text-sm text-muted-foreground mt-0.5">
-                              {formatDate(session.date)}&nbsp;&middot;&nbsp;
-                              {formatTime(session.start_time)}&nbsp;&middot;&nbsp;
-                              {session.duration_minutes} min
-                            </p>
-                            {session.location !== null && (
-                              <p className="text-sm text-muted-foreground mt-0.5">
-                                {session.location}
-                              </p>
-                            )}
-                          </div>
+                      {/* Top row: header badges */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className={`font-medium truncate${cancelled ? " line-through text-muted-foreground" : ""}`}>
+                          {typeMap.get(session.session_type_id) ?? "Unknown"}
+                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isAdmin && !cancelled && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                              {session.attendance_count}&nbsp;{session.attendance_count !== 1 ? "attendees" : "attendee"}
+                            </span>
+                          )}
                           {cancelled && (
-                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                               Cancelled
                             </span>
                           )}
                         </div>
                       </div>
-                      {!cancelled && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <SessionCardActions session={session} isAdmin={isAdmin} />
+
+                      {/* Two-column layout on md+ */}
+                      <div className="flex flex-col md:flex-row md:items-start gap-4">
+                        {/* Left col: date/time/duration + location */}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm text-muted-foreground${cancelled ? " line-through" : ""}`}>
+                            {formatDate(session.date)}&nbsp;&middot;&nbsp;
+                            {formatTime(session.start_time)}&nbsp;&middot;&nbsp;
+                            {session.duration_minutes} min
+                          </p>
+                          {session.location !== null && (
+                            <p className={`text-sm text-muted-foreground mt-0.5${cancelled ? " line-through" : ""}`}>
+                              {session.location}
+                            </p>
+                          )}
                         </div>
-                      )}
+
+                        {/* Right col: info snippet + actions */}
+                        {!cancelled && (
+                          <div className="md:w-64 shrink-0 space-y-2">
+                            {session.info !== null && (
+                              <p className="line-clamp-2 text-sm text-muted-foreground">
+                                {session.info}
+                              </p>
+                            )}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <SessionCardActions session={session} isAdmin={isAdmin} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 </li>

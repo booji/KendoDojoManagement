@@ -17,6 +17,8 @@ export type SessionInstance = {
   info: string | null
   coach_notes: string | null
   checkin_url: string | null
+  attendance_count: number
+  is_checked_in: boolean
 }
 
 export type SessionInstanceUpdate = {
