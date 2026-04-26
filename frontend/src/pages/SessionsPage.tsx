@@ -711,76 +711,11 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
       <DialogTrigger render={<Button size="sm" />}>
         Create Session
       </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create Session</DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-2">
-
-          {/* Session type */}
-          <div className="space-y-1.5">
-            <Label htmlFor="session-type">Session type</Label>
-            <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
-              <SelectTrigger id="session-type" className="min-h-[44px]">
-                <SelectValue placeholder="Select type…">
-                  {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {localTypes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showNewTypeInput ? (
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  placeholder="New type name"
-                  className="min-h-[44px] flex-1 text-sm"
-                  aria-label="New session type name"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      void handleAddType()
-                    }
-                    if (e.key === "Escape") {
-                      setShowNewTypeInput(false)
-                      setNewTypeName("")
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  className="min-h-[44px] shrink-0"
-                  onClick={() => void handleAddType()}
-                  disabled={creatingType || newTypeName.trim() === ""}
-                >
-                  {creatingType ? "Adding…" : "Add"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-[44px] shrink-0"
-                  onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
-                onClick={() => setShowNewTypeInput(true)}
-              >
-                Add new type…
-              </button>
-            )}
-          </div>
 
           {/* Recurring toggle */}
           <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
@@ -791,74 +726,141 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             <span className="text-sm font-medium">Recurring session</span>
           </label>
 
-          {/* One-off: date */}
-          {!isRecurring && (
+          {/* Recurring: template title (full-width) */}
+          {isRecurring && (
             <div className="space-y-1.5">
-              <Label htmlFor="session-date">Date</Label>
+              <Label htmlFor="recurring-title">Template title (optional)</Label>
               <Input
-                id="session-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                id="recurring-title"
+                value={recurringTitle}
+                onChange={(e) => setRecurringTitle(e.target.value)}
+                placeholder="e.g. Monday evening practice"
                 className="min-h-[44px]"
               />
             </div>
           )}
 
-          {/* Recurring: title, start date, days, interval */}
-          {isRecurring && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="recurring-title">Template title (optional)</Label>
-                <Input
-                  id="recurring-title"
-                  value={recurringTitle}
-                  onChange={(e) => setRecurringTitle(e.target.value)}
-                  placeholder="e.g. Monday evening practice"
-                  className="min-h-[44px]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="start-date">Start date</Label>
-                <Input
-                  id="start-date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="min-h-[44px]"
-                />
-              </div>
-            </>
-          )}
+          {/* Session type + Date grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="session-type">Session type</Label>
+              <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
+                <SelectTrigger id="session-type" className="min-h-[44px]">
+                  <SelectValue placeholder="Select type…">
+                    {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {localTypes.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {showNewTypeInput ? (
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    value={newTypeName}
+                    onChange={(e) => setNewTypeName(e.target.value)}
+                    placeholder="New type name"
+                    className="min-h-[44px] flex-1 text-sm"
+                    aria-label="New session type name"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        void handleAddType()
+                      }
+                      if (e.key === "Escape") {
+                        setShowNewTypeInput(false)
+                        setNewTypeName("")
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-[44px] shrink-0"
+                    onClick={() => void handleAddType()}
+                    disabled={creatingType || newTypeName.trim() === ""}
+                  >
+                    {creatingType ? "Adding…" : "Add"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-[44px] shrink-0"
+                    onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
+                  onClick={() => setShowNewTypeInput(true)}
+                >
+                  Add new type…
+                </button>
+              )}
+            </div>
 
-          {/* Start time */}
-          <div className="space-y-1.5">
-            <Label htmlFor="session-time">Start time</Label>
-            <Input
-              id="session-time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="min-h-[44px]"
-            />
+            <div className="space-y-1.5">
+              {isRecurring ? (
+                <>
+                  <Label htmlFor="start-date">Start date</Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="min-h-[44px]"
+                  />
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="session-date">Date</Label>
+                  <Input
+                    id="session-date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="min-h-[44px]"
+                  />
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Duration */}
-          <div className="space-y-1.5">
-            <Label htmlFor="session-duration">Duration (minutes)</Label>
-            <Input
-              id="session-duration"
-              type="number"
-              min={1}
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="min-h-[44px]"
-            />
+          {/* Start time + Duration grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="session-time">Start time</Label>
+              <Input
+                id="session-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="min-h-[44px]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="session-duration">Duration (minutes)</Label>
+              <Input
+                id="session-duration"
+                type="number"
+                min={1}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="min-h-[44px]"
+              />
+            </div>
           </div>
 
-          {/* Recurring: days + interval */}
+          {/* Recurring: days + interval grid */}
           {isRecurring && (
-            <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Days of week</Label>
                 <DayPicker selected={selectedDays} onChange={setSelectedDays} />
@@ -878,10 +880,10 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
                   </SelectContent>
                 </Select>
               </div>
-            </>
+            </div>
           )}
 
-          {/* Location */}
+          {/* Location (full-width) */}
           <div className="space-y-1.5">
             <Label htmlFor="session-location">Location (optional)</Label>
             <Input
@@ -893,7 +895,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             />
           </div>
 
-          {/* Info (markdown) */}
+          {/* Info (full-width markdown) */}
           <MarkdownField
             id="session-info"
             label="Info (optional, markdown)"
@@ -904,7 +906,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             placeholder="Session info visible to members…"
           />
 
-          {/* Coach notes (markdown) */}
+          {/* Coach notes (full-width markdown) */}
           <MarkdownField
             id="session-coach-notes"
             label="Coach notes (optional, markdown)"
