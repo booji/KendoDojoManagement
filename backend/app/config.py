@@ -16,3 +16,10 @@ WEBAUTHN_ORIGIN: str = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")
 WEBAUTHN_CHALLENGE_TTL_SECONDS: int = int(
     os.getenv("WEBAUTHN_CHALLENGE_TTL_SECONDS", "300")
 )
+
+_cors_origins_env: str = os.getenv("CORS_ORIGINS", "")
+CORS_ORIGINS: list[str] = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else [WEBAUTHN_ORIGIN]
+)
