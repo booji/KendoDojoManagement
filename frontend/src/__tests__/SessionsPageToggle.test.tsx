@@ -62,6 +62,16 @@ vi.mock("@/components/SessionCardList", () => ({
   ),
 }))
 
+// ── Mock SessionsTable (for AC8 desktop integration test) ─────────────────────
+
+vi.mock("@/components/SessionsTable", () => ({
+  default: (props: Record<string, unknown>) => (
+    <div data-testid="sessions-table" aria-label="Sessions table">
+      Sessions table
+    </div>
+  ),
+}))
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderSessionsPage() {
@@ -236,6 +246,33 @@ describe("AC8 — toggle is hidden on mobile via responsive CSS class", () => {
       const listBtn = screen.getByRole("button", { name: /^list$/i })
       const toggleContainer = listBtn.parentElement
       expect(toggleContainer?.className).toMatch(/hidden/)
+    })
+  })
+})
+
+// ── AC8 — SessionsTable present in DOM in desktop list view ──────────────────
+//
+// SessionsTable is rendered for the desktop table layout alongside (or instead of)
+// SessionCardList. It may be visually hidden on mobile via CSS but must be present
+// in the DOM so assistive tech and tests can reach it.
+
+describe("AC8 — SessionsTable present in DOM for desktop list view", () => {
+  it("renders an element with data-testid='sessions-table' in list view", async () => {
+    renderSessionsPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sessions-table")).toBeInTheDocument()
+    })
+  })
+
+  it("sessions-table is present in DOM even alongside session-card-list", async () => {
+    renderSessionsPage()
+
+    await waitFor(() => {
+      // Both may exist simultaneously (one hidden on mobile via CSS, one on desktop)
+      // The key requirement is that sessions-table is in the DOM.
+      const table = screen.getByTestId("sessions-table")
+      expect(table).toBeInTheDocument()
     })
   })
 })

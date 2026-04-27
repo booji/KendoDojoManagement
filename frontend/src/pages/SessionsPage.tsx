@@ -39,6 +39,7 @@ import {
 import { CalendarIcon } from "lucide-react"
 import SessionCardList from "@/components/SessionCardList"
 import CalendarView from "@/components/CalendarView"
+import SessionsTable from "@/components/SessionsTable"
 
 // ── Markdown preview field ─────────────────────────────────────────────────────
 
@@ -641,7 +642,7 @@ const SessionsPage = () => {
   const isAdmin = role === "admin"
 
   return (
-    <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-8 max-w-2xl mx-auto"}>
+    <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-6 max-w-screen-xl mx-auto"}>
       {/* Page toolbar */}
       <div className={pageView === "calendar" ? "flex items-center justify-between gap-4 px-4 py-3 border-b shrink-0" : "flex items-center justify-between gap-4"}>
         <h1 className="text-xl font-semibold">Sessions</h1>
@@ -679,12 +680,16 @@ const SessionsPage = () => {
       {pageView === "calendar" ? (
         <CalendarView isAdmin={isAdmin} />
       ) : (
-        <SessionCardList
-          sessions={sessions}
-          typeMap={typeMap}
-          role={role}
-          sessionTypes={sessionTypes}
-        />
+        <>
+          {/* Mobile: card list */}
+          <div className="md:hidden">
+            <SessionCardList sessions={sessions} typeMap={typeMap} role={role} sessionTypes={sessionTypes} />
+          </div>
+          {/* Desktop: data table */}
+          <div className="hidden md:block">
+            <SessionsTable sessions={sessions} typeMap={typeMap} isAdmin={isAdmin} />
+          </div>
+        </>
       )}
     </div>
   )
