@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import insert, select
 
@@ -17,6 +18,8 @@ import app.sessions.db_models  # noqa: F401
 import app.settings.models  # noqa: F401
 from app.attendance.router import router as attendance_router
 from app.auth.router import router as auth_router
+from app.config import CORS_ORIGINS
+from app.core.middleware import SecurityHeadersMiddleware
 from app.dashboard.router import router as dashboard_router
 from app.db.base import Base
 from app.db.engine import engine
@@ -45,6 +48,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(health_router)
 app.include_router(setup_router)
