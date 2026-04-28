@@ -96,10 +96,15 @@ async def checkin_via_token(
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> AttendanceRead:
-    token_record = await token_repo.get(token)
+    try:
+        token_record = await token_repo.redeem(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Token already used"
+        )
     if token_record is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Token not found"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
     expires_at = datetime.fromisoformat(token_record["expires_at"])
     if expires_at.tzinfo is None:

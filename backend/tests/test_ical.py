@@ -155,6 +155,15 @@ class StubCheckinTokenRepo:
     async def get(self, token: str) -> dict[str, Any] | None:
         return self._store.get(token)
 
+    async def redeem(self, token: str) -> dict[str, Any] | None:
+        record = self._store.get(token)
+        if record is None:
+            return None
+        if record.get("used_at") is not None:
+            raise ValueError("Token already used")
+        record["used_at"] = "used"
+        return record
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -476,13 +485,19 @@ async def test_generate_checkin_token_uses_webauthn_origin_fallback(
 
 
 @pytest.mark.anyio
-async def test_ical_feed_includes_all_upcoming_sessions(instance_repo, type_repo) -> None:
+async def test_ical_feed_includes_all_upcoming_sessions(
+    instance_repo, type_repo
+) -> None:
     """Every upcoming non-cancelled instance appears as its own VEVENT."""
     ta = type_repo.seed(str(uuid.uuid4()), "Session A")
     tb = type_repo.seed(str(uuid.uuid4()), "Session B")
     tc = type_repo.seed(str(uuid.uuid4()), "Cancelled Session")
-    await _seed_instance(instance_repo, session_type_id=ta["id"], instance_date="2099-06-02")
-    await _seed_instance(instance_repo, session_type_id=tb["id"], instance_date="2099-06-09")
+    await _seed_instance(
+        instance_repo, session_type_id=ta["id"], instance_date="2099-06-02"
+    )
+    await _seed_instance(
+        instance_repo, session_type_id=tb["id"], instance_date="2099-06-09"
+    )
     # Cancelled — must NOT appear
     await _seed_instance(
         instance_repo,
