@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
+import bcrypt
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +45,8 @@ class AbstractCheckinTokenRepository(Protocol):
 
     async def get(self, token: str) -> dict[str, Any] | None: ...
 
+    async def redeem(self, token: str) -> dict[str, Any] | None: ...
+
 
 @runtime_checkable
 class AbstractSessionInstanceRepository(Protocol):
@@ -60,11 +64,12 @@ def _attendance_to_dict(obj: Attendance) -> dict[str, Any]:
     }
 
 
-def _token_to_dict(obj: CheckinToken) -> dict[str, Any]:
+def _token_to_dict(obj: CheckinToken, plaintext: str | None = None) -> dict[str, Any]:
     return {
-        "token": obj.token,
+        "token": plaintext if plaintext is not None else obj.token,
         "session_id": obj.session_id,
         "expires_at": obj.expires_at,
+        "used_at": obj.used_at,
     }
 
 
@@ -175,22 +180,52 @@ class SqlCheckinTokenRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _token_lookup(plaintext: str) -> str:
+        return hashlib.sha256(plaintext.encode()).hexdigest()
+
     async def create(self, session_id: str, expires_at: datetime) -> dict[str, Any]:
+        plaintext = secrets.token_urlsafe(32)
+        token_hash = bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
         obj = CheckinToken(
-            token=secrets.token_urlsafe(16),
+            token=token_hash,
+            token_lookup=self._token_lookup(plaintext),
             session_id=session_id,
             expires_at=expires_at.isoformat(),
         )
         self._session.add(obj)
         await self._session.flush()
-        return _token_to_dict(obj)
+        return _token_to_dict(obj, plaintext=plaintext)
+
+    async def _find_by_plaintext(
+        self, token: str, *, for_update: bool = False
+    ) -> CheckinToken | None:
+        q = select(CheckinToken).where(
+            CheckinToken.token_lookup == self._token_lookup(token)
+        )
+        if for_update:
+            q = q.with_for_update()
+        result = await self._session.execute(q)
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        if not bcrypt.checkpw(token.encode(), obj.token.encode()):
+            return None
+        return obj
 
     async def get(self, token: str) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            select(CheckinToken).where(CheckinToken.token == token)
-        )
-        obj = result.scalar_one_or_none()
-        return _token_to_dict(obj) if obj else None
+        obj = await self._find_by_plaintext(token)
+        return _token_to_dict(obj, plaintext=token) if obj else None
+
+    async def redeem(self, token: str) -> dict[str, Any] | None:
+        obj = await self._find_by_plaintext(token, for_update=True)
+        if obj is None:
+            return None
+        if obj.used_at is not None:
+            raise ValueError("Token already used")
+        obj.used_at = datetime.now(UTC)
+        await self._session.flush()
+        return _token_to_dict(obj, plaintext=token)
 
 
 class SqlSessionInstanceRepository:

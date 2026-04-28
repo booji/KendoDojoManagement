@@ -209,6 +209,15 @@ class StubCheckinTokenRepo:
     async def get(self, token: str) -> dict[str, Any] | None:
         return self._store.get(token)
 
+    async def redeem(self, token: str) -> dict[str, Any] | None:
+        record = self._store.get(token)
+        if record is None:
+            return None
+        if record.get("used_at") is not None:
+            raise ValueError("Token already used")
+        record["used_at"] = datetime.now(UTC).isoformat()
+        return record
+
     def seed_expired(self, session_id: str) -> dict[str, Any]:
         """Seed an already-expired token for testing."""
         token = str(uuid.uuid4())
@@ -462,7 +471,7 @@ async def test_expired_token_returns_410(
 
 
 @pytest.mark.anyio
-async def test_invalid_token_returns_404(
+async def test_invalid_token_returns_401(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
     token_repo: StubCheckinTokenRepo,
@@ -474,7 +483,7 @@ async def test_invalid_token_returns_404(
     ) as c:
         response = await c.post("/checkin/this-token-does-not-exist")
 
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
