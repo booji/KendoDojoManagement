@@ -34,6 +34,13 @@ from app.auth.passkey_service import (
     register_passkey_begin,
     register_passkey_complete,
 )
+from app.auth.rate_limiter import (
+    PER_IP_LIMIT,
+    check_lockout,
+    clear_lockout,
+    limiter,
+    record_failure,
+)
 from app.auth.recovery_repository import (
     AbstractAdminTokenRepository,
     AbstractRecoveryRepository,
@@ -47,7 +54,7 @@ from app.auth.recovery_service import (
     hash_codes,
     is_admin_token_valid,
 )
-from app.auth.service import login_user, register_user
+from app.auth.service import register_user
 from app.auth.token import encode_recovery_token
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -64,12 +71,58 @@ async def register_password(
 
 
 @router.post("/login/password", status_code=200)
+@limiter.limit(PER_IP_LIMIT)
 async def login_password(
+    request: Request,
     payload: LoginRequest,
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
-    token_response = await login_user(payload, uow)
+    # Look up the user first so we can apply per-account lockout
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if user is not None:
+        # Check lockout before verifying password
+        if await check_lockout(user.id, uow.session):
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail="Account temporarily locked. Try again later.",
+            )
+
+    # Delegate to service for credential verification
+    from app.auth.password import verify_password
+    from app.auth.token import encode_token
+
+    if user is None or not verify_password(payload.password, user.hashed_password):
+        if user is not None:
+            await record_failure(user.id, uow.session)
+            await uow.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account deactivated",
+        )
+
+    # Successful login — clear any lockout state
+    await clear_lockout(user.id, uow.session)
+    await uow.commit()
+
+    claims = UserClaims(
+        sub=user.id,
+        email=user.email,
+        role=user.role,  # type: ignore[arg-type]
+        is_active=user.is_active,
+        theme=user.theme,  # type: ignore[arg-type]
+    )
+    from app.auth.models import TokenResponse
+
+    token_response = TokenResponse(access_token=encode_token(claims))
+
     response.set_cookie(
         key="access_token",
         value=token_response.access_token,
@@ -121,7 +174,9 @@ async def admin_only(
 
 
 @router.post("/register/passkey/begin")
+@limiter.limit(PER_IP_LIMIT)
 async def passkey_register_begin(
+    request: Request,
     payload: PasskeyBeginRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
@@ -129,7 +184,9 @@ async def passkey_register_begin(
 
 
 @router.post("/register/passkey/complete", status_code=201)
+@limiter.limit(PER_IP_LIMIT)
 async def passkey_register_complete(
+    request: Request,
     payload: PasskeyRegisterCompleteRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> PasskeyRegisterCompleteResponse:
@@ -146,7 +203,9 @@ async def security_status(
 
 
 @router.post("/login/passkey/begin")
+@limiter.limit(PER_IP_LIMIT)
 async def passkey_login_begin(
+    request: Request,
     payload: PasskeyBeginRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
@@ -154,7 +213,9 @@ async def passkey_login_begin(
 
 
 @router.post("/login/passkey/complete")
+@limiter.limit(PER_IP_LIMIT)
 async def passkey_login_complete(
+    request: Request,
     payload: PasskeyLoginCompleteRequest,
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
@@ -279,9 +340,10 @@ class _RedeemRequest(BaseModel):
 
 
 @router.post("/recovery/redeem", status_code=200)
+@limiter.limit(PER_IP_LIMIT)
 async def redeem_recovery_code(
-    payload: _RedeemRequest,
     request: Request,
+    payload: _RedeemRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     attempt_repo: Annotated[AbstractAttemptRepository, Depends(get_attempt_repo)],
@@ -351,9 +413,7 @@ async def generate_admin_token(
         AbstractAdminTokenRepository, Depends(get_admin_token_repo)
     ],
 ) -> dict[str, str]:
-    result = await uow.session.execute(
-        select(User).where(User.id == payload.user_id)
-    )
+    result = await uow.session.execute(select(User).where(User.id == payload.user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

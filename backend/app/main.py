@@ -6,7 +6,11 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import insert, select
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 
 import app.attendance.db_models  # noqa: F401
 
@@ -17,6 +21,7 @@ import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
 import app.settings.models  # noqa: F401
 from app.attendance.router import router as attendance_router
+from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import CORS_ORIGINS
 from app.core.middleware import SecurityHeadersMiddleware
@@ -34,6 +39,18 @@ from app.settings.router import router as settings_router
 from app.users.router import router as users_router
 
 
+def _rate_limit_exceeded_handler(
+    request: StarletteRequest, exc: RateLimitExceeded
+) -> JSONResponse:
+    """Return 429 with Retry-After header when a rate limit is exceeded."""
+    response = JSONResponse(
+        {"detail": f"Rate limit exceeded: {exc.detail}"},
+        status_code=429,
+    )
+    response.headers["Retry-After"] = "60"
+    return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     async with engine.begin() as conn:
@@ -49,6 +66,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,

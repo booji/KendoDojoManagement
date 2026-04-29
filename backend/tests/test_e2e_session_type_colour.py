@@ -203,8 +203,8 @@ def test_cancelled_sessions_remain_grey_regardless_of_type_colour(page: Page) ->
     chip = page.locator(f'[data-session-id="{session_id}"]')
     expect(chip).to_be_visible(timeout=10000)
     style = chip.get_attribute("style") or ""
-    assert "e74c3c" not in style.lower(), (
-        f"Cancelled chip should not have type colour, got style: {style}"
-    )
+    assert (
+        "e74c3c" not in style.lower()
+    ), f"Cancelled chip should not have type colour, got style: {style}"
 
     _reset_colour(page, admin_token, type_id)

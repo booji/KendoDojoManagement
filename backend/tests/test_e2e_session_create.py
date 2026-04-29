@@ -1,4 +1,5 @@
 """E2E stub: session creation modal."""
+
 import pytest
 
 

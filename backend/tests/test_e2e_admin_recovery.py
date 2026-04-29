@@ -11,6 +11,7 @@ import pytest
 
 # ── AC4 — Admin member list shows passkey count ───────────────────────────────
 
+
 # Passkey count in the member LIST is deferred: the /members endpoint does not
 # return passkey_count and adding it requires a backend schema change. It is
 # visible on the member DETAIL page via GET /auth/security-status.

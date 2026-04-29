@@ -165,9 +165,7 @@ class StubAttendanceRepo:
                 return r
         return None
 
-    async def count_for_sessions(
-        self, session_ids: list[str]
-    ) -> dict[str, int]:
+    async def count_for_sessions(self, session_ids: list[str]) -> dict[str, int]:
         """Return a mapping of session_id -> attendance count."""
         result: dict[str, int] = {sid: 0 for sid in session_ids}
         for r in self._store:
@@ -265,7 +263,9 @@ async def test_list_sessions_includes_attendance_count(
     type_repo, template_repo, instance_repo, attendance_repo
 ) -> None:
     """GET /sessions returns attendance_count reflecting the number of attendance records."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override  # use admin for full view
+    app.dependency_overrides[REQUIRE_MEMBER] = (
+        _admin_override  # use admin for full view
+    )
 
     type_id = list(type_repo._store.keys())[0]
 

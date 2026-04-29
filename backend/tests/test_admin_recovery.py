@@ -71,9 +71,7 @@ async def db_client(_engine):
     yield _engine
 
 
-async def _seed_user(
-    engine, email: str, user_id: str, *, role: str = "member"
-) -> None:
+async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
         await conn.execute(
@@ -202,10 +200,14 @@ async def test_admin_can_generate_token_for_user(db_client) -> None:
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
     await _seed_user(db_client, "target@dojo.test", target_id)
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": target_id},
@@ -222,10 +224,14 @@ async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
     await _seed_user(db_client, "target@dojo.test", target_id)
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": target_id},
@@ -248,10 +254,14 @@ async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
     await _seed_user(db_client, "target@dojo.test", target_id)
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": target_id},
@@ -281,11 +291,15 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
     await _seed_user(db_client, "target@dojo.test", target_id)
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
     before = datetime.now(UTC)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": target_id},
@@ -338,7 +352,9 @@ async def test_non_admin_cannot_generate_admin_token() -> None:
 @pytest.mark.anyio
 async def test_unauthenticated_cannot_generate_admin_token() -> None:
     """POST /auth/recovery/admin-token returns 401 with no token."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": str(uuid.uuid4())},
@@ -353,10 +369,14 @@ async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
             json={"user_id": str(uuid.uuid4())},
@@ -371,10 +391,14 @@ async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
 
-    claims = UserClaims(sub=admin_id, email="admin@dojo.test", role="admin", is_active=True)
+    claims = UserClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post("/auth/recovery/admin-token", json={})
 
     assert response.status_code == 422
@@ -391,7 +415,9 @@ async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -408,7 +434,9 @@ async def test_redeem_valid_admin_token_returns_access_token(db_client) -> None:
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -428,7 +456,9 @@ async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
     plaintext = "admn-tok1-abcd"
     token_id = await _seed_admin_token(db_client, target_id, plaintext)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -451,7 +481,9 @@ async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
     expired = datetime.now(UTC) - timedelta(minutes=1)
     await _seed_admin_token(db_client, target_id, plaintext, expires_at=expired)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -468,7 +500,9 @@ async def test_redeem_used_admin_token_returns_401(db_client) -> None:
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext, used=True)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -485,7 +519,9 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         r1 = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -511,7 +547,9 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     await _seed_admin_token(db_client, target_id, plaintext)
     await _seed_failed_attempt(db_client, target_id, count=4)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": "wrong-token-xxxx"},
@@ -529,7 +567,9 @@ async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None
     await _seed_admin_token(db_client, target_id, plaintext)
     await _seed_failed_attempt(db_client, target_id, count=3)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -551,7 +591,9 @@ async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
     plaintext = "admn-tok2-efgh"
     token_id = await _seed_admin_token(db_client, target_id, plaintext)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -573,7 +615,9 @@ async def test_expired_admin_token_is_rejected(db_client) -> None:
     expired = datetime.now(UTC) - timedelta(hours=2)
     await _seed_admin_token(db_client, target_id, plaintext, expires_at=expired)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -590,7 +634,9 @@ async def test_used_admin_token_is_rejected(db_client) -> None:
     plaintext = "admn-tok2-efgh"
     await _seed_admin_token(db_client, target_id, plaintext, used=True)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},

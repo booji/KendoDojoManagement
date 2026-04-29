@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AttendanceRead(BaseModel):
@@ -22,4 +22,4 @@ class MarkAttendedRequest(BaseModel):
 
 
 class AddVisitorRequest(BaseModel):
-    visitor_name: str
+    visitor_name: str = Field(..., max_length=100)

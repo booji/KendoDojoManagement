@@ -213,7 +213,9 @@ async def test_range_query_returns_sessions_within_date_range(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get("/sessions", params={"from": "2099-06-01", "to": "2099-06-30"})
+        response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
 
     assert response.status_code == 200
     sessions = response.json()
@@ -238,7 +240,9 @@ async def test_range_query_response_has_required_fields(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get("/sessions", params={"from": "2099-06-01", "to": "2099-06-30"})
+        response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
 
     assert response.status_code == 200
     sessions = response.json()
@@ -260,7 +264,9 @@ async def test_range_query_unauthenticated_returns_401(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get("/sessions", params={"from": "2099-06-01", "to": "2099-06-30"})
+        response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
 
     assert response.status_code == 401
 
@@ -278,7 +284,9 @@ async def test_admin_range_query_includes_cancelled_sessions(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get("/sessions", params={"from": "2099-06-01", "to": "2099-06-30"})
+        response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
 
     assert response.status_code == 200
     sessions = response.json()
@@ -304,7 +312,9 @@ async def test_member_range_query_excludes_cancelled_sessions(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get("/sessions", params={"from": "2099-06-01", "to": "2099-06-30"})
+        response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
 
     assert response.status_code == 200
     sessions = response.json()

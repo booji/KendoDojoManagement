@@ -18,6 +18,8 @@ class User(UUIDBase):
     challenge_issued_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    login_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class PasskeyCredential(UUIDBase):

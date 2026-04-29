@@ -43,7 +43,9 @@ class _NoOpAttendanceRepo:
     ) -> dict[str, Any]:  # pragma: no cover
         return {}
 
-    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:  # pragma: no cover
+    async def list_for_member(
+        self, member_id: str
+    ) -> list[dict[str, Any]]:  # pragma: no cover
         return []
 
 
@@ -60,3 +62,19 @@ def _default_attendance_repo_stub():
     app.dependency_overrides.setdefault(get_attendance_repo, lambda: stub)
     yield
     # Teardown is handled by each test file's own clear_overrides fixture.
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Reset slowapi in-memory rate limit counters and per-account failure counts
+    between tests so accumulated state from one test doesn't bleed into the next.
+    """
+    from app.main import app
+
+    yield
+
+    # Reset slowapi storage
+    try:
+        app.state.limiter._storage.reset()
+    except Exception:
+        pass

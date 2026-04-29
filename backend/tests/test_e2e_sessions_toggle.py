@@ -126,7 +126,10 @@ def test_clicking_calendar_renders_calendar_view(page: Page) -> None:
     expect(page.locator("span.flex-1.text-center")).to_be_visible()
 
     # Calendar button now active
-    assert page.get_by_role("button", name="Calendar").get_attribute("aria-pressed") == "true"
+    assert (
+        page.get_by_role("button", name="Calendar").get_attribute("aria-pressed")
+        == "true"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +153,9 @@ def test_clicking_list_restores_session_card_list(page: Page) -> None:
 
     expect(page.get_by_role("button", name="Previous period")).not_to_be_visible()
     expect(page.get_by_role("heading", name="Sessions")).to_be_visible()
-    assert page.get_by_role("button", name="List").get_attribute("aria-pressed") == "true"
+    assert (
+        page.get_by_role("button", name="List").get_attribute("aria-pressed") == "true"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -280,4 +285,6 @@ def test_list_is_default_view_on_sessions_page(page: Page) -> None:
 
     expect(page.get_by_role("heading", name="Sessions")).to_be_visible()
     expect(page.get_by_role("button", name="Previous period")).not_to_be_visible()
-    assert page.get_by_role("button", name="List").get_attribute("aria-pressed") == "true"
+    assert (
+        page.get_by_role("button", name="List").get_attribute("aria-pressed") == "true"
+    )
