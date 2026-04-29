@@ -71,7 +71,10 @@ def test_session_card_list_renders_week_grouped_cards(page: Page) -> None:
 
     # Get a session type
     import json
-    types_resp = page.request.get(f"{API_URL}/session-types", headers=_api_headers(admin_token))
+
+    types_resp = page.request.get(
+        f"{API_URL}/session-types", headers=_api_headers(admin_token)
+    )
     assert types_resp.status == 200
     type_id = types_resp.json()[0]["id"]
     type_name = types_resp.json()[0]["name"]
@@ -80,12 +83,14 @@ def test_session_card_list_renders_week_grouped_cards(page: Page) -> None:
     page.request.post(
         f"{API_URL}/sessions",
         headers=headers,
-        data=json.dumps({
-            "session_type_id": type_id,
-            "date": "2099-07-14",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }),
+        data=json.dumps(
+            {
+                "session_type_id": type_id,
+                "date": "2099-07-14",
+                "start_time": "19:00",
+                "duration_minutes": 90,
+            }
+        ),
     )
 
     _go_to_sessions_as(page, "member")
@@ -192,6 +197,6 @@ def test_sessions_page_no_visual_regression_mobile(page: Page) -> None:
     btn_box = ical_btn.bounding_box()
     assert btn_box is not None, "iCal button bounding box should not be None"
     assert btn_box["x"] >= 0, "iCal button should not overflow left edge"
-    assert btn_box["x"] + btn_box["width"] <= 375 + 1, (
-        f"iCal button overflows right edge: x={btn_box['x']}, width={btn_box['width']}"
-    )
+    assert (
+        btn_box["x"] + btn_box["width"] <= 375 + 1
+    ), f"iCal button overflows right edge: x={btn_box['x']}, width={btn_box['width']}"

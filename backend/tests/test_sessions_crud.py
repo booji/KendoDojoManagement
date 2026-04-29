@@ -248,7 +248,9 @@ async def test_get_session_instance_not_found(instance_repo) -> None:
     """GET /sessions/{id} must return 404 when the ID is unknown."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     fake_id = str(uuid.uuid4())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{fake_id}")
     assert response.status_code == 404
 
@@ -263,7 +265,9 @@ async def test_get_session_instance_admin_sees_coach_notes(instance_repo) -> Non
     """Admin GET /sessions/{id} must include the real coach_notes value."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     inst = await _seed_instance(instance_repo, coach_notes="Focus on men-uchi today")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{inst['id']}")
     assert response.status_code == 200
     body = response.json()
@@ -277,8 +281,12 @@ async def test_get_session_instance_member_sees_null_coach_notes(
 ) -> None:
     """Member GET /sessions/{id} must return coach_notes as null even when stored value is non-null."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    inst = await _seed_instance(instance_repo, coach_notes="Secret notes for admin only")
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    inst = await _seed_instance(
+        instance_repo, coach_notes="Secret notes for admin only"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.get(f"/sessions/{inst['id']}")
     assert response.status_code == 200
     body = response.json()
@@ -315,7 +323,9 @@ async def test_put_session_instance_updates_target_only(
         "start_time": "20:00",
         "duration_minutes": 60,
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.put(f"/sessions/{target['id']}", json=update_payload)
     assert response.status_code == 200
     body = response.json()
@@ -357,7 +367,9 @@ async def test_patch_template_regenerates_future_instances(
         "duration_minutes": 60,
         "location": "New Location",
     }
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.patch(
             f"/sessions/templates/{tmpl['id']}", json=update_payload
         )
@@ -395,7 +407,9 @@ async def test_patch_template_leaves_past_instances_untouched(
     )
 
     update_payload = {"start_time": "20:00", "duration_minutes": 60}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.patch(
             f"/sessions/templates/{tmpl['id']}", json=update_payload
         )
@@ -404,8 +418,12 @@ async def test_patch_template_leaves_past_instances_untouched(
     # Past instance must still exist and be unmodified
     past_after = await instance_repo.get(past_inst["id"])
     assert past_after is not None, "Past instance must not be deleted"
-    assert past_after["start_time"] == "19:00", "Past instance start_time must be unchanged"
-    assert past_after["duration_minutes"] == 90, "Past instance duration must be unchanged"
+    assert (
+        past_after["start_time"] == "19:00"
+    ), "Past instance start_time must be unchanged"
+    assert (
+        past_after["duration_minutes"] == 90
+    ), "Past instance duration must be unchanged"
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +445,9 @@ async def test_delete_template_cancels_future_instances(
         instance_date="2099-07-01",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200
 
@@ -445,7 +465,9 @@ async def test_delete_template_deactivates_template(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     tmpl = await _seed_template(template_repo)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200
 

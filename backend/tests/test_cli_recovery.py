@@ -110,9 +110,7 @@ def seeded_db():
     os.unlink(db_path)
 
 
-async def _seed_user(
-    engine, email: str, user_id: str, *, role: str = "member"
-) -> None:
+async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
         await conn.execute(
@@ -200,12 +198,16 @@ async def test_cli_token_stored_with_null_created_by_id(tmp_db) -> None:
     factory = async_sessionmaker(eng2, expire_on_commit=False)
     async with factory() as session:
         rows = (
-            await session.execute(
-                select(AdminRecoveryToken).where(
-                    AdminRecoveryToken.user_id == target_id
+            (
+                await session.execute(
+                    select(AdminRecoveryToken).where(
+                        AdminRecoveryToken.user_id == target_id
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     await eng2.dispose()
 
     assert len(rows) == 1
@@ -237,12 +239,16 @@ async def test_cli_token_only_one_row_created(tmp_db) -> None:
     factory = async_sessionmaker(eng2, expire_on_commit=False)
     async with factory() as session:
         rows = (
-            await session.execute(
-                select(AdminRecoveryToken).where(
-                    AdminRecoveryToken.user_id == target_id
+            (
+                await session.execute(
+                    select(AdminRecoveryToken).where(
+                        AdminRecoveryToken.user_id == target_id
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     await eng2.dispose()
 
     assert len(rows) == 1
@@ -260,7 +266,9 @@ async def test_cli_generated_token_redeems_returns_200(db_client) -> None:
     # Seed with created_by_id=None to simulate CLI-generated token
     await _seed_admin_token(db_client, target_id, plaintext, created_by_id=None)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -277,7 +285,9 @@ async def test_cli_generated_token_redeems_returns_access_token(db_client) -> No
     plaintext = "cli-break-glass-token-abcd"
     await _seed_admin_token(db_client, target_id, plaintext, created_by_id=None)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
@@ -300,7 +310,9 @@ async def test_cli_generated_token_marked_used_after_redeem(db_client) -> None:
         db_client, target_id, plaintext, created_by_id=None
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
             json={"email": _TARGET_EMAIL, "code": plaintext},
