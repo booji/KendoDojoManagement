@@ -1,4 +1,12 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(pytest)",
+      "Bash(cd * && . .venv/bin/activate && pytest *)",
+      "Bash(. .venv/bin/activate && pytest *)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
