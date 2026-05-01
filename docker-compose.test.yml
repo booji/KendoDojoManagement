@@ -1,0 +1,27 @@
+# DO NOT USE IN PRODUCTION — test only
+services:
+  test:
+    build:
+      context: .
+      target: backend-dev-deps
+    volumes:
+      - ./backend:/app
+    environment:
+      WATCHFILES_FORCE_POLLING: "1"
+    env_file:
+      - .env.test
+    command: watchfiles --filter python "pytest tests/ -x -q" .
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env.test
+    # NO named volume — ephemeral, destroyed on `down`
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kendo_test -d kendo_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

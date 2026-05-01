@@ -2,6 +2,8 @@ import os
 from typing import Any
 
 import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Must be set before any app imports so token.py can read it
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
@@ -78,3 +80,73 @@ def _reset_rate_limiter():
         app.state.limiter._storage.reset()
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL integration fixtures
+# ---------------------------------------------------------------------------
+
+_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")
+
+
+@pytest.fixture(scope="session")
+def pg_engine():
+    """Session-scoped async engine pointed at the DATABASE_URL env var.
+
+    In the docker-compose.test.yml stack, DATABASE_URL is postgresql+asyncpg://...
+    Falls back to sqlite+aiosqlite for local runs without docker.
+    """
+    url = _DATABASE_URL
+    connect_args = {}
+    if url.startswith("sqlite"):
+        connect_args["check_same_thread"] = False
+    return create_async_engine(url, connect_args=connect_args)
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def _setup_schema(pg_engine):
+    """Create all tables once per test session (PostgreSQL only).
+
+    No-op when DATABASE_URL is SQLite so existing local tests continue to work.
+    """
+    if not _DATABASE_URL.startswith("postgresql"):
+        yield
+        return
+
+    # Import all models so they register with Base.metadata
+    import app.attendance.db_models  # noqa: F401
+    import app.auth.db_models  # noqa: F401
+    import app.grades.db_models  # noqa: F401
+    import app.members.db_models  # noqa: F401
+    import app.sessions.db_models  # noqa: F401
+    import app.settings.models  # noqa: F401
+    from app.db.base import Base
+
+    async with pg_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with pg_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture
+async def db_session(pg_engine) -> AsyncSession:
+    """Function-scoped async session with savepoint rollback for test isolation.
+
+    Each test gets a fresh savepoint; on teardown the transaction is rolled back,
+    leaving the database clean for the next test.
+    """
+    async with pg_engine.connect() as conn:
+        await conn.begin()
+        # Nested transaction = SAVEPOINT
+        await conn.begin_nested()
+
+        session_factory = async_sessionmaker(
+            bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        )
+        session = session_factory()
+
+        yield session
+
+        await session.close()
+        await conn.rollback()
