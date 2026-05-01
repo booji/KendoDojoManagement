@@ -26,6 +26,7 @@ from app.auth.models import (
     UserClaims,
 )
 from app.auth.token import encode_token
+from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 
 _NOT_FOUND = HTTPException(
@@ -116,27 +117,34 @@ async def register_passkey_complete(
     result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if user is None:
+        log_security_event("passkey_registered", "failure")
         raise _NOT_FOUND
 
     if not user.pending_challenge or not user.challenge_issued_at:
+        log_security_event("passkey_registered", "failure", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No registration in progress",
         )
     age = datetime.now(UTC) - user.challenge_issued_at.replace(tzinfo=UTC)
     if age > timedelta(seconds=config.WEBAUTHN_CHALLENGE_TTL_SECONDS):
+        log_security_event("passkey_registered", "failure", user_id=user.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Registration challenge expired",
         )
     expected_challenge = _decode_challenge(user.pending_challenge)
 
-    verified = webauthn.verify_registration_response(
-        credential=_to_registration_credential(payload.credential),
-        expected_challenge=expected_challenge,
-        expected_rp_id=config.WEBAUTHN_RP_ID,
-        expected_origin=config.WEBAUTHN_ORIGIN,
-    )
+    try:
+        verified = webauthn.verify_registration_response(
+            credential=_to_registration_credential(payload.credential),
+            expected_challenge=expected_challenge,
+            expected_rp_id=config.WEBAUTHN_RP_ID,
+            expected_origin=config.WEBAUTHN_ORIGIN,
+        )
+    except Exception:
+        log_security_event("passkey_registered", "failure", user_id=user.id)
+        raise
 
     existing_count_result = await uow.session.execute(
         select(func.count())
@@ -160,6 +168,7 @@ async def register_passkey_complete(
     user.pending_challenge = None
     await uow.commit()
 
+    log_security_event("passkey_registered", "success", user_id=user.id)
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
         email=user.email,
@@ -259,4 +268,5 @@ async def login_passkey_complete(
         is_active=user.is_active,
         theme=user.theme,  # type: ignore[arg-type]
     )
+    log_security_event("login_passkey", "success", user_id=user.id)
     return TokenResponse(access_token=encode_token(claims))

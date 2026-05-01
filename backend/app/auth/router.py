@@ -34,7 +34,9 @@ from app.auth.passkey_service import (
     register_passkey_begin,
     register_passkey_complete,
 )
+from app.auth.password import verify_password
 from app.auth.rate_limiter import (
+    MAX_FAILURES,
     PER_IP_LIMIT,
     check_lockout,
     clear_lockout,
@@ -55,7 +57,8 @@ from app.auth.recovery_service import (
     is_admin_token_valid,
 )
 from app.auth.service import register_user
-from app.auth.token import encode_recovery_token
+from app.auth.token import encode_recovery_token, encode_token
+from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 
@@ -70,6 +73,9 @@ async def register_password(
     return await register_user(payload, uow)
 
 
+_MAX_PASSWORD_FAILURES = 5
+
+
 @router.post("/login/password", status_code=200)
 @limiter.limit(PER_IP_LIMIT)
 async def login_password(
@@ -77,27 +83,27 @@ async def login_password(
     payload: LoginRequest,
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    attempt_repo: Annotated[AbstractAttemptRepository, Depends(get_attempt_repo)],
 ) -> dict:
-    # Look up the user first so we can apply per-account lockout
     result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
     if user is not None:
         # Check lockout before verifying password
         if await check_lockout(user.id, uow.session):
+            log_security_event("login_lockout", "failure", user_id=user.id)
             raise HTTPException(
                 status_code=status.HTTP_423_LOCKED,
                 detail="Account temporarily locked. Try again later.",
             )
 
-    # Delegate to service for credential verification
-    from app.auth.password import verify_password
-    from app.auth.token import encode_token
-
     if user is None or not verify_password(payload.password, user.hashed_password):
         if user is not None:
-            await record_failure(user.id, uow.session)
+            new_count = await record_failure(user.id, uow.session)
             await uow.commit()
+            if new_count >= MAX_FAILURES:
+                log_security_event("login_lockout", "failure", user_id=user.id)
+        log_security_event("login_password", "failure")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -119,13 +125,11 @@ async def login_password(
         is_active=user.is_active,
         theme=user.theme,  # type: ignore[arg-type]
     )
-    from app.auth.models import TokenResponse
-
-    token_response = TokenResponse(access_token=encode_token(claims))
-
+    token_response_val = encode_token(claims)
+    log_security_event("login_password", "success", user_id=user.id)
     response.set_cookie(
         key="access_token",
-        value=token_response.access_token,
+        value=token_response_val,
         httponly=True,
         samesite="strict",
         secure=config.COOKIE_SECURE,
@@ -220,7 +224,11 @@ async def passkey_login_complete(
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
-    token_response = await login_passkey_complete(payload, uow)
+    try:
+        token_response = await login_passkey_complete(payload, uow)
+    except Exception:
+        log_security_event("login_passkey", "failure")
+        raise
     response.set_cookie(
         key="access_token",
         value=token_response.access_token,
@@ -288,6 +296,7 @@ async def delete_passkey(
                 detail="Cannot delete your only passkey without recovery codes",
             )
     await repo.delete(passkey_id, claims.sub)
+    log_security_event("passkey_deleted", "success", user_id=claims.sub)
 
 
 @router.post("/recovery/codes/generate", status_code=200)
@@ -374,6 +383,7 @@ async def redeem_recovery_code(
         await recovery_repo.mark_used(matched_id)
         await attempt_repo.log_attempt(user.id, ip, success=True)
         await uow.commit()
+        log_security_event("recovery_redeem", "success", user_id=user.id)
         token = encode_recovery_token(user_id=user.id, email=user.email)
         return {"access_token": token, "token_type": "bearer"}
 
@@ -390,11 +400,13 @@ async def redeem_recovery_code(
         await admin_token_repo.mark_admin_token_used(matched_admin_id)
         await attempt_repo.log_attempt(user.id, ip, success=True)
         await uow.commit()
+        log_security_event("recovery_redeem", "success", user_id=user.id)
         token = encode_recovery_token(user_id=user.id, email=user.email)
         return {"access_token": token, "token_type": "bearer"}
 
     await attempt_repo.log_attempt(user.id, ip, success=False)
     await uow.commit()
+    log_security_event("recovery_redeem", "failure", user_id=user.id)
     if failures + 1 >= 5:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -429,4 +441,10 @@ async def generate_admin_token(
         expires_at=expires_at,
     )
     await uow.commit()
+    log_security_event(
+        "admin_token_generated",
+        "success",
+        user_id=claims.sub,
+        detail={"target_user_id": payload.user_id},
+    )
     return {"token": plaintext}
