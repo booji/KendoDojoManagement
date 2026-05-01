@@ -1,0 +1,47 @@
+# DO NOT USE IN PRODUCTION — dev only, uses weak credentials from .env.dev
+services:
+  backend:
+    build:
+      context: .
+      target: backend-dev-deps
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      WATCHFILES_FORCE_POLLING: "1"
+    env_file:
+      - .env.dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      target: frontend-deps
+    volumes:
+      - ./frontend:/frontend
+      - /frontend/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      BACKEND_URL: "http://backend:8000"
+    command: npm run dev -- --host 0.0.0.0
+
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env.dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kendo_dev -d kendo_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

@@ -12,10 +12,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/health": "http://localhost:8000",
-      "/static": "http://localhost:8000",
+      "/health": process.env.BACKEND_URL ?? "http://localhost:8000",
+      "/static": process.env.BACKEND_URL ?? "http://localhost:8000",
       "/api": {
-        target: "http://localhost:8000",
+        target: process.env.BACKEND_URL ?? "http://localhost:8000",
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
