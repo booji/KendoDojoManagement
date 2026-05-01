@@ -23,6 +23,7 @@ from app.attendance.repository import (
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_member_repo
@@ -84,6 +85,13 @@ async def generate_checkin_token(
     expires_at = datetime.now(UTC) + timedelta(hours=24)
     record = await token_repo.create(session_id, expires_at)
     await uow.commit()
+    log_security_event(
+        "checkin_token_generated",
+        "success",
+        detail={"session_id": session_id},
+    )
+    if isinstance(record.get("expires_at"), datetime):
+        record = {**record, "expires_at": record["expires_at"].isoformat()}
     return CheckinTokenRead(**record)
 
 
