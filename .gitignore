@@ -217,6 +217,7 @@ dist/
 # Env overrides (may contain real secrets)
 .env.local
 .env.*.local
+.env.prod
 
 # SQLite
 *.db
