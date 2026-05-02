@@ -16,9 +16,9 @@ class User(UUIDBase):
     theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")
     pending_challenge: Mapped[str | None] = mapped_column(String(255), nullable=True)
     challenge_issued_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
+        DateTime(timezone=True), nullable=True
     )
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     login_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
@@ -34,9 +34,9 @@ class PasskeyCredential(UUIDBase):
     label: Mapped[str] = mapped_column(String(255), nullable=False, default="Passkey")
     aaguid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RecoveryCode(UUIDBase):
@@ -47,9 +47,9 @@ class RecoveryCode(UUIDBase):
     )
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     set_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
 
@@ -60,7 +60,7 @@ class RecoveryAttempt(UUIDBase):
         ForeignKey("users.id"), nullable=False, index=True
     )
     attempted_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -77,7 +77,7 @@ class AdminRecoveryToken(UUIDBase):
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

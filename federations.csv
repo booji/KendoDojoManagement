@@ -1,0 +1,68 @@
+Country/Region,ISO Code,Federation Name,Abbreviation,Website,Continental Grouping,Type,Confidence
+FIK (Global),INT,International Kendo Federation,FIK,https://www.kendo-fik.org,Global,Global Body,High
+South Africa,ZA,South African Kendo Federation,SAKF,http://www.sakf.co.za,Africa,National,High
+Tunisia,TN,Association Sportive de Kendo,,,Africa,National,High
+USA,US,All United States Kendo Federation,AUSKF,https://www.auskf.org/,Pan-Am,National,High
+Hawaii (USA),US-HI,Hawaii Kendo Federation,HKF,http://www.hawaiikendofederation.org,Pan-Am,Regional (within USA),High
+Canada,CA,Canadian Kendo Federation,CKF,http://kendo-canada.com/,Pan-Am,National,High
+Mexico,MX,Mexican Kendo Federation,,https://m.facebook.com/KendoMexico/,Pan-Am,National,High
+Brazil,BR,Brazilian Kendo Confederation,CBK,http://www.cbkendo.com.br,Pan-Am,National,High
+Argentina,AR,Federacion Argentina de Kendo,,http://www.kendoargentina.org,Pan-Am,National,High
+Venezuela,VE,Federacion Venezolana de Kendo,,https://www.facebook.com/FVK.KENDO.IAIDO.JODO/,Pan-Am,National,High
+Aruba,AW,Kendo Aruba/Bun Bu Itchi,,https://www.facebook.com/kendoaruba,Pan-Am,Special Status,High
+Chile,CL,Chilean Kendo Federation,,https://www.facebook.com/Federacion-Chilena-de-Kendo-302733993086777/,Pan-Am,National,High
+Dominican Republic,DO,Federation Dominicana de Kendo,,http://www.fedoken.org,Pan-Am,National,High
+Ecuador,EC,Asociacion Ecuatoriana de Kendo,,http://kendoecuador.org,Pan-Am,National,High
+Colombia,CO,Asociacion Colombiana de Kendo,,http://kendocolombia.org/,Pan-Am,National,High
+Peru,PE,Federacion Deportiva Nacional de Kendo del Peru (FDNKP),FDNKP,,Pan-Am,National,High
+Uruguay,UY,Asociacion Uruguaya de Kendo Iaido (AUKI),AUKI,,Pan-Am,National,High
+Latin America,INT-LATAM,Latin American Kendo Confederation,LAKC,http://www.clakendo.org,Pan-Am,Regional Body,High
+Japan,JP,All Japan Kendo Federation,ZNKR,http://www.kendo.or.jp,Asia,National,High
+South Korea,KR,Korea Kumdo Association,KKA,http://www.kumdo.org,Asia,National,High
+Chinese Taipei,TW,Republic of China Kendo Association,,http://www.rocka.org.tw,Asia,National,High
+Hong Kong,HK,Kendo Association of Hong Kong China,HKKA,http://www.hongkongkendo.com/,Asia,National,High
+Malaysia,MY,Malaysia Kendo Association,,http://malaysiakendo.org/,Asia,National,High
+Singapore,SG,Singapore Kendo Club,,https://singaporekendo.org/,Asia,National,High
+Thailand,TH,Thailand Kendo Club,,,Asia,National,High
+Macao,MO,China-Macao Kendo Associations Union,,http://macaukendo.org,Asia,Special Status,High
+China,CN,CKOU,,,Asia,National,High
+Indonesia,ID,Indonesia Kendo Association,,,Asia,National,High
+Mongolia,MN,Mongolian Kendo Federation,,http://kendo.mn,Asia,National,High
+Philippines,PH,United Kendo Federation of the Philippines,,https://www.kendo.ph/,Asia,National,High
+Australia,AU,Australian Kendo Renmei Incorporated,AKR,http://www.kendoaustralia.asn.au,Oceania,National,High
+New Zealand,NZ,New Zealand Kendo Federation,NZKF,http://www.kendo.org.nz,Oceania,National,High
+Europe,INT-EU,European Kendo Federation,EKF,http://www.ekf-eu.com,Europe,Regional Body,High
+United Kingdom,GB,British Kendo Association,BKA,http://www.britishkendoassociation.com,Europe,National,High
+France,FR,Comite National de Kendo (FFJDA),CNKDR,http://www.cnkendo-dr.com,Europe,National,High
+Sweden,SE,Swedish Kendo Federation,SKF,http://www.kendoforbundet.se,Europe,National,High
+Belgium,BE,All Belgium Kendo Federation,ABKF,http://www.abkfevents.be,Europe,National,High
+Netherlands,NL,Nederlandse Kendo Renmei,NKR,http://www.nkr.nl,Europe,National,High
+Switzerland,CH,Swiss Kendo and Iaido Federation,SKI,http://www.kendo.ch,Europe,National,High
+Germany,DE,Deutscher Kendobund (DKenB),DKenB,http://www.dkenb.de,Europe,National,High
+Spain,ES,Royal Spanish Judo Federation (Kendo),RFEJYDA,http://www.rfejudo.com,Europe,National,High
+Austria,AT,Austrian Kendo Association,,http://www.kendo-austria.at,Europe,National,High
+Norway,NO,Norwegian Kendo Committee,,http://www.kampsport.no,Europe,National,High
+Denmark,DK,Danish Kendo Federation,DKF,http://www.kendo-dkf.dk,Europe,National,High
+Finland,FI,Finnish Kendo Association,,http://www.kendoliitto.fi,Europe,National,High
+Italy,IT,Confederazione Italiana Kendo,CIK,http://www.confederazioneitalianakendo.it,Europe,National,High
+Hungary,HU,Hungarian Kendo Iaido Jodo Federation,,http://www.kendo.hu,Europe,National,High
+Poland,PL,Polish Kendo Federation,PZF,http://www.kendo.pl,Europe,National,High
+Serbia,RS,Serbian Kendo Federation,,http://www.kendo.rs,Europe,National,High
+Czech Republic,CZ,Czech Kendo Federation,CKF,http://www.czech-kendo.cz,Europe,National,High
+Romania,RO,Romanian Kendo Department,,http://www.kendo-romania.ro,Europe,National,High
+Luxembourg,LU,Shobukai Kendo Luxembourg,,http://www.shobukai.lu,Europe,National,High
+Russia,RU,Russian Kendo Federation,,http://www.kendo-russia.ru,Europe,National,High
+Portugal,PT,Federacao Portuguesa de Kendo (FPKIJ),FPKIJ,http://www.kendo.pt,Europe,National,High
+Ireland,IE,Kendo na h-Eireann,,http://www.irishkendofederation.org,Europe,National,High
+Bulgaria,BG,Bulgarian Kendo Federation,,http://www.kendo.bg,Europe,National,High
+Greece,GR,Hellenic Kendo Iaido Naginata Federation,,http://www.eokin.gr,Europe,National,High
+Israel,IL,Israel Kendo and Budo Federation,,,Europe/Asia,National,High
+Montenegro,ME,Montenegrin Kendo Federation,,,Europe,National,High
+Latvia,LV,Latvian Kendo Federation,,,Europe,National,High
+Lithuania,LT,Lithuanian Kendo Association,,https://lka.kendo.lt/,Europe,National,High
+Croatia,HR,Croatian Kendo Association,,http://www.kendo.hr,Europe,National,High
+Slovenia,SI,Kendo Federation of Slovenia,,http://www.kendo-zveza.si,Europe,National,High
+Turkey,TR,Turkish Kendo Association,,,Europe/Asia,National,High
+Malta,MT,Maltese Kendo Federation,,,Europe,National,High
+North Macedonia,MK,Macedonian Kendo Iaido Federation,,http://www.kendo.mk,Europe,National,High
+Ukraine,UA,Ukrainian Kendo Federation,,,Europe,National,High

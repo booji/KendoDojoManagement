@@ -12,13 +12,78 @@ description: TDD and QA enforcer for KendoDojoManagement. Ensures red-green-refa
 
 Never write a full test suite before implementing. Never implement without a test first.
 
-## Backend test rules
+## Two test modes
+
+The project has **two distinct backend test tiers**. Use the right tier for the right job.
+
+### Tier 1 — Unit tests (stub-based, no DB)
+
 - Framework: `pytest` + `anyio` (`@pytest.mark.anyio`)
-- **No DB in tests** — use `StubRepository` (plain Python class, no engine)
+- **No DB** — use `StubRepository` (plain Python class, no engine)
 - Override deps via `app.dependency_overrides[get_x_repo] = lambda: stub`
 - Always add an `autouse=True` fixture that calls `app.dependency_overrides.clear()`
 - Test files: `backend/tests/test_{concept}.py`
-- Run: `.venv/bin/pytest -q` from `backend/`
+- Run locally: `. .venv/bin/activate && pytest -q` from `backend/`
+
+This is the default tier. Write unit tests here for all new routes and domain logic.
+
+### Tier 2 — PostgreSQL integration tests (container-backed)
+
+Use these when the test **must verify real SQL behaviour** — constraint enforcement, savepoint rollback, migration correctness, query semantics that SQLite doesn't emulate.
+
+**Fixtures (defined in `conftest.py`):**
+
+| Fixture | Scope | What it provides |
+|---------|-------|-----------------|
+| `pg_engine` | session | `AsyncEngine` pointing at `DATABASE_URL`; falls back to SQLite if not set |
+| `db_session` | function | `AsyncSession` wrapped in a savepoint; rolled back after each test for isolation |
+
+`DATABASE_URL` is injected by the test container via `.env.test`:
+```
+DATABASE_URL=postgresql+asyncpg://kendo_test:kendo_test_password@db:5432/kendo_test
+```
+
+**Running the container stack:**
+```bash
+# Preferred: watcher re-runs pytest on every file change
+make test
+
+# One-shot inside the running container
+# docker:
+docker compose -f docker-compose.test.yml exec test pytest -q
+# podman:
+podman-compose -f docker-compose.test.yml exec test pytest -q
+```
+
+> The `Makefile` auto-detects `podman-compose` vs `docker compose`, so `make test` and `make down` work unchanged on either runtime.
+
+The `make test` stack mounts `./backend` into the container and watches for changes — no restart needed. The `db` service is ephemeral (no named volume); it is destroyed on `make down`.
+
+**Writing a container-backed test:**
+```python
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+@pytest.mark.anyio
+async def test_member_persists(db_session: AsyncSession) -> None:
+    await db_session.execute(
+        text("INSERT INTO members (id, email) VALUES (:id, :email)"),
+        {"id": "uuid-1", "email": "a@b.com"},
+    )
+    result = await db_session.execute(
+        text("SELECT email FROM members WHERE id = :id"), {"id": "uuid-1"}
+    )
+    assert result.scalar() == "a@b.com"
+```
+
+**Tier 2 guard — only use `db_session` / `pg_engine` when:**
+- Testing a repository implementation against real SQL
+- Verifying DB constraints (unique, FK, not-null)
+- Testing migration correctness
+- Anything where SQLite's looser semantics would mask a bug
+
+Do **not** use `db_session` for route-level tests — those belong in Tier 1 with stubs.
 
 ## What to test
 - Observable HTTP behaviour: status codes, response body shape, error messages
@@ -30,6 +95,7 @@ Never write a full test suite before implementing. Never implement without a tes
 - Asserting on private state (reading `._session`, `._items` in tests)
 - Tests that only pass because the stub returns a hardcoded value without exercising route logic
 - Missing `autouse` cleanup — causes test-order pollution
+- Using `db_session` in route tests (use a stub instead; the container is for repository/SQL tests)
 
 ## Coverage gaps to check
 After any new route or repository method, verify tests exist for:
@@ -37,6 +103,7 @@ After any new route or repository method, verify tests exist for:
 - Not found (404) if applicable
 - Validation error (422) for required fields
 - Unauthorised (401) if the endpoint is protected
+- For new repository implementations: at least one Tier 2 test verifying real SQL behaviour
 
 ## Playwright browser tests
 
