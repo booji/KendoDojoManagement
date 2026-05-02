@@ -1,15 +1,20 @@
 """
-Failing tests for issue #108: PostgreSQL fixtures with per-test savepoint rollback.
+PostgreSQL integration tests: engine fixture and per-test savepoint rollback.
 
-These tests will FAIL until conftest.py is updated to provide:
-  - `pg_engine`   — an AsyncEngine whose URL starts with postgresql+asyncpg://
-  - `db_session`  — an AsyncSession wrapped in a savepoint that is rolled back after
-                    each test, so data written in one test is invisible to the next.
+Skipped automatically when DATABASE_URL is not postgresql+asyncpg:// (i.e. local
+dev without Docker). Run via docker-compose.test.yml which sets DATABASE_URL.
 """
+
+import os
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL", "").startswith("postgresql"),
+    reason="PostgreSQL not configured — set DATABASE_URL=postgresql+asyncpg://",
+)
 
 # ---------------------------------------------------------------------------
 # 1. Verify the engine fixture uses PostgreSQL, not SQLite
