@@ -250,7 +250,7 @@ async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_endpoint_returns_valid_ical_structure(instance_repo) -> None:
+async def test_ical_endpoint_returns_valid_ical_structure(instance_repo, type_repo) -> None:
     """GET /sessions/ical must return a valid iCal document beginning with BEGIN:VCALENDAR."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -283,7 +283,7 @@ async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) 
 
 
 @pytest.mark.anyio
-async def test_ical_feed_includes_dtstart_and_dtend(instance_repo) -> None:
+async def test_ical_feed_includes_dtstart_and_dtend(instance_repo, type_repo) -> None:
     """VEVENT must include DTSTART and DTEND derived from date, start_time,
     and duration_minutes."""
     await _seed_instance(
@@ -305,7 +305,7 @@ async def test_ical_feed_includes_dtstart_and_dtend(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_feed_includes_location(instance_repo) -> None:
+async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
     """VEVENT must include LOCATION when set on the instance."""
     await _seed_instance(instance_repo, location="Dojo East Wing")
     async with AsyncClient(
@@ -317,7 +317,7 @@ async def test_ical_feed_includes_location(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_feed_includes_description_from_info(instance_repo) -> None:
+async def test_ical_feed_includes_description_from_info(instance_repo, type_repo) -> None:
     """VEVENT must include DESCRIPTION set to the info field."""
     await _seed_instance(instance_repo, info="Practice focus: kote strikes")
     async with AsyncClient(
@@ -329,7 +329,7 @@ async def test_ical_feed_includes_description_from_info(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_feed_omits_location_when_null(instance_repo) -> None:
+async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> None:
     """VEVENT must not include a LOCATION line when location is None."""
     await _seed_instance(instance_repo, location=None)
     async with AsyncClient(
@@ -343,7 +343,7 @@ async def test_ical_feed_omits_location_when_null(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_feed_omits_description_when_info_null(instance_repo) -> None:
+async def test_ical_feed_omits_description_when_info_null(instance_repo, type_repo) -> None:
     """VEVENT must not include a DESCRIPTION line when info is None."""
     await _seed_instance(instance_repo, info=None)
     async with AsyncClient(
@@ -362,7 +362,7 @@ async def test_ical_feed_omits_description_when_info_null(instance_repo) -> None
 
 
 @pytest.mark.anyio
-async def test_ical_feed_never_includes_coach_notes(instance_repo) -> None:
+async def test_ical_feed_never_includes_coach_notes(instance_repo, type_repo) -> None:
     """iCal feed must never expose coach_notes regardless of the stored value."""
     await _seed_instance(
         instance_repo,
@@ -387,7 +387,7 @@ async def test_ical_feed_never_includes_coach_notes(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_vevent_uid_equals_instance_uuid(instance_repo) -> None:
+async def test_ical_vevent_uid_equals_instance_uuid(instance_repo, type_repo) -> None:
     """Each VEVENT UID must equal the session instance UUID."""
     inst = await _seed_instance(instance_repo)
     async with AsyncClient(
@@ -399,7 +399,7 @@ async def test_ical_vevent_uid_equals_instance_uuid(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_vevent_uid_stable_across_requests(instance_repo) -> None:
+async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) -> None:
     """VEVENT UIDs must remain identical across two consecutive requests."""
     inst = await _seed_instance(instance_repo)
     async with AsyncClient(
