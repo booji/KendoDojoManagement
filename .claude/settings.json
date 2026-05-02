@@ -4,7 +4,17 @@
       "Bash(pytest *)",
       "Bash(pytest)",
       "Bash(cd * && . .venv/bin/activate && pytest *)",
-      "Bash(. .venv/bin/activate && pytest *)"
+      "Bash(. .venv/bin/activate && pytest *)",
+      "Bash(podman-compose -f docker-compose.test.yml exec test *)",
+      "Bash(docker compose -f docker-compose.test.yml exec test *)",
+      "Bash(make test)",
+      "Bash(make help)",
+      "Bash(make logs)",
+      "Bash(make down)",
+      "Bash(. .venv/bin/activate && ruff check *)",
+      "Bash(cd * && . .venv/bin/activate && ruff check *)",
+      "Bash(npm run build *)",
+      "Bash(npm run build)"
     ]
   },
   "hooks": {
