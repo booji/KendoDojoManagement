@@ -23,7 +23,6 @@ The project has **two distinct backend test tiers**. Use the right tier for the 
 - Override deps via `app.dependency_overrides[get_x_repo] = lambda: stub`
 - Always add an `autouse=True` fixture that calls `app.dependency_overrides.clear()`
 - Test files: `backend/tests/test_{concept}.py`
-- Run locally: `. .venv/bin/activate && pytest -q` from `backend/`
 
 This is the default tier. Write unit tests here for all new routes and domain logic.
 
@@ -45,19 +44,19 @@ DATABASE_URL=postgresql+asyncpg://kendo_test:kendo_test_password@db:5432/kendo_t
 
 **Running the container stack:**
 ```bash
-# Preferred: watcher re-runs pytest on every file change
-make test
+# One-shot full run (canonical verification command):
+podman-compose -p kdmtest -f docker-compose.test.yml run --rm test pytest tests/ -q
+# or with docker:
+docker compose -f docker-compose.test.yml run --rm test pytest tests/ -q
 
-# One-shot inside the running container
-# docker:
-docker compose -f docker-compose.test.yml exec test pytest -q
-# podman:
-podman-compose -f docker-compose.test.yml exec test pytest -q
+# Rebuild the image first if requirements-dev.txt or Dockerfile changed:
+podman-compose -p kdmtest -f docker-compose.test.yml build test
+
+# Watcher mode for active development (re-runs pytest on every file change):
+make test
 ```
 
-> The `Makefile` auto-detects `podman-compose` vs `docker compose`, so `make test` and `make down` work unchanged on either runtime.
-
-The `make test` stack mounts `./backend` into the container and watches for changes — no restart needed. The `db` service is ephemeral (no named volume); it is destroyed on `make down`.
+Use `-p kdmtest` to keep the test DB isolated from the dev stack. The `db` service is ephemeral — destroyed on `make down`.
 
 **Writing a container-backed test:**
 ```python

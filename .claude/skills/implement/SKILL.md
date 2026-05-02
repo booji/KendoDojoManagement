@@ -78,11 +78,14 @@ Issue #<number> has been partially implemented: failing tests exist in backend/t
 Your job: implement the minimum backend code to make those tests pass.
 
 Follow the pattern: model → repository → router → register in main.py
-After implementation run from backend/ with venv active (. .venv/bin/activate):
-  ruff check . --fix
-  pytest -q
+After implementation:
+1. Lint from backend/ with venv active (. .venv/bin/activate):
+     ruff check . --fix
+2. Run the full test suite in the container from the repo root:
+     podman-compose -p kdmtest -f docker-compose.test.yml build test
+     podman-compose -p kdmtest -f docker-compose.test.yml run --rm test pytest tests/ -q
 
-Both must pass with zero errors. Report the pytest output.
+Both must pass with zero errors (known permanent failures in #128 and test_generate_checkin_token_* are acceptable). Report the pytest output.
 If a model changed, remind the user to run Alembic migrations.
 ```
 
@@ -132,11 +135,11 @@ You are the QA agent for KendoDojoManagement.
 
 Read the skill at .claude/skills/tdd/SKILL.md for all rules and conventions, especially the Playwright section and the xfail lifecycle.
 
-## Step 1 — Run unit/integration tests
+## Step 1 — Run the full test suite in the container
 ```bash
-cd /home/pip/KendoDojoManagement/backend
-. .venv/bin/activate
-pytest -q --ignore=tests/test_e2e_*.py
+cd /home/pip/KendoDojoManagement
+podman-compose -p kdmtest -f docker-compose.test.yml build test
+podman-compose -p kdmtest -f docker-compose.test.yml run --rm test pytest tests/ -q --ignore=tests/test_e2e_*.py
 ```
 
 ## Step 2 — Start servers for e2e tests

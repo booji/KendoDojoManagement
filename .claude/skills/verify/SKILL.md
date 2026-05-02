@@ -1,15 +1,43 @@
 ---
 name: verify
-description: Run the full test suite to verify correctness. Update the test command in this file once the stack is chosen.
+description: Run the full test suite in the PostgreSQL test container to verify correctness.
 ---
 
-Run the project's full test suite and report results.
+# Verify — full test suite
 
-**Until the stack is decided**, ask the user which test command to run, or check for a test runner config (e.g., pytest.ini, jest.config.*, cargo test, go test ./...) and use the appropriate command.
+All tests run in the PostgreSQL test container. Do not use local pytest as the verification step.
 
-Once the stack is set, update this skill with the exact command (e.g., `pytest`, `cargo test`, `go test ./...`, `npm test`).
+## Command
 
-Report:
-- Pass/fail summary
-- Any failing test names and their error output
+From the repo root:
+
+```bash
+# First time, or after any change to requirements-dev.txt or Dockerfile:
+podman-compose -p kdmtest -f docker-compose.test.yml build test
+
+# Run the full suite:
+podman-compose -p kdmtest -f docker-compose.test.yml run --rm test pytest tests/ -q
+```
+
+Use `-p kdmtest` to keep the test DB container isolated from the dev stack.
+
+For `docker compose` instead of `podman-compose`:
+```bash
+docker compose -f docker-compose.test.yml run --rm test pytest tests/ -q
+```
+
+## Known permanent skips / open issues
+
+Do not treat these as regressions:
+
+| Test | Status | Reason |
+|------|--------|--------|
+| `test_pg_isolation::test_pg_fixture_uses_postgresql` | SKIP locally, PASS in container | By design |
+| `test_pg_isolation::test_data_isolation_between_tests_a/b` | ERROR | Tracked in #128 |
+| `test_ical::test_generate_checkin_token_*` | FAIL | Pre-existing app bug |
+
+## Report
+
+- Pass / fail / error / skip counts
+- Any new failures not in the known list above (with full error output)
 - Whether all tests passed or action is needed

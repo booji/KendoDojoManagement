@@ -24,8 +24,12 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
 2. **Red-green TDD.** One failing test → minimum implementation → pass → refactor.
 3. After changes run both — both must pass:
    ```
+   # Lint (from backend/):
    .venv/bin/ruff check . --fix
-   .venv/bin/pytest -q
+
+   # Tests — run in the PostgreSQL container (from repo root):
+   podman-compose -p kdmtest -f docker-compose.test.yml build test
+   podman-compose -p kdmtest -f docker-compose.test.yml run --rm test pytest tests/ -q
    ```
 4. Register new routers in `app/main.py`.
 5. When a model changes, remind the user to create an Alembic migration:
