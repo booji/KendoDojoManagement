@@ -6,8 +6,10 @@ services:
       target: backend-dev-deps
     volumes:
       - ./backend:/app
+      - .:/repo:ro
     environment:
       WATCHFILES_FORCE_POLLING: "1"
+      REPO_ROOT: /repo
     env_file:
       - .env.test
     command: watchfiles --filter python "pytest tests/ -x -q" .

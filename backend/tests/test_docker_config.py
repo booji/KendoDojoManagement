@@ -3,6 +3,7 @@ File-based tests for Production Docker Compose configuration (Issue #5).
 No live Docker required — these inspect files on disk.
 """
 
+import os
 import re as _re
 from pathlib import Path
 
@@ -12,7 +13,9 @@ import yaml
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).parent.parent.parent  # repo root
+# In the docker-compose.test.yml container, REPO_ROOT=/repo (full repo mount).
+# Locally, walk three levels up from this file (backend/tests/ → repo root).
+ROOT = Path(os.environ["REPO_ROOT"]) if "REPO_ROOT" in os.environ else Path(__file__).parent.parent.parent
 COMPOSE_FILE = ROOT / "docker-compose.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 REQUIREMENTS = ROOT / "backend" / "requirements.txt"
