@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -84,6 +85,9 @@ async def generate_checkin_token(
         )
     expires_at = datetime.now(UTC) + timedelta(hours=24)
     record = await token_repo.create(session_id, expires_at)
+    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")
+    checkin_url = f"{origin.rstrip('/')}/checkin/{record['token']}"
+    await session_repo.update(session_id, {"checkin_url": checkin_url})
     await uow.commit()
     log_security_event(
         "checkin_token_generated",

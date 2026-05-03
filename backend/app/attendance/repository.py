@@ -52,6 +52,10 @@ class AbstractCheckinTokenRepository(Protocol):
 class AbstractSessionInstanceRepository(Protocol):
     async def get(self, instance_id: str) -> dict[str, Any] | None: ...
 
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None: ...
+
 
 def _attendance_to_dict(obj: Attendance) -> dict[str, Any]:
     return {
@@ -238,3 +242,17 @@ class SqlSessionInstanceRepository:
         )
         obj = result.scalar_one_or_none()
         return _instance_to_dict(obj) if obj else None
+
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionInstance).where(SessionInstance.id == instance_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        for key, value in data.items():
+            setattr(obj, key, value)
+        await self._session.flush()
+        return _instance_to_dict(obj)

@@ -829,6 +829,11 @@ async def test_checkin_token_generation_emits_log(
                 }
             return None
 
+        async def update(
+            self, instance_id: str, data: dict[str, _Any]
+        ) -> dict[str, _Any] | None:
+            return None
+
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: admin_claims
     app.dependency_overrides[get_checkin_token_repo] = lambda: checkin_token_repo
     app.dependency_overrides[get_session_instance_repo] = lambda: _StubSessionInstanceRepoWithData()
