@@ -1,3 +1,5 @@
+import uuid
+
 from pydantic import BaseModel, Field
 
 
@@ -18,7 +20,7 @@ class CheckinTokenRead(BaseModel):
 
 
 class MarkAttendedRequest(BaseModel):
-    member_id: str
+    member_id: uuid.UUID
 
 
 class AddVisitorRequest(BaseModel):
