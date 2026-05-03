@@ -8,6 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # Must be set before any app imports so token.py can read it
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
+_DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if not _DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError(
+        "DATABASE_URL must be a PostgreSQL URL (postgresql+asyncpg://...). "
+        "Run tests via: docker compose -f docker-compose.test.yml run --rm test"
+    )
+
 
 @pytest.fixture(scope="session")
 def anyio_backend() -> str:
@@ -86,34 +93,14 @@ def _reset_rate_limiter():
 # PostgreSQL integration fixtures
 # ---------------------------------------------------------------------------
 
-_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")
-
 
 @pytest.fixture(scope="session")
 def pg_engine():
-    """Session-scoped async engine pointed at the DATABASE_URL env var.
-
-    In the docker-compose.test.yml stack, DATABASE_URL is postgresql+asyncpg://...
-    Falls back to sqlite+aiosqlite for local runs without docker.
-    """
-    url = _DATABASE_URL
-    connect_args = {}
-    if url.startswith("sqlite"):
-        connect_args["check_same_thread"] = False
-    return create_async_engine(url, connect_args=connect_args)
+    return create_async_engine(_DATABASE_URL)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _setup_schema(pg_engine):
-    """Create all tables once per test session (PostgreSQL only).
-
-    No-op when DATABASE_URL is SQLite so existing local tests continue to work.
-    """
-    if not _DATABASE_URL.startswith("postgresql"):
-        yield
-        return
-
-    # Import all models so they register with Base.metadata
     import app.attendance.db_models  # noqa: F401
     import app.auth.db_models  # noqa: F401
     import app.grades.db_models  # noqa: F401

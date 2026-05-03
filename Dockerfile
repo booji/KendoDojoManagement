@@ -7,6 +7,14 @@ FROM backend-deps AS backend-dev-deps
 COPY backend/requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
+FROM backend-dev-deps AS backend-e2e-deps
+# Install Node.js 22 (for Vite dev server) and Playwright system deps
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN playwright install --with-deps chromium
+
 FROM node:22-slim AS frontend-deps
 WORKDIR /frontend
 COPY frontend/package*.json ./

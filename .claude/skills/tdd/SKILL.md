@@ -23,9 +23,10 @@ The project has **two distinct backend test tiers**. Use the right tier for the 
 - Override deps via `app.dependency_overrides[get_x_repo] = lambda: stub`
 - Always add an `autouse=True` fixture that calls `app.dependency_overrides.clear()`
 - Test files: `backend/tests/test_{concept}.py`
-- Run locally: `. .venv/bin/activate && pytest -q` from `backend/`
 
 This is the default tier. Write unit tests here for all new routes and domain logic.
+
+> **All pytest runs — including Tier 1 — must run inside the test container.** `conftest.py` raises `RuntimeError` on startup if `DATABASE_URL` is not a PostgreSQL URL, so `pytest` on the host will always fail.
 
 ### Tier 2 — PostgreSQL integration tests (container-backed)
 
@@ -35,7 +36,7 @@ Use these when the test **must verify real SQL behaviour** — constraint enforc
 
 | Fixture | Scope | What it provides |
 |---------|-------|-----------------|
-| `pg_engine` | session | `AsyncEngine` pointing at `DATABASE_URL`; falls back to SQLite if not set |
+| `pg_engine` | session | `AsyncEngine` pointing at `DATABASE_URL` (PostgreSQL only — no SQLite fallback) |
 | `db_session` | function | `AsyncSession` wrapped in a savepoint; rolled back after each test for isolation |
 
 `DATABASE_URL` is injected by the test container via `.env.test`:
@@ -45,19 +46,14 @@ DATABASE_URL=postgresql+asyncpg://kendo_test:kendo_test_password@db:5432/kendo_t
 
 **Running the container stack:**
 ```bash
-# Preferred: watcher re-runs pytest on every file change
-make test
+# One-shot: runs all tests (unit + integration + e2e) then exits
+docker compose -f docker-compose.test.yml run --rm test
 
-# One-shot inside the running container
-# docker:
-docker compose -f docker-compose.test.yml exec test pytest -q
-# podman:
-podman-compose -f docker-compose.test.yml exec test pytest -q
+# Drop the stack when done
+docker compose -f docker-compose.test.yml down
 ```
 
-> The `Makefile` auto-detects `podman-compose` vs `docker compose`, so `make test` and `make down` work unchanged on either runtime.
-
-The `make test` stack mounts `./backend` into the container and watches for changes — no restart needed. The `db` service is ephemeral (no named volume); it is destroyed on `make down`.
+The test container (`backend-e2e-deps` stage) includes Python, Node 22, and Playwright/Chromium. `run_tests.sh` starts uvicorn on `:8000` and Vite on `:5173`, waits for both, then runs `pytest tests/ -x -q`. The `db` service is ephemeral — destroyed on `down`.
 
 **Writing a container-backed test:**
 ```python
@@ -108,15 +104,9 @@ After any new route or repository method, verify tests exist for:
 ## Playwright browser tests
 
 ### Setup
-All commands run from `backend/` with the venv active:
-```bash
-cd backend
-. .venv/bin/activate
-pip install pytest-playwright
-playwright install chromium
-```
+Playwright is included in `requirements-dev.txt` and installed with browsers in the `backend-e2e-deps` Docker stage — no local setup required.
 
-Tests live in `backend/tests/test_e2e_*.py`. They require both servers running — the orchestrator starts them before invoking the QA agent.
+Tests live in `backend/tests/test_e2e_*.py`. They run automatically as part of `docker compose -f docker-compose.test.yml run --rm test` — `run_tests.sh` starts uvicorn and Vite before invoking pytest.
 
 ### Fixtures
 ```python
@@ -176,5 +166,5 @@ def test_user_can_register(page: Page) -> None:
 ### Rules
 - Browser tests assert **observable UI behaviour** — visible text, button states, navigation — not implementation details
 - One browser test per acceptance criterion from the issue; do not write exhaustive UI tests
-- Run with: `. .venv/bin/activate && pytest backend/tests/test_e2e_*.py --headed=false -q` from `backend/`
+- Run via: `docker compose -f docker-compose.test.yml run --rm test` (includes e2e automatically)
 - Never leave `xfail` stubs in place after implementation — promote or escalate
