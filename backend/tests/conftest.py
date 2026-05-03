@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 # Must be set before any app imports so token.py can read it
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
@@ -116,24 +117,35 @@ async def _setup_schema(pg_engine):
         await conn.run_sync(Base.metadata.drop_all)
 
 
-@pytest.fixture
-async def db_session(pg_engine) -> AsyncSession:
+@pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
     """Function-scoped async session with savepoint rollback for test isolation.
 
     Each test gets a fresh savepoint; on teardown the transaction is rolled back,
     leaving the database clean for the next test.
+
+    Uses NullPool so every call creates a fresh asyncpg connection in the
+    current (function-scoped) event loop.  The session-scoped pg_engine uses a
+    standard pool whose connections are bound to the session event loop; reusing
+    those pooled connections from a different loop causes InterfaceError.  By
+    bypassing the pool entirely, db_session is always loop-safe.
     """
-    async with pg_engine.connect() as conn:
-        await conn.begin()
-        # Nested transaction = SAVEPOINT
-        await conn.begin_nested()
+    engine = create_async_engine(_DATABASE_URL, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            nested = await conn.begin_nested()
 
-        session_factory = async_sessionmaker(
-            bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
-        )
-        session = session_factory()
+            session_factory = async_sessionmaker(
+                bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+            )
+            session = session_factory()
 
-        yield session
+            yield session
 
-        await session.close()
-        await conn.rollback()
+            await session.close()
+            if nested.is_active:
+                await nested.rollback()
+            await trans.rollback()
+    finally:
+        await engine.dispose()

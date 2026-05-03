@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_pg_fixture_uses_postgresql(pg_engine: AsyncEngine) -> None:
     """The `pg_engine` fixture must connect to PostgreSQL, not SQLite.
 
@@ -47,7 +47,7 @@ _SENTINEL_A = "isolation-sentinel-test-a"
 _SENTINEL_B = "isolation-sentinel-test-b"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_data_isolation_between_tests_a(db_session: AsyncSession) -> None:
     """Insert a row in test A; verify test B's sentinel is NOT present.
 
@@ -79,7 +79,7 @@ async def test_data_isolation_between_tests_a(db_session: AsyncSession) -> None:
     )
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_data_isolation_between_tests_b(db_session: AsyncSession) -> None:
     """Insert a row in test B; verify test A's sentinel is NOT present.
 
