@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import Annotated, Any
 
@@ -99,11 +100,11 @@ async def list_members(
 
 @router.get("/members/{member_id}")
 async def get_member(
-    member_id: str,
+    member_id: uuid.UUID,
     claims: _Member,
     repo: _Repo,
 ) -> MemberResponse:
-    record = await repo.get(member_id)
+    record = await repo.get(str(member_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -126,7 +127,7 @@ async def get_member(
 
 @router.put("/members/{member_id}")
 async def update_member(
-    member_id: str,
+    member_id: uuid.UUID,
     payload: UpdateMemberRequest,
     _claims: _Admin,
     repo: _Repo,
@@ -137,7 +138,7 @@ async def update_member(
         data["dob"] = data["dob"].isoformat()
     if "join_date" in data and hasattr(data["join_date"], "isoformat"):
         data["join_date"] = data["join_date"].isoformat()
-    record = await repo.update(member_id, data)
+    record = await repo.update(str(member_id), data)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -153,12 +154,12 @@ async def update_member(
 
 @router.delete("/members/{member_id}")
 async def deactivate_member(
-    member_id: str,
+    member_id: uuid.UUID,
     _claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
-    record = await repo.deactivate(member_id)
+    record = await repo.deactivate(str(member_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"

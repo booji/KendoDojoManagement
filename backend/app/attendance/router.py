@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -45,13 +46,13 @@ _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 
 @router.post("/sessions/{session_id}/checkin")
 async def checkin_to_session(
-    session_id: str,
+    session_id: uuid.UUID,
     current_user: _Member,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> AttendanceRead:
-    session = await session_repo.get(session_id)
+    session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
@@ -60,39 +61,43 @@ async def checkin_to_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Session is cancelled"
         )
-    existing = await attendance_repo.get_by_session_member(session_id, current_user.sub)
+    existing = await attendance_repo.get_by_session_member(
+        str(session_id), current_user.sub
+    )
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
         )
-    record = await attendance_repo.check_in(session_id, current_user.sub, "self")
+    record = await attendance_repo.check_in(str(session_id), current_user.sub, "self")
     await uow.commit()
     return AttendanceRead(**record)
 
 
 @router.get("/sessions/{session_id}/checkin-token")
 async def generate_checkin_token(
-    session_id: str,
+    session_id: uuid.UUID,
     _claims: _Admin,
     session_repo: _SessRepo,
     token_repo: _TokRepo,
     uow: _UoW,
 ) -> CheckinTokenRead:
-    session = await session_repo.get(session_id)
+    session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     expires_at = datetime.now(UTC) + timedelta(hours=24)
-    record = await token_repo.create(session_id, expires_at)
-    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")
+    record = await token_repo.create(str(session_id), expires_at)
+    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv(
+        "WEBAUTHN_ORIGIN", "http://localhost:5173"
+    )
     checkin_url = f"{origin.rstrip('/')}/checkin/{record['token']}"
-    await session_repo.update(session_id, {"checkin_url": checkin_url})
+    await session_repo.update(str(session_id), {"checkin_url": checkin_url})
     await uow.commit()
     log_security_event(
         "checkin_token_generated",
         "success",
-        detail={"session_id": session_id},
+        detail={"session_id": str(session_id)},
     )
     if isinstance(record.get("expires_at"), datetime):
         record = {**record, "expires_at": record["expires_at"].isoformat()}
@@ -144,36 +149,36 @@ async def checkin_via_token(
 
 @router.get("/sessions/{session_id}/attendance")
 async def list_session_attendance(
-    session_id: str,
+    session_id: uuid.UUID,
     _claims: _Admin,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
 ) -> list[AttendanceRead]:
-    session = await session_repo.get(session_id)
+    session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
-    records = await attendance_repo.list_for_session(session_id)
+    records = await attendance_repo.list_for_session(str(session_id))
     return [AttendanceRead(**r) for r in records]
 
 
 @router.post("/sessions/{session_id}/attendance", status_code=status.HTTP_201_CREATED)
 async def admin_mark_attended(
-    session_id: str,
+    session_id: uuid.UUID,
     body: MarkAttendedRequest,
     current_user: _Admin,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> AttendanceRead:
-    session = await session_repo.get(session_id)
+    session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     record = await attendance_repo.admin_mark_attended(
-        session_id, body.member_id, current_user.sub
+        str(session_id), str(body.member_id), current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)
@@ -185,13 +190,13 @@ async def admin_mark_attended(
     response_class=Response,
 )
 async def remove_attendance(
-    session_id: str,
-    member_id: str,
+    session_id: uuid.UUID,
+    member_id: uuid.UUID,
     _claims: _Admin,
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> Response:
-    removed = await attendance_repo.remove_attendance(session_id, member_id)
+    removed = await attendance_repo.remove_attendance(str(session_id), str(member_id))
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found"
@@ -202,20 +207,20 @@ async def remove_attendance(
 
 @router.post("/sessions/{session_id}/visitors", status_code=status.HTTP_201_CREATED)
 async def add_visitor(
-    session_id: str,
+    session_id: uuid.UUID,
     body: AddVisitorRequest,
     current_user: _Admin,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> AttendanceRead:
-    session = await session_repo.get(session_id)
+    session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     record = await attendance_repo.add_visitor(
-        session_id, body.visitor_name, current_user.sub
+        str(session_id), body.visitor_name, current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)
@@ -223,7 +228,7 @@ async def add_visitor(
 
 @router.get("/members/{member_id}/attendance")
 async def get_member_attendance_history(
-    member_id: str,
+    member_id: uuid.UUID,
     current_user: _Member,
     attendance_repo: _AttRepo,
     member_repo: _MemberRepo,
@@ -232,11 +237,15 @@ async def get_member_attendance_history(
         # Resolve the calling user's own member record to compare by member UUID
         # (current_user.sub is a user UUID; member_id is a member record UUID)
         own_member = await member_repo.get_by_user_id(current_user.sub)
-        own_member_id = own_member["id"] if own_member is not None else None
-        if own_member_id != member_id:
+        raw_id = own_member["id"] if own_member is not None else None
+        try:
+            own_member_id = str(uuid.UUID(raw_id)) if raw_id is not None else None
+        except ValueError:
+            own_member_id = None
+        if own_member_id != str(member_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot access another member's attendance history",
             )
-    records = await attendance_repo.list_for_member(member_id)
+    records = await attendance_repo.list_for_member(str(member_id))
     return [AttendanceRead(**r) for r in records]

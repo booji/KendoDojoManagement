@@ -42,6 +42,10 @@ _MEMBER_B = UserClaims(
     sub="member-b-uuid", email="member-b@dojo.test", role="member", is_active=True
 )
 
+# Valid UUIDs for use in URL path params (member record IDs, not user IDs)
+_MEMBER_A_ID = "00000000-0000-0000-0000-000000000001"
+_MEMBER_B_ID = "00000000-0000-0000-0000-000000000002"
+
 
 def _admin_override():
     return _ADMIN
@@ -60,7 +64,7 @@ def _member_b_override():
 # ---------------------------------------------------------------------------
 
 _MEMBER_A_RECORD: dict[str, Any] = {
-    "id": "member-a-uuid",
+    "id": _MEMBER_A_ID,
     "email": "member-a@dojo.test",
     "full_name": "Member A",
     "user_id": _MEMBER_A.sub,
@@ -68,7 +72,7 @@ _MEMBER_A_RECORD: dict[str, Any] = {
 }
 
 _MEMBER_B_RECORD: dict[str, Any] = {
-    "id": "member-b-uuid",
+    "id": _MEMBER_B_ID,
     "email": "member-b@dojo.test",
     "full_name": "Member B",
     "user_id": _MEMBER_B.sub,
@@ -272,7 +276,7 @@ def test_grade_display_names() -> None:
 async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     """Promoting a Mukyū member advances them to Rokkyū."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -284,14 +288,14 @@ async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     # The new grade should be Rokkyū
     assert body["grade"] == "ROKKYUU"
     assert body["display_name"] == "Rokkyū (6-kyu)"
-    assert body["member_id"] == member_id
+    assert body["member_id"] == _MEMBER_A_ID
 
 
 @pytest.mark.anyio
 async def test_promote_increments_grade(member_repo, grade_repo) -> None:
     """Promoting twice from Mukyū results in Gokyū."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -309,7 +313,7 @@ async def test_promote_increments_grade(member_repo, grade_repo) -> None:
 async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
     """Promoting a member already at Hachidan must return 400."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     # Seed the grade repo so the member is already at Hachidan
     await grade_repo.add_promotion(
@@ -333,7 +337,7 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
 async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
     """Promotion response includes awarded_by (admin member_id) and promoted_at."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -360,7 +364,7 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
     """GET /members/{id}/grades returns history with oldest entry first."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     # Seed three promotions in order
     await grade_repo.add_promotion(
@@ -415,7 +419,7 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
 async def test_grade_history_own_member(member_repo, grade_repo) -> None:
     """A member can read their own grade history — 200."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     await grade_repo.add_promotion(
         member_id=member_id,
@@ -441,7 +445,7 @@ async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> 
     """A non-admin member cannot read another member's grade history — 403."""
     # Member B tries to read Member A's history
     app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
-    member_a_id = "member-a-uuid"
+    member_a_id = _MEMBER_A_ID
 
     await grade_repo.add_promotion(
         member_id=member_a_id,
@@ -464,7 +468,7 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
     """An admin can read any member's grade history — 200."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    member_id = "member-a-uuid"
+    member_id = _MEMBER_A_ID
 
     await grade_repo.add_promotion(
         member_id=member_id,

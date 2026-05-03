@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, timedelta
 from typing import Annotated, Any
 
@@ -69,13 +70,13 @@ async def list_session_types(repo: _TypeRepo) -> list[dict[str, Any]]:
 
 @router.put("/session-types/{type_id}")
 async def update_session_type(
-    type_id: str,
+    type_id: uuid.UUID,
     payload: SessionTypeUpdate,
     _claims: _Admin,
     repo: _TypeRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    result = await repo.update(type_id, payload.colour)
+    result = await repo.update(str(type_id), payload.colour)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
@@ -129,11 +130,11 @@ async def create_session_template(
 
 @router.get("/sessions/templates/{template_id}")
 async def get_session_template(
-    template_id: str,
+    template_id: uuid.UUID,
     _claims: _Admin,
     repo: _TmplRepo,
 ) -> dict[str, Any]:
-    template = await repo.get(template_id)
+    template = await repo.get(str(template_id))
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
@@ -143,14 +144,14 @@ async def get_session_template(
 
 @router.post("/sessions/templates/{template_id}/generate")
 async def generate_session_instances(
-    template_id: str,
+    template_id: uuid.UUID,
     payload: GenerateRequest,
     _claims: _Admin,
     template_repo: _TmplRepo,
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> list[dict[str, Any]]:
-    template = await template_repo.get(template_id)
+    template = await template_repo.get(str(template_id))
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
@@ -163,7 +164,7 @@ async def generate_session_instances(
         existing_list = [
             r
             for r in (await instance_repo.list())
-            if r.get("template_id") == template_id
+            if r.get("template_id") == str(template_id)
         ]
         existing_dates = {r["date"] for r in existing_list}
     instance_data_list = generate_instances(template, horizon, existing_dates)
@@ -194,12 +195,12 @@ async def create_adhoc_session(
 
 @router.post("/sessions/{instance_id}/cancel")
 async def cancel_session_instance(
-    instance_id: str,
+    instance_id: uuid.UUID,
     _claims: _Admin,
     repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    record = await repo.cancel(instance_id)
+    record = await repo.cancel(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -299,11 +300,11 @@ async def list_upcoming_sessions(
 
 @router.get("/sessions/{instance_id}")
 async def get_session_instance(
-    instance_id: str,
+    instance_id: uuid.UUID,
     claims: _Member,
     repo: _InstRepo,
 ) -> dict[str, Any]:
-    record = await repo.get(instance_id)
+    record = await repo.get(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -317,14 +318,14 @@ async def get_session_instance(
 
 @router.put("/sessions/{instance_id}")
 async def update_session_instance(
-    instance_id: str,
+    instance_id: uuid.UUID,
     payload: SessionInstanceUpdate,
     _claims: _Admin,
     repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await repo.update(instance_id, data)
+    record = await repo.update(str(instance_id), data)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -336,7 +337,7 @@ async def update_session_instance(
 
 @router.patch("/sessions/templates/{template_id}")
 async def update_session_template(
-    template_id: str,
+    template_id: uuid.UUID,
     payload: SessionTemplateUpdate,
     _claims: _Admin,
     template_repo: _TmplRepo,
@@ -344,14 +345,14 @@ async def update_session_template(
     uow: _UoW,
 ) -> dict[str, Any]:
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    template = await template_repo.update(template_id, data)
+    template = await template_repo.update(str(template_id), data)
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
     today = date.today()
     horizon = today + timedelta(days=90)
-    await instance_repo.delete_future_for_template(template_id, today)
+    await instance_repo.delete_future_for_template(str(template_id), today)
     instance_data_list = generate_instances(template, horizon, set())
     for inst_data in instance_data_list:
         await instance_repo.add(inst_data)
@@ -361,18 +362,18 @@ async def update_session_template(
 
 @router.delete("/sessions/templates/{template_id}")
 async def delete_session_template(
-    template_id: str,
+    template_id: uuid.UUID,
     _claims: _Admin,
     template_repo: _TmplRepo,
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    template = await template_repo.deactivate(template_id)
+    template = await template_repo.deactivate(str(template_id))
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
     today = date.today()
-    await instance_repo.cancel_future_for_template(template_id, today)
+    await instance_repo.cancel_future_for_template(str(template_id), today)
     await uow.commit()
     return template

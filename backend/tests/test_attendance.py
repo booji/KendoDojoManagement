@@ -41,11 +41,18 @@ _ADMIN = UserClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
 _MEMBER = UserClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
+    sub="00000000-0000-0000-0000-000000000002",
+    email="member@dojo.test",
+    role="member",
+    is_active=True,
 )
 _OTHER_MEMBER = UserClaims(
     sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
 )
+
+# Valid UUIDs for use in path params
+_SOME_MEMBER_UUID = "00000000-0000-0000-0000-000000000099"
+_NONEXISTENT_MEMBER_UUID = "00000000-0000-0000-0000-000000000000"
 
 
 def _admin_override():
@@ -562,13 +569,13 @@ async def test_admin_mark_attended_returns_201(
     ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",
-            json={"member_id": "some-member-uuid"},
+            json={"member_id": _SOME_MEMBER_UUID},
         )
 
     assert response.status_code == 201
     body = response.json()
     assert body["session_id"] == session["id"]
-    assert body["member_id"] == "some-member-uuid"
+    assert body["member_id"] == _SOME_MEMBER_UUID
     assert body["recorded_by"] == _ADMIN.sub
 
 
@@ -585,7 +592,7 @@ async def test_admin_mark_attended_nonexistent_session_returns_404(
     ) as c:
         response = await c.post(
             f"/sessions/{fake_id}/attendance",
-            json={"member_id": "some-member-uuid"},
+            json={"member_id": _SOME_MEMBER_UUID},
         )
 
     assert response.status_code == 404
@@ -641,7 +648,7 @@ async def test_admin_remove_attendance_returns_204(
 ) -> None:
     session = session_repo.seed(cancelled=False)
     await attendance_repo.admin_mark_attended(
-        session["id"], "some-member-uuid", "admin-uuid"
+        session["id"], _SOME_MEMBER_UUID, "admin-uuid"
     )
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
@@ -649,7 +656,7 @@ async def test_admin_remove_attendance_returns_204(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.delete(
-            f"/sessions/{session['id']}/attendance/some-member-uuid"
+            f"/sessions/{session['id']}/attendance/{_SOME_MEMBER_UUID}"
         )
 
     assert response.status_code == 204
@@ -667,7 +674,7 @@ async def test_admin_remove_attendance_not_found_returns_404(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.delete(
-            f"/sessions/{session['id']}/attendance/nonexistent-member"
+            f"/sessions/{session['id']}/attendance/{_NONEXISTENT_MEMBER_UUID}"
         )
 
     assert response.status_code == 404
@@ -684,7 +691,7 @@ async def test_member_cannot_remove_attendance(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.delete(
-            f"/sessions/{session['id']}/attendance/some-member-uuid",
+            f"/sessions/{session['id']}/attendance/{_SOME_MEMBER_UUID}",
             cookies={"access_token": _member_token()},
         )
 

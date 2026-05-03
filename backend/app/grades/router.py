@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -55,18 +56,18 @@ def _entry_from_dict(d: dict[str, Any]) -> GradeHistoryEntry:
 
 @router.post("/members/{member_id}/promote")
 async def promote_member(
-    member_id: str,
+    member_id: uuid.UUID,
     claims: _Admin,
     member_repo: _MemberRepo,
     grade_repo: _GradeRepo,
 ) -> PromoteResponse:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
 
-    current = await grade_repo.get_current_grade(member_id)
+    current = await grade_repo.get_current_grade(str(member_id))
     next_grade = _next_grade(current)
 
     if next_grade is None:
@@ -77,7 +78,7 @@ async def promote_member(
 
     promoted_at = datetime.now(UTC).isoformat()
     record = await grade_repo.add_promotion(
-        member_id=member_id,
+        member_id=str(member_id),
         grade=next_grade.value,
         display_name=next_grade.display_name,
         awarded_by=claims.sub,
@@ -93,12 +94,12 @@ async def promote_member(
 
 @router.get("/members/{member_id}/grades")
 async def get_grade_history(
-    member_id: str,
+    member_id: uuid.UUID,
     claims: _Member,
     member_repo: _MemberRepo,
     grade_repo: _GradeRepo,
 ) -> list[GradeHistoryEntry]:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -110,5 +111,5 @@ async def get_grade_history(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
             )
 
-    history = await grade_repo.get_history(member_id)
+    history = await grade_repo.get_history(str(member_id))
     return [_entry_from_dict(e) for e in history]
