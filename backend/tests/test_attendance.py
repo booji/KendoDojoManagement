@@ -82,6 +82,15 @@ class StubSessionInstanceRepo:
     async def get(self, instance_id: str) -> dict[str, Any] | None:
         return self._store.get(instance_id)
 
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        record = self._store.get(instance_id)
+        if record is None:
+            return None
+        record.update(data)
+        return record
+
     def seed(self, cancelled: bool = False) -> dict[str, Any]:
         new_id = str(uuid.uuid4())
         record = {
