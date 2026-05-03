@@ -237,7 +237,11 @@ async def get_member_attendance_history(
         # Resolve the calling user's own member record to compare by member UUID
         # (current_user.sub is a user UUID; member_id is a member record UUID)
         own_member = await member_repo.get_by_user_id(current_user.sub)
-        own_member_id = own_member["id"] if own_member is not None else None
+        raw_id = own_member["id"] if own_member is not None else None
+        try:
+            own_member_id = str(uuid.UUID(raw_id)) if raw_id is not None else None
+        except ValueError:
+            own_member_id = None
         if own_member_id != str(member_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
