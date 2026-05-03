@@ -1,7 +1,19 @@
 import uuid
 
 from sqlalchemy import String
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
+
+
+class UUIDType(TypeDecorator):
+    impl = String(36)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        return dialect.type_descriptor(String(36))
 
 
 class Base(DeclarativeBase):
@@ -14,7 +26,7 @@ class UUIDBase(Base):
     __abstract__ = True
 
     id: Mapped[str] = mapped_column(
-        String(36),
+        UUIDType(),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import UUIDBase
+from app.db.base import UUIDBase, UUIDType
 
 
 class User(UUIDBase):
@@ -18,14 +18,18 @@ class User(UUIDBase):
     challenge_issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     login_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class PasskeyCredential(UUIDBase):
     __tablename__ = "passkey_credentials"
 
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        UUIDType(), ForeignKey("users.id"), nullable=False
+    )
     credential_id: Mapped[bytes] = mapped_column(
         LargeBinary, nullable=False, unique=True
     )
@@ -36,18 +40,22 @@ class PasskeyCredential(UUIDBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RecoveryCode(UUIDBase):
     __tablename__ = "recovery_codes"
 
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
     )
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     set_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -57,7 +65,7 @@ class RecoveryAttempt(UUIDBase):
     __tablename__ = "recovery_attempts"
 
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
     )
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -70,14 +78,16 @@ class AdminRecoveryToken(UUIDBase):
     __tablename__ = "admin_recovery_tokens"
 
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
     )
     created_by_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id"), nullable=True
+        UUIDType(), ForeignKey("users.id"), nullable=True
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

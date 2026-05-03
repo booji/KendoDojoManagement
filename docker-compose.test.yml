@@ -3,16 +3,17 @@ services:
   test:
     build:
       context: .
-      target: backend-dev-deps
+      target: backend-e2e-deps
     volumes:
       - ./backend:/app
+      - ./frontend:/frontend
+      - frontend_node_modules:/frontend/node_modules
       - .:/repo:ro
     environment:
-      WATCHFILES_FORCE_POLLING: "1"
       REPO_ROOT: /repo
     env_file:
       - .env.test
-    command: watchfiles --filter python "pytest tests/ -x -q" .
+    command: /app/run_tests.sh
     depends_on:
       db:
         condition: service_healthy
@@ -27,3 +28,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+volumes:
+  frontend_node_modules:
