@@ -102,6 +102,11 @@ async def admin_update_member_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
+    existing = await mf_repo.get(mf_id)
+    if existing is None or existing.get("member_id") != member_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
+        )
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
     if "renewal_date" in data and hasattr(data["renewal_date"], "isoformat"):
         data["renewal_date"] = data["renewal_date"].isoformat()
@@ -132,11 +137,12 @@ async def admin_remove_member_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    removed = await mf_repo.remove(mf_id)
-    if not removed:
+    existing = await mf_repo.get(mf_id)
+    if existing is None or existing.get("member_id") != member_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
+    await mf_repo.remove(mf_id)
     await uow.commit()
 
 
