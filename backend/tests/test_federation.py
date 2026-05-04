@@ -549,7 +549,7 @@ async def test_deactivated_federation_hidden_from_list_but_record_preserved(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         list_resp = await c.get("/federations")
-    assert response.status_code == 200
+    assert list_resp.status_code == 200
     names = [r["name"] for r in list_resp.json()]
     assert "Will Be Deactivated" not in names
 

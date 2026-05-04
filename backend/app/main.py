@@ -16,7 +16,9 @@ import app.attendance.db_models  # noqa: F401
 
 # Import all models so their tables are registered with Base.metadata
 import app.auth.db_models  # noqa: F401
+import app.federations.db_models  # noqa: F401
 import app.grades.db_models  # noqa: F401
+import app.member_federations.db_models  # noqa: F401
 import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
 import app.settings.models  # noqa: F401
@@ -28,7 +30,9 @@ from app.core.middleware import SecurityHeadersMiddleware
 from app.dashboard.router import router as dashboard_router
 from app.db.base import Base
 from app.db.engine import engine
+from app.federations.router import router as federations_router
 from app.grades.router import router as grades_router
+from app.member_federations.router import router as member_federations_router
 from app.members.router import router as members_router
 from app.reports.router import router as reports_router
 from app.routers.health import router as health_router
@@ -83,12 +87,14 @@ app.include_router(setup_router)
 app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(members_router)
+app.include_router(member_federations_router)
 app.include_router(users_router)
 app.include_router(grades_router)
 app.include_router(attendance_router)
 app.include_router(reports_router)
 app.include_router(settings_router)
 app.include_router(dashboard_router)
+app.include_router(federations_router)
 
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
 os.makedirs(_STATIC_DIR, exist_ok=True)
