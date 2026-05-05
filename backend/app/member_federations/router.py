@@ -151,18 +151,25 @@ async def admin_remove_member_federation(
 # ===========================================================================
 
 
+async def _get_member_by_user(
+    user_id: str, member_repo: AbstractMemberRepository
+) -> dict:
+    member = await member_repo.get_by_user_id(user_id)
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    return member
+
+
 @router.get("/users/me/federations")
 async def me_list_federations(
     claims: _Member,
     member_repo: _MemberRepo,
     mf_repo: _MfRepo,
 ) -> list[MemberFederationResponse]:
-    member = await member_repo.get(claims.sub)
-    if member is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
-        )
-    records = await mf_repo.get_for_member(claims.sub)
+    member = await _get_member_by_user(claims.sub, member_repo)
+    records = await mf_repo.get_for_member(member["id"])
     return [_to_response(r) for r in records]
 
 
@@ -174,13 +181,9 @@ async def me_add_federation(
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
-    member = await member_repo.get(claims.sub)
-    if member is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
-        )
+    member = await _get_member_by_user(claims.sub, member_repo)
     data = payload.model_dump()
-    data["member_id"] = claims.sub
+    data["member_id"] = member["id"]
     if data.get("renewal_date") is not None and hasattr(
         data["renewal_date"], "isoformat"
     ):
@@ -199,9 +202,9 @@ async def me_update_federation(
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
-    # Verify ownership — the membership must belong to this member
+    member = await _get_member_by_user(claims.sub, member_repo)
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != claims.sub:
+    if existing is None or existing.get("member_id") != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
@@ -229,9 +232,9 @@ async def me_remove_federation(
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> None:
-    # Verify ownership
+    member = await _get_member_by_user(claims.sub, member_repo)
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != claims.sub:
+    if existing is None or existing.get("member_id") != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )

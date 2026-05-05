@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError, getMe, performPasskeyRegistration } from "@/api/auth"
+import type { UserClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
 import type { PasskeyRecord } from "@/api/passkeys"
 import {
@@ -11,7 +12,10 @@ import {
   updateMyFederation,
   deleteMyFederation,
 } from "@/api/federations"
-import type { FederationResponse, MemberFederationResponse } from "@/api/federations"
+import type {
+  FederationResponse,
+  MemberFederationResponse,
+} from "@/api/federations"
 import { useThemeContext } from "@/contexts/ThemeProvider"
 import type { Theme } from "@/contexts/ThemeProvider"
 import { Badge } from "@/components/ui/badge"
@@ -37,7 +41,6 @@ type FormState = {
   dob: string
   emergency_contact_name: string
   emergency_contact_phone: string
-  federation_number: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -45,7 +48,6 @@ const EMPTY_FORM: FormState = {
   dob: "",
   emergency_contact_name: "",
   emergency_contact_phone: "",
-  federation_number: "",
 }
 
 const memberToForm = (m: MemberResponse): FormState => ({
@@ -53,7 +55,6 @@ const memberToForm = (m: MemberResponse): FormState => ({
   dob: "",  // dob is not returned by the API — leave blank to avoid overwriting
   emergency_contact_name: m.emergency_contact_name ?? "",
   emergency_contact_phone: m.emergency_contact_phone ?? "",
-  federation_number: m.federation_number ?? "",
 })
 
 // ── Profile summary (read-only) ───────────────────────────────────────────────
@@ -103,7 +104,6 @@ const ProfileSummary = ({
           <Field label="Date of birth" value={null} />
           <Field label="Join date" value={member.join_date} />
           <Field label="Membership status" value={member.membership_status} />
-          <Field label="Federation number" value={member.federation_number} />
           <Field label="Emergency contact" value={member.emergency_contact_name} />
           <Field label="Emergency contact phone" value={member.emergency_contact_phone} />
         </dl>
@@ -521,7 +521,7 @@ const FederationsCard = () => {
     Promise.all([getMyFederations(), listFederations()])
       .then(([mfs, feds]) => {
         setMemberships(mfs)
-        setFederations(feds)
+        setFederations(feds.filter((f) => f.is_active))
       })
       .catch((err: unknown) => {
         setLoadError(isApiError(err) ? err.message : "Failed to load federations")
@@ -684,7 +684,7 @@ const FederationsCard = () => {
                   onChange={(e) => setForm((prev) => ({ ...prev, search: e.target.value, federation_id: "" }))}
                   autoComplete="off"
                 />
-                {filteredFederations.length > 0 && (
+                {form.search.trim() !== "" && !form.federation_id && filteredFederations.length > 0 && (
                   <ul className="mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover text-sm shadow-sm">
                     {filteredFederations.map((f) => (
                       <li key={f.id}>
@@ -710,8 +710,17 @@ const FederationsCard = () => {
                     ))}
                   </ul>
                 )}
-                {filteredFederations.length === 0 && form.search.trim() !== "" && (
+                {filteredFederations.length === 0 && form.search.trim() !== "" && !form.federation_id && (
                   <p className="text-xs text-muted-foreground mt-1">No federations match your search.</p>
+                )}
+                {form.federation_id && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground mt-1"
+                    onClick={() => setForm((prev) => ({ ...prev, federation_id: "", search: "" }))}
+                  >
+                    ✕ Clear selection
+                  </button>
                 )}
               </div>
             )}
@@ -801,7 +810,7 @@ const FederationsCard = () => {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; member: MemberResponse | null }
+  | { status: "ready"; member: MemberResponse | null; user: UserClaims }
   | { status: "error"; message: string }
 
 const SettingsPage = () => {
@@ -813,9 +822,9 @@ const SettingsPage = () => {
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    getMyMember()
-      .then((member) => {
-        setLoadState({ status: "ready", member })
+    Promise.all([getMyMember(), getMe()])
+      .then(([member, user]) => {
+        setLoadState({ status: "ready", member, user })
         setForm(member !== null ? memberToForm(member) : EMPTY_FORM)
       })
       .catch((err: unknown) => {
@@ -852,13 +861,14 @@ const SettingsPage = () => {
       full_name: form.full_name || undefined,
       emergency_contact_name: form.emergency_contact_name || null,
       emergency_contact_phone: form.emergency_contact_phone || null,
-      federation_number: form.federation_number || null,
       ...(form.dob ? { dob: form.dob } : {}),
     }
 
     try {
       const updated = await updateMyMember(payload)
-      setLoadState({ status: "ready", member: updated })
+      setLoadState((prev) =>
+        prev.status === "ready" ? { ...prev, member: updated } : prev
+      )
       setEditing(false)
     } catch (err) {
       setSaveError(isApiError(err) ? err.message : "Failed to save your details")
@@ -888,7 +898,7 @@ const SettingsPage = () => {
   }
 
   return (
-    <div className="px-4 py-6 max-w-2xl mx-auto space-y-6">
+    <div className="px-4 py-6 mx-auto space-y-6 max-w-2xl">
       <h1 className="text-xl font-semibold">Settings</h1>
 
       {!editing ? (
@@ -926,16 +936,6 @@ const SettingsPage = () => {
                       Leave blank to keep your existing date of birth.
                     </p>
                   )}
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="settings_federation_number">Federation number</Label>
-                  <Input
-                    id="settings_federation_number"
-                    value={form.federation_number}
-                    onChange={(e) => handleChange("federation_number", e.target.value)}
-                    placeholder="Optional"
-                  />
                 </div>
 
                 <div className="space-y-1">
