@@ -15,6 +15,8 @@ if not _DATABASE_URL.startswith("postgresql"):
         "DATABASE_URL must be a PostgreSQL URL (postgresql+asyncpg://...). "
         "Run tests via: docker compose -f docker-compose.test.yml run --rm test"
     )
+# Pin it back so load_dotenv() in app/config.py can't override it later.
+os.environ["DATABASE_URL"] = _DATABASE_URL
 
 
 @pytest.fixture(scope="session")
