@@ -20,17 +20,14 @@ import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from app.auth.db_models import User
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
-from app.db.base import Base
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 _ADMIN = UserClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
@@ -51,24 +48,15 @@ def clear_overrides():
 
 
 @pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
+async def db_client(pg_engine: AsyncEngine):
+    factory = async_sessionmaker(pg_engine, expire_on_commit=False)
 
     async def _override():
         async with SQLAlchemyUnitOfWork(factory) as uow:
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield _engine
+    yield pg_engine
 
 
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
@@ -315,7 +303,6 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
         )
         row = result.scalar_one()
 
-    # expires_at may be timezone-naive (sqlite) — normalise
     expires_at = row.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
