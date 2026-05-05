@@ -7,7 +7,6 @@ import {
   getSessionTypes,
   createSession,
   createSessionTemplate,
-  createSessionType,
 } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { getMe } from "@/api/auth"
@@ -142,10 +141,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 
   // Session type
   const [typeId, setTypeId] = useState("")
-  const [newTypeName, setNewTypeName] = useState("")
-  const [showNewTypeInput, setShowNewTypeInput] = useState(false)
-  const [creatingType, setCreatingType] = useState(false)
-  const [localTypes, setLocalTypes] = useState<SessionType[]>(sessionTypes)
 
   // Common fields
   const [time, setTime] = useState("")
@@ -169,17 +164,9 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Keep localTypes in sync when prop changes (e.g. initial load)
-  useEffect(() => {
-    setLocalTypes(sessionTypes)
-  }, [sessionTypes])
-
   const reset = () => {
     setIsRecurring(false)
     setTypeId("")
-    setNewTypeName("")
-    setShowNewTypeInput(false)
-    setCreatingType(false)
     setTime("")
     setDuration("90")
     setLocation("")
@@ -194,27 +181,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
     setIntervalWeeks(1)
     setSubmitting(false)
     setFormError(null)
-  }
-
-  const handleAddType = async () => {
-    const name = newTypeName.trim()
-    if (!name) return
-    setCreatingType(true)
-    try {
-      const newType = await createSessionType(name)
-      setLocalTypes((prev) => [...prev, newType])
-      setTypeId(newType.id)
-      setNewTypeName("")
-      setShowNewTypeInput(false)
-    } catch (err) {
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "Failed to create session type"
-      setFormError(message)
-    } finally {
-      setCreatingType(false)
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -318,63 +284,15 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
               <SelectTrigger id="session-type" className="min-h-[44px]">
                 <SelectValue placeholder="Select type…">
-                  {typeId ? (localTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
+                  {typeId ? (sessionTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {localTypes.map((t) => (
+                {sessionTypes.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {showNewTypeInput ? (
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  placeholder="New type name"
-                  className="min-h-[44px] flex-1 text-sm"
-                  aria-label="New session type name"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      void handleAddType()
-                    }
-                    if (e.key === "Escape") {
-                      setShowNewTypeInput(false)
-                      setNewTypeName("")
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  className="min-h-[44px] shrink-0"
-                  onClick={() => void handleAddType()}
-                  disabled={creatingType || newTypeName.trim() === ""}
-                >
-                  {creatingType ? "Adding…" : "Add"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-[44px] shrink-0"
-                  onClick={() => { setShowNewTypeInput(false); setNewTypeName("") }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline mt-1"
-                onClick={() => setShowNewTypeInput(true)}
-              >
-                Add new type…
-              </button>
-            )}
           </div>
 
           {/* Recurring toggle */}
