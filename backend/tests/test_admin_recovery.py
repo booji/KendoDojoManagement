@@ -13,6 +13,7 @@ Acceptance criteria exercised:
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -20,7 +21,8 @@ import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.auth.db_models import User
 from app.auth.guards import REQUIRE_ADMIN
@@ -48,15 +50,17 @@ def clear_overrides():
 
 
 @pytest.fixture
-async def db_client(pg_engine: AsyncEngine):
-    factory = async_sessionmaker(pg_engine, expire_on_commit=False)
+async def db_client():
+    engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def _override():
         async with SQLAlchemyUnitOfWork(factory) as uow:
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield pg_engine
+    yield engine
+    await engine.dispose()
 
 
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
