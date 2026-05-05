@@ -16,6 +16,12 @@ KendoDojoManagement — manages sessions and members of a kendo dojo. Open sourc
 - **Deployment:** Docker Compose (app + PostgreSQL containers)
 - **Primary keys:** UUID
 
+## Type Configuration Convention
+
+Any domain "type" (e.g. session type, grading, shogo, officer roles, membership type) must be configurable exclusively through Admin Settings. Never add inline type creation to feature dialogs or forms — all type management belongs in the admin settings page.
+
+Planned future types: Grading, Shogo, Officer Roles, Membership Type.
+
 ## Design Philosophy
 
 **Deep modules** (Ousterhout, *A Philosophy of Software Design*): favor small interfaces hiding large implementations. A caller should need to know as little as possible about what's underneath. New modules and abstractions should earn their existence by hiding meaningful complexity.
