@@ -50,8 +50,8 @@ def clear_overrides():
 
 
 @pytest.fixture
-async def db_client():
-    engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+async def db_client(database_url: str):
+    engine = create_async_engine(database_url, poolclass=NullPool)
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def _override():

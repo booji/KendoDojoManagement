@@ -24,6 +24,11 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    return _DATABASE_URL
+
+
 class _NoOpAttendanceRepo:
     """Stub attendance repo used as a default in unit tests that don't set one."""
 
