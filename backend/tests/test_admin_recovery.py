@@ -63,8 +63,9 @@ async def db_client(database_url: str):
     await engine.dispose()
 
 
-async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
-    """Insert a user row into the test DB."""
+async def _seed_user(engine, user_id: str, *, role: str = "member") -> str:
+    """Insert a user row into the test DB. Returns the email used."""
+    email = f"{user_id}@dojo.test"
     async with engine.begin() as conn:
         await conn.execute(
             insert(User).values(
@@ -75,6 +76,7 @@ async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") 
                 is_active=True,
             )
         )
+    return email
 
 
 async def _seed_admin_token(
@@ -189,8 +191,8 @@ async def test_admin_can_generate_token_for_user(db_client) -> None:
     """POST /auth/recovery/admin-token (admin) returns plaintext token."""
     admin_id = str(uuid.uuid4())
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
-    await _seed_user(db_client, "target@dojo.test", target_id)
+    await _seed_user(db_client, admin_id, role="admin")
+    await _seed_user(db_client, target_id)
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -213,8 +215,8 @@ async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     """Response body includes the plaintext token field."""
     admin_id = str(uuid.uuid4())
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
-    await _seed_user(db_client, "target@dojo.test", target_id)
+    await _seed_user(db_client, admin_id, role="admin")
+    await _seed_user(db_client, target_id)
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -243,8 +245,8 @@ async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
 
     admin_id = str(uuid.uuid4())
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
-    await _seed_user(db_client, "target@dojo.test", target_id)
+    await _seed_user(db_client, admin_id, role="admin")
+    await _seed_user(db_client, target_id)
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -280,8 +282,8 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
 
     admin_id = str(uuid.uuid4())
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
-    await _seed_user(db_client, "target@dojo.test", target_id)
+    await _seed_user(db_client, admin_id, role="admin")
+    await _seed_user(db_client, target_id)
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -358,7 +360,7 @@ async def test_unauthenticated_cannot_generate_admin_token() -> None:
 async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     """POST /auth/recovery/admin-token returns 404 when user_id doesn't exist."""
     admin_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
+    await _seed_user(db_client, admin_id, role="admin")
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -380,7 +382,7 @@ async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
 async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
     """POST /auth/recovery/admin-token returns 422 when user_id is absent."""
     admin_id = str(uuid.uuid4())
-    await _seed_user(db_client, "admin@dojo.test", admin_id, role="admin")
+    await _seed_user(db_client, admin_id, role="admin")
 
     claims = UserClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
@@ -402,7 +404,7 @@ async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
 async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
     """POST /auth/recovery/redeem succeeds with a valid admin-issued token."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
@@ -411,7 +413,7 @@ async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert response.status_code == 200
@@ -421,7 +423,7 @@ async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
 async def test_redeem_valid_admin_token_returns_access_token(db_client) -> None:
     """Redeeming a valid admin token returns a JWT access token."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
@@ -430,7 +432,7 @@ async def test_redeem_valid_admin_token_returns_access_token(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     body = response.json()
@@ -443,7 +445,7 @@ async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
     from app.auth.db_models import AdminRecoveryToken  # red
 
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     token_id = await _seed_admin_token(db_client, target_id, plaintext)
 
@@ -452,7 +454,7 @@ async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert response.status_code == 200
@@ -467,7 +469,7 @@ async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
 async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
     """POST /auth/recovery/redeem rejects an expired admin token with 401."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     expired = datetime.now(UTC) - timedelta(minutes=1)
     await _seed_admin_token(db_client, target_id, plaintext, expires_at=expired)
@@ -477,7 +479,7 @@ async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert response.status_code == 401
@@ -487,7 +489,7 @@ async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
 async def test_redeem_used_admin_token_returns_401(db_client) -> None:
     """POST /auth/recovery/redeem rejects an already-used admin token with 401."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext, used=True)
 
@@ -496,7 +498,7 @@ async def test_redeem_used_admin_token_returns_401(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert response.status_code == 401
@@ -506,7 +508,7 @@ async def test_redeem_used_admin_token_returns_401(db_client) -> None:
 async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     """Redeeming the same admin token twice: second attempt returns 401."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
 
@@ -515,11 +517,11 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     ) as c:
         r1 = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
         r2 = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert r1.status_code == 200
@@ -533,7 +535,7 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
 async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     """After 4 prior failures, a 5th bad attempt at admin token redeem returns 429."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
     await _seed_failed_attempt(db_client, target_id, count=4)
@@ -543,7 +545,7 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": "wrong-token-xxxx"},
+            json={"email": target_email, "code": "wrong-token-xxxx"},
         )
 
     assert response.status_code == 429
@@ -553,7 +555,7 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
 async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None:
     """3 prior failures: 4th attempt with valid admin token should succeed."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
     await _seed_admin_token(db_client, target_id, plaintext)
     await _seed_failed_attempt(db_client, target_id, count=3)
@@ -563,7 +565,7 @@ async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert response.status_code == 200
@@ -578,7 +580,7 @@ async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
     from app.auth.db_models import AdminRecoveryToken  # red
 
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok2-efgh"
     token_id = await _seed_admin_token(db_client, target_id, plaintext)
 
@@ -587,7 +589,7 @@ async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
     ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert r.status_code == 200
@@ -601,7 +603,7 @@ async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
 async def test_expired_admin_token_is_rejected(db_client) -> None:
     """Unit: expired admin token → 401."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok2-efgh"
     expired = datetime.now(UTC) - timedelta(hours=2)
     await _seed_admin_token(db_client, target_id, plaintext, expires_at=expired)
@@ -611,7 +613,7 @@ async def test_expired_admin_token_is_rejected(db_client) -> None:
     ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert r.status_code == 401
@@ -621,7 +623,7 @@ async def test_expired_admin_token_is_rejected(db_client) -> None:
 async def test_used_admin_token_is_rejected(db_client) -> None:
     """Unit: already-used admin token → 401."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok2-efgh"
     await _seed_admin_token(db_client, target_id, plaintext, used=True)
 
@@ -630,7 +632,7 @@ async def test_used_admin_token_is_rejected(db_client) -> None:
     ) as c:
         r = await c.post(
             "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
+            json={"email": target_email, "code": plaintext},
         )
 
     assert r.status_code == 401
