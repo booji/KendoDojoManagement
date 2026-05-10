@@ -68,7 +68,6 @@ def _create_member_record(
     full_name: str = "Alice Kendo",
     emergency_contact_name: str = "Bob Kendo",
     emergency_contact_phone: str = "07700900000",
-    federation_number: str = "FED-001",
 ) -> dict:
     resp = requests.put(
         f"{API_URL}/users/me/member",
@@ -77,7 +76,6 @@ def _create_member_record(
             "dob": "1990-05-15",
             "emergency_contact_name": emergency_contact_name,
             "emergency_contact_phone": emergency_contact_phone,
-            "federation_number": federation_number,
         },
         cookies={"access_token": token},
     )
@@ -115,7 +113,6 @@ def test_settings_summary_shows_member_record_values(page: Page) -> None:
     # Values are visible in the read-only summary
     expect(page.get_by_text("Prepop Tester")).to_be_visible()
     expect(page.get_by_text("Bob Kendo")).to_be_visible()
-    expect(page.get_by_text("FED-001")).to_be_visible()
 
 
 # ── AC3 — Saving returns to summary with updated values ──────────────────────

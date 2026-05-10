@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 // ── MarkdownField ─────────────────────────────────────────────────────────────
 
@@ -216,6 +218,7 @@ const SessionDetailPage = () => {
   const [checkinState, setCheckinState] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [checkinError, setCheckinError] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [attendanceOpen, setAttendanceOpen] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -223,8 +226,6 @@ const SessionDetailPage = () => {
       .then(([session, me, attendance]) => {
         const attendanceList = Array.isArray(attendance) ? attendance : []
         setState({ kind: "loaded", session, role: me.role, attendance: attendanceList })
-        // Defer series cancel button to a separate render so the instance
-        // cancel button is rendered alone first (for accessibility clarity)
         if (session.template_id !== null) {
           setTimeout(() => setShowSeriesCancel(true), 0)
         }
@@ -282,7 +283,7 @@ const SessionDetailPage = () => {
 
   if (state.kind === "loading") {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto">
+      <div className="px-4 py-6 max-w-6xl mx-auto">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     )
@@ -290,7 +291,7 @@ const SessionDetailPage = () => {
 
   if (state.kind === "error") {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto">
+      <div className="px-4 py-6 max-w-6xl mx-auto">
         <p className="text-sm text-destructive">{state.message}</p>
       </div>
     )
@@ -299,86 +300,109 @@ const SessionDetailPage = () => {
   const { session, role, attendance } = state
   const isAdmin = role === "admin"
 
+  if (editing) {
+    return (
+      <div className="px-4 py-6 max-w-6xl mx-auto">
+        <h1 className="text-xl font-semibold mb-4">Edit Session</h1>
+        <EditForm
+          session={session}
+          onSave={(updated) => {
+            setState({ ...state, session: updated })
+            setEditing(false)
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="px-4 py-6 space-y-6 max-w-2xl mx-auto">
+    <div className="px-4 py-6 space-y-6 max-w-6xl mx-auto">
       <h1 className="text-xl font-semibold">Session Detail</h1>
 
+      {/* Details card — full width, metadata in a grid on desktop */}
       <Card>
-        <CardContent className="py-4 space-y-3">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Date</p>
-            <p className="font-medium">{session.date}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Start time</p>
-            <p className="font-medium">{session.start_time}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Duration</p>
-            <p className="font-medium">{session.duration_minutes} min</p>
-          </div>
-          {session.location !== null && (
+        <CardContent className="py-4 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Location</p>
-              <p className="font-medium">{session.location}</p>
+              <p className="text-sm text-muted-foreground">Date</p>
+              <p className="font-medium">{session.date}</p>
             </div>
-          )}
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Start time</p>
+              <p className="font-medium">{session.start_time}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Duration</p>
+              <p className="font-medium">{session.duration_minutes} min</p>
+            </div>
+            {session.location !== null && (
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Location</p>
+                <p className="font-medium">{session.location}</p>
+              </div>
+            )}
+          </div>
+
           {session.cancelled && (
             <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               Cancelled
             </span>
           )}
+
+          {session.checkin_url !== null && (
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Check-in URL</p>
+              <p className="text-sm break-all">{session.checkin_url}</p>
+            </div>
+          )}
+
+          {/* Check-in button */}
+          {!session.cancelled && (
+            <div className="space-y-2">
+              {checkinState === "success" ? (
+                <div
+                  className="flex items-center justify-center w-full min-h-[48px] rounded-md bg-green-100 text-green-800 font-medium text-sm"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Checked in!
+                </div>
+              ) : (
+                <Button
+                  size="lg"
+                  className="w-full min-h-[48px]"
+                  onClick={() => void handleCheckIn()}
+                  disabled={checkinState === "loading"}
+                  aria-label="Check in to this session"
+                >
+                  {checkinState === "loading" ? "Checking in…" : "Check In"}
+                </Button>
+              )}
+              {checkinState === "error" && checkinError !== null && (
+                <p className="text-xs text-destructive" role="alert">{checkinError}</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {session.info !== null && (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Info</p>
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{session.info}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-
-      {session.checkin_url !== null && (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Check-in URL</p>
-          <p className="text-sm break-all">{session.checkin_url}</p>
-        </div>
-      )}
-
-      {/* Check-in button */}
-      {!session.cancelled && (
-        <div className="space-y-2">
-          {checkinState === "success" ? (
-            <div
-              className="flex items-center justify-center w-full min-h-[48px] rounded-md bg-green-100 text-green-800 font-medium text-sm"
-              role="status"
-              aria-live="polite"
-            >
-              Checked in!
+      {/* Info + Coach Notes — two columns on desktop only when both present */}
+      {(session.info !== null || (isAdmin && session.coach_notes !== null)) && (
+        <div className={
+          session.info !== null && isAdmin && session.coach_notes !== null
+            ? "grid grid-cols-1 md:grid-cols-2 gap-6"
+            : "space-y-6"
+        }>
+          {session.info !== null && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Info</p>
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{session.info}</ReactMarkdown>
+              </div>
             </div>
-          ) : (
-            <Button
-              size="lg"
-              className="w-full min-h-[48px]"
-              onClick={() => void handleCheckIn()}
-              disabled={checkinState === "loading"}
-              aria-label="Check in to this session"
-            >
-              {checkinState === "loading" ? "Checking in…" : "Check In"}
-            </Button>
           )}
-          {checkinState === "error" && checkinError !== null && (
-            <p className="text-xs text-destructive" role="alert">{checkinError}</p>
-          )}
-        </div>
-      )}
-
-      {/* Admin-only sections */}
-      {isAdmin && (
-        <>
-          {session.coach_notes !== null && (
+          {isAdmin && session.coach_notes !== null && (
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Coach Notes</p>
               <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -386,57 +410,61 @@ const SessionDetailPage = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Attendance</p>
-            {attendance.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No attendees yet.</p>
-            ) : (
-              <ul className="space-y-1" aria-label="Attendance list">
-                {attendance.map((record) => (
-                  <li key={record.id} className="text-sm font-mono">
-                    {record.visitor_name ?? record.display_name ?? "Unknown"}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {editing ? (
-            <EditForm
-              session={session}
-              onSave={(updated) => {
-                setState({ ...state, session: updated })
-                setEditing(false)
-              }}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setEditing(true)} className="min-h-[44px]">
-                Edit
-              </Button>
+      {/* Admin actions + attendance */}
+      {isAdmin && (
+        <>
+          <div className="flex flex-wrap justify-end gap-2">
+            {showSeriesCancel && (
               <Button
                 variant="destructive"
-                onClick={() => void handleCancelInstance()}
+                onClick={() => void handleCancelSeries()}
                 className="min-h-[44px]"
               >
-                Cancel Session
+                Cancel Series
               </Button>
-              {showSeriesCancel && (
-                <Button
-                  variant="destructive"
-                  onClick={() => void handleCancelSeries()}
-                  className="min-h-[44px]"
-                >
-                  Cancel Series
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+            <Button
+              variant="destructive"
+              onClick={() => void handleCancelInstance()}
+              className="min-h-[44px]"
+            >
+              Cancel Session
+            </Button>
+            <Button onClick={() => setEditing(true)} className="min-h-[44px]">
+              Edit
+            </Button>
+          </div>
           {cancelError !== null && (
             <p className="text-sm text-destructive" role="alert">{cancelError}</p>
           )}
+
+          <Collapsible open={attendanceOpen} onOpenChange={setAttendanceOpen}>
+            <CollapsibleTrigger
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+              aria-expanded={attendanceOpen}
+            >
+              {attendanceOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+              Attendance ({attendance.length})
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-2">
+                {attendance.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No attendees yet.</p>
+                ) : (
+                  <ul className="space-y-1" aria-label="Attendance list">
+                    {attendance.map((record) => (
+                      <li key={record.id} className="text-sm font-mono">
+                        {record.visitor_name ?? record.display_name ?? "Unknown"}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </>
       )}
     </div>

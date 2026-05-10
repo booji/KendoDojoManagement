@@ -2,77 +2,42 @@
 Browser (Playwright) tests for issue #11 — Reports and CSV export.
 
 One test per acceptance criterion.
+Auth pattern: synthetic JWT tokens injected as cookies (same as test_e2e_attendance_admin.py).
 """
 
-import pathlib
-import sqlite3 as _sqlite3
+import os
 import uuid
 
-import requests
+from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
+_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=_dotenv_path, override=False)
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+
+from app import config as _config  # noqa: E402
+from app.auth.models import UserClaims  # noqa: E402
+from app.auth.token import encode_token  # noqa: E402
+
+_config.JWT_SECRET = os.environ["JWT_SECRET"]
+
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
-
-_DB_PATH = pathlib.Path(__file__).parent.parent / "kendo.db"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _register_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": password},
+def _make_token(role: str) -> str:
+    claims = UserClaims(
+        sub=str(uuid.uuid4()),
+        email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
+        role=role,  # type: ignore[arg-type]
+        is_active=True,
     )
-    resp.raise_for_status()
-    return resp.json()["sub"]
-
-
-def _login_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": password},
-    )
-    resp.raise_for_status()
-    return resp.cookies["access_token"]
+    return encode_token(claims)
 
 
 def _inject_cookie(page: Page, token: str) -> None:
     page.context.add_cookies(
-        [
-            {
-                "name": "access_token",
-                "value": token,
-                "domain": "localhost",
-                "path": "/",
-                "httpOnly": True,
-                "sameSite": "Strict",
-            }
-        ]
+        [{"name": "access_token", "value": token, "url": BASE_URL}]
     )
-
-
-def _promote_to_admin(user_id: str) -> None:
-    with _sqlite3.connect(_DB_PATH) as conn:
-        conn.execute("UPDATE users SET role='admin' WHERE id=?", (user_id,))
-
-
-def _register_admin_token() -> str:
-    tag = uuid.uuid4().hex[:8]
-    email = f"e2e_reports_admin_{tag}@dojo.test"
-    user_id = _register_api(email)
-    _promote_to_admin(user_id)
-    return _login_api(email)
-
-
-def _register_member_token() -> str:
-    tag = uuid.uuid4().hex[:8]
-    email = f"e2e_reports_member_{tag}@dojo.test"
-    _register_api(email)
-    return _login_api(email)
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +46,7 @@ def _register_member_token() -> str:
 
 
 def test_reports_page_renders_attendance_report(page: Page) -> None:
-    token = _register_admin_token()
-    _inject_cookie(page, token)
+    _inject_cookie(page, _make_token("admin"))
 
     page.goto(f"{BASE_URL}/reports")
 
@@ -104,8 +68,7 @@ def test_reports_page_renders_attendance_report(page: Page) -> None:
 
 
 def test_reports_page_renders_members_report(page: Page) -> None:
-    token = _register_admin_token()
-    _inject_cookie(page, token)
+    _inject_cookie(page, _make_token("admin"))
 
     page.goto(f"{BASE_URL}/reports")
 
@@ -122,8 +85,7 @@ def test_reports_page_renders_members_report(page: Page) -> None:
 
 
 def test_reports_page_has_csv_download_buttons(page: Page) -> None:
-    token = _register_admin_token()
-    _inject_cookie(page, token)
+    _inject_cookie(page, _make_token("admin"))
 
     page.goto(f"{BASE_URL}/reports")
 
@@ -141,8 +103,7 @@ def test_reports_page_has_csv_download_buttons(page: Page) -> None:
 
 
 def test_reports_page_is_accessible_via_navigation(page: Page) -> None:
-    token = _register_admin_token()
-    _inject_cookie(page, token)
+    _inject_cookie(page, _make_token("admin"))
 
     page.goto(f"{BASE_URL}/")
     page.wait_for_selector("[data-slot='sidebar']", timeout=15000)

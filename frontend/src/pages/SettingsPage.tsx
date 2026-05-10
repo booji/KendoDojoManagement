@@ -6,6 +6,12 @@ import type { UserClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
 import type { PasskeyRecord } from "@/api/passkeys"
 import {
+  getRecoveryStatus,
+  generateRecoveryCodes,
+  regenerateRecoveryCodes,
+} from "@/api/recovery"
+import type { RecoveryStatus } from "@/api/recovery"
+import {
   listFederations,
   getMyFederations,
   addMyFederation,
@@ -261,7 +267,7 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
 
 type PasskeyLoadState =
   | { status: "loading" }
-  | { status: "ready"; passkeys: PasskeyRecord[]; passkeyCount: number }
+  | { status: "ready"; passkeys: PasskeyRecord[]; passkeyCount: number; recovery: RecoveryStatus }
   | { status: "error"; message: string }
 
 const SecurityCard = () => {
@@ -271,11 +277,14 @@ const SecurityCard = () => {
   const [nudgeOpen, setNudgeOpen] = useState(false)
   const [addingFromNudge, setAddingFromNudge] = useState(false)
   const [nudgeAddError, setNudgeAddError] = useState<string | null>(null)
+  const [generatedCodes, setGeneratedCodes] = useState<string[] | null>(null)
+  const [recoveryWorking, setRecoveryWorking] = useState(false)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
 
   const loadData = () => {
-    Promise.all([listPasskeys(), getSecurityStatus()])
-      .then(([passkeys, status]) =>
-        setState({ status: "ready", passkeys, passkeyCount: status.passkey_count })
+    Promise.all([listPasskeys(), getSecurityStatus(), getRecoveryStatus()])
+      .then(([passkeys, status, recovery]) =>
+        setState({ status: "ready", passkeys, passkeyCount: status.passkey_count, recovery })
       )
       .catch((err: unknown) => {
         setState({
@@ -283,6 +292,36 @@ const SecurityCard = () => {
           message: isApiError(err) ? err.message : "Failed to load passkeys",
         })
       })
+  }
+
+  const handleGenerateCodes = async () => {
+    setRecoveryWorking(true)
+    setRecoveryError(null)
+    try {
+      const data = await generateRecoveryCodes()
+      setGeneratedCodes(data.codes)
+      const recovery = await getRecoveryStatus()
+      setState((prev) => prev.status === "ready" ? { ...prev, recovery } : prev)
+    } catch (err) {
+      setRecoveryError(isApiError(err) ? err.message : "Failed to generate recovery codes")
+    } finally {
+      setRecoveryWorking(false)
+    }
+  }
+
+  const handleRegenerateCodes = async () => {
+    setRecoveryWorking(true)
+    setRecoveryError(null)
+    try {
+      const data = await regenerateRecoveryCodes()
+      setGeneratedCodes(data.codes)
+      const recovery = await getRecoveryStatus()
+      setState((prev) => prev.status === "ready" ? { ...prev, recovery } : prev)
+    } catch (err) {
+      setRecoveryError(isApiError(err) ? err.message : "Failed to regenerate recovery codes")
+    } finally {
+      setRecoveryWorking(false)
+    }
   }
 
   useEffect(() => {
@@ -423,10 +462,67 @@ const SecurityCard = () => {
               >
                 {addingPasskey ? "Registering…" : "Add a passkey"}
               </Button>
+
+              <div className="border-t pt-4">
+                <p className="text-xs text-muted-foreground mb-2">Recovery codes</p>
+                {state.recovery.has_set ? (
+                  <p className="text-sm mb-3">
+                    {state.recovery.unused_count} unused{" "}
+                    {state.recovery.unused_count === 1 ? "code" : "codes"} remaining
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No recovery codes generated
+                  </p>
+                )}
+                {recoveryError !== null && (
+                  <p className="text-sm text-destructive mb-2" role="alert">
+                    {recoveryError}
+                  </p>
+                )}
+                {state.recovery.has_set ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleRegenerateCodes()}
+                    disabled={recoveryWorking}
+                  >
+                    {recoveryWorking ? "Working…" : "Regenerate"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleGenerateCodes()}
+                    disabled={recoveryWorking}
+                  >
+                    {recoveryWorking ? "Working…" : "Generate codes"}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={generatedCodes !== null} onOpenChange={(o) => { if (!o) setGeneratedCodes(null) }}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Recovery codes</DialogTitle>
+            <DialogDescription>
+              Save these codes somewhere safe. Each code can only be used once.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md bg-muted p-4 font-mono text-sm space-y-1">
+            {(generatedCodes ?? []).map((code) => (
+              <p key={code}>{code}</p>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setGeneratedCodes(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={nudgeOpen} onOpenChange={setNudgeOpen}>
         <DialogContent showCloseButton>

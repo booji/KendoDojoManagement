@@ -12,7 +12,7 @@ from playwright.sync_api import Page, expect
 
 # Load the real JWT_SECRET from .env so tokens pass server-side validation.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -93,6 +93,8 @@ def test_session_card_list_renders_week_grouped_cards(page: Page) -> None:
         ),
     )
 
+    # Use mobile viewport so SessionCardList (md:hidden) is visible, not the table
+    page.set_viewport_size({"width": 375, "height": 812})
     _go_to_sessions_as(page, "member")
 
     # Week group label (h2) should be present

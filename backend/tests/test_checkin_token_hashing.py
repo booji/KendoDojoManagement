@@ -470,7 +470,7 @@ async def test_http_checkin_via_valid_token_returns_200(
 
 
 # ---------------------------------------------------------------------------
-# AC8 — HTTP: wrong token → 401
+# AC8 — HTTP: wrong token → 404
 # ---------------------------------------------------------------------------
 
 
@@ -480,12 +480,7 @@ async def test_http_checkin_via_wrong_token_returns_401(
     http_attendance_repo: _StubAttendanceRepo,
     http_token_repo: _HashingStubCheckinTokenRepo,
 ) -> None:
-    """POST /checkin/{token} with wrong plaintext → 401 (not 404).
-
-    With hashing, no DB lookup can confirm whether a token *slot* exists for
-    an arbitrary string; the correct response is 401 Unauthorized to avoid
-    leaking token existence.
-    """
+    """POST /checkin/{token} with wrong plaintext → 404."""
     session = http_session_repo.seed(cancelled=False)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
     await http_token_repo.create(session["id"], expires_at)
@@ -497,8 +492,8 @@ async def test_http_checkin_via_wrong_token_returns_401(
         response = await c.post("/checkin/wrong-plaintext-token-that-wont-match")
 
     assert (
-        response.status_code == 401
-    ), f"Expected 401 for a wrong token, got {response.status_code}"
+        response.status_code == 404
+    ), f"Expected 404 for a wrong token, got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------

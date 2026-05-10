@@ -17,13 +17,14 @@ AC2, AC3 — no admin UI exists yet; covered via direct API assertions in AC1/AC
 import json
 import os
 import uuid
+from datetime import date, timedelta
 
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
 # Load the real JWT_SECRET from .env so tokens pass server-side validation.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -158,7 +159,12 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     type_id = types_resp.json()[0]["id"]
     type_name = types_resp.json()[0]["name"]
 
-    # Create a template with a far-future start date
+    # Find the next Thursday within the default 90-day horizon
+    today = date.today()
+    days_until_thursday = (3 - today.weekday()) % 7 or 7  # day_of_week 3 = Thursday
+    next_thursday = today + timedelta(days=days_until_thursday)
+    horizon_date = next_thursday + timedelta(weeks=1)
+
     tmpl_resp = page.request.post(
         f"{API_URL}/sessions/templates",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
@@ -166,7 +172,7 @@ def test_generating_instances_from_template_shows_them_in_session_list(
             {
                 "session_type_id": type_id,
                 "title": "E2E Template",
-                "start_date": "2099-08-07",  # Thursday
+                "start_date": next_thursday.isoformat(),
                 "start_time": "18:30",
                 "duration_minutes": 60,
                 "recurrence": "weekly",
@@ -177,11 +183,11 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
 
-    # Generate instances up to a horizon two weeks out
+    # Generate instances up to a horizon two weeks out (within 90-day window)
     gen_resp = page.request.post(
         f"{API_URL}/sessions/templates/{template_id}/generate",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({"horizon": "2099-08-21"}),
+        data=json.dumps({"horizon": horizon_date.isoformat()}),
     )
     assert gen_resp.status == 200
     instances = gen_resp.json()
@@ -193,8 +199,9 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # The sessions page renders session type names as card headings
-    expect(page.get_by_text(type_name).first).to_be_visible()
+    # On desktop the table is shown; card list is md:hidden. Scope to the table.
+    table = page.locator("[data-testid='sessions-table']")
+    expect(table.get_by_text(type_name).first).to_be_visible(timeout=20000)
 
 
 # ---------------------------------------------------------------------------
@@ -231,15 +238,16 @@ def test_admin_can_create_adhoc_session_via_ui(page: Page) -> None:
         sess_resp.status == 201
     ), f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
     body = sess_resp.json()
-    assert body["status"] == "scheduled"
+    assert body["cancelled"] is False
 
-    # Visit the sessions page as a member and confirm the card is visible
+    # Visit the sessions page as a member and confirm the session appears in the table
     member_token = _make_token("member")
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    expect(page.get_by_text(type_name).first).to_be_visible()
+    table = page.locator("[data-testid='sessions-table']")
+    expect(table.get_by_text(type_name).first).to_be_visible()
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +368,9 @@ def test_authenticated_member_sees_upcoming_sessions_list(page: Page) -> None:
     # Page heading
     expect(page.get_by_role("heading", name="Sessions")).to_be_visible()
 
-    # At least one session card is rendered
-    expect(page.get_by_text(type_name).first).to_be_visible()
+    # At least one session row is rendered in the table
+    table = page.locator("[data-testid='sessions-table']")
+    expect(table.get_by_text(type_name).first).to_be_visible()
 
     # Week group label rendered (format "Week of D Mon")
     week_labels = page.locator("h2").all()
@@ -404,6 +413,7 @@ def test_session_list_renders_correctly_on_mobile(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     expect(page.get_by_role("heading", name="Sessions")).to_be_visible()
+    # Mobile shows the card list (md:hidden is visible at 375px)
     expect(page.get_by_text(type_name).first).to_be_visible()
 
 
@@ -438,4 +448,6 @@ def test_session_list_renders_correctly_on_desktop(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     expect(page.get_by_role("heading", name="Sessions")).to_be_visible()
-    expect(page.get_by_text(type_name).first).to_be_visible()
+    # Desktop shows the sessions table; scope assertion to avoid md:hidden card list
+    table = page.locator("[data-testid='sessions-table']")
+    expect(table.get_by_text(type_name).first).to_be_visible()

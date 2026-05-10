@@ -156,7 +156,6 @@ def fed_repo() -> StubFederationRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_create_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -173,7 +172,6 @@ async def test_admin_can_create_federation(fed_repo) -> None:
     assert body["is_pinned"] is False
 
 
-@pytest.mark.anyio
 async def test_create_federation_missing_name_returns_422(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -183,7 +181,6 @@ async def test_create_federation_missing_name_returns_422(fed_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_federation_with_all_optional_fields(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = {
@@ -207,7 +204,6 @@ async def test_create_federation_with_all_optional_fields(fed_repo) -> None:
     assert body["type"] == "National"
 
 
-@pytest.mark.anyio
 async def test_create_federation_unauthenticated_returns_401(fed_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -218,7 +214,6 @@ async def test_create_federation_unauthenticated_returns_401(fed_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_federation(fed_repo) -> None:
     from app.auth.token import encode_token
 
@@ -239,7 +234,6 @@ async def test_member_cannot_create_federation(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_edit_federation_metadata(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await fed_repo.add({"name": "Old Name"})
@@ -253,7 +247,6 @@ async def test_admin_can_edit_federation_metadata(fed_repo) -> None:
     assert response.json()["name"] == "New Name"
 
 
-@pytest.mark.anyio
 async def test_edit_federation_not_found_returns_404(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -264,7 +257,6 @@ async def test_edit_federation_not_found_returns_404(fed_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_edit_federation_unauthenticated_returns_401(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     async with AsyncClient(
@@ -274,7 +266,6 @@ async def test_edit_federation_unauthenticated_returns_401(fed_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_member_cannot_edit_federation(fed_repo) -> None:
     from app.auth.token import encode_token
 
@@ -296,7 +287,6 @@ async def test_member_cannot_edit_federation(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_pin_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await fed_repo.add({"name": "Pinnable Fed"})
@@ -311,7 +301,6 @@ async def test_admin_can_pin_federation(fed_repo) -> None:
     assert response.json()["is_pinned"] is True
 
 
-@pytest.mark.anyio
 async def test_admin_can_unpin_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await fed_repo.add({"name": "Pinned Fed", "is_pinned": True})
@@ -330,7 +319,6 @@ async def test_admin_can_unpin_federation(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_deactivate_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await fed_repo.add({"name": "Active Fed"})
@@ -344,7 +332,6 @@ async def test_admin_can_deactivate_federation(fed_repo) -> None:
     assert response.json()["is_active"] is False
 
 
-@pytest.mark.anyio
 async def test_deactivate_nonexistent_federation_returns_404(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -355,7 +342,6 @@ async def test_deactivate_nonexistent_federation_returns_404(fed_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_delete_federation_unauthenticated_returns_401(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     async with AsyncClient(
@@ -365,7 +351,6 @@ async def test_delete_federation_unauthenticated_returns_401(fed_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_member_cannot_delete_federation(fed_repo) -> None:
     from app.auth.token import encode_token
 
@@ -386,7 +371,6 @@ async def test_member_cannot_delete_federation(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_reactivate_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await fed_repo.add({"name": "Dormant Fed", "is_active": False})
@@ -405,7 +389,6 @@ async def test_admin_can_reactivate_federation(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_federations_returns_active_only(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "Active Fed"})
@@ -422,7 +405,6 @@ async def test_get_federations_returns_active_only(fed_repo) -> None:
     assert "Inactive Fed" not in names
 
 
-@pytest.mark.anyio
 async def test_get_federations_pinned_first_alphabetical(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "Zeta Fed"})
@@ -444,7 +426,6 @@ async def test_get_federations_pinned_first_alphabetical(fed_repo) -> None:
     assert names[3] == "Zeta Fed"
 
 
-@pytest.mark.anyio
 async def test_get_federations_filter_by_type(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "National A", "type": "National"})
@@ -461,7 +442,6 @@ async def test_get_federations_filter_by_type(fed_repo) -> None:
     assert not any(r["name"] == "Global A" for r in results)
 
 
-@pytest.mark.anyio
 async def test_get_federations_filter_by_continental_grouping(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "Euro Fed", "continental_grouping": "Europe"})
@@ -478,7 +458,6 @@ async def test_get_federations_filter_by_continental_grouping(fed_repo) -> None:
     assert not any(r["name"] == "Asia Fed" for r in results)
 
 
-@pytest.mark.anyio
 async def test_get_federations_search_by_name_prefix(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "British Kendo Association"})
@@ -494,7 +473,6 @@ async def test_get_federations_search_by_name_prefix(fed_repo) -> None:
     assert results[0]["name"] == "British Kendo Association"
 
 
-@pytest.mark.anyio
 async def test_get_federations_search_by_abbreviation_prefix(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await fed_repo.add({"name": "British Kendo Association", "abbreviation": "BKA"})
@@ -515,7 +493,6 @@ async def test_get_federations_search_by_abbreviation_prefix(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_federations_unauthenticated_returns_401(fed_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -529,7 +506,6 @@ async def test_get_federations_unauthenticated_returns_401(fed_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_deactivated_federation_hidden_from_list_but_record_preserved(
     fed_repo,
 ) -> None:

@@ -12,14 +12,10 @@ class Attendance(UUIDBase):
     session_id: Mapped[str] = mapped_column(
         UUIDType(), ForeignKey("session_instances.id"), nullable=False
     )
-    member_id: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("members.id"), nullable=True
-    )
+    member_id: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
     visitor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     checked_in_at: Mapped[str] = mapped_column(String(50), nullable=False)
-    recorded_by: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False
-    )
+    recorded_by: Mapped[str] = mapped_column(UUIDType(), nullable=False)
 
 
 class CheckinToken(UUIDBase):

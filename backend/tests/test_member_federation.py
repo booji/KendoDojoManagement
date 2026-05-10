@@ -109,6 +109,12 @@ class StubMemberRepo:
                 return item
         return None
 
+    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
+        for item in self._store.values():
+            if item.get("user_id") == user_id:
+                return item
+        return None
+
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
         new_id = str(uuid.uuid4())
         record = {"id": new_id, **data}
@@ -268,7 +274,6 @@ def mf_repo() -> StubMemberFederationRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_add_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -292,7 +297,6 @@ async def test_admin_can_add_federation_membership(
     assert body["member_number"] == "AJKF-12345"
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_missing_federation_id_returns_422(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -307,7 +311,6 @@ async def test_add_federation_membership_missing_federation_id_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_missing_member_number_returns_422(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -322,7 +325,6 @@ async def test_add_federation_membership_missing_member_number_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_member_number_too_long_returns_422(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -341,7 +343,6 @@ async def test_add_federation_membership_member_number_too_long_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_max_100_chars_accepted(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -360,7 +361,6 @@ async def test_add_federation_membership_max_100_chars_accepted(
     assert response.status_code == 201
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_member_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -376,7 +376,6 @@ async def test_add_federation_membership_member_not_found_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_add_federation_membership_unauthenticated_returns_401(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -390,7 +389,6 @@ async def test_add_federation_membership_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_member_cannot_add_to_other_member_via_admin_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -414,7 +412,6 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_add_membership_with_renewal_date(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -435,7 +432,6 @@ async def test_add_membership_with_renewal_date(
     assert response.json()["renewal_date"] == "2026-04-01"
 
 
-@pytest.mark.anyio
 async def test_add_membership_without_renewal_date(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -457,7 +453,6 @@ async def test_add_membership_without_renewal_date(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_renewal_status_none_when_no_date(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -474,7 +469,6 @@ async def test_renewal_status_none_when_no_date(
     assert response.json()["renewal_status"] is None
 
 
-@pytest.mark.anyio
 async def test_renewal_status_expired_when_past_date(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -496,7 +490,6 @@ async def test_renewal_status_expired_when_past_date(
     assert response.json()["renewal_status"] == "expired"
 
 
-@pytest.mark.anyio
 async def test_renewal_status_expiring_soon_within_30_days(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -518,7 +511,6 @@ async def test_renewal_status_expiring_soon_within_30_days(
     assert response.json()["renewal_status"] == "expiring_soon"
 
 
-@pytest.mark.anyio
 async def test_renewal_status_expiring_soon_exactly_30_days(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -540,7 +532,6 @@ async def test_renewal_status_expiring_soon_exactly_30_days(
     assert response.json()["renewal_status"] == "expiring_soon"
 
 
-@pytest.mark.anyio
 async def test_renewal_status_ok_when_beyond_30_days(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -568,7 +559,6 @@ async def test_renewal_status_ok_when_beyond_30_days(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_edit_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -595,7 +585,6 @@ async def test_admin_can_edit_federation_membership(
     assert response.json()["member_number"] == "NEW-999"
 
 
-@pytest.mark.anyio
 async def test_admin_can_update_renewal_date(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -622,7 +611,6 @@ async def test_admin_can_update_renewal_date(
     assert response.json()["renewal_date"] == new_date
 
 
-@pytest.mark.anyio
 async def test_edit_federation_membership_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -643,7 +631,6 @@ async def test_edit_federation_membership_not_found_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_remove_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -665,7 +652,6 @@ async def test_admin_can_remove_federation_membership(
     assert response.status_code == 204
 
 
-@pytest.mark.anyio
 async def test_remove_federation_membership_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -678,7 +664,6 @@ async def test_remove_federation_membership_not_found_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_remove_federation_membership_unauthenticated_returns_401(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -703,7 +688,6 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_list_member_federations(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -732,7 +716,6 @@ async def test_admin_can_list_member_federations(
     assert len(response.json()) == 2
 
 
-@pytest.mark.anyio
 async def test_get_member_federations_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -750,7 +733,6 @@ async def test_get_member_federations_not_found_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_can_add_own_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -772,7 +754,6 @@ async def test_member_can_add_own_federation_membership(
     assert body["member_number"] == "SELF-001"
 
 
-@pytest.mark.anyio
 async def test_member_can_list_own_federation_memberships(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -794,7 +775,6 @@ async def test_member_can_list_own_federation_memberships(
     assert response.json()[0]["member_number"] == "SELF-A"
 
 
-@pytest.mark.anyio
 async def test_member_can_edit_own_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -819,7 +799,6 @@ async def test_member_can_edit_own_federation_membership(
     assert response.json()["member_number"] == "AFTER"
 
 
-@pytest.mark.anyio
 async def test_member_can_remove_own_federation_membership(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -840,7 +819,6 @@ async def test_member_can_remove_own_federation_membership(
     assert response.status_code == 204
 
 
-@pytest.mark.anyio
 async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -865,7 +843,6 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -886,7 +863,6 @@ async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_me_federations_unauthenticated_returns_401(
     member_repo, fed_repo, mf_repo
 ) -> None:

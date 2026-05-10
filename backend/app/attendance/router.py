@@ -68,7 +68,7 @@ async def checkin_to_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
         )
-    record = await attendance_repo.check_in(str(session_id), current_user.sub, "self")
+    record = await attendance_repo.check_in(str(session_id), current_user.sub, current_user.sub)
     await uow.commit()
     return AttendanceRead(**record)
 
@@ -121,7 +121,7 @@ async def checkin_via_token(
         )
     if token_record is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid token"
         )
     expires_at = datetime.fromisoformat(token_record["expires_at"])
     if expires_at.tzinfo is None:
@@ -141,7 +141,7 @@ async def checkin_via_token(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
         )
     record = await attendance_repo.check_in(
-        token_record["session_id"], current_user.sub, "self"
+        token_record["session_id"], current_user.sub, current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)

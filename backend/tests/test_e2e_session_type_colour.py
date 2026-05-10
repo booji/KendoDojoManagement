@@ -10,6 +10,7 @@ Acceptance criteria:
 
 from __future__ import annotations
 
+import datetime
 import os
 import uuid
 
@@ -17,7 +18,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -29,9 +30,9 @@ _config.JWT_SECRET = os.environ["JWT_SECRET"]
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
 
-# Use a date in the current month — the calendar loads April 2026 by default,
-# so no navigation is needed. Session-ID-scoped lookups avoid collisions.
-_TEST_DATE = "2026-04-25"
+# Use a date in the current month so no calendar navigation is needed.
+_today = datetime.date.today()
+_TEST_DATE = _today.replace(day=25).isoformat()
 _TEST_TIME = "19:00"
 
 

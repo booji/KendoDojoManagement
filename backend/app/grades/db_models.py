@@ -14,7 +14,5 @@ class GradeHistory(UUIDBase):
     )
     grade: Mapped[str] = mapped_column(String(20), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    promoted_at: Mapped[str] = mapped_column(String(30), nullable=False)
-    awarded_by: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False
-    )
+    promoted_at: Mapped[str] = mapped_column(String(50), nullable=False)
+    awarded_by: Mapped[str] = mapped_column(UUIDType(), nullable=False)

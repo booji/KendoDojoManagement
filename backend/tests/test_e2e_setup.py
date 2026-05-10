@@ -5,22 +5,20 @@ the populate step, and "populated instance" checks (AC2) run after.
 
 The module-scoped ``fresh_db`` fixture wipes the users and passkey_credentials
 tables at the start of the module so the server starts each suite group in a
-known state.  Because uvicorn keeps an open aiosqlite connection pool, we write
-via sqlite3 directly — SQLite's WAL mode tolerates this without locking issues.
+known state.
 """
 
+import asyncio
+import concurrent.futures
 import os
-import sqlite3
 
+import asyncpg
 import pytest
 import requests
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
-
-# Path to the live dev database used by uvicorn when DATABASE_URL is not set.
-_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "kendo.db")
 
 # The backend exposes /setup directly (no /api prefix).
 # The frontend dev-server proxy rewrites /api/setup → /setup on the backend,
@@ -33,25 +31,26 @@ _SETUP_HEALTH_URL = f"{API_URL}/setup"
 # ---------------------------------------------------------------------------
 
 
-def _clear_users_and_credentials() -> None:
-    """Wipe users and passkey_credentials so the server reports a fresh instance.
-
-    SQLite foreign key enforcement is off by default, so the order only matters
-    for passkey_credentials → users (FK) but we delete credentials first anyway.
-    The members.user_id column is nullable so we only delete linked member rows
-    to avoid breaking unrelated member fixtures.
-    """
-    conn = sqlite3.connect(_DB_PATH)
+async def _clear_users_async() -> None:
+    db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    conn = await asyncpg.connect(db_url)
     try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM passkey_credentials")
-        cur.execute("DELETE FROM grade_history")
-        cur.execute("DELETE FROM attendance")
-        cur.execute("DELETE FROM members WHERE user_id IS NOT NULL")
-        cur.execute("DELETE FROM users")
-        conn.commit()
+        await conn.execute("DELETE FROM passkey_credentials")
+        await conn.execute("DELETE FROM recovery_codes")
+        await conn.execute("DELETE FROM recovery_attempts")
+        await conn.execute("DELETE FROM admin_recovery_tokens")
+        await conn.execute("DELETE FROM grade_history")
+        await conn.execute("DELETE FROM attendance")
+        await conn.execute("DELETE FROM members WHERE user_id IS NOT NULL")
+        await conn.execute("DELETE FROM users")
     finally:
-        conn.close()
+        await conn.close()
+
+
+def _clear_users_and_credentials() -> None:
+    """Wipe users and passkey_credentials so the server reports a fresh instance."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(lambda: asyncio.run(_clear_users_async())).result()
 
 
 def _populate_instance() -> None:

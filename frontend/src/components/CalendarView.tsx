@@ -436,19 +436,23 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
   })()
 
   useEffect(() => {
+    let cancelled = false
     setLoadState({ kind: "loading" })
     Promise.all([getSessionsForRange(from, to), getSessionTypes()])
       .then(([sessions, types]: [SessionInstance[], SessionType[]]) => {
+        if (cancelled) return
         const typeMap = new Map<string, SessionType>(types.map((t) => [t.id, t]))
         setLoadState({ kind: "loaded", sessions, typeMap })
       })
       .catch((err: unknown) => {
+        if (cancelled) return
         const message =
           typeof err === "object" && err !== null && "message" in err
             ? String((err as { message: unknown }).message)
             : "Failed to load sessions"
         setLoadState({ kind: "error", message })
       })
+    return () => { cancelled = true }
   }, [from, to])
 
   const handlePrev = () => {

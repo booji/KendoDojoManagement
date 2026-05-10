@@ -19,7 +19,7 @@ from playwright.sync_api import Page, expect
 
 # Load the real JWT_SECRET from .env so tokens pass server-side validation.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -48,8 +48,7 @@ def _make_token(role: str) -> str:
 
 
 def _set_cookie(page: Page, token: str) -> None:
-    """Navigate to the app and inject the access_token cookie."""
-    page.goto(BASE_URL)
+    """Inject the access_token cookie into the browser context."""
     page.context.add_cookies(
         [{"name": "access_token", "value": token, "url": BASE_URL}]
     )
@@ -109,6 +108,7 @@ def test_member_can_checkin_to_session_via_ui(page: Page) -> None:
     _create_session(page, admin_token, "2099-07-15")
 
     member_token = _make_token("member")
+    page.set_viewport_size({"width": 375, "height": 667})  # mobile: shows SessionCardList
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
@@ -176,11 +176,12 @@ def test_admin_can_generate_checkin_token_via_ui(page: Page) -> None:
     admin_token = _make_token("admin")
     _create_session(page, admin_token, "2099-07-29")
 
+    page.set_viewport_size({"width": 375, "height": 667})  # mobile: shows SessionCardList with share button
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # Admin sees the "Share check-in link" button
+    # Admin sees the "Share check-in link" button (only rendered in mobile SessionCardList)
     share_btn = page.get_by_role("button", name="Share check-in link").first
     expect(share_btn).to_be_visible(timeout=8000)
 

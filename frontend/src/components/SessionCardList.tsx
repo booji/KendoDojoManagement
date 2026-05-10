@@ -288,13 +288,13 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
   }
 
   return (
-    <div className="mt-2 border-t pt-3">
+    <div className="mt-2 border-t pt-3" data-session-id={sessionId}>
       <button
         type="button"
         className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
         onClick={toggle}
         aria-expanded={open}
-        aria-controls="attendance-panel"
+        aria-controls={`attendance-panel-${sessionId}`}
       >
         <span>Attendance</span>
         {open ? (
@@ -305,7 +305,7 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
       </button>
 
       {open && (
-        <div id="attendance-panel" className="mt-3 space-y-4">
+        <div id={`attendance-panel-${sessionId}`} className="mt-3 space-y-4">
           {panel.kind === "loading" && (
             <div className="space-y-2">
               <Skeleton className="h-5 w-full" />

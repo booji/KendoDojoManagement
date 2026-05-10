@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { checkinViaToken } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
@@ -15,12 +15,15 @@ const CheckinPage = () => {
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
   const [state, setState] = useState<PageState>({ kind: "loading" })
+  const hasFired = useRef(false)
 
   useEffect(() => {
     if (!token) {
       setState({ kind: "invalid" })
       return
     }
+    if (hasFired.current) return
+    hasFired.current = true
 
     checkinViaToken(token)
       .then(() => {

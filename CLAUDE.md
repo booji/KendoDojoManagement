@@ -22,6 +22,14 @@ Any domain "type" (e.g. session type, grading, shogo, officer roles, membership 
 
 Planned future types: Grading, Shogo, Officer Roles, Membership Type.
 
+## UI Conventions
+
+### Desktop Layout
+Pages use full-width layout with `px-4` padding. No `max-w-*` constraint on page wrappers — content fills the available space beside the sidebar. Use responsive grid (`md:grid-cols-2`, `md:grid-cols-4` etc.) to structure content on wider screens rather than capping width.
+
+### Button Ordering (macOS HIG)
+Action buttons are right-aligned (`justify-end`). Order left-to-right: most destructive → least destructive → primary/safe action. Example: `Cancel Series` | `Cancel Session` | `Edit`. The default/safe action always sits rightmost.
+
 ## Design Philosophy
 
 **Deep modules** (Ousterhout, *A Philosophy of Software Design*): favor small interfaces hiding large implementations. A caller should need to know as little as possible about what's underneath. New modules and abstractions should earn their existence by hiding meaningful complexity.

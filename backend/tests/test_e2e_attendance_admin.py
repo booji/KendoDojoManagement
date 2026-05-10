@@ -9,73 +9,92 @@ ACs covered:
   AC5 — GET /members/{id}/attendance returns full history (admin any; member own only)
   AC6 — Member cannot access another member's attendance history (403)
 
-Setup strategy
---------------
-Tests use the live backend (SQLite dev DB) and the Vite dev server.  Each test
-creates its own data via the backend API and drives the UI with Playwright.
-
-The admin account (admin@test.com / testpass123) is assumed to already exist as
-the first registered user (role=admin).
-
-Session isolation: each test creates sessions on a unique future date
-(different per test via time offsets) so the sessions page only shows
-that test's session when filtered — but since we cannot filter in the UI,
-we instead scope the Playwright interaction to the *last* card in the list
-(the most recently scheduled session appears last chronologically).
-
-AC5b (member viewing own attendance history) and AC6 (member blocked from
-another member's history): the /members/:id route is admin-only in the React
-router, so members are redirected to /.  These ACs are enforced at the API
-level; the browser tests verify the API response directly via page.evaluate
-after logging in via the UI to obtain a session cookie.
+Auth pattern: synthetic JWT tokens injected as cookies (same as test_e2e_attendance.py).
+No real user registration required. members.user_id has no FK constraint so synthetic
+UUIDs from JWT claims can link member records without a real users row.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 
 import requests
+from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
+
+_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=_dotenv_path, override=False)
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+
+from app import config as _config  # noqa: E402
+from app.auth.models import UserClaims  # noqa: E402
+from app.auth.token import encode_token  # noqa: E402
+
+_config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
 
-ADMIN_EMAIL = "admin@test.com"
-ADMIN_PASSWORD = "testpass123"
-
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Auth helpers
 # ---------------------------------------------------------------------------
 
 
-def _api_login(email: str, password: str) -> dict:
-    """Log in via the API and return the cookie dict."""
-    r = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": password},
+def _make_token(role: str, sub: str | None = None) -> str:
+    claims = UserClaims(
+        sub=sub or str(uuid.uuid4()),
+        email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
+        role=role,  # type: ignore[arg-type]
+        is_active=True,
     )
+    return encode_token(claims)
+
+
+def _cookie_dict(token: str) -> dict:
+    return {"access_token": token}
+
+
+def _inject_cookie(page: Page, token: str) -> None:
+    page.context.add_cookies(
+        [{"name": "access_token", "value": token, "url": BASE_URL}]
+    )
+
+
+# ---------------------------------------------------------------------------
+# API helpers
+# ---------------------------------------------------------------------------
+
+
+def _api_get_session_type_id(admin_token: str) -> str:
+    r = requests.get(f"{API_URL}/session-types", cookies=_cookie_dict(admin_token))
     r.raise_for_status()
-    return r.cookies.get_dict()
+    return r.json()[0]["id"]
 
 
-def _api_register(email: str, password: str) -> dict:
-    """Register a new user and return the UserClaims dict."""
+def _api_create_session(admin_token: str, date: str = "2299-06-01") -> dict:
+    type_id = _api_get_session_type_id(admin_token)
     r = requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": password},
+        f"{API_URL}/sessions",
+        cookies=_cookie_dict(admin_token),
+        json={
+            "session_type_id": type_id,
+            "date": date,
+            "start_time": "18:00",
+            "duration_minutes": 90,
+        },
     )
     r.raise_for_status()
     return r.json()
 
 
-def _api_create_member(admin_cookies: dict, email: str, full_name: str) -> dict:
-    """Create a member record via the admin API (no user_id link)."""
+def _api_create_member(admin_token: str, full_name: str) -> dict:
     r = requests.post(
         f"{API_URL}/members",
-        cookies=admin_cookies,
+        cookies=_cookie_dict(admin_token),
         json={
-            "email": email,
+            "email": f"member-{uuid.uuid4().hex[:8]}@dojo.test",
             "full_name": full_name,
             "dob": "1990-01-01",
             "join_date": "2024-01-01",
@@ -89,82 +108,44 @@ def _api_create_member(admin_cookies: dict, email: str, full_name: str) -> dict:
     return r.json()
 
 
-def _api_self_onboard_member(email: str, password: str, full_name: str) -> dict:
-    """Register a user and create+link their own member record via PUT /users/me/member.
+def _api_create_member_with_user_id(member_sub: str, full_name: str) -> dict:
+    """Create member via PUT /users/me/member with member's own JWT.
 
-    Returns the member record dict.  The member record's user_id will equal
-    the user's sub, so GET /members/{member_id}/attendance will allow self-access.
+    members.user_id has no FK constraint so member_sub need not be in users table.
+    The self-access check in GET /members/{id}/attendance uses
+    get_by_user_id(claims.sub) which will match this member's user_id.
     """
-    r = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": password},
-    )
-    r.raise_for_status()
-    member_cookies = r.cookies.get_dict()
-
+    member_token = _make_token("member", sub=member_sub)
     r = requests.put(
         f"{API_URL}/users/me/member",
-        cookies=member_cookies,
+        cookies=_cookie_dict(member_token),
         json={"full_name": full_name},
     )
     r.raise_for_status()
     return r.json()
 
 
-def _api_get_session_type_id(admin_cookies: dict) -> str:
-    """Return the first session-type ID (created by app lifespan)."""
-    r = requests.get(f"{API_URL}/session-types", cookies=admin_cookies)
-    r.raise_for_status()
-    return r.json()[0]["id"]
-
-
-def _api_create_session(admin_cookies: dict, date: str = "2026-05-01") -> dict:
-    """Create an ad-hoc session instance on the given date."""
-    type_id = _api_get_session_type_id(admin_cookies)
-    r = requests.post(
-        f"{API_URL}/sessions",
-        cookies=admin_cookies,
-        json={
-            "session_type_id": type_id,
-            "date": date,
-            "start_time": "18:00",
-            "duration_minutes": 90,
-        },
-    )
-    r.raise_for_status()
-    return r.json()
-
-
-def _api_mark_attended(admin_cookies: dict, session_id: str, member_id: str) -> dict:
+def _api_mark_attended(admin_token: str, session_id: str, member_id: str) -> dict:
     r = requests.post(
         f"{API_URL}/sessions/{session_id}/attendance",
-        cookies=admin_cookies,
+        cookies=_cookie_dict(admin_token),
         json={"member_id": member_id},
     )
     r.raise_for_status()
     return r.json()
 
 
-def _login_ui(page: Page, email: str, password: str) -> None:
-    """Log in via the UI password form and wait for redirect to /."""
-    page.goto(f"{BASE_URL}/login")
-    page.get_by_role("button", name="Use email and password instead").click()
-    page.get_by_label("Email").fill(email)
-    page.get_by_label("Password").fill(password)
-    page.get_by_role("button", name="Sign in").click()
-    expect(page).to_have_url(f"{BASE_URL}/")
-
-
 def _open_last_attendance_panel(page: Page) -> None:
-    """
-    Open the Attendance panel on the last session card in the list.
-    Each test creates sessions on unique future dates so the newest session
-    (chronologically last) is the one we want.
-    """
-    # All Attendance toggle buttons — pick the last one (newest session)
     toggles = page.get_by_role("button", name="Attendance")
     count = toggles.count()
     toggles.nth(count - 1).click()
+
+
+def _open_session_panel(page: Page, session_id: str):
+    """Open the attendance panel for a specific session and return its locator."""
+    panel = page.locator(f'[data-session-id="{session_id}"]')
+    panel.get_by_role("button", name="Attendance").click()
+    return panel
 
 
 # ---------------------------------------------------------------------------
@@ -173,29 +154,27 @@ def _open_last_attendance_panel(page: Page) -> None:
 
 
 def test_admin_can_mark_member_attended(page: Page) -> None:
-    # Unique date so this session sorts last
-    test_date = "2026-06-01"
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    _api_create_session(admin_cookies, date=test_date)
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-01")
+    session_id = session["id"]
 
     suffix = uuid.uuid4().hex[:8]
-    email = f"member_ac1_{suffix}@test.com"
-    _api_register(email, "testpass123")
-    member = _api_create_member(admin_cookies, email, f"Member AC1 {suffix}")
+    full_name = f"Member AC1 {suffix}"
+    member = _api_create_member(admin_token, full_name)
     member_id = member["id"]
 
-    _login_ui(page, ADMIN_EMAIL, ADMIN_PASSWORD)
+    page.set_viewport_size({"width": 375, "height": 667})
+    _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
+    page.wait_for_load_state("networkidle")
 
-    _open_last_attendance_panel(page)
+    panel = _open_session_panel(page, session_id)
 
-    # Fill in the member ID and submit
-    page.get_by_label("Member ID to mark attended").fill(member_id)
-    page.get_by_label("Mark member attended").click()
+    panel.get_by_label("Member ID to mark attended").fill(member_id)
+    panel.get_by_label("Mark member attended").click()
 
-    # The attendance list should now show the member's truncated ID
-    truncated = member_id[:8] + "\u2026"
-    expect(page.get_by_label("Attendance list").last).to_contain_text(truncated)
+    # UI shows display_name (member's full_name) after successful mark
+    expect(panel.get_by_label("Attendance list")).to_contain_text(full_name)
 
 
 # ---------------------------------------------------------------------------
@@ -204,38 +183,30 @@ def test_admin_can_mark_member_attended(page: Page) -> None:
 
 
 def test_admin_can_remove_member_attendance(page: Page) -> None:
-    test_date = "2026-06-02"
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    session = _api_create_session(admin_cookies, date=test_date)
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-02")
     session_id = session["id"]
 
     suffix = uuid.uuid4().hex[:8]
-    email = f"member_ac2_{suffix}@test.com"
-    _api_register(email, "testpass123")
-    member = _api_create_member(admin_cookies, email, f"Member AC2 {suffix}")
+    full_name = f"Member AC2 {suffix}"
+    member = _api_create_member(admin_token, full_name)
     member_id = member["id"]
 
-    # Mark the member as attended first (via API)
-    _api_mark_attended(admin_cookies, session_id, member_id)
+    _api_mark_attended(admin_token, session_id, member_id)
 
-    _login_ui(page, ADMIN_EMAIL, ADMIN_PASSWORD)
+    page.set_viewport_size({"width": 375, "height": 667})
+    _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
+    page.wait_for_load_state("networkidle")
 
-    _open_last_attendance_panel(page)
+    panel = _open_session_panel(page, session_id)
 
-    # The member should be listed
-    truncated = member_id[:8] + "\u2026"
-    last_list = page.get_by_label("Attendance list").last
-    expect(last_list).to_contain_text(truncated)
+    expect(panel.get_by_label("Attendance list")).to_contain_text(full_name)
 
-    # Click the Remove button for that member
-    remove_btn = page.get_by_label(f"Remove attendance for {member_id[:8]}")
-    remove_btn.click()
+    # aria-label uses display_name when available
+    panel.get_by_label(f"Remove attendance for {full_name}").click()
 
-    # The member should no longer appear in the list
-    # After removal the list may be empty — just confirm the truncated ID is gone
-    # (the "No attendees yet" message appears when the list is empty)
-    expect(page.get_by_text("No attendees yet").last).to_be_visible()
+    expect(panel.get_by_text("No attendees yet")).to_be_visible()
 
 
 # ---------------------------------------------------------------------------
@@ -244,23 +215,23 @@ def test_admin_can_remove_member_attendance(page: Page) -> None:
 
 
 def test_admin_can_add_visitor_to_session(page: Page) -> None:
-    test_date = "2026-06-03"
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    _api_create_session(admin_cookies, date=test_date)
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-03")
+    session_id = session["id"]
 
     visitor_name = f"John Visitor {uuid.uuid4().hex[:6]}"
 
-    _login_ui(page, ADMIN_EMAIL, ADMIN_PASSWORD)
+    page.set_viewport_size({"width": 375, "height": 667})
+    _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
+    page.wait_for_load_state("networkidle")
 
-    _open_last_attendance_panel(page)
+    panel = _open_session_panel(page, session_id)
 
-    # Fill visitor name and submit
-    page.get_by_label("Visitor name").fill(visitor_name)
-    page.get_by_label("Add visitor").click()
+    panel.get_by_label("Visitor name").fill(visitor_name)
+    panel.get_by_label("Add visitor").click()
 
-    # Visitor name should appear in the attendance list
-    expect(page.get_by_label("Attendance list").last).to_contain_text(visitor_name)
+    expect(panel.get_by_label("Attendance list")).to_contain_text(visitor_name)
 
 
 # ---------------------------------------------------------------------------
@@ -269,39 +240,34 @@ def test_admin_can_add_visitor_to_session(page: Page) -> None:
 
 
 def test_session_attendance_list_shows_visitors_alongside_members(page: Page) -> None:
-    test_date = "2026-06-04"
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    session = _api_create_session(admin_cookies, date=test_date)
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-04")
     session_id = session["id"]
 
     suffix = uuid.uuid4().hex[:8]
-    email = f"member_ac4_{suffix}@test.com"
-    _api_register(email, "testpass123")
-    member = _api_create_member(admin_cookies, email, f"Member AC4 {suffix}")
+    full_name = f"Member AC4 {suffix}"
+    member = _api_create_member(admin_token, full_name)
     member_id = member["id"]
 
-    # Mark member attended and add a visitor via API
-    _api_mark_attended(admin_cookies, session_id, member_id)
+    _api_mark_attended(admin_token, session_id, member_id)
     visitor_name = f"Visitor AC4 {uuid.uuid4().hex[:6]}"
     r = requests.post(
         f"{API_URL}/sessions/{session_id}/visitors",
-        cookies=admin_cookies,
+        cookies=_cookie_dict(admin_token),
         json={"visitor_name": visitor_name},
     )
     r.raise_for_status()
 
-    _login_ui(page, ADMIN_EMAIL, ADMIN_PASSWORD)
+    page.set_viewport_size({"width": 375, "height": 667})
+    _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
+    page.wait_for_load_state("networkidle")
 
-    _open_last_attendance_panel(page)
+    panel = _open_session_panel(page, session_id)
 
-    # Both member (truncated ID) and visitor should appear together
-    truncated = member_id[:8] + "\u2026"
-    last_list = page.get_by_label("Attendance list").last
-    expect(last_list).to_contain_text(truncated)
-    expect(last_list).to_contain_text(visitor_name)
-    # Visitor badge
-    expect(last_list).to_contain_text("Visitor")
+    expect(panel.get_by_label("Attendance list")).to_contain_text(full_name)
+    expect(panel.get_by_label("Attendance list")).to_contain_text(visitor_name)
+    expect(panel.get_by_label("Attendance list")).to_contain_text("Visitor")
 
 
 # ---------------------------------------------------------------------------
@@ -310,62 +276,53 @@ def test_session_attendance_list_shows_visitors_alongside_members(page: Page) ->
 
 
 def test_admin_can_view_any_member_attendance_history(page: Page) -> None:
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    session = _api_create_session(admin_cookies, date="2026-06-05")
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-05")
     session_id = session["id"]
 
     suffix = uuid.uuid4().hex[:8]
-    email = f"member_ac5a_{suffix}@test.com"
-    _api_register(email, "testpass123")
-    member = _api_create_member(admin_cookies, email, f"Member AC5a {suffix}")
+    member = _api_create_member(admin_token, f"Member AC5a {suffix}")
     member_id = member["id"]
 
-    # Mark member attended so there's history to show
-    _api_mark_attended(admin_cookies, session_id, member_id)
+    _api_mark_attended(admin_token, session_id, member_id)
 
-    _login_ui(page, ADMIN_EMAIL, ADMIN_PASSWORD)
+    _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/members/{member_id}")
+    page.wait_for_load_state("networkidle")
 
-    # The Attendance History card title (a <div data-slot="card-title">)
     expect(
         page.locator('[data-slot="card-title"]', has_text="Attendance History")
     ).to_be_visible()
 
-    # Expand attendance history — button text is "Show attendance (1 sessions)"
     page.get_by_role("button", name="Show attendance").click()
 
-    # The attendance history list (#attendance-history-list) should appear
     expect(page.locator("#attendance-history-list")).to_be_visible()
 
 
 # ---------------------------------------------------------------------------
 # AC5b — Member can view own attendance history via API
-# (The /members/:id UI route is admin-only; AC5b is enforced at the API layer.
-#  We verify the API returns 200 for self after logging in via the UI.)
 # ---------------------------------------------------------------------------
 
 
 def test_member_can_view_own_attendance_history(page: Page) -> None:
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    session = _api_create_session(admin_cookies, date="2026-06-06")
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-06")
     session_id = session["id"]
 
+    # Create member with user_id = member_sub (FK removed, no real user needed)
+    member_sub = str(uuid.uuid4())
     suffix = uuid.uuid4().hex[:8]
-    email = f"member_ac5b_{suffix}@test.com"
-    _api_register(email, "testpass123")
-
-    # Self-onboard: PUT /users/me/member creates a member record with user_id linked,
-    # so the router's get_by_user_id lookup will resolve correctly for self-access.
-    member = _api_self_onboard_member(email, "testpass123", f"Member AC5b {suffix}")
+    member = _api_create_member_with_user_id(member_sub, f"Member AC5b {suffix}")
     member_id = member["id"]
 
-    # Mark member attended so history exists
-    _api_mark_attended(admin_cookies, session_id, member_id)
+    _api_mark_attended(admin_token, session_id, member_id)
 
-    # Log in as the member via the UI (establishes the session cookie in the browser)
-    _login_ui(page, email, "testpass123")
+    # Inject member JWT — get_by_user_id(member_sub) finds this member → 200
+    member_token = _make_token("member", sub=member_sub)
+    _inject_cookie(page, member_token)
+    page.goto(BASE_URL)
+    page.wait_for_load_state("networkidle")
 
-    # Call the API from the browser (shares the httpOnly cookie set by the UI login)
     result = page.evaluate(
         """async (memberId) => {
             const res = await fetch(`/api/members/${memberId}/attendance`, {
@@ -386,29 +343,21 @@ def test_member_can_view_own_attendance_history(page: Page) -> None:
 
 
 def test_member_cannot_view_other_member_attendance_history(page: Page) -> None:
-    admin_cookies = _api_login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    session = _api_create_session(admin_cookies, date="2026-06-07")
+    admin_token = _make_token("admin")
+    session = _api_create_session(admin_token, date="2299-06-07")
     session_id = session["id"]
 
     suffix = uuid.uuid4().hex[:8]
-
-    # Target member (has attendance)
-    target_email = f"target_ac6_{suffix}@test.com"
-    _api_register(target_email, "testpass123")
-    target_member = _api_create_member(
-        admin_cookies, target_email, f"Target AC6 {suffix}"
-    )
+    target_member = _api_create_member(admin_token, f"Target AC6 {suffix}")
     target_member_id = target_member["id"]
-    _api_mark_attended(admin_cookies, session_id, target_member_id)
+    _api_mark_attended(admin_token, session_id, target_member_id)
 
-    # Viewer member (tries to access target's history)
-    viewer_email = f"viewer_ac6_{suffix}@test.com"
-    _api_register(viewer_email, "testpass123")
+    # Viewer has JWT but no linked member record → get_by_user_id returns None → 403
+    viewer_token = _make_token("member")
+    _inject_cookie(page, viewer_token)
+    page.goto(BASE_URL)
+    page.wait_for_load_state("networkidle")
 
-    # Log in as the viewer via the UI
-    _login_ui(page, viewer_email, "testpass123")
-
-    # Verify the API returns 403 when the member tries to access another member's history
     result = page.evaluate(
         """async (targetMemberId) => {
             const res = await fetch(`/api/members/${targetMemberId}/attendance`, {

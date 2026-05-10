@@ -52,7 +52,6 @@ def _seed_record(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Emergency Contact",
         "emergency_contact_phone": "+447700900001",
-        "federation_number": "FED-SELF-001",
         "parental_consent_obtained": False,
         "user_id": _USER_SUB,
     }
@@ -217,7 +216,6 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "federation_number",
         "parental_consent_obtained",
         "is_minor",
     }
@@ -306,24 +304,6 @@ async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
     body = response.json()
     assert body["emergency_contact_name"] == "New Emergency"
     assert body["emergency_contact_phone"] == "+447700900999"
-
-
-@pytest.mark.anyio
-async def test_put_my_member_updates_federation_number(member_repo) -> None:
-    """PUT updates federation_number."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    await member_repo.add(_seed_record())
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.put(
-            "/users/me/member",
-            json={"federation_number": "FED-NEW-999"},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["federation_number"] == "FED-NEW-999"
 
 
 @pytest.mark.anyio

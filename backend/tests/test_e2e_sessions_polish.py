@@ -22,7 +22,7 @@ from playwright.sync_api import Page, expect
 
 # Load the real JWT_SECRET from .env so tokens pass server-side validation.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -99,17 +99,17 @@ def test_session_card_click_navigates_to_detail_page(page: Page) -> None:
     session_id = _ensure_session(page, admin_token)
 
     member_token = _make_token("member")
+    page.set_viewport_size({"width": 375, "height": 812})
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # Click the first session card (cursor-pointer class)
+    # Click the first session card (mobile card list visible at 375px)
     card = page.locator(".cursor-pointer").first
     expect(card).to_be_visible()
     card.click()
 
-    # Should land on /sessions/<uuid> — any UUID is valid since other sessions may
-    # exist from previous test runs and appear before the one we just created.
+    # Should land on /sessions/<uuid>
     expect(page).to_have_url(re.compile(r"/sessions/[0-9a-f-]{36}$"), timeout=5000)
 
 
@@ -124,6 +124,9 @@ def test_ical_url_displayed_for_authenticated_member(page: Page) -> None:
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
+
+    # The iCal input is inside a popover — open it first
+    page.get_by_role("button", name="Subscribe to iCal feed").click()
 
     ical_input = page.get_by_label("iCal feed URL")
     expect(ical_input).to_be_visible()
@@ -147,6 +150,9 @@ def test_ical_copy_button_copies_url_to_clipboard(page: Page) -> None:
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
+
+    # Open the iCal popover first
+    page.get_by_role("button", name="Subscribe to iCal feed").click()
 
     copy_button = page.get_by_role("button", name="Copy")
     expect(copy_button).to_be_visible()
@@ -174,6 +180,9 @@ def test_ical_widget_shows_helper_text(page: Page) -> None:
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
+    # Open the iCal popover first
+    page.get_by_role("button", name="Subscribe to iCal feed").click()
+
     helper = page.get_by_text(
         "Subscribe in Google Calendar, Apple Calendar, or Outlook using this URL"
     )
@@ -194,11 +203,13 @@ def test_e2e_copy_then_navigate_to_session_detail(page: Page) -> None:
     session_id = _ensure_session(page, admin_token)
 
     member_token = _make_token("member")
+    page.set_viewport_size({"width": 375, "height": 812})
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # Part 1: copy iCal URL to clipboard
+    # Part 1: copy iCal URL to clipboard (open popover first)
+    page.get_by_role("button", name="Subscribe to iCal feed").click()
     copy_button = page.get_by_role("button", name="Copy")
     expect(copy_button).to_be_visible()
     copy_button.click()
@@ -209,7 +220,9 @@ def test_e2e_copy_then_navigate_to_session_detail(page: Page) -> None:
         "/api/sessions/ical" in clipboard_text
     ), f"Clipboard should contain iCal URL, got: {clipboard_text}"
 
-    # Part 2: navigate to session detail via card click
+    # Close popover and navigate to session detail via card click (mobile card list at 375px)
+    page.keyboard.press("Escape")
+    # Part 2: navigate to session detail via card click (mobile card list at 375px)
     card = page.locator(".cursor-pointer").first
     expect(card).to_be_visible()
     card.click()
