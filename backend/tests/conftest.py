@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Any
 
@@ -17,11 +18,6 @@ if not _DATABASE_URL.startswith("postgresql"):
     )
 # Pin it back so load_dotenv() in app/config.py can't override it later.
 os.environ["DATABASE_URL"] = _DATABASE_URL
-
-
-@pytest.fixture(scope="session")
-def anyio_backend() -> str:
-    return "asyncio"
 
 
 @pytest.fixture(scope="session")
@@ -104,11 +100,23 @@ def _reset_rate_limiter():
 
 @pytest.fixture(scope="session")
 def pg_engine():
+    """Session-scoped async engine for tests that need to inspect engine metadata.
+
+    Note: this engine is not used for schema setup (see _setup_schema) and must
+    not be used inside async test functions if there is also a session event loop,
+    as pooled connections are bound to the event loop in which they were created.
+    """
     return create_async_engine(_DATABASE_URL)
 
 
-@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
-async def _setup_schema(pg_engine):
+@pytest.fixture(scope="session", autouse=True)
+def _setup_schema():
+    """Create all tables once per session using a short-lived event loop.
+
+    Using a sync fixture with asyncio.run() avoids leaving an anyio session
+    event loop in a running state, which would cause pytest-asyncio to fail
+    when trying to run_until_complete on that same loop for later tests.
+    """
     import app.attendance.db_models  # noqa: F401
     import app.auth.db_models  # noqa: F401
     import app.grades.db_models  # noqa: F401
@@ -117,11 +125,25 @@ async def _setup_schema(pg_engine):
     import app.settings.models  # noqa: F401
     from app.db.base import Base
 
-    async with pg_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    async def _create() -> None:
+        engine = create_async_engine(_DATABASE_URL, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        finally:
+            await engine.dispose()
+
+    async def _drop() -> None:
+        engine = create_async_engine(_DATABASE_URL, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_create())
     yield
-    async with pg_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    asyncio.run(_drop())
 
 
 @pytest_asyncio.fixture

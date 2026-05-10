@@ -85,7 +85,6 @@ async def put_my_member(
             "is_first_aider": False,
             "emergency_contact_name": data.get("emergency_contact_name"),
             "emergency_contact_phone": data.get("emergency_contact_phone"),
-            "federation_number": data.get("federation_number"),
             "parental_consent_obtained": False,
             "user_id": claims.sub,
         }

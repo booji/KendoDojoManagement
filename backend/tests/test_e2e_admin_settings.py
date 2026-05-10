@@ -11,84 +11,50 @@ Acceptance criteria covered here (criteria 6-9):
   9. Visiting /admin/settings as a regular member is redirected (not accessible).
 """
 
-import pathlib
-import sqlite3 as _sqlite3
+import os
 import uuid
 
-import requests
+from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=_dotenv_path, override=False)
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
-# Path to the dev SQLite DB used by the running server
-_DB_PATH = pathlib.Path(__file__).parent.parent / "kendo.db"
+from app import config as _config  # noqa: E402
+from app.auth.models import UserClaims  # noqa: E402
+from app.auth.token import encode_token  # noqa: E402
+
+_config.JWT_SECRET = os.environ["JWT_SECRET"]
+
+BASE_URL = "http://localhost:5173"
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
 
-def _register_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": password},
+def _make_token(role: str) -> str:
+    claims = UserClaims(
+        sub=str(uuid.uuid4()),
+        email=f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
+        role=role,  # type: ignore[arg-type]
+        is_active=True,
     )
-    resp.raise_for_status()
-    return resp.json()["sub"]
-
-
-def _login_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": password},
-    )
-    resp.raise_for_status()
-    return resp.cookies["access_token"]
+    return encode_token(claims)
 
 
 def _inject_cookie(page: Page, token: str) -> None:
+    page.goto(BASE_URL)
     page.context.add_cookies(
-        [
-            {
-                "name": "access_token",
-                "value": token,
-                "domain": "localhost",
-                "path": "/",
-                "httpOnly": True,
-                "sameSite": "Strict",
-            }
-        ]
+        [{"name": "access_token", "value": token, "url": BASE_URL}]
     )
-
-
-def _promote_to_admin(user_id: str) -> None:
-    """Directly set a user's role to admin in the local SQLite dev DB."""
-    with _sqlite3.connect(_DB_PATH) as conn:
-        conn.execute("UPDATE users SET role='admin' WHERE id=?", (user_id,))
-
-
-def _register_admin_user() -> str:
-    """Register a fresh user, promote them to admin, return their access token."""
-    tag = uuid.uuid4().hex[:8]
-    email = f"e2e_admin_{tag}@dojo.test"
-    user_id = _register_api(email)
-    _promote_to_admin(user_id)
-    return _login_api(email)
-
-
-def _register_member_user() -> str:
-    """Register a fresh regular member, return their access token."""
-    tag = uuid.uuid4().hex[:8]
-    email = f"e2e_member_{tag}@dojo.test"
-    _register_api(email)
-    return _login_api(email)
 
 
 # ── AC6 — Admin nav renders both Settings and Admin Settings links ─────────
 
 
 def test_admin_nav_has_settings_and_admin_settings_links(page: Page) -> None:
-    token = _register_admin_user()
+    token = _make_token("admin")
     _inject_cookie(page, token)
 
     page.goto(f"{BASE_URL}/")
@@ -108,7 +74,7 @@ def test_admin_nav_has_settings_and_admin_settings_links(page: Page) -> None:
 
 
 def test_admin_settings_page_renders_personal_details(page: Page) -> None:
-    token = _register_admin_user()
+    token = _make_token("admin")
     _inject_cookie(page, token)
 
     page.goto(f"{BASE_URL}/settings")
@@ -121,7 +87,7 @@ def test_admin_settings_page_renders_personal_details(page: Page) -> None:
 
 
 def test_admin_settings_page_renders_non_blank_content(page: Page) -> None:
-    token = _register_admin_user()
+    token = _make_token("admin")
     _inject_cookie(page, token)
 
     page.goto(f"{BASE_URL}/admin/settings")
@@ -133,8 +99,8 @@ def test_admin_settings_page_renders_non_blank_content(page: Page) -> None:
 
 
 def test_admin_settings_page_redirects_regular_member(page: Page) -> None:
-    member_token = _register_member_user()
-    _inject_cookie(page, member_token)
+    token = _make_token("member")
+    _inject_cookie(page, token)
 
     page.goto(f"{BASE_URL}/admin/settings")
 

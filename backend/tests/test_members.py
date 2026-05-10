@@ -64,7 +64,6 @@ def _valid_member_payload(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Hanako Yamada",
         "emergency_contact_phone": "+447700900000",
-        "federation_number": "FED-001",
         "parental_consent_obtained": False,
     }
     base.update(overrides)
@@ -199,7 +198,6 @@ async def test_create_member_response_schema_has_all_required_fields(
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "federation_number",
         "parental_consent_obtained",
         "is_minor",
     }

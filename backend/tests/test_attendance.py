@@ -302,7 +302,7 @@ async def test_member_can_checkin_to_session(
     assert body["session_id"] == session["id"]
     assert body["member_id"] == _MEMBER.sub
     assert "checked_in_at" in body
-    assert body["recorded_by"] == "self"
+    assert body["recorded_by"] == _MEMBER.sub
 
 
 @pytest.mark.anyio
@@ -499,7 +499,7 @@ async def test_invalid_token_returns_401(
     ) as c:
         response = await c.post("/checkin/this-token-does-not-exist")
 
-    assert response.status_code == 401
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

@@ -18,7 +18,6 @@ class CreateMemberRequest(BaseModel):
     is_first_aider: bool = False
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
-    federation_number: str | None = None
     parental_consent_obtained: bool = False
 
 
@@ -32,7 +31,6 @@ class UpdateMemberRequest(BaseModel):
     is_first_aider: bool | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
-    federation_number: str | None = None
     parental_consent_obtained: bool | None = None
 
 
@@ -43,7 +41,6 @@ class SelfUpdateMemberRequest(BaseModel):
     dob: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
-    federation_number: str | None = None
 
 
 class MemberResponse(BaseModel):
@@ -56,6 +53,5 @@ class MemberResponse(BaseModel):
     is_first_aider: bool
     emergency_contact_name: str | None
     emergency_contact_phone: str | None
-    federation_number: str | None
     parental_consent_obtained: bool
     is_minor: bool

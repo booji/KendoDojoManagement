@@ -143,7 +143,13 @@ class SqlAttendanceRepository:
         )
         self._session.add(obj)
         await self._session.flush()
-        return _attendance_to_dict(obj)
+        result = await self._session.execute(
+            select(Attendance, Member.full_name)
+            .outerjoin(Member, or_(Attendance.member_id == Member.id, Attendance.member_id == Member.user_id))
+            .where(Attendance.id == obj.id)
+        )
+        row = result.one()
+        return {**_attendance_to_dict(row.Attendance), "display_name": row.full_name}
 
     async def remove_attendance(self, session_id: str, member_id: str) -> bool:
         result = await self._session.execute(

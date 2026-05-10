@@ -43,7 +43,6 @@ def _to_dict(obj: Member) -> dict[str, Any]:
         "is_first_aider": obj.is_first_aider,
         "emergency_contact_name": obj.emergency_contact_name,
         "emergency_contact_phone": obj.emergency_contact_phone,
-        "federation_number": obj.federation_number,
         "parental_consent_obtained": obj.parental_consent_obtained,
         "user_id": obj.user_id,
     }

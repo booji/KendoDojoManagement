@@ -51,7 +51,6 @@ def _seed_admin_member(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Admin Contact",
         "emergency_contact_phone": "+447700900002",
-        "federation_number": "FED-ADMIN-001",
         "parental_consent_obtained": False,
         "user_id": _ADMIN_SUB,
     }
@@ -272,7 +271,7 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.put("/users/me/member", json={"federation_number": "FED-ADMIN-999"})
+        await c.put("/users/me/member", json={"full_name": "Updated Admin Name"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -280,7 +279,7 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
-    assert get_response.json()["federation_number"] == "FED-ADMIN-999"
+    assert get_response.json()["full_name"] == "Updated Admin Name"
 
 
 # ---------------------------------------------------------------------------

@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 AUTH_LOCKOUT_MINUTES: int = int(os.getenv("AUTH_LOCKOUT_MINUTES", "15"))
 MAX_FAILURES: int = 10
-PER_IP_LIMIT: str = "20/minute"
-PER_ACCOUNT_LIMIT: str = "10/minute"
+PER_IP_LIMIT: str = os.getenv("RATE_LIMIT_PER_IP", "20/minute")
+PER_ACCOUNT_LIMIT: str = os.getenv("RATE_LIMIT_PER_ACCOUNT", "10/minute")
 
 
 def _real_ip(request: Request) -> str:

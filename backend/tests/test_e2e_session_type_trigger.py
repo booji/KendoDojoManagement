@@ -16,7 +16,7 @@ from playwright.sync_api import Page, expect
 
 # Load the real JWT_SECRET from .env so tokens pass server-side validation.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -82,7 +82,7 @@ def test_session_type_trigger_shows_name_after_selection(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     # Open the "New Session" dialog
-    page.get_by_role("button", name="New Session").click()
+    page.get_by_role("button", name="Create Session").click()
     page.wait_for_selector("[role='dialog']")
 
     # The trigger should show the placeholder before any selection
@@ -121,7 +121,7 @@ def test_session_type_trigger_shows_placeholder_when_empty(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     # Open the "New Session" dialog
-    page.get_by_role("button", name="New Session").click()
+    page.get_by_role("button", name="Create Session").click()
     page.wait_for_selector("[role='dialog']")
 
     # Before selection the trigger must show the placeholder text
@@ -152,7 +152,7 @@ def test_session_type_dropdown_items_show_names(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     # Open the "New Session" dialog, then open the dropdown
-    page.get_by_role("button", name="New Session").click()
+    page.get_by_role("button", name="Create Session").click()
     page.wait_for_selector("[role='dialog']")
     page.locator("[id='session-type']").click()
 

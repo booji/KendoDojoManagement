@@ -14,6 +14,8 @@ This file covers criterion 5 via browser tests, plus smoke-checks for the UI
 pages themselves.
 """
 
+import uuid
+
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
@@ -23,9 +25,11 @@ BASE_URL = "http://localhost:5173"
 
 
 def test_register_page_renders(page: Page) -> None:
-    """The /register route renders a form with the required fields."""
+    """The /register route renders passkey mode by default; password mode shows on toggle."""
     page.goto(f"{BASE_URL}/register")
     expect(page.get_by_label("Email")).to_be_visible()
+    # Switch to password mode to verify those fields exist
+    page.get_by_role("button", name="Use email and password instead").click()
     expect(page.get_by_label("Password", exact=True)).to_be_visible()
     expect(page.get_by_label("Confirm password")).to_be_visible()
     expect(page.get_by_role("button", name="Register")).to_be_visible()
@@ -34,7 +38,8 @@ def test_register_page_renders(page: Page) -> None:
 def test_register_flow_redirects_to_login(page: Page) -> None:
     """Filling the register form with valid data submits and redirects to /login."""
     page.goto(f"{BASE_URL}/register")
-    page.get_by_label("Email").fill("e2e_register@dojo.test")
+    page.get_by_role("button", name="Use email and password instead").click()
+    page.get_by_label("Email").fill(f"e2e_register_{uuid.uuid4().hex[:8]}@dojo.test")
     page.get_by_label("Password", exact=True).fill("Str0ng!Pass")
     page.get_by_label("Confirm password").fill("Str0ng!Pass")
     page.get_by_role("button", name="Register").click()
@@ -45,25 +50,30 @@ def test_register_flow_redirects_to_login(page: Page) -> None:
 
 
 def test_login_page_renders(page: Page) -> None:
-    """The /login route renders a form with email and password fields."""
+    """The /login route renders passkey mode by default; password mode shows on toggle."""
     page.goto(f"{BASE_URL}/login")
     expect(page.get_by_label("Email")).to_be_visible()
+    page.get_by_role("button", name="Use email and password instead").click()
     expect(page.get_by_label("Password")).to_be_visible()
     expect(page.get_by_role("button", name="Sign in")).to_be_visible()
 
 
 def test_login_flow_redirects_to_home(page: Page) -> None:
     """Logging in with valid credentials redirects to /."""
-    # Register the account first (via API to avoid UI dependency)
+    email = f"e2e_login_{uuid.uuid4().hex[:8]}@dojo.test"
+
+    # Register first
     page.goto(f"{BASE_URL}/register")
-    page.get_by_label("Email").fill("e2e_login@dojo.test")
+    page.get_by_role("button", name="Use email and password instead").click()
+    page.get_by_label("Email").fill(email)
     page.get_by_label("Password", exact=True).fill("Str0ng!Pass")
     page.get_by_label("Confirm password").fill("Str0ng!Pass")
     page.get_by_role("button", name="Register").click()
     expect(page).to_have_url(f"{BASE_URL}/login")
 
     # Now log in
-    page.get_by_label("Email").fill("e2e_login@dojo.test")
+    page.get_by_role("button", name="Use email and password instead").click()
+    page.get_by_label("Email").fill(email)
     page.get_by_label("Password").fill("Str0ng!Pass")
     page.get_by_role("button", name="Sign in").click()
     expect(page).to_have_url(f"{BASE_URL}/")

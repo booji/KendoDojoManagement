@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -107,17 +107,14 @@ def _navigate_to_test_month(page: Page) -> None:
 
 
 def _navigate_fast(page: Page, target_label: str) -> None:
-    """Use API to load the page with ?month= parameter if supported, else navigate via clicks.
-
-    Since the CalendarView uses anchor state (no URL params), we use JavaScript to
-    manipulate the anchor by dispatching a known number of clicks.
-    """
-    # Count clicks from current month (April 2026) to June 2090:
-    # 2090-06 - 2026-04 = 64 years * 12 + 2 months = 770 months
-    _MONTHS_AHEAD = (2090 - 2026) * 12 + (6 - 4)  # 770
+    """Navigate the calendar to target_label by clicking Next period the required number of times."""
+    import datetime
+    today = datetime.date.today()
+    target_year, target_month = 2090, 6
+    months_ahead = (target_year - today.year) * 12 + (target_month - today.month)
     period_span = page.locator("span.flex-1.text-center")
     next_btn = page.get_by_role("button", name="Next period")
-    for _ in range(_MONTHS_AHEAD):
+    for _ in range(months_ahead):
         next_btn.click()
         page.wait_for_timeout(10)
     # Verify we landed correctly

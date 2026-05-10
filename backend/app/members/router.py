@@ -45,7 +45,6 @@ def _to_response(record: dict[str, Any]) -> MemberResponse:
         is_first_aider=record["is_first_aider"],
         emergency_contact_name=record.get("emergency_contact_name"),
         emergency_contact_phone=record.get("emergency_contact_phone"),
-        federation_number=record.get("federation_number"),
         parental_consent_obtained=record.get("parental_consent_obtained", False),
         is_minor=is_minor,
     )

@@ -11,6 +11,7 @@ Covers:
 
 import json
 import os
+import re
 import uuid
 
 import pytest
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
@@ -154,7 +155,7 @@ def test_attendance_section_is_collapsed_by_default(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     # Trigger button visible, list not visible
-    expect(page.get_by_role("button", name=lambda n: "Attendance" in n)).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("Attendance"))).to_be_visible()
     expect(page.get_by_label("Attendance list")).not_to_be_visible()
 
 
@@ -166,7 +167,7 @@ def test_attendance_section_expands_on_click(page: Page) -> None:
     page.goto(f"{BASE_URL}/sessions/{session_id}")
     page.wait_for_load_state("networkidle")
 
-    page.get_by_role("button", name=lambda n: "Attendance" in n).click()
+    page.get_by_role("button", name=re.compile("Attendance")).click()
     expect(page.get_by_text("No attendees yet.")).to_be_visible()
 
 

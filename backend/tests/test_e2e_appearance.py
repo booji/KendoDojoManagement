@@ -18,7 +18,7 @@ from playwright.sync_api import Page
 
 # Load .env with override=True so the JWT_SECRET matches what the server uses.
 _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=True)
+load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from playwright.sync_api import expect  # noqa: E402

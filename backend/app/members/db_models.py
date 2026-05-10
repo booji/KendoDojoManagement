@@ -24,10 +24,7 @@ class Member(UUIDBase):
     emergency_contact_phone: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )
-    federation_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     parental_consent_obtained: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    user_id: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=True
-    )
+    user_id: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
