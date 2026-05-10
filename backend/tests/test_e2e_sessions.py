@@ -17,6 +17,7 @@ AC2, AC3 — no admin UI exists yet; covered via direct API assertions in AC1/AC
 import json
 import os
 import uuid
+from datetime import date, timedelta
 
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
@@ -158,7 +159,12 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     type_id = types_resp.json()[0]["id"]
     type_name = types_resp.json()[0]["name"]
 
-    # Create a template with a far-future start date
+    # Find the next Thursday within the default 90-day horizon
+    today = date.today()
+    days_until_thursday = (3 - today.weekday()) % 7 or 7  # day_of_week 3 = Thursday
+    next_thursday = today + timedelta(days=days_until_thursday)
+    horizon_date = next_thursday + timedelta(weeks=1)
+
     tmpl_resp = page.request.post(
         f"{API_URL}/sessions/templates",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
@@ -166,7 +172,7 @@ def test_generating_instances_from_template_shows_them_in_session_list(
             {
                 "session_type_id": type_id,
                 "title": "E2E Template",
-                "start_date": "2099-08-07",  # Thursday
+                "start_date": next_thursday.isoformat(),
                 "start_time": "18:30",
                 "duration_minutes": 60,
                 "recurrence": "weekly",
@@ -177,11 +183,11 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
 
-    # Generate instances up to a horizon two weeks out
+    # Generate instances up to a horizon two weeks out (within 90-day window)
     gen_resp = page.request.post(
         f"{API_URL}/sessions/templates/{template_id}/generate",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({"horizon": "2099-08-21"}),
+        data=json.dumps({"horizon": horizon_date.isoformat()}),
     )
     assert gen_resp.status == 200
     instances = gen_resp.json()

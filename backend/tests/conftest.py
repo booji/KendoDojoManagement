@@ -62,6 +62,20 @@ class _NoOpAttendanceRepo:
         return []
 
 
+def pytest_collection_modifyitems(items: list) -> None:
+    """Run unit/integration tests before e2e tests.
+
+    Playwright's sync API uses a greenlet-based asyncio event loop that leaves
+    asyncio.get_event_loop() returning a running loop while any playwright
+    fixture is alive. Python 3.13 raises RuntimeError when any run_until_complete
+    is attempted while another loop is running, breaking pytest-asyncio tests.
+    Running non-e2e tests first avoids this conflict entirely.
+    """
+    e2e = [item for item in items if "/test_e2e_" in item.nodeid]
+    non_e2e = [item for item in items if "/test_e2e_" not in item.nodeid]
+    items[:] = non_e2e + e2e
+
+
 @pytest.fixture(autouse=True)
 def _default_attendance_repo_stub():
     """Install a no-op attendance repo so tests that don't mock it don't hit the DB.
