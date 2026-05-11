@@ -51,7 +51,8 @@ class GradeHistoryEntry(BaseModel):
     grade: str
     display_name: str
     promoted_at: str
-    awarded_by: str
+    assigned_by: str
+    status: str
 
 
 class PromoteResponse(BaseModel):
@@ -60,4 +61,5 @@ class PromoteResponse(BaseModel):
     grade: str
     display_name: str
     promoted_at: str
-    awarded_by: str
+    assigned_by: str
+    status: str

@@ -45,7 +45,8 @@ def _entry_from_dict(d: dict[str, Any]) -> GradeHistoryEntry:
         grade=d["grade"],
         display_name=d["display_name"],
         promoted_at=d["promoted_at"],
-        awarded_by=d["awarded_by"],
+        assigned_by=d["assigned_by"],
+        status=d["status"],
     )
 
 
@@ -81,7 +82,7 @@ async def promote_member(
         member_id=str(member_id),
         grade=next_grade.value,
         display_name=next_grade.display_name,
-        awarded_by=claims.sub,
+        assigned_by=claims.sub,
         promoted_at=promoted_at,
     )
     return PromoteResponse(**record)
