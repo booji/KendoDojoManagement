@@ -4,8 +4,9 @@ These tests are intentionally written BEFORE the implementation exists.
 They are expected to FAIL in the red phase of TDD.
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # 1. UUIDType dialect dispatch
@@ -32,9 +33,9 @@ class TestUUIDTypeDialectDispatch:
         # The impl passed to type_descriptor should be a PG UUID type
         pg_dialect.type_descriptor.assert_called_once()
         call_arg = pg_dialect.type_descriptor.call_args[0][0]
-        assert isinstance(call_arg, PG_UUID), (
-            f"Expected PG_UUID instance for postgresql dialect, got {type(call_arg)}"
-        )
+        assert isinstance(
+            call_arg, PG_UUID
+        ), f"Expected PG_UUID instance for postgresql dialect, got {type(call_arg)}"
 
     def test_sqlite_dialect_returns_string36_impl(self) -> None:
         from sqlalchemy import String
@@ -51,12 +52,12 @@ class TestUUIDTypeDialectDispatch:
 
         sqlite_dialect.type_descriptor.assert_called_once()
         call_arg = sqlite_dialect.type_descriptor.call_args[0][0]
-        assert isinstance(call_arg, String), (
-            f"Expected String instance for sqlite dialect, got {type(call_arg)}"
-        )
-        assert call_arg.length == 36, (
-            f"Expected String(36) for sqlite dialect, got String({call_arg.length})"
-        )
+        assert isinstance(
+            call_arg, String
+        ), f"Expected String instance for sqlite dialect, got {type(call_arg)}"
+        assert (
+            call_arg.length == 36
+        ), f"Expected String(36) for sqlite dialect, got String({call_arg.length})"
 
 
 # ---------------------------------------------------------------------------
@@ -72,18 +73,18 @@ class TestUUIDBaseIdType:
         from app.db.base import UUIDType
 
         col_type = User.__table__.c.id.type
-        assert isinstance(col_type, UUIDType), (
-            f"Expected User.id to use UUIDType, got {type(col_type).__name__}"
-        )
+        assert isinstance(
+            col_type, UUIDType
+        ), f"Expected User.id to use UUIDType, got {type(col_type).__name__}"
 
     def test_member_id_column_uses_uuid_type(self) -> None:
         from app.db.base import UUIDType
         from app.members.db_models import Member
 
         col_type = Member.__table__.c.id.type
-        assert isinstance(col_type, UUIDType), (
-            f"Expected Member.id to use UUIDType, got {type(col_type).__name__}"
-        )
+        assert isinstance(
+            col_type, UUIDType
+        ), f"Expected Member.id to use UUIDType, got {type(col_type).__name__}"
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +101,9 @@ class TestAttendanceFKConstraints:
         fks = Attendance.__table__.c.session_id.foreign_keys
         assert len(fks) > 0, "attendance.session_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "session_instances.id" in targets, (
-            f"attendance.session_id FK must reference session_instances.id, got {targets}"
-        )
+        assert (
+            "session_instances.id" in targets
+        ), f"attendance.session_id FK must reference session_instances.id, got {targets}"
 
     @pytest.mark.xfail(
         strict=False,
@@ -114,9 +115,9 @@ class TestAttendanceFKConstraints:
         fks = Attendance.__table__.c.member_id.foreign_keys
         assert len(fks) > 0, "attendance.member_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "members.id" in targets, (
-            f"attendance.member_id FK must reference members.id, got {targets}"
-        )
+        assert (
+            "members.id" in targets
+        ), f"attendance.member_id FK must reference members.id, got {targets}"
 
     @pytest.mark.xfail(
         strict=False,
@@ -128,9 +129,9 @@ class TestAttendanceFKConstraints:
         fks = Attendance.__table__.c.recorded_by.foreign_keys
         assert len(fks) > 0, "attendance.recorded_by must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "users.id" in targets, (
-            f"attendance.recorded_by FK must reference users.id, got {targets}"
-        )
+        assert (
+            "users.id" in targets
+        ), f"attendance.recorded_by FK must reference users.id, got {targets}"
 
 
 # ---------------------------------------------------------------------------
@@ -147,9 +148,9 @@ class TestCheckinTokenFKConstraint:
         fks = CheckinToken.__table__.c.session_id.foreign_keys
         assert len(fks) > 0, "checkin_tokens.session_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "session_instances.id" in targets, (
-            f"checkin_tokens.session_id FK must reference session_instances.id, got {targets}"
-        )
+        assert (
+            "session_instances.id" in targets
+        ), f"checkin_tokens.session_id FK must reference session_instances.id, got {targets}"
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +159,7 @@ class TestCheckinTokenFKConstraint:
 
 
 class TestGradeHistoryFKConstraints:
-    """GradeHistory must carry FK constraints on member_id and awarded_by."""
+    """GradeHistory must carry FK constraints on member_id and assigned_by."""
 
     def test_grade_history_member_id_fk_references_members(self) -> None:
         from app.grades.db_models import GradeHistory
@@ -166,23 +167,43 @@ class TestGradeHistoryFKConstraints:
         fks = GradeHistory.__table__.c.member_id.foreign_keys
         assert len(fks) > 0, "grade_history.member_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "members.id" in targets, (
-            f"grade_history.member_id FK must reference members.id, got {targets}"
-        )
+        assert (
+            "members.id" in targets
+        ), f"grade_history.member_id FK must reference members.id, got {targets}"
+
+    def test_grade_history_has_assigned_by_column(self) -> None:
+        """grade_history must have assigned_by column (renamed from awarded_by)."""
+        from app.grades.db_models import GradeHistory
+
+        assert hasattr(
+            GradeHistory, "assigned_by"
+        ), "GradeHistory must have assigned_by column; awarded_by has been renamed"
+        assert (
+            not hasattr(GradeHistory, "awarded_by")
+            or "awarded_by" not in GradeHistory.__table__.c
+        ), "GradeHistory must NOT have awarded_by column; it was renamed to assigned_by"
+
+    def test_grade_history_has_status_column(self) -> None:
+        """grade_history must have a status column with default 'confirmed'."""
+        from app.grades.db_models import GradeHistory
+
+        assert (
+            "status" in GradeHistory.__table__.c
+        ), "GradeHistory must have a status column"
 
     @pytest.mark.xfail(
         strict=False,
-        reason="FK not enforced: awarded_by stores user sub but no FK to users.id defined",
+        reason="FK not enforced: assigned_by stores user sub but no FK to users.id defined",
     )
-    def test_grade_history_awarded_by_fk_references_users(self) -> None:
+    def test_grade_history_assigned_by_fk_references_users(self) -> None:
         from app.grades.db_models import GradeHistory
 
-        fks = GradeHistory.__table__.c.awarded_by.foreign_keys
-        assert len(fks) > 0, "grade_history.awarded_by must have a FK constraint"
+        fks = GradeHistory.__table__.c.assigned_by.foreign_keys
+        assert len(fks) > 0, "grade_history.assigned_by must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "users.id" in targets, (
-            f"grade_history.awarded_by FK must reference users.id, got {targets}"
-        )
+        assert (
+            "users.id" in targets
+        ), f"grade_history.assigned_by FK must reference users.id, got {targets}"
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +224,6 @@ class TestMemberUserIdFKConstraint:
         fks = Member.__table__.c.user_id.foreign_keys
         assert len(fks) > 0, "members.user_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
-        assert "users.id" in targets, (
-            f"members.user_id FK must reference users.id, got {targets}"
-        )
+        assert (
+            "users.id" in targets
+        ), f"members.user_id FK must reference users.id, got {targets}"

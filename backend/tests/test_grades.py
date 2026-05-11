@@ -139,7 +139,7 @@ class StubGradeRepo:
     """In-memory grade history repository.
 
     Each entry shape:
-      { id, member_id, grade (machine value), display_name, promoted_at (ISO), awarded_by }
+      { id, member_id, grade (machine value), display_name, promoted_at (ISO), assigned_by, status }
     """
 
     def __init__(self) -> None:
@@ -157,16 +157,18 @@ class StubGradeRepo:
         member_id: str,
         grade: str,
         display_name: str,
-        awarded_by: str,
+        assigned_by: str,
         promoted_at: str,
+        status: str = "confirmed",
     ) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "id": str(uuid.uuid4()),
             "member_id": member_id,
             "grade": grade,
             "display_name": display_name,
-            "awarded_by": awarded_by,
+            "assigned_by": assigned_by,
             "promoted_at": promoted_at,
+            "status": status,
         }
         self._history.append(entry)
         return entry
@@ -320,7 +322,7 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
         member_id=member_id,
         grade="HACHIDAN",
         display_name="Hachidan (8-dan)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at=datetime.now(UTC).isoformat(),
     )
 
@@ -335,7 +337,7 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
 
 @pytest.mark.anyio
 async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
-    """Promotion response includes awarded_by (admin member_id) and promoted_at."""
+    """Promotion response includes assigned_by (admin member_id), promoted_at, and status."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
 
@@ -346,9 +348,12 @@ async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert "awarded_by" in body, "Response must include awarded_by"
+    assert "assigned_by" in body, "Response must include assigned_by"
+    assert "awarded_by" not in body, "Response must NOT include old field awarded_by"
     assert "promoted_at" in body, "Response must include promoted_at"
-    assert body["awarded_by"] == _ADMIN.sub
+    assert "status" in body, "Response must include status"
+    assert body["assigned_by"] == _ADMIN.sub
+    assert body["status"] == "confirmed"
     # promoted_at must be a parseable ISO timestamp
     promoted_at = datetime.fromisoformat(body["promoted_at"])
     assert promoted_at is not None
@@ -371,21 +376,21 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
         member_id=member_id,
         grade="ROKKYUU",
         display_name="Rokkyū (6-kyu)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2024-01-01T10:00:00+00:00",
     )
     await grade_repo.add_promotion(
         member_id=member_id,
         grade="GOKYUU",
         display_name="Gokyū (5-kyu)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2024-06-01T10:00:00+00:00",
     )
     await grade_repo.add_promotion(
         member_id=member_id,
         grade="YONKYUU",
         display_name="Yonkyū (4-kyu)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2025-01-01T10:00:00+00:00",
     )
 
@@ -407,7 +412,11 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
         assert "grade" in entry
         assert "display_name" in entry
         assert "promoted_at" in entry
-        assert "awarded_by" in entry
+        assert "assigned_by" in entry, "History entries must include assigned_by"
+        assert (
+            "awarded_by" not in entry
+        ), "History entries must NOT include old field awarded_by"
+        assert "status" in entry, "History entries must include status"
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +434,7 @@ async def test_grade_history_own_member(member_repo, grade_repo) -> None:
         member_id=member_id,
         grade="ROKKYUU",
         display_name="Rokkyū (6-kyu)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2024-01-01T10:00:00+00:00",
     )
 
@@ -451,7 +460,7 @@ async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> 
         member_id=member_a_id,
         grade="ROKKYUU",
         display_name="Rokkyū (6-kyu)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2024-01-01T10:00:00+00:00",
     )
 
@@ -474,7 +483,7 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
         member_id=member_id,
         grade="SHODAN",
         display_name="Shodan (1-dan)",
-        awarded_by=_ADMIN.sub,
+        assigned_by=_ADMIN.sub,
         promoted_at="2025-01-01T10:00:00+00:00",
     )
 

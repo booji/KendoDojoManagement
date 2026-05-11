@@ -6,7 +6,8 @@ export type GradeHistoryEntry = {
   grade: string
   display_name: string
   promoted_at: string
-  awarded_by: string
+  assigned_by: string
+  status: string
 }
 
 export type PromoteResponse = {
@@ -15,7 +16,8 @@ export type PromoteResponse = {
   grade: string
   display_name: string
   promoted_at: string
-  awarded_by: string
+  assigned_by: string
+  status: string
 }
 
 const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {

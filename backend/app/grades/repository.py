@@ -20,8 +20,9 @@ class AbstractGradeRepository(ABC):
         member_id: str,
         grade: str,
         display_name: str,
-        awarded_by: str,
+        assigned_by: str,
         promoted_at: str,
+        status: str = "confirmed",
     ) -> dict[str, Any]: ...
 
     @abstractmethod
@@ -35,7 +36,8 @@ def _to_dict(obj: GradeHistory) -> dict[str, Any]:
         "grade": obj.grade,
         "display_name": obj.display_name,
         "promoted_at": obj.promoted_at,
-        "awarded_by": obj.awarded_by,
+        "assigned_by": obj.assigned_by,
+        "status": obj.status,
     }
 
 
@@ -58,16 +60,18 @@ class SqlGradeRepository(AbstractGradeRepository):
         member_id: str,
         grade: str,
         display_name: str,
-        awarded_by: str,
+        assigned_by: str,
         promoted_at: str,
+        status: str = "confirmed",
     ) -> dict[str, Any]:
         obj = GradeHistory(
             id=str(uuid4()),
             member_id=member_id,
             grade=grade,
             display_name=display_name,
-            awarded_by=awarded_by,
+            assigned_by=assigned_by,
             promoted_at=promoted_at,
+            status=status,
         )
         self._session.add(obj)
         await self._session.flush()
