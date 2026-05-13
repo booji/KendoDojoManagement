@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
@@ -7,7 +8,8 @@ from app.dependencies import get_uow
 from app.grades.repository import AbstractGradeRepository, SqlGradeRepository
 
 
-def get_grade_repo(
+async def get_grade_repo(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> AbstractGradeRepository:
-    return SqlGradeRepository(uow.session)
+) -> AsyncGenerator[AbstractGradeRepository]:
+    yield SqlGradeRepository(uow.session)
+    await uow.commit()

@@ -4,7 +4,7 @@ import { getMember, updateMember, deactivateMember } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
-import { promoteMember, getGradeHistory } from "@/api/grades"
+import { setMemberGrade, getGradeHistory, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -323,9 +323,14 @@ type GradeCardProps = {
 const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
   const [history, setHistory] = useState<GradeHistoryEntry[] | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [promoting, setPromoting] = useState(false)
-  const [promoteError, setPromoteError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+
+  // Edit grade dialog state
+  const [editOpen, setEditOpen] = useState(false)
+  const [selectedGrade, setSelectedGrade] = useState<string>("")
+  const [awardedAt, setAwardedAt] = useState<string>("")
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     getGradeHistory(memberId)
@@ -340,91 +345,163 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
       ? history[history.length - 1].display_name
       : "Mukyū"
 
-  const handlePromote = async () => {
-    setPromoteError(null)
-    setPromoting(true)
+  const openEditDialog = () => {
+    setSelectedGrade("")
+    setAwardedAt("")
+    setSaveError(null)
+    setEditOpen(true)
+  }
+
+  const handleSetGrade = async () => {
+    if (!selectedGrade) return
+    setSaving(true)
+    setSaveError(null)
     try {
-      const result = await promoteMember(memberId)
-      setHistory((prev) => (prev !== null ? [...prev, result] : [result]))
+      const body: { grade: string; awarded_at?: string } = { grade: selectedGrade }
+      if (awardedAt) body.awarded_at = new Date(awardedAt).toISOString()
+      const result = await setMemberGrade(memberId, body)
+      // Refetch full history to keep the list accurate
+      const updated = await getGradeHistory(memberId)
+      setHistory(updated)
+      // If refetch somehow fails, at least append the new entry
+      void result
+      setEditOpen(false)
     } catch (err) {
-      setPromoteError(isApiError(err) ? err.message : "Failed to promote member")
+      setSaveError(isApiError(err) ? err.message : "Failed to set grade")
     } finally {
-      setPromoting(false)
+      setSaving(false)
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Grade</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {historyError !== null ? (
-          <p className="text-sm text-destructive" role="alert">{historyError}</p>
-        ) : history === null ? (
-          <Skeleton className="h-5 w-32" />
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Grade</CardTitle>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openEditDialog}
+              aria-label="Edit member grade"
+            >
+              <PencilIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+              Edit grade
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {historyError !== null ? (
+            <p className="text-sm text-destructive" role="alert">{historyError}</p>
+          ) : history === null ? (
+            <Skeleton className="h-5 w-32" />
+          ) : (
+            <>
               <p className="text-sm font-medium">{currentGrade}</p>
-              {isAdmin && (
-                <Button
-                  size="sm"
-                  onClick={handlePromote}
-                  disabled={promoting}
-                  aria-label="Promote member"
-                >
-                  {promoting ? "Promoting…" : "Promote"}
-                </Button>
+
+              {history.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setHistoryOpen((o) => !o)}
+                    aria-expanded={historyOpen}
+                    aria-controls="grade-history-list"
+                  >
+                    {historyOpen ? (
+                      <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
+                    ) : (
+                      <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    {historyOpen ? "Hide" : "Show"} grade history ({history.length})
+                  </button>
+
+                  {historyOpen && (
+                    <ol
+                      id="grade-history-list"
+                      className="mt-2 space-y-1 border-l-2 border-border pl-3"
+                    >
+                      {history.map((entry) => (
+                        <li key={entry.id} className="text-sm">
+                          <span className="font-medium">{entry.display_name}</span>
+                          <span className="text-muted-foreground ml-2 text-xs">
+                            {new Date(entry.promoted_at).toLocaleDateString("default", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
               )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit grade dialog */}
+      <Dialog open={editOpen} onOpenChange={(o) => { if (!o) setEditOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set grade</DialogTitle>
+            <DialogDescription>
+              Assign a confirmed grade to this member.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1">
+              <Label htmlFor="grade_select_trigger">Grade</Label>
+              <Select value={selectedGrade} onValueChange={(v) => setSelectedGrade(v ?? "")}>
+                <SelectTrigger id="grade_select_trigger" className="w-full" aria-label="Select grade">
+                  <SelectValue placeholder="Select a grade…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNABLE_GRADES.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {promoteError !== null && (
-              <p className="text-sm text-destructive" role="alert">{promoteError}</p>
-            )}
+            <div className="space-y-1">
+              <Label htmlFor="awarded_at_input">Date awarded (optional)</Label>
+              <Input
+                id="awarded_at_input"
+                type="date"
+                value={awardedAt}
+                onChange={(e) => setAwardedAt(e.target.value)}
+                placeholder="Leave blank for today"
+              />
+            </div>
 
-            {history.length > 0 && (
-              <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setHistoryOpen((o) => !o)}
-                  aria-expanded={historyOpen}
-                  aria-controls="grade-history-list"
-                >
-                  {historyOpen ? (
-                    <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
-                  ) : (
-                    <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
-                  )}
-                  {historyOpen ? "Hide" : "Show"} grade history ({history.length})
-                </button>
-
-                {historyOpen && (
-                  <ol
-                    id="grade-history-list"
-                    className="mt-2 space-y-1 border-l-2 border-border pl-3"
-                  >
-                    {history.map((entry) => (
-                      <li key={entry.id} className="text-sm">
-                        <span className="font-medium">{entry.display_name}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          {new Date(entry.promoted_at).toLocaleDateString("default", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
+            {saveError !== null && (
+              <p className="text-sm text-destructive" role="alert">{saveError}</p>
             )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSetGrade()}
+              disabled={saving || !selectedGrade}
+              aria-label="Save grade"
+            >
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

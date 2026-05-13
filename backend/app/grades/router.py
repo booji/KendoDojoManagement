@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.grades.dependencies import get_grade_repo
-from app.grades.models import Grade, GradeHistoryEntry, PromoteResponse
+from app.grades.models import (
+    CurrentGradeResponse,
+    Grade,
+    GradeHistoryEntry,
+    SetGradeRequest,
+    SetGradeResponse,
+)
 from app.grades.repository import AbstractGradeRepository
 from app.members.dependencies import get_member_repo
 from app.members.repository import AbstractMemberRepository
@@ -21,71 +27,111 @@ _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
-_GRADES = list(Grade)
 
-
-def _next_grade(current: str | None) -> Grade | None:
-    """Return the next grade after current, or None if already at max."""
-    if current is None:
-        # No grade yet — first promotion goes to ROKKYUU (index 1)
-        return _GRADES[1]
-    try:
-        idx = _GRADES.index(Grade(current))
-    except ValueError:
-        return _GRADES[1]
-    if idx >= len(_GRADES) - 1:
-        return None
-    return _GRADES[idx + 1]
-
-
-def _entry_from_dict(d: dict[str, Any]) -> GradeHistoryEntry:
+def _entry_from_dict(
+    d: dict[str, Any], *, include_assigned_by: bool
+) -> GradeHistoryEntry:
     return GradeHistoryEntry(
         id=d["id"],
         member_id=d["member_id"],
         grade=d["grade"],
         display_name=d["display_name"],
         promoted_at=d["promoted_at"],
-        assigned_by=d["assigned_by"],
+        assigned_by=d["assigned_by"] if include_assigned_by else None,
         status=d["status"],
     )
 
 
 # ---------------------------------------------------------------------------
-# POST /members/{member_id}/promote — admin only
+# POST /members/{member_id}/grades — admin only
 # ---------------------------------------------------------------------------
 
 
-@router.post("/members/{member_id}/promote")
-async def promote_member(
+@router.post("/members/{member_id}/grades", status_code=status.HTTP_201_CREATED)
+async def set_member_grade(
     member_id: uuid.UUID,
+    body: SetGradeRequest,
     claims: _Admin,
     member_repo: _MemberRepo,
     grade_repo: _GradeRepo,
-) -> PromoteResponse:
+) -> SetGradeResponse:
+    if claims.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+
+    if body.grade == Grade.MUKYUU:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MUKYUU cannot be assigned",
+        )
+
     member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
 
-    current = await grade_repo.get_current_grade(str(member_id))
-    next_grade = _next_grade(current)
-
-    if next_grade is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot promote beyond Hachidan",
-        )
-
-    promoted_at = datetime.now(UTC).isoformat()
+    awarded_at = (
+        body.awarded_at.isoformat()
+        if body.awarded_at
+        else datetime.now(UTC).isoformat()
+    )
     record = await grade_repo.add_promotion(
         member_id=str(member_id),
-        grade=next_grade.value,
-        display_name=next_grade.display_name,
+        grade=body.grade.value,
+        display_name=body.grade.display_name,
         assigned_by=claims.sub,
-        promoted_at=promoted_at,
+        promoted_at=awarded_at,
+        status="confirmed",
     )
-    return PromoteResponse(**record)
+    return SetGradeResponse(
+        id=record["id"],
+        member_id=record["member_id"],
+        grade=record["grade"],
+        display_name=record["display_name"],
+        awarded_at=record["promoted_at"],
+        assigned_by=record["assigned_by"],
+        status=record["status"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /members/{member_id}/grades/current — member (own) or admin (any)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/members/{member_id}/grades/current")
+async def get_current_grade(
+    member_id: uuid.UUID,
+    claims: _Member,
+    member_repo: _MemberRepo,
+    grade_repo: _GradeRepo,
+) -> CurrentGradeResponse:
+    member = await member_repo.get(str(member_id))
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+
+    if claims.role != "admin" and member.get("user_id") != claims.sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
+
+    history = await grade_repo.get_history(str(member_id))
+    confirmed = [e for e in history if e.get("status") == "confirmed"]
+    if not confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No grade history found"
+        )
+
+    latest = max(confirmed, key=lambda e: e["promoted_at"])
+    return CurrentGradeResponse(
+        grade=latest["grade"],
+        display_name=latest["display_name"],
+        awarded_at=latest["promoted_at"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +139,7 @@ async def promote_member(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/members/{member_id}/grades")
+@router.get("/members/{member_id}/grades", response_model_exclude_none=True)
 async def get_grade_history(
     member_id: uuid.UUID,
     claims: _Member,
@@ -112,5 +158,6 @@ async def get_grade_history(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
             )
 
+    is_admin = claims.role == "admin"
     history = await grade_repo.get_history(str(member_id))
-    return [_entry_from_dict(e) for e in history]
+    return [_entry_from_dict(e, include_assigned_by=is_admin) for e in history]
