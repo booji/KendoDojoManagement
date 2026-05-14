@@ -14,7 +14,6 @@ import os
 import re
 import uuid
 
-import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
