@@ -1,8 +1,10 @@
 # Auto-detect container runtime: prefer podman-compose, fall back to docker compose
 ifeq ($(shell command -v podman-compose 2>/dev/null),)
-  COMPOSE := docker compose
+  COMPOSE  := docker compose
+  RUNTIME  := docker
 else
-  COMPOSE := podman-compose
+  COMPOSE  := podman-compose
+  RUNTIME  := podman
 endif
 
 COMPOSE_DEV  := $(COMPOSE) -f docker-compose.dev.yml
@@ -13,6 +15,8 @@ COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml
 
 ## dev: Start the dev stack with hot-reload
 dev:
+	$(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
+	$(RUNTIME) rm -f kendodojomanagement_db_1 kendodojomanagement_backend_1 kendodojomanagement_frontend_1 2>/dev/null || true
 	$(COMPOSE_DEV) up
 
 ## test: Start the test watcher stack
