@@ -20,7 +20,7 @@ class AbstractGradeRepository(ABC):
         member_id: str,
         grade: str,
         display_name: str,
-        assigned_by: str,
+        assigned_by: str | None,
         promoted_at: str,
         status: str = "confirmed",
     ) -> dict[str, Any]: ...
@@ -60,7 +60,7 @@ class SqlGradeRepository(AbstractGradeRepository):
         member_id: str,
         grade: str,
         display_name: str,
-        assigned_by: str,
+        assigned_by: str | None,
         promoted_at: str,
         status: str = "confirmed",
     ) -> dict[str, Any]:

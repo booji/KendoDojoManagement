@@ -97,6 +97,67 @@ async def set_member_grade(
 
 
 # ---------------------------------------------------------------------------
+# POST /members/{member_id}/grades/propose — member only (own record)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/members/{member_id}/grades/propose", status_code=status.HTTP_201_CREATED)
+async def propose_member_grade(
+    member_id: uuid.UUID,
+    body: SetGradeRequest,
+    claims: _Member,
+    member_repo: _MemberRepo,
+    grade_repo: _GradeRepo,
+) -> SetGradeResponse:
+    if claims.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot use the member propose endpoint",
+        )
+
+    member = await member_repo.get(str(member_id))
+    if member is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+
+    if member.get("user_id") != claims.sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You may only propose a grade for your own record",
+        )
+
+    if body.grade == Grade.MUKYUU:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MUKYUU cannot be proposed",
+        )
+
+    proposed_at = (
+        body.awarded_at.isoformat()
+        if body.awarded_at
+        else datetime.now(UTC).isoformat()
+    )
+    record = await grade_repo.add_promotion(
+        member_id=str(member_id),
+        grade=body.grade.value,
+        display_name=body.grade.display_name,
+        assigned_by=None,
+        promoted_at=proposed_at,
+        status="pending",
+    )
+    return SetGradeResponse(
+        id=record["id"],
+        member_id=record["member_id"],
+        grade=record["grade"],
+        display_name=record["display_name"],
+        awarded_at=record["promoted_at"],
+        assigned_by=record["assigned_by"],
+        status=record["status"],
+    )
+
+
+# ---------------------------------------------------------------------------
 # GET /members/{member_id}/grades/current — member (own) or admin (any)
 # ---------------------------------------------------------------------------
 

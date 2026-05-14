@@ -21,7 +21,7 @@ export type SetGradeResponse = {
   grade: string
   display_name: string
   awarded_at: string
-  assigned_by: string
+  assigned_by: string | null
   status: string
 }
 
@@ -81,6 +81,33 @@ export const setMemberGrade = async (
   }
   if (!res.ok) {
     await throwApiError(res, "Failed to set grade")
+  }
+
+  return res.json() as Promise<SetGradeResponse>
+}
+
+export const proposeGrade = async (
+  memberId: string,
+  body: SetGradeRequest
+): Promise<SetGradeResponse> => {
+  const res = await fetch(`/api/members/${memberId}/grades/propose`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 404) {
+    await throwApiError(res, "Member not found")
+  }
+  if (res.status === 422) {
+    await throwApiError(res, "Invalid grade")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to propose grade")
   }
 
   return res.json() as Promise<SetGradeResponse>

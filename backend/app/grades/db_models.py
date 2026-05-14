@@ -15,7 +15,7 @@ class GradeHistory(UUIDBase):
     grade: Mapped[str] = mapped_column(String(20), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     promoted_at: Mapped[str] = mapped_column(String(50), nullable=False)
-    assigned_by: Mapped[str] = mapped_column(UUIDType(), nullable=False)
+    assigned_by: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="confirmed"
     )

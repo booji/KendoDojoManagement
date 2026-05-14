@@ -858,3 +858,176 @@ async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None
     assert response.status_code == 404, (
         f"POST /promote must be gone (404); got {response.status_code}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #145 — Grade proposal (member self-report)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_propose_creates_pending_entry(member_repo, grade_repo) -> None:
+    """MEMBER_A proposes SHODAN for their own record → 201, status==pending, assigned_by is None."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades/propose",
+            json={"grade": "SHODAN"},
+        )
+
+    assert response.status_code == 201, (
+        f"Expected 201 Created, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body["grade"] == "SHODAN"
+    assert body["status"] == "pending"
+    assert body.get("assigned_by") is None, (
+        "Self-proposed grade must have assigned_by=None"
+    )
+    assert body["member_id"] == member_id
+
+
+@pytest.mark.anyio
+async def test_propose_own_record_member_cannot_propose_for_other(
+    member_repo, grade_repo
+) -> None:
+    """MEMBER_A tries to propose for MEMBER_B_ID → 403."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    other_member_id = _MEMBER_B_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{other_member_id}/grades/propose",
+            json={"grade": "SHODAN"},
+        )
+
+    assert response.status_code == 403, (
+        f"Member must not be able to propose for another member; got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_propose_admin_forbidden(member_repo, grade_repo) -> None:
+    """Admin tries POST /propose → 403 (admin cannot use member-only endpoint)."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades/propose",
+            json={"grade": "SHODAN"},
+        )
+
+    assert response.status_code == 403, (
+        f"Admin must not be able to use the member-only propose endpoint; got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_propose_pending_entry_visible_to_own_member(
+    member_repo, grade_repo
+) -> None:
+    """MEMBER_A proposes grade, then GET /grades as MEMBER_A → pending entry included."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        propose_response = await c.post(
+            f"/members/{member_id}/grades/propose",
+            json={"grade": "SHODAN"},
+        )
+        assert propose_response.status_code == 201, (
+            f"Propose step failed: {propose_response.status_code}: {propose_response.text}"
+        )
+
+        history_response = await c.get(f"/members/{member_id}/grades")
+
+    assert history_response.status_code == 200
+    history = history_response.json()
+    pending_entries = [e for e in history if e.get("status") == "pending"]
+    assert len(pending_entries) >= 1, (
+        "Pending entry must be visible to the proposing member in their own grade history"
+    )
+    assert pending_entries[0]["grade"] == "SHODAN"
+
+
+@pytest.mark.anyio
+async def test_propose_pending_entry_not_visible_to_other_member(
+    member_repo, grade_repo
+) -> None:
+    """MEMBER_A's pending entry NOT visible when MEMBER_B tries to view MEMBER_A's grades — 403.
+
+    Uses the propose endpoint to create the pending entry (so the test fails until
+    the endpoint exists), then confirms MEMBER_B cannot see MEMBER_A's history.
+    """
+    # MEMBER_A proposes a grade via the new endpoint
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        propose_response = await c.post(
+            f"/members/{_MEMBER_A_ID}/grades/propose",
+            json={"grade": "SHODAN"},
+        )
+    assert propose_response.status_code == 201, (
+        f"Propose step must succeed; got {propose_response.status_code}: {propose_response.text}"
+    )
+
+    # MEMBER_B tries to read MEMBER_A's grade history — must be 403
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/members/{_MEMBER_A_ID}/grades")
+
+    assert response.status_code == 403, (
+        f"Member B must not be able to read Member A's grades; got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_propose_mukyuu_returns_422(member_repo, grade_repo) -> None:
+    """Proposing MUKYUU → 422."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades/propose",
+            json={"grade": "MUKYUU"},
+        )
+
+    assert response.status_code == 422, (
+        f"MUKYUU must not be proposable; got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_propose_invalid_grade_returns_422(member_repo, grade_repo) -> None:
+    """Proposing 'NOTAGRADE' → 422."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades/propose",
+            json={"grade": "NOTAGRADE"},
+        )
+
+    assert response.status_code == 422, (
+        f"Invalid grade must return 422; got {response.status_code}"
+    )

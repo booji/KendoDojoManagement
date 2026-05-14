@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, updateMember, deactivateMember } from "@/api/members"
+import { getMember, getMyMember, updateMember, deactivateMember } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
-import { setMemberGrade, getGradeHistory, ASSIGNABLE_GRADES } from "@/api/grades"
+import { setMemberGrade, proposeGrade, getGradeHistory, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -318,9 +318,10 @@ const DeactivateDialog = ({ open, memberName, onConfirm, onClose, loading }: Dea
 type GradeCardProps = {
   memberId: string
   isAdmin: boolean
+  isOwnProfile: boolean
 }
 
-const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
+const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
   const [history, setHistory] = useState<GradeHistoryEntry[] | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -332,6 +333,13 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Propose grade dialog state
+  const [proposeOpen, setProposeOpen] = useState(false)
+  const [proposedGrade, setProposedGrade] = useState<string>("")
+  const [proposedAt, setProposedAt] = useState<string>("")
+  const [proposing, setProposing] = useState(false)
+  const [proposeError, setProposeError] = useState<string | null>(null)
+
   useEffect(() => {
     getGradeHistory(memberId)
       .then(setHistory)
@@ -340,9 +348,11 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
       })
   }, [memberId])
 
+  const confirmedHistory = history !== null ? history.filter((e) => e.status === "confirmed") : null
+
   const currentGrade =
-    history !== null && history.length > 0
-      ? history[history.length - 1].display_name
+    confirmedHistory !== null && confirmedHistory.length > 0
+      ? confirmedHistory.at(-1)!.display_name
       : "Mukyū"
 
   const openEditDialog = () => {
@@ -350,6 +360,13 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
     setAwardedAt("")
     setSaveError(null)
     setEditOpen(true)
+  }
+
+  const openProposeDialog = () => {
+    setProposedGrade("")
+    setProposedAt("")
+    setProposeError(null)
+    setProposeOpen(true)
   }
 
   const handleSetGrade = async () => {
@@ -373,22 +390,53 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
     }
   }
 
+  const handleProposeGrade = async () => {
+    if (!proposedGrade) return
+    setProposing(true)
+    setProposeError(null)
+    try {
+      const body: { grade: string; awarded_at?: string } = { grade: proposedGrade }
+      if (proposedAt) body.awarded_at = new Date(proposedAt).toISOString()
+      const result = await proposeGrade(memberId, body)
+      void result
+      const updated = await getGradeHistory(memberId)
+      setHistory(updated)
+      setProposeOpen(false)
+    } catch (err) {
+      setProposeError(isApiError(err) ? err.message : "Failed to propose grade")
+    } finally {
+      setProposing(false)
+    }
+  }
+
   return (
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Grade</CardTitle>
-          {isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openEditDialog}
-              aria-label="Edit member grade"
-            >
-              <PencilIcon className="h-4 w-4 mr-1" aria-hidden="true" />
-              Edit grade
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {isOwnProfile && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openProposeDialog}
+                aria-label="Submit my grade"
+              >
+                Submit my grade
+              </Button>
+            )}
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openEditDialog}
+                aria-label="Edit member grade"
+              >
+                <PencilIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+                Edit grade
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {historyError !== null ? (
@@ -424,6 +472,11 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
                       {history.map((entry) => (
                         <li key={entry.id} className="text-sm">
                           <span className="font-medium">{entry.display_name}</span>
+                          {entry.status === "pending" && (
+                            <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300">
+                              awaiting confirmation
+                            </span>
+                          )}
                           <span className="text-muted-foreground ml-2 text-xs">
                             {new Date(entry.promoted_at).toLocaleDateString("default", {
                               day: "numeric",
@@ -497,6 +550,66 @@ const GradeCard = ({ memberId, isAdmin }: GradeCardProps) => {
               aria-label="Save grade"
             >
               {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Propose grade dialog */}
+      <Dialog open={proposeOpen} onOpenChange={(o) => { if (!o) setProposeOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit my grade</DialogTitle>
+            <DialogDescription>
+              Propose your own grade for admin confirmation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1">
+              <Label htmlFor="propose_grade_select_trigger">Grade</Label>
+              <Select value={proposedGrade} onValueChange={(v) => setProposedGrade(v ?? "")}>
+                <SelectTrigger id="propose_grade_select_trigger" className="w-full" aria-label="Select grade to propose">
+                  <SelectValue placeholder="Select a grade…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNABLE_GRADES.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="proposed_at_input">Date awarded (optional)</Label>
+              <Input
+                id="proposed_at_input"
+                type="date"
+                value={proposedAt}
+                onChange={(e) => setProposedAt(e.target.value)}
+                placeholder="Leave blank for today"
+              />
+            </div>
+
+            {proposeError !== null && (
+              <p className="text-sm text-destructive" role="alert">{proposeError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setProposeOpen(false)}
+              disabled={proposing}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleProposeGrade()}
+              disabled={proposing || !proposedGrade}
+              aria-label="Submit grade proposal"
+            >
+              {proposing ? "Submitting…" : "Submit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1061,6 +1174,7 @@ const MemberDetailPage = () => {
 
   const [member, setMember] = useState<MemberResponse | null>(null)
   const [currentUser, setCurrentUser] = useState<UserClaims | null>(null)
+  const [myMember, setMyMember] = useState<MemberResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [editing, setEditing] = useState(false)
@@ -1073,10 +1187,11 @@ const MemberDetailPage = () => {
 
   useEffect(() => {
     if (!id) return
-    Promise.all([getMember(id), getMe()])
-      .then(([m, u]) => {
+    Promise.all([getMember(id), getMe(), getMyMember()])
+      .then(([m, u, mine]) => {
         setMember(m)
         setCurrentUser(u)
+        setMyMember(mine)
       })
       .catch((err: unknown) => {
         setLoadError(isApiError(err) ? err.message : "Failed to load member")
@@ -1084,6 +1199,7 @@ const MemberDetailPage = () => {
   }, [id])
 
   const isAdmin = currentUser?.role === "admin"
+  const isOwnProfile = !isAdmin && member !== null && myMember !== null && member.id === myMember.id
 
   const startEdit = () => {
     if (member === null) return
@@ -1292,7 +1408,7 @@ const MemberDetailPage = () => {
             </CardContent>
           </Card>
 
-          <GradeCard memberId={member.id} isAdmin={isAdmin} />
+          <GradeCard memberId={member.id} isAdmin={isAdmin} isOwnProfile={isOwnProfile} />
 
           <FederationsCard memberId={member.id} />
 
