@@ -276,7 +276,7 @@ def test_grade_display_names() -> None:
 
 @pytest.mark.anyio
 async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
-    """Promoting a Mukyū member advances them to Rokkyū."""
+    """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
 
@@ -285,59 +285,40 @@ async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
-    assert response.status_code == 200
-    body = response.json()
-    # The new grade should be Rokkyū
-    assert body["grade"] == "ROKKYUU"
-    assert body["display_name"] == "Rokkyū (6-kyu)"
-    assert body["member_id"] == _MEMBER_A_ID
+    assert response.status_code == 404
 
 
 @pytest.mark.anyio
 async def test_promote_increments_grade(member_repo, grade_repo) -> None:
-    """Promoting twice from Mukyū results in Gokyū."""
+    """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.post(f"/members/{member_id}/promote")  # → Rokkyū
-        response = await c.post(f"/members/{member_id}/promote")  # → Gokyū
+        response = await c.post(f"/members/{member_id}/promote")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["grade"] == "GOKYUU"
-    assert body["display_name"] == "Gokyū (5-kyu)"
+    assert response.status_code == 404
 
 
 @pytest.mark.anyio
 async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
-    """Promoting a member already at Hachidan must return 400."""
+    """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
-
-    # Seed the grade repo so the member is already at Hachidan
-    await grade_repo.add_promotion(
-        member_id=member_id,
-        grade="HACHIDAN",
-        display_name="Hachidan (8-dan)",
-        assigned_by=_ADMIN.sub,
-        promoted_at=datetime.now(UTC).isoformat(),
-    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
-    assert response.status_code == 400
-    assert "hachidan" in response.json()["detail"].lower()
+    assert response.status_code == 404
 
 
 @pytest.mark.anyio
 async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
-    """Promotion response includes assigned_by (admin member_id), promoted_at, and status."""
+    """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
 
@@ -346,17 +327,7 @@ async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert "assigned_by" in body, "Response must include assigned_by"
-    assert "awarded_by" not in body, "Response must NOT include old field awarded_by"
-    assert "promoted_at" in body, "Response must include promoted_at"
-    assert "status" in body, "Response must include status"
-    assert body["assigned_by"] == _ADMIN.sub
-    assert body["status"] == "confirmed"
-    # promoted_at must be a parseable ISO timestamp
-    promoted_at = datetime.fromisoformat(body["promoted_at"])
-    assert promoted_at is not None
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -496,3 +467,394 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
     history = response.json()
     assert len(history) == 1
     assert history[0]["grade"] == "SHODAN"
+
+
+# ===========================================================================
+# Issue #144 — New grade endpoint tests
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# AC1 — POST /members/{id}/promote must be removed (404)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_promote_endpoint_removed_returns_404(member_repo, grade_repo) -> None:
+    """AC1: POST /members/{id}/promote must no longer exist — should return 404."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(f"/members/{member_id}/promote")
+
+    assert response.status_code == 404, (
+        f"POST /members/{{id}}/promote must be removed; got {response.status_code}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC2 — POST /members/{id}/grades creates a confirmed history entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> None:
+    """AC2: POST /members/{id}/grades (admin only) creates a confirmed grade entry."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "SHODAN", "awarded_at": "2025-01-15T10:00:00+00:00"},
+        )
+
+    assert response.status_code == 201, (
+        f"Expected 201 Created, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body["grade"] == "SHODAN"
+    assert body["status"] == "confirmed"
+    assert body["member_id"] == member_id
+    assert "id" in body
+
+
+@pytest.mark.anyio
+async def test_post_grades_non_admin_forbidden(member_repo, grade_repo) -> None:
+    """AC2: POST /members/{id}/grades is admin-only — non-admin gets 401/403."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "SHODAN"},
+        )
+
+    assert response.status_code in (401, 403), (
+        f"Non-admin must be rejected; got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_post_grades_member_not_found(member_repo, grade_repo) -> None:
+    """AC2: POST /members/{id}/grades returns 404 when member does not exist."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    nonexistent_id = "00000000-0000-0000-0000-000000000099"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{nonexistent_id}/grades",
+            json={"grade": "SHODAN"},
+        )
+
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# AC3 — awarded_at defaults to server-side UTC now when omitted
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_post_grades_awarded_at_defaults_to_now(member_repo, grade_repo) -> None:
+    """AC3: Omitting awarded_at results in a server-generated UTC timestamp."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    before = datetime.now(UTC)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "ROKKYUU"},
+            # No awarded_at field
+        )
+
+    after = datetime.now(UTC)
+
+    assert response.status_code == 201, (
+        f"Expected 201 Created, got {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert "awarded_at" in body or "promoted_at" in body, (
+        "Response must include an awarded_at (or promoted_at) timestamp"
+    )
+    ts_raw = body.get("awarded_at") or body.get("promoted_at")
+    ts = datetime.fromisoformat(ts_raw)
+    # Normalise to UTC for comparison
+    if ts.tzinfo is None:
+        import datetime as _dt
+        ts = ts.replace(tzinfo=_dt.UTC)
+    assert before <= ts <= after, (
+        f"Server timestamp {ts} must be between {before} and {after}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC4 — Invalid grade value → 422; MUKYUU → 422
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_post_grades_invalid_grade_value_returns_422(
+    member_repo, grade_repo
+) -> None:
+    """AC4: Posting an unrecognised grade value returns 422."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "NOTAGRADE"},
+        )
+
+    assert response.status_code == 422, (
+        f"Invalid grade must return 422, got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_post_grades_mukyuu_returns_422(member_repo, grade_repo) -> None:
+    """AC4: MUKYUU is the default/ungraded state and cannot be explicitly assigned — 422."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "MUKYUU"},
+        )
+
+    assert response.status_code == 422, (
+        f"MUKYUU must not be assignable via POST /grades; got {response.status_code}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC5 — GET /members/{id}/grades omits assigned_by for non-admin callers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_grades_omits_assigned_by_for_non_admin(
+    member_repo, grade_repo
+) -> None:
+    """AC5: Non-admin callers must NOT see assigned_by in grade history entries."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    member_id = _MEMBER_A_ID
+
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="ROKKYUU",
+        display_name="Rokkyū (6-kyu)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2024-01-01T10:00:00+00:00",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/members/{member_id}/grades")
+
+    assert response.status_code == 200
+    history = response.json()
+    assert len(history) == 1
+    entry = history[0]
+    assert "assigned_by" not in entry, (
+        "Non-admin callers must not see assigned_by in grade history"
+    )
+
+
+@pytest.mark.anyio
+async def test_get_grades_includes_assigned_by_for_admin(
+    member_repo, grade_repo
+) -> None:
+    """AC5: Admin callers MUST see assigned_by in grade history entries."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="SHODAN",
+        display_name="Shodan (1-dan)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2025-01-01T10:00:00+00:00",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/members/{member_id}/grades")
+
+    assert response.status_code == 200
+    history = response.json()
+    assert len(history) == 1
+    entry = history[0]
+    assert "assigned_by" in entry, "Admin callers must see assigned_by"
+    assert entry["assigned_by"] == _ADMIN.sub
+
+
+# ---------------------------------------------------------------------------
+# AC6 — Current grade derived as latest confirmed entry by awarded_at
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_current_grade_is_latest_confirmed_by_awarded_at(
+    member_repo, grade_repo
+) -> None:
+    """AC6: Current grade is the most recent confirmed entry ordered by awarded_at."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    # Seed entries out of insertion order — latest awarded_at is SANDAN
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="GOKYUU",
+        display_name="Gokyū (5-kyu)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2023-01-01T10:00:00+00:00",
+        status="confirmed",
+    )
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="SANDAN",
+        display_name="Sandan (3-dan)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2025-06-01T10:00:00+00:00",
+        status="confirmed",
+    )
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="SHODAN",
+        display_name="Shodan (1-dan)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2024-01-01T10:00:00+00:00",
+        status="confirmed",
+    )
+
+    # GET the member's detail or a dedicated current-grade endpoint
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/members/{member_id}/grades/current")
+
+    assert response.status_code == 200, (
+        f"GET /members/{{id}}/grades/current must exist; got {response.status_code}"
+    )
+    body = response.json()
+    assert body["grade"] == "SANDAN", (
+        f"Current grade must be the latest confirmed entry by awarded_at; got {body.get('grade')}"
+    )
+
+
+@pytest.mark.anyio
+async def test_current_grade_ignores_non_confirmed_entries(
+    member_repo, grade_repo
+) -> None:
+    """AC6: Only confirmed entries contribute to current grade determination."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    # A confirmed SHODAN followed by a pending NIDAN — current must still be SHODAN
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="SHODAN",
+        display_name="Shodan (1-dan)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2024-01-01T10:00:00+00:00",
+        status="confirmed",
+    )
+    await grade_repo.add_promotion(
+        member_id=member_id,
+        grade="NIDAN",
+        display_name="Nidan (2-dan)",
+        assigned_by=_ADMIN.sub,
+        promoted_at="2025-01-01T10:00:00+00:00",
+        status="pending",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/members/{member_id}/grades/current")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grade"] == "SHODAN", (
+        f"Non-confirmed entries must not affect current grade; got {body.get('grade')}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC11 — Rokkyu promotion bug is no longer reproducible
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
+    member_repo, grade_repo
+) -> None:
+    """AC11: The old promote endpoint bug that skipped MUKYUU to ROKKYUU is gone.
+
+    The new POST /grades endpoint must assign exactly the grade specified,
+    with no automatic progression. ROKKYUU can be assigned explicitly to a
+    member with no prior grade (previously required going through promote).
+    """
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    # Explicitly assign ROKKYUU to a member with no prior grade history
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            f"/members/{member_id}/grades",
+            json={"grade": "ROKKYUU"},
+        )
+
+    assert response.status_code == 201, (
+        f"Should be able to assign ROKKYUU directly; got {response.status_code}"
+    )
+    body = response.json()
+    assert body["grade"] == "ROKKYUU"
+    # No phantom MUKYUU entry should have been created
+    history = grade_repo._history
+    assert len(history) == 1, (
+        f"Only one entry should exist — no phantom MUKYUU; found {len(history)}"
+    )
+    assert history[0]["grade"] == "ROKKYUU"
+
+
+@pytest.mark.anyio
+async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None:
+    """AC11: The old /promote endpoint that caused the Rokkyu bug is gone."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    member_id = _MEMBER_A_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(f"/members/{member_id}/promote")
+
+    # The bug-causing endpoint must be removed
+    assert response.status_code == 404, (
+        f"POST /promote must be gone (404); got {response.status_code}"
+    )

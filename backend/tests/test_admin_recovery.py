@@ -13,7 +13,6 @@ Acceptance criteria exercised:
 
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import UTC, datetime, timedelta
 

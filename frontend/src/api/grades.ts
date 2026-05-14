@@ -6,19 +6,47 @@ export type GradeHistoryEntry = {
   grade: string
   display_name: string
   promoted_at: string
-  assigned_by: string
+  assigned_by: string | null
   status: string
 }
 
-export type PromoteResponse = {
+export type SetGradeRequest = {
+  grade: string
+  awarded_at?: string
+}
+
+export type SetGradeResponse = {
   id: string
   member_id: string
   grade: string
   display_name: string
-  promoted_at: string
+  awarded_at: string
   assigned_by: string
   status: string
 }
+
+export type CurrentGradeResponse = {
+  grade: string
+  display_name: string
+  awarded_at: string
+}
+
+export const ASSIGNABLE_GRADES: Array<{ value: string; label: string }> = [
+  { value: "ROKKYUU", label: "Rokkyū (6-kyu)" },
+  { value: "GOKYUU", label: "Gokyū (5-kyu)" },
+  { value: "YONKYUU", label: "Yonkyū (4-kyu)" },
+  { value: "SANKYUU", label: "Sankyū (3-kyu)" },
+  { value: "NIKYUU", label: "Nikyū (2-kyu)" },
+  { value: "IKKYUU", label: "Ikkyū (1-kyu)" },
+  { value: "SHODAN", label: "Shodan (1-dan)" },
+  { value: "NIDAN", label: "Nidan (2-dan)" },
+  { value: "SANDAN", label: "Sandan (3-dan)" },
+  { value: "YONDAN", label: "Yondan (4-dan)" },
+  { value: "GODAN", label: "Godan (5-dan)" },
+  { value: "ROKUDAN", label: "Rokudan (6-dan)" },
+  { value: "NANADAN", label: "Nanadan (7-dan)" },
+  { value: "HACHIDAN", label: "Hachidan (8-dan)" },
+]
 
 const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {
   let message = defaultMessage
@@ -31,10 +59,15 @@ const throwApiError = async (res: Response, defaultMessage: string): Promise<nev
   throw { status: res.status, message } satisfies ApiError
 }
 
-export const promoteMember = async (memberId: string): Promise<PromoteResponse> => {
-  const res = await fetch(`/api/members/${memberId}/promote`, {
+export const setMemberGrade = async (
+  memberId: string,
+  body: SetGradeRequest
+): Promise<SetGradeResponse> => {
+  const res = await fetch(`/api/members/${memberId}/grades`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   })
 
   if (res.status === 401 || res.status === 403) {
@@ -43,14 +76,34 @@ export const promoteMember = async (memberId: string): Promise<PromoteResponse> 
   if (res.status === 404) {
     await throwApiError(res, "Member not found")
   }
-  if (res.status === 409) {
-    await throwApiError(res, "Member is already at the highest grade")
+  if (res.status === 422) {
+    await throwApiError(res, "Invalid grade")
   }
   if (!res.ok) {
-    await throwApiError(res, "Failed to promote member")
+    await throwApiError(res, "Failed to set grade")
   }
 
-  return res.json() as Promise<PromoteResponse>
+  return res.json() as Promise<SetGradeResponse>
+}
+
+export const getCurrentGrade = async (
+  memberId: string
+): Promise<CurrentGradeResponse | null> => {
+  const res = await fetch(`/api/members/${memberId}/grades/current`, {
+    credentials: "include",
+  })
+
+  if (res.status === 404) {
+    return null
+  }
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load current grade")
+  }
+
+  return res.json() as Promise<CurrentGradeResponse>
 }
 
 export const getGradeHistory = async (memberId: string): Promise<GradeHistoryEntry[]> => {

@@ -304,14 +304,16 @@ async def test_get_member_grades_bad_uuid_returns_422() -> None:
 
 
 @pytest.mark.anyio
-async def test_post_member_promote_bad_uuid_returns_422() -> None:
-    """POST /members/not-a-uuid/promote should return 422 when member_id is uuid.UUID."""
+async def test_post_member_grades_bad_uuid_returns_422() -> None:
+    """POST /members/not-a-uuid/grades should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(f"/members/{_BAD_UUID}/promote")
+        response = await c.post(
+            f"/members/{_BAD_UUID}/grades", json={"grade": "SHODAN"}
+        )
 
     assert response.status_code == 422
 

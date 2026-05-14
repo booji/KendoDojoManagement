@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 _DISPLAY_NAMES: dict[str, str] = {
     "MUKYUU": "Mukyū",
@@ -51,15 +52,33 @@ class GradeHistoryEntry(BaseModel):
     grade: str
     display_name: str
     promoted_at: str
-    assigned_by: str
+    assigned_by: str | None
     status: str
 
 
-class PromoteResponse(BaseModel):
+class SetGradeRequest(BaseModel):
+    grade: Grade
+    awarded_at: datetime | None = None
+
+    @field_validator("awarded_at")
+    @classmethod
+    def no_future_dates(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v > datetime.now(v.tzinfo):
+            raise ValueError("awarded_at cannot be in the future")
+        return v
+
+
+class SetGradeResponse(BaseModel):
     id: str
     member_id: str
     grade: str
     display_name: str
-    promoted_at: str
+    awarded_at: str
     assigned_by: str
     status: str
+
+
+class CurrentGradeResponse(BaseModel):
+    grade: str
+    display_name: str
+    awarded_at: str

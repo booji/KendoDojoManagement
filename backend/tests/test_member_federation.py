@@ -29,10 +29,10 @@ from httpx import ASGITransport, AsyncClient
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.federations.dependencies import get_federation_repo  # noqa: F401 — red
+from app.main import app
 from app.member_federations.dependencies import (  # noqa: F401 — red
     get_member_federation_repo,
 )
-from app.main import app
 from app.members.dependencies import get_member_repo  # noqa: F401
 
 # ---------------------------------------------------------------------------

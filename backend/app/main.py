@@ -1,7 +1,11 @@
+import asyncio
+import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import uuid4
+
+_log = logging.getLogger(__name__)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,16 +59,29 @@ def _rate_limit_exceeded_handler(
     return response
 
 
+async def _init_db() -> None:
+    for attempt in range(10):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            async with engine.begin() as conn:
+                result = await conn.execute(select(SessionType))
+                if not result.fetchone():
+                    await conn.execute(
+                        insert(SessionType).values(id=str(uuid4()), name="General Training")
+                    )
+            return
+        except Exception as exc:
+            if attempt == 9:
+                raise
+            delay = 2**attempt
+            _log.warning("DB not ready (attempt %d/10): %s — retrying in %ds", attempt + 1, exc, delay)
+            await asyncio.sleep(delay)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    async with engine.begin() as conn:
-        result = await conn.execute(select(SessionType))
-        if not result.fetchone():
-            await conn.execute(
-                insert(SessionType).values(id=str(uuid4()), name="General Training")
-            )
+    await _init_db()
     yield
 
 
