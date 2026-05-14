@@ -74,7 +74,7 @@ class SetGradeResponse(BaseModel):
     grade: str
     display_name: str
     awarded_at: str
-    assigned_by: str
+    assigned_by: str | None
     status: str
 
 
