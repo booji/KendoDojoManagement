@@ -4,7 +4,7 @@ import { getMember, getMyMember, updateMember, deactivateMember } from "@/api/me
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
-import { setMemberGrade, proposeGrade, getGradeHistory, ASSIGNABLE_GRADES } from "@/api/grades"
+import { setMemberGrade, proposeGrade, getGradeHistory, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -340,6 +340,8 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
   const [proposing, setProposing] = useState(false)
   const [proposeError, setProposeError] = useState<string | null>(null)
 
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+
   useEffect(() => {
     getGradeHistory(memberId)
       .then(setHistory)
@@ -409,6 +411,34 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
     }
   }
 
+  const handleApprove = async (entryId: string) => {
+    setActionInProgress(entryId)
+    try {
+      const updated = await approveGrade(memberId, entryId)
+      setHistory((prev) =>
+        prev === null ? null : prev.map((e) => (e.id === updated.id ? updated : e))
+      )
+    } catch {
+      // silently ignore — the button will re-enable
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  const handleReject = async (entryId: string) => {
+    setActionInProgress(entryId)
+    try {
+      await rejectGrade(memberId, entryId)
+      setHistory((prev) =>
+        prev === null ? null : prev.filter((e) => e.id !== entryId)
+      )
+    } catch {
+      // silently ignore
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
   return (
     <>
       <Card>
@@ -470,20 +500,40 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
                       className="mt-2 space-y-1 border-l-2 border-border pl-3"
                     >
                       {history.map((entry) => (
-                        <li key={entry.id} className="text-sm">
+                        <li key={entry.id} className="text-sm flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{entry.display_name}</span>
                           {entry.status === "pending" && (
-                            <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300">
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300">
                               awaiting confirmation
                             </span>
                           )}
-                          <span className="text-muted-foreground ml-2 text-xs">
+                          <span className="text-muted-foreground text-xs">
                             {new Date(entry.promoted_at).toLocaleDateString("default", {
                               day: "numeric",
                               month: "long",
                               year: "numeric",
                             })}
                           </span>
+                          {isAdmin && entry.status === "pending" && (
+                            <span className="flex gap-1 ml-auto">
+                              <button
+                                onClick={() => void handleApprove(entry.id)}
+                                disabled={actionInProgress === entry.id}
+                                aria-label={`Approve ${entry.display_name}`}
+                                className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 border border-green-200 hover:bg-green-200 disabled:opacity-50 dark:bg-green-900/30 dark:text-green-300"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => void handleReject(entry.id)}
+                                disabled={actionInProgress === entry.id}
+                                aria-label={`Reject ${entry.display_name}`}
+                                className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 border border-red-200 hover:bg-red-200 disabled:opacity-50 dark:bg-red-900/30 dark:text-red-300"
+                              >
+                                Reject
+                              </button>
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ol>

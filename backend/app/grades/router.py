@@ -222,3 +222,67 @@ async def get_grade_history(
     is_admin = claims.role == "admin"
     history = await grade_repo.get_history(str(member_id))
     return [_entry_from_dict(e, include_assigned_by=is_admin) for e in history]
+
+
+# ---------------------------------------------------------------------------
+# POST /members/{member_id}/grades/{entry_id}/approve — admin only
+# ---------------------------------------------------------------------------
+
+
+@router.post("/members/{member_id}/grades/{entry_id}/approve")
+async def approve_grade_entry(
+    member_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    claims: _Admin,
+    grade_repo: _GradeRepo,
+) -> GradeHistoryEntry:
+    if claims.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+    try:
+        record = await grade_repo.approve_entry(
+            str(member_id), str(entry_id), claims.sub
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Grade entry not found"
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Entry is not pending"
+        )
+    return _entry_from_dict(record, include_assigned_by=True)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /members/{member_id}/grades/{entry_id} — admin only
+# ---------------------------------------------------------------------------
+
+
+@router.delete(
+    "/members/{member_id}/grades/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def delete_grade_entry(
+    member_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    claims: _Admin,
+    grade_repo: _GradeRepo,
+) -> None:
+    if claims.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+    try:
+        await grade_repo.delete_entry(str(member_id), str(entry_id))
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Grade entry not found"
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only pending entries may be deleted",
+        )

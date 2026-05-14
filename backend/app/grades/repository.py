@@ -28,6 +28,26 @@ class AbstractGradeRepository(ABC):
     @abstractmethod
     async def get_history(self, member_id: str) -> list[dict[str, Any]]: ...
 
+    @abstractmethod
+    async def approve_entry(
+        self, member_id: str, entry_id: str, approved_by: str
+    ) -> dict[str, Any]:
+        """Transition a pending entry to confirmed, setting assigned_by.
+
+        Raises KeyError if entry not found.
+        Raises ValueError if entry is not pending.
+        """
+        ...
+
+    @abstractmethod
+    async def delete_entry(self, member_id: str, entry_id: str) -> None:
+        """Remove a pending entry.
+
+        Raises KeyError if entry not found.
+        Raises ValueError if entry is not pending (confirmed entries cannot be deleted).
+        """
+        ...
+
 
 def _to_dict(obj: GradeHistory) -> dict[str, Any]:
     return {
@@ -84,3 +104,37 @@ class SqlGradeRepository(AbstractGradeRepository):
             .order_by(GradeHistory.promoted_at.asc())
         )
         return [_to_dict(obj) for obj in result.scalars().all()]
+
+    async def approve_entry(
+        self, member_id: str, entry_id: str, approved_by: str
+    ) -> dict[str, Any]:
+        result = await self._session.execute(
+            select(GradeHistory).where(
+                GradeHistory.id == entry_id,
+                GradeHistory.member_id == member_id,
+            )
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            raise KeyError(f"Entry {entry_id} not found")
+        if obj.status != "pending":
+            raise ValueError("Entry is not pending")
+        obj.status = "confirmed"
+        obj.assigned_by = approved_by
+        await self._session.flush()
+        return _to_dict(obj)
+
+    async def delete_entry(self, member_id: str, entry_id: str) -> None:
+        result = await self._session.execute(
+            select(GradeHistory).where(
+                GradeHistory.id == entry_id,
+                GradeHistory.member_id == member_id,
+            )
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            raise KeyError(f"Entry {entry_id} not found")
+        if obj.status != "pending":
+            raise ValueError("Only pending entries may be deleted")
+        await self._session.delete(obj)
+        await self._session.flush()
