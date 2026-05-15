@@ -82,3 +82,13 @@ class CurrentGradeResponse(BaseModel):
     grade: str
     display_name: str
     awarded_at: str
+
+
+class PendingGradeEntry(BaseModel):
+    id: str
+    member_id: str
+    member_name: str
+    grade: str
+    display_name: str
+    promoted_at: str
+    status: str

@@ -1,5 +1,15 @@
 import type { ApiError } from "@/api/auth"
 
+export type PendingGradeEntry = {
+  id: string
+  member_id: string
+  member_name: string
+  grade: string
+  display_name: string
+  promoted_at: string
+  status: string
+}
+
 export type GradeHistoryEntry = {
   id: string
   member_id: string
@@ -160,6 +170,19 @@ export const rejectGrade = async (
   if (res.status === 404) await throwApiError(res, "Grade entry not found")
   if (res.status === 409) await throwApiError(res, "Only pending entries may be rejected")
   if (!res.ok) await throwApiError(res, "Failed to reject grade")
+}
+
+export const listPendingGrades = async (): Promise<PendingGradeEntry[]> => {
+  const res = await fetch("/api/grades/pending", {
+    credentials: "include",
+  })
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to load pending grades")
+  }
+  return res.json() as Promise<PendingGradeEntry[]>
 }
 
 export const getGradeHistory = async (memberId: string): Promise<GradeHistoryEntry[]> => {

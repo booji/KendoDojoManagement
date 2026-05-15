@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grades.db_models import GradeHistory
+from app.members.db_models import Member
 
 
 class AbstractGradeRepository(ABC):
@@ -47,6 +48,9 @@ class AbstractGradeRepository(ABC):
         Raises ValueError if entry is not pending (confirmed entries cannot be deleted).
         """
         ...
+
+    @abstractmethod
+    async def list_pending(self) -> list[dict[str, Any]]: ...
 
 
 def _to_dict(obj: GradeHistory) -> dict[str, Any]:
@@ -138,3 +142,15 @@ class SqlGradeRepository(AbstractGradeRepository):
             raise ValueError("Only pending entries may be deleted")
         await self._session.delete(obj)
         await self._session.flush()
+
+    async def list_pending(self) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            select(GradeHistory, Member.full_name)
+            .join(Member, GradeHistory.member_id == Member.id)
+            .where(GradeHistory.status == "pending")
+            .order_by(GradeHistory.promoted_at.asc())
+        )
+        return [
+            {**_to_dict(gh), "member_name": full_name}
+            for gh, full_name in result.all()
+        ]

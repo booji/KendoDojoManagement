@@ -13,6 +13,7 @@ from app.grades.models import (
     CurrentGradeResponse,
     Grade,
     GradeHistoryEntry,
+    PendingGradeEntry,
     SetGradeRequest,
     SetGradeResponse,
 )
@@ -40,6 +41,24 @@ def _entry_from_dict(
         assigned_by=d["assigned_by"] if include_assigned_by else None,
         status=d["status"],
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /grades/pending — admin only
+# ---------------------------------------------------------------------------
+
+
+@router.get("/grades/pending")
+async def list_pending_grades(
+    claims: _Admin,
+    grade_repo: _GradeRepo,
+) -> list[PendingGradeEntry]:
+    if claims.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+    entries = await grade_repo.list_pending()
+    return [PendingGradeEntry(**e) for e in entries]
 
 
 # ---------------------------------------------------------------------------
