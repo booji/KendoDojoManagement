@@ -119,6 +119,11 @@ const LoginPage = () => {
                   Register
                 </Link>
               </p>
+              <p className="text-center text-sm text-muted-foreground">
+                <Link to="/recovery/redeem" className="text-primary underline-offset-4 hover:underline">
+                  Use a recovery code
+                </Link>
+              </p>
             </form>
           ) : (
             <form onSubmit={handlePasswordLogin} className="flex flex-col gap-4">
@@ -167,6 +172,11 @@ const LoginPage = () => {
                 No account yet?{" "}
                 <Link to="/register" className="text-primary underline-offset-4 hover:underline">
                   Register
+                </Link>
+              </p>
+              <p className="text-center text-sm text-muted-foreground">
+                <Link to="/recovery/redeem" className="text-primary underline-offset-4 hover:underline">
+                  Use a recovery code
                 </Link>
               </p>
             </form>
