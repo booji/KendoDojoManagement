@@ -92,6 +92,7 @@ def seeded_db():
         db_path = f.name
 
     sync_url = f"sqlite:///{db_path}"
+    async_url = f"sqlite+aiosqlite:///{db_path}"
     engine = _ce(sync_url)
     Base.metadata.create_all(engine)
     with Session(engine) as session:
@@ -106,7 +107,7 @@ def seeded_db():
         )
         session.commit()
     engine.dispose()
-    yield sync_url
+    yield async_url
     os.unlink(db_path)
 
 
@@ -187,7 +188,7 @@ async def test_cli_token_stored_with_null_created_by_id(tmp_db) -> None:
     result = runner.invoke(
         cli_app,
         ["create-recovery-token", _TARGET_EMAIL],
-        env={"DATABASE_URL": tmp_db["sync_url"]},
+        env={"DATABASE_URL": tmp_db["async_url"]},
     )
 
     assert result.exit_code == 0
@@ -230,7 +231,7 @@ async def test_cli_token_only_one_row_created(tmp_db) -> None:
     runner.invoke(
         cli_app,
         ["create-recovery-token", _TARGET_EMAIL],
-        env={"DATABASE_URL": tmp_db["sync_url"]},
+        env={"DATABASE_URL": tmp_db["async_url"]},
     )
 
     eng2 = create_async_engine(
