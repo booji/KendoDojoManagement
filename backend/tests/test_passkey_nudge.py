@@ -161,7 +161,6 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
             insert(User).values(
                 id=user_id,
                 email="firstpasskey@dojo.test",
-                hashed_password="",
                 role="member",
                 is_active=True,
                 pending_challenge="dGVzdC1jaGFsbGVuZ2U",
@@ -250,7 +249,6 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
             insert(User).values(
                 id=user_id,
                 email="secondpasskey@dojo.test",
-                hashed_password="",
                 role="member",
                 is_active=True,
                 pending_challenge="dGVzdC1jaGFsbGVuZ2U",

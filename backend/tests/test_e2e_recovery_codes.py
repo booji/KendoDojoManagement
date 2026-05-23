@@ -31,14 +31,7 @@ pytestmark = pytest.mark.e2e
 
 
 def _register_and_get_token(email: str) -> str:
-    requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": "Str0ng!Pass"},
-    ).raise_for_status()
-    resp = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": "Str0ng!Pass"},
-    )
+    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
     resp.raise_for_status()
     return resp.cookies["access_token"]
 

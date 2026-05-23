@@ -216,7 +216,7 @@ def test_log_emits_valid_json(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     logs = _capture_security_logs(caplog)
     assert len(logs) == 1, "Expected exactly one log record"
@@ -227,7 +227,7 @@ def test_log_required_key_timestamp(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     logs = _capture_security_logs(caplog)
     assert "timestamp" in logs[0]
@@ -238,11 +238,11 @@ def test_log_required_key_event_type(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     logs = _capture_security_logs(caplog)
     assert "event_type" in logs[0]
-    assert logs[0]["event_type"] == "login_password"
+    assert logs[0]["event_type"] == "login_passkey"
 
 
 def test_log_required_key_result(caplog: pytest.LogCaptureFixture) -> None:
@@ -250,7 +250,7 @@ def test_log_required_key_result(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     logs = _capture_security_logs(caplog)
     assert "result" in logs[0]
@@ -262,7 +262,7 @@ def test_log_result_failure(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="failure")
+        log_security_event(event_type="login_passkey", result="failure")
 
     logs = _capture_security_logs(caplog)
     assert logs[0]["result"] == "failure"
@@ -273,7 +273,7 @@ def test_log_timestamp_is_iso_string(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     logs = _capture_security_logs(caplog)
     ts = logs[0]["timestamp"]
@@ -294,7 +294,7 @@ def test_optional_user_id_omitted_when_not_passed(caplog: pytest.LogCaptureFixtu
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="failure")
+        log_security_event(event_type="login_passkey", result="failure")
 
     logs = _capture_security_logs(caplog)
     assert "user_id" not in logs[0]
@@ -305,7 +305,7 @@ def test_optional_ip_address_omitted_when_not_passed(caplog: pytest.LogCaptureFi
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="failure")
+        log_security_event(event_type="login_passkey", result="failure")
 
     logs = _capture_security_logs(caplog)
     assert "ip_address" not in logs[0]
@@ -316,7 +316,7 @@ def test_optional_detail_omitted_when_not_passed(caplog: pytest.LogCaptureFixtur
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="failure")
+        log_security_event(event_type="login_passkey", result="failure")
 
     logs = _capture_security_logs(caplog)
     assert "detail" not in logs[0]
@@ -333,7 +333,7 @@ def test_optional_user_id_included_when_passed(caplog: pytest.LogCaptureFixture)
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         log_security_event(
-            event_type="login_password",
+            event_type="login_passkey",
             result="success",
             user_id="test-user-123",
         )
@@ -363,7 +363,7 @@ def test_optional_detail_included_when_passed(caplog: pytest.LogCaptureFixture) 
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         log_security_event(
-            event_type="login_lockout",
+            event_type="recovery_redeem",
             result="failure",
             detail="too many failed attempts",
         )
@@ -401,8 +401,6 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
     "event_type",
     [
         "login_passkey",
-        "login_password",
-        "login_lockout",
         "recovery_redeem",
         "admin_token_generated",
         "passkey_registered",
@@ -413,7 +411,7 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
 def test_all_event_types_accepted(
     event_type: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """log_security_event must accept each of the 8 defined event_type values."""
+    """log_security_event must accept each of the 6 defined event_type values."""
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
@@ -434,7 +432,7 @@ def test_log_output_is_single_line(caplog: pytest.LogCaptureFixture) -> None:
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(event_type="login_password", result="success")
+        log_security_event(event_type="login_passkey", result="success")
 
     records = [r for r in caplog.records if r.name == "security_events"]
     assert len(records) == 1
@@ -490,6 +488,10 @@ async def _register_user(email: str, password: str = "Str0ng!Pass") -> None:
         )
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
+)
 @pytest.mark.anyio
 async def test_password_login_success_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
@@ -513,6 +515,10 @@ async def test_password_login_success_emits_log(
     ), f"Expected login_password/success event, got: {logs}"
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
+)
 @pytest.mark.anyio
 async def test_password_login_failure_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
@@ -536,6 +542,10 @@ async def test_password_login_failure_emits_log(
     ), f"Expected login_password/failure event, got: {logs}"
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
+)
 @pytest.mark.anyio
 async def test_password_login_unknown_user_emits_failure_log(
     db_client, caplog: pytest.LogCaptureFixture
@@ -591,6 +601,10 @@ async def test_passkey_login_failure_emits_log(
     ), f"Expected login_passkey/failure event, got: {logs}"
 
 
+@pytest.mark.xfail(
+    strict=False,
+    reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
+)
 @pytest.mark.anyio
 async def test_account_lockout_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
@@ -714,7 +728,6 @@ async def test_recovery_redeem_failure_emits_log(
             insert(DbUser).values(
                 id=user_id,
                 email="redeem_fail@dojo.test",
-                hashed_password=_bcrypt.hashpw(b"unused", _bcrypt.gensalt()).decode(),
                 role="member",
                 is_active=True,
             )
@@ -757,7 +770,6 @@ async def test_admin_token_generation_emits_log(caplog: pytest.LogCaptureFixture
             insert(DbUser).values(
                 id=target_user_id,
                 email="target@dojo.test",
-                hashed_password=_bcrypt.hashpw(b"unused", _bcrypt.gensalt()).decode(),
                 role="member",
                 is_active=True,
             )

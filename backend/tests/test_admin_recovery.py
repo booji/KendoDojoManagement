@@ -70,7 +70,6 @@ async def _seed_user(engine, user_id: str, *, role: str = "member") -> str:
             insert(User).values(
                 id=user_id,
                 email=email,
-                hashed_password=bcrypt.hashpw(b"unused", bcrypt.gensalt()).decode(),
                 role=role,
                 is_active=True,
             )

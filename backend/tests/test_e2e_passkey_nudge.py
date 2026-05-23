@@ -39,15 +39,11 @@ pytestmark = pytest.mark.e2e
 
 
 def _register_and_login(page: Page) -> tuple[str, str]:
-    """Register a fresh user, log in, inject the auth cookie, return (email, token)."""
+    """Create a fresh test user, inject the auth cookie, return (email, token)."""
     email = f"nudge-{uuid.uuid4().hex[:8]}@dojo.test"
-    requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": "Str0ng!Pass"},
-    ).raise_for_status()
     resp = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": "Str0ng!Pass"},
+        f"{API_URL}/auth/login/test",
+        json={"email": email, "role": "admin"},
     )
     resp.raise_for_status()
     token = resp.cookies["access_token"]

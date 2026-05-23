@@ -3,12 +3,11 @@
 Exposes /setup, /setup/passkey/begin, and /setup/passkey/complete.
 
 All three endpoints share the same guard: _has_registered_user().  A "registered
-user" is one who has either a non-empty hashed_password (password registration)
-or at least one PasskeyCredential row (passkey registration).
+user" is one who has at least one PasskeyCredential row.
 
 Using this definition instead of a raw user-count means:
-- Phantom users created by an abandoned begin ceremony (hashed_password="" and no
-  credentials) do NOT block a legitimate first-run setup.
+- Phantom users created by an abandoned begin ceremony (no credentials yet) do
+  NOT block a legitimate first-run setup.
 - Concurrent begin calls both create phantom rows, but neither blocks the other's
   complete call — the first to complete creates a PasskeyCredential, which causes
   the second complete call to see a registered user and return 404.
@@ -43,18 +42,10 @@ _ALREADY_DONE = HTTPException(
 async def _has_registered_user(uow: AbstractUnitOfWork) -> bool:
     """Return True if any fully-registered user exists.
 
-    Checks for:
-    1. A user with a non-empty hashed_password (password registration path).
-    2. Any PasskeyCredential row (passkey registration path).
-
-    Phantom users from abandoned passkey ceremonies have hashed_password="" and
-    no credentials, so they do not count as registered.
+    A "registered user" is one who has at least one PasskeyCredential row.
+    Phantom users from abandoned passkey ceremonies have no credentials, so
+    they do not count as registered.
     """
-    password_count = await uow.session.execute(
-        select(func.count()).select_from(User).where(User.hashed_password != "")
-    )
-    if password_count.scalar_one() > 0:
-        return True
     passkey_count = await uow.session.execute(
         select(func.count()).select_from(PasskeyCredential)
     )

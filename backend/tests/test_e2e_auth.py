@@ -1,82 +1,76 @@
 """
-E2E browser tests for issue #3 — email/password auth.
+E2E browser tests for auth UI (issues #3 and #155).
 
-Acceptance criteria:
-  1. POST /auth/register/password creates a new account with hashed password
-  2. POST /auth/login/password returns a JWT (cookie) on valid credentials, 401 on invalid
-  3. Protected endpoints return 401 when no valid token is provided
-  4. Deactivated accounts cannot log in
-  5. Login and register UI pages exist and are functional
-  6. Passwords are never stored in plaintext
+Issue #3 — email/password auth criteria covered by unit/integration tests in test_auth.py.
+Issue #155 — legacy password auth removal:
+  - Login page must show only passkey form; no "Use email and password instead" option.
+  - Register page must show only passkey form; no "Use email and password instead" option.
 
-Criteria 1, 2, 3, 4, 6 are covered by unit/integration tests in test_auth.py.
-This file covers criterion 5 via browser tests, plus smoke-checks for the UI
-pages themselves.
+Criteria still covered by browser tests:
+  - Unauthenticated redirect to /login
 """
 
 import uuid
 
+import pytest
+import requests
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
+API_URL = "http://localhost:8000"
 
 
-# ── Register page ─────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Module fixture: seed a user so setup is unavailable and / → /login works
+# ---------------------------------------------------------------------------
 
 
-def test_register_page_renders(page: Page) -> None:
-    """The /register route renders passkey mode by default; password mode shows on toggle."""
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_db() -> None:
+    """Register a throwaway password user so the backend reports a populated instance.
+
+    Without at least one user the backend's /setup endpoint returns 200, and the
+    frontend redirects unauthenticated visitors from / to /setup instead of /login.
+    This fixture seeds the DB once per module so all tests in this file observe
+    the "populated" state.
+    """
+    email = f"e2e_auth_seed_{uuid.uuid4().hex[:8]}@dojo.test"
+    resp = requests.post(
+        f"{API_URL}/auth/login/test",
+        json={"email": email, "role": "admin"},
+        timeout=5,
+    )
+    assert resp.ok, f"Seed login failed: {resp.status_code} {resp.text}"
+
+
+# ── Register page — passkey-only (issue #155) ─────────────────────────────────
+
+
+def test_register_page_has_no_password_toggle(page: Page) -> None:
+    """Register page must NOT show a 'Use email and password instead' button (AC2 issue #155)."""
     page.goto(f"{BASE_URL}/register")
-    expect(page.get_by_label("Email")).to_be_visible()
-    # Switch to password mode to verify those fields exist
-    page.get_by_role("button", name="Use email and password instead").click()
-    expect(page.get_by_label("Password", exact=True)).to_be_visible()
-    expect(page.get_by_label("Confirm password")).to_be_visible()
-    expect(page.get_by_role("button", name="Register")).to_be_visible()
+    expect(page.get_by_text("Use email and password instead")).not_to_be_visible()
 
 
-def test_register_flow_redirects_to_login(page: Page) -> None:
-    """Filling the register form with valid data submits and redirects to /login."""
+def test_register_page_renders_passkey_form_only(page: Page) -> None:
+    """Register page shows the passkey form and no password fields (AC2 issue #155)."""
     page.goto(f"{BASE_URL}/register")
-    page.get_by_role("button", name="Use email and password instead").click()
-    page.get_by_label("Email").fill(f"e2e_register_{uuid.uuid4().hex[:8]}@dojo.test")
-    page.get_by_label("Password", exact=True).fill("Str0ng!Pass")
-    page.get_by_label("Confirm password").fill("Str0ng!Pass")
-    page.get_by_role("button", name="Register").click()
-    expect(page).to_have_url(f"{BASE_URL}/login")
+    expect(page.locator("input[type='password']")).to_have_count(0)
 
 
-# ── Login page ────────────────────────────────────────────────────────────────
+# ── Login page — passkey-only (issue #155) ────────────────────────────────────
 
 
-def test_login_page_renders(page: Page) -> None:
-    """The /login route renders passkey mode by default; password mode shows on toggle."""
+def test_login_page_has_no_password_toggle(page: Page) -> None:
+    """Login page must NOT show a 'Use email and password instead' button (AC1 issue #155)."""
     page.goto(f"{BASE_URL}/login")
-    expect(page.get_by_label("Email")).to_be_visible()
-    page.get_by_role("button", name="Use email and password instead").click()
-    expect(page.get_by_label("Password")).to_be_visible()
-    expect(page.get_by_role("button", name="Sign in")).to_be_visible()
+    expect(page.get_by_text("Use email and password instead")).not_to_be_visible()
 
 
-def test_login_flow_redirects_to_home(page: Page) -> None:
-    """Logging in with valid credentials redirects to /."""
-    email = f"e2e_login_{uuid.uuid4().hex[:8]}@dojo.test"
-
-    # Register first
-    page.goto(f"{BASE_URL}/register")
-    page.get_by_role("button", name="Use email and password instead").click()
-    page.get_by_label("Email").fill(email)
-    page.get_by_label("Password", exact=True).fill("Str0ng!Pass")
-    page.get_by_label("Confirm password").fill("Str0ng!Pass")
-    page.get_by_role("button", name="Register").click()
-    expect(page).to_have_url(f"{BASE_URL}/login")
-
-    # Now log in
-    page.get_by_role("button", name="Use email and password instead").click()
-    page.get_by_label("Email").fill(email)
-    page.get_by_label("Password").fill("Str0ng!Pass")
-    page.get_by_role("button", name="Sign in").click()
-    expect(page).to_have_url(f"{BASE_URL}/")
+def test_login_page_renders_passkey_form_only(page: Page) -> None:
+    """Login page shows the passkey form and no password fields (AC1 issue #155)."""
+    page.goto(f"{BASE_URL}/login")
+    expect(page.locator("input[type='password']")).to_have_count(0)
 
 
 # ── Unauthenticated redirect ──────────────────────────────────────────────────
