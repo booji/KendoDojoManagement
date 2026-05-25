@@ -32,16 +32,6 @@ class TokenResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
 
 
-class RegisterRequest(BaseModel):
-    email: LenientEmail
-    password: str
-
-
-class LoginRequest(BaseModel):
-    email: LenientEmail
-    password: str
-
-
 class PasskeyBeginRequest(BaseModel):
     email: LenientEmail
 

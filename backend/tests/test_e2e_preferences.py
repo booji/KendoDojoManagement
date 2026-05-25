@@ -8,36 +8,24 @@ Requires a running backend at BASE_API (http://localhost:8000).
 
 import json
 
+import requests
 from playwright.sync_api import Playwright
 
 BASE_API = "http://localhost:8000"
 
 _EMAIL = "e2e_prefs@dojo.test"
-_PASSWORD = "testpass_prefs_1"
 
 
 def _get_token(playwright: Playwright) -> str:
-    """Register (idempotent), login, and return the raw access_token value."""
-    ctx = playwright.request.new_context(base_url=BASE_API)
-    ctx.post(
-        "/auth/register/password",
-        headers={"Content-Type": "application/json"},
-        data=json.dumps({"email": _EMAIL, "password": _PASSWORD}),
+    """Create-or-get a test user and return the raw access_token value."""
+    resp = requests.post(
+        f"{BASE_API}/auth/login/test",
+        json={"email": _EMAIL, "role": "admin"},
     )
-    resp = ctx.post(
-        "/auth/login/password",
-        headers={"Content-Type": "application/json"},
-        data=json.dumps({"email": _EMAIL, "password": _PASSWORD}),
-    )
-    assert resp.ok, f"login failed: {resp.text()}"
-    # headers_array is a list of {"name": ..., "value": ...} dicts
-    for h in resp.headers_array:
-        if h["name"].lower() == "set-cookie" and "access_token=" in h["value"]:
-            token = h["value"].split("access_token=")[1].split(";")[0]
-            ctx.dispose()
-            return token
-    ctx.dispose()
-    raise AssertionError("access_token cookie not found in login response")
+    assert resp.ok, f"test login failed: {resp.text}"
+    token = resp.cookies["access_token"]
+    assert token, "access_token cookie not found in test login response"
+    return token
 
 
 # ---------------------------------------------------------------------------

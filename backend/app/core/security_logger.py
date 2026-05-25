@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 _VALID_EVENT_TYPES = frozenset(
     {
         "login_passkey",
-        "login_password",
-        "login_lockout",
         "recovery_redeem",
         "admin_token_generated",
         "passkey_registered",

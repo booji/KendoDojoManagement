@@ -100,7 +100,6 @@ def seeded_db():
             User(
                 id=str(uuid.uuid4()),
                 email="admin@dojo.test",
-                hashed_password=bcrypt.hashpw(b"unused", bcrypt.gensalt()).decode(),
                 role="admin",
                 is_active=True,
             )
@@ -118,7 +117,6 @@ async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") 
             insert(User).values(
                 id=user_id,
                 email=email,
-                hashed_password=bcrypt.hashpw(b"unused", bcrypt.gensalt()).decode(),
                 role=role,
                 is_active=True,
             )

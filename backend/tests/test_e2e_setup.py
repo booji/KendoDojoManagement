@@ -54,15 +54,35 @@ def _clear_users_and_credentials() -> None:
 
 
 def _populate_instance() -> None:
-    """Register a password user so the server reports a populated instance."""
+    """Create a passkey credential row so the server reports a populated instance."""
     resp = requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": "e2e_setup_seed@dojo.test", "password": "Str0ng!Pass1"},
+        f"{API_URL}/auth/login/test",
+        json={"email": "e2e_setup_seed@dojo.test", "role": "admin"},
         timeout=5,
     )
-    assert (
-        resp.status_code == 201
-    ), f"Seed registration failed: {resp.status_code} {resp.text}"
+    assert resp.ok, f"Test login failed: {resp.status_code} {resp.text}"
+    user_id = resp.json()["sub"]
+
+    db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+
+    async def _insert_credential() -> None:
+        conn = await asyncpg.connect(db_url)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO passkey_credentials
+                    (id, user_id, credential_id, public_key, sign_count, label, created_at)
+                VALUES
+                    (gen_random_uuid()::text, $1, '\\xDEADBEEF', '\\xDEADBEEF', 0, 'seed', now())
+                ON CONFLICT DO NOTHING
+                """,
+                user_id,
+            )
+        finally:
+            await conn.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(lambda: asyncio.run(_insert_credential())).result()
 
 
 # ---------------------------------------------------------------------------

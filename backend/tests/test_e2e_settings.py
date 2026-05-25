@@ -30,20 +30,14 @@ API_URL = "http://localhost:8000"
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _register_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/register/password",
-        json={"email": email, "password": password},
-    )
+def _register_api(email: str) -> str:
+    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
     resp.raise_for_status()
     return resp.json()["sub"]
 
 
-def _login_api(email: str, password: str = "Str0ng!Pass") -> str:
-    resp = requests.post(
-        f"{API_URL}/auth/login/password",
-        json={"email": email, "password": password},
-    )
+def _login_api(email: str) -> str:
+    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
     resp.raise_for_status()
     return resp.cookies["access_token"]
 

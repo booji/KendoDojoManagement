@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import Annotated, Any
 
@@ -18,12 +19,10 @@ from app.auth.dependencies import (
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import (
     LenientEmail,
-    LoginRequest,
     PasskeyBeginRequest,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
-    RegisterRequest,
     ThemeUpdate,
     UserClaims,
 )
@@ -34,14 +33,9 @@ from app.auth.passkey_service import (
     register_passkey_begin,
     register_passkey_complete,
 )
-from app.auth.password import verify_password
 from app.auth.rate_limiter import (
-    MAX_FAILURES,
     PER_IP_LIMIT,
-    check_lockout,
-    clear_lockout,
     limiter,
-    record_failure,
 )
 from app.auth.recovery_repository import (
     AbstractAdminTokenRepository,
@@ -56,7 +50,6 @@ from app.auth.recovery_service import (
     hash_codes,
     is_admin_token_valid,
 )
-from app.auth.service import register_user
 from app.auth.token import encode_recovery_token, encode_token
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -64,78 +57,7 @@ from app.dependencies import get_uow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
-@router.post("/register/password", response_model=UserClaims, status_code=201)
-async def register_password(
-    payload: RegisterRequest,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> UserClaims:
-    return await register_user(payload, uow)
-
-
-_MAX_PASSWORD_FAILURES = 5
-
-
-@router.post("/login/password", status_code=200)
-@limiter.limit(PER_IP_LIMIT)
-async def login_password(
-    request: Request,
-    payload: LoginRequest,
-    response: Response,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-    attempt_repo: Annotated[AbstractAttemptRepository, Depends(get_attempt_repo)],
-) -> dict:
-    result = await uow.session.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
-
-    if user is not None:
-        # Check lockout before verifying password
-        if await check_lockout(user.id, uow.session):
-            log_security_event("login_lockout", "failure", user_id=user.id)
-            raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail="Account temporarily locked. Try again later.",
-            )
-
-    if user is None or not verify_password(payload.password, user.hashed_password):
-        if user is not None:
-            new_count = await record_failure(user.id, uow.session)
-            await uow.commit()
-            if new_count >= MAX_FAILURES:
-                log_security_event("login_lockout", "failure", user_id=user.id)
-        log_security_event("login_password", "failure")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account deactivated",
-        )
-
-    # Successful login — clear any lockout state
-    await clear_lockout(user.id, uow.session)
-    await uow.commit()
-
-    claims = UserClaims(
-        sub=user.id,
-        email=user.email,
-        role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
-        theme=user.theme,  # type: ignore[arg-type]
-    )
-    token_response_val = encode_token(claims)
-    log_security_event("login_password", "success", user_id=user.id)
-    response.set_cookie(
-        key="access_token",
-        value=token_response_val,
-        httponly=True,
-        samesite="strict",
-        secure=config.COOKIE_SECURE,
-        max_age=60 * int(config.JWT_EXPIRE_MINUTES),
-    )
-    return {"detail": "logged in"}
+_ALLOW_TEST_AUTH = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 
 @router.post("/logout", status_code=200)
@@ -448,3 +370,44 @@ async def generate_admin_token(
         detail={"target_user_id": payload.user_id},
     )
     return {"token": plaintext}
+
+
+class _TestLoginRequest(BaseModel):
+    email: str
+    role: str = "admin"
+
+
+@router.post("/login/test", status_code=200)
+async def test_login(
+    payload: _TestLoginRequest,
+    response: Response,
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict:
+    """Create-or-get a user and return a JWT cookie. Only active when ALLOW_TEST_AUTH=true."""  # noqa: E501
+    if not _ALLOW_TEST_AUTH:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    result = await uow.session.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        user = User(email=payload.email, role=payload.role, is_active=True)
+        uow.session.add(user)
+        await uow.session.flush()
+    await uow.commit()
+    token = encode_token(
+        UserClaims(
+            sub=user.id,
+            email=user.email,
+            role=user.role,
+            is_active=user.is_active,
+            theme=user.theme,
+        )
+    )
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="strict",
+        secure=config.COOKIE_SECURE,
+        max_age=60 * int(config.JWT_EXPIRE_MINUTES),
+    )
+    return {"detail": "logged in", "sub": user.id}

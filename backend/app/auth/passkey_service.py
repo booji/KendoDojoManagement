@@ -85,7 +85,6 @@ async def _get_or_create_user(email: str, uow: AbstractUnitOfWork) -> User:
         role = "admin" if is_first_user else "member"
         user = User(
             email=email,
-            hashed_password="",
             role=role,
             is_active=True,
         )

@@ -10,7 +10,6 @@ class User(UUIDBase):
     __tablename__ = "users"
 
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")
@@ -18,10 +17,6 @@ class User(UUIDBase):
     challenge_issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    login_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class PasskeyCredential(UUIDBase):
@@ -84,7 +79,9 @@ class AdminRecoveryToken(UUIDBase):
         UUIDType(), ForeignKey("users.id"), nullable=True
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

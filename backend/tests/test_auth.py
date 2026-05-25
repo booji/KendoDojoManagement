@@ -1,37 +1,9 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
-from app.db.base import Base
-from app.db.unit_of_work import SQLAlchemyUnitOfWork
-from app.dependencies import get_uow
 from app.main import app
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _engine
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -40,12 +12,12 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-# ── Registration ──────────────────────────────────────────────────────────────
+# ── Password routes removed — must return 404 ────────────────────────────────
 
 
 @pytest.mark.anyio
-async def test_register_first_user_becomes_admin(db_client) -> None:
-    """First registration on a fresh instance gets admin role."""
+async def test_register_password_route_returns_404() -> None:
+    """POST /auth/register/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -53,122 +25,20 @@ async def test_register_first_user_becomes_admin(db_client) -> None:
             "/auth/register/password",
             json={"email": "musashi@example.com", "password": "Str0ng!Pass"},
         )
-    assert response.status_code == 201
-    body = response.json()
-    assert body["email"] == "musashi@example.com"
-    assert body["role"] == "admin"
-    assert "sub" in body
-    assert "password" not in body
-    assert "hashed_password" not in body
+    assert response.status_code == 404
 
 
 @pytest.mark.anyio
-async def test_register_subsequent_user_is_member(db_client) -> None:
-    """Second and later registrations get member role."""
+async def test_login_password_route_returns_404() -> None:
+    """POST /auth/login/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.post(
-            "/auth/register/password",
-            json={"email": "first@example.com", "password": "Str0ng!Pass"},
-        )
         response = await c.post(
-            "/auth/register/password",
+            "/auth/login/password",
             json={"email": "musashi@example.com", "password": "Str0ng!Pass"},
         )
-    assert response.status_code == 201
-    assert response.json()["role"] == "member"
-
-
-@pytest.mark.anyio
-async def test_register_duplicate_email_returns_409(db_client) -> None:
-    payload = {"email": "dupe@dojo.test", "password": "Str0ng!Pass"}
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        await c.post("/auth/register/password", json=payload)
-        response = await c.post("/auth/register/password", json=payload)
-    assert response.status_code == 409
-
-
-# ── Login ─────────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.anyio
-async def test_login_returns_jwt(db_client) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        await c.post(
-            "/auth/register/password",
-            json={"email": "login@dojo.test", "password": "Str0ng!Pass"},
-        )
-        response = await c.post(
-            "/auth/login/password",
-            json={"email": "login@dojo.test", "password": "Str0ng!Pass"},
-        )
-    assert response.status_code == 200
-    assert response.json() == {"detail": "logged in"}
-    assert "access_token" in response.cookies
-
-
-@pytest.mark.anyio
-async def test_login_wrong_password_returns_401(db_client) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        await c.post(
-            "/auth/register/password",
-            json={"email": "badpass@dojo.test", "password": "Str0ng!Pass"},
-        )
-        response = await c.post(
-            "/auth/login/password",
-            json={"email": "badpass@dojo.test", "password": "wrongpassword"},
-        )
-    assert response.status_code == 401
-
-
-@pytest.mark.anyio
-async def test_login_unknown_email_returns_401(db_client) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(
-            "/auth/login/password",
-            json={"email": "nobody@dojo.test", "password": "whatever"},
-        )
-    assert response.status_code == 401
-
-
-@pytest.mark.anyio
-async def test_login_deactivated_account_returns_403(db_client) -> None:
-    engine = db_client
-    from sqlalchemy import update
-
-    from app.auth.db_models import User
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post(
-            "/auth/register/password",
-            json={"email": "inactive@dojo.test", "password": "Str0ng!Pass"},
-        )
-    user_id = resp.json()["sub"]
-
-    async with engine.begin() as conn:
-        await conn.execute(
-            update(User).where(User.id == user_id).values(is_active=False)
-        )
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(
-            "/auth/login/password",
-            json={"email": "inactive@dojo.test", "password": "Str0ng!Pass"},
-        )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 # ── Route protection ──────────────────────────────────────────────────────────
@@ -221,30 +91,3 @@ async def test_admin_route_accepts_admin_token() -> None:
     ) as c:
         response = await c.get("/auth/admin-only")
     assert response.status_code == 200
-
-
-# ── Password storage ──────────────────────────────────────────────────────────
-
-
-@pytest.mark.anyio
-async def test_password_not_stored_in_plaintext(db_client) -> None:
-    engine = db_client
-    from sqlalchemy import select
-
-    from app.auth.db_models import User
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        await c.post(
-            "/auth/register/password",
-            json={"email": "hash@dojo.test", "password": "MySecret123!"},
-        )
-
-    async with engine.connect() as conn:
-        result = await conn.execute(select(User).where(User.email == "hash@dojo.test"))
-        user = result.fetchone()
-
-    assert user is not None
-    assert user.hashed_password != "MySecret123!"
-    assert user.hashed_password.startswith("$2")  # bcrypt prefix
