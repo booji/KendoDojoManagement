@@ -32,7 +32,9 @@ _SETUP_HEALTH_URL = f"{API_URL}/setup"
 
 
 async def _clear_users_async() -> None:
-    db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    db_url = os.environ["DATABASE_URL"].replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
     conn = await asyncpg.connect(db_url)
     try:
         await conn.execute("DELETE FROM passkey_credentials")
@@ -63,7 +65,9 @@ def _populate_instance() -> None:
     assert resp.ok, f"Test login failed: {resp.status_code} {resp.text}"
     user_id = resp.json()["sub"]
 
-    db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    db_url = os.environ["DATABASE_URL"].replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
 
     async def _insert_credential() -> None:
         conn = await asyncpg.connect(db_url)

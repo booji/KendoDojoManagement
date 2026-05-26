@@ -250,7 +250,9 @@ async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_endpoint_returns_valid_ical_structure(instance_repo, type_repo) -> None:
+async def test_ical_endpoint_returns_valid_ical_structure(
+    instance_repo, type_repo
+) -> None:
     """GET /sessions/ical must return a valid iCal document beginning with BEGIN:VCALENDAR."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -317,7 +319,9 @@ async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_ical_feed_includes_description_from_info(instance_repo, type_repo) -> None:
+async def test_ical_feed_includes_description_from_info(
+    instance_repo, type_repo
+) -> None:
     """VEVENT must include DESCRIPTION set to the info field."""
     await _seed_instance(instance_repo, info="Practice focus: kote strikes")
     async with AsyncClient(
@@ -343,7 +347,9 @@ async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> N
 
 
 @pytest.mark.anyio
-async def test_ical_feed_omits_description_when_info_null(instance_repo, type_repo) -> None:
+async def test_ical_feed_omits_description_when_info_null(
+    instance_repo, type_repo
+) -> None:
     """VEVENT must not include a DESCRIPTION line when info is None."""
     await _seed_instance(instance_repo, info=None)
     async with AsyncClient(

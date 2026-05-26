@@ -28,7 +28,9 @@ pytestmark = pytest.mark.e2e
 
 def _register_and_login(page: Page) -> str:
     email = f"pk-e2e-{uuid.uuid4().hex[:8]}@dojo.test"
-    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
+    resp = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"}
+    )
     resp.raise_for_status()
     token = resp.cookies["access_token"]
     page.context.add_cookies(

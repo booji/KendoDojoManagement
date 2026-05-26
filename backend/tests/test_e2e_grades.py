@@ -61,19 +61,22 @@ def _set_grade_via_api(admin_token: str, member_id: str, grade: str) -> None:
     r.raise_for_status()
 
 
-def _create_member_via_api(admin_token: str, full_name: str, email: str | None = None) -> str:
+def _create_member_via_api(
+    admin_token: str, full_name: str, email: str | None = None
+) -> str:
+    parts = full_name.split(" ", 1)
     r = requests.post(
         f"{API_BASE}/members",
         cookies=_cookie_dict(admin_token),
         json={
             "email": email or f"member-{uuid.uuid4().hex[:8]}@dojo.test",
-            "full_name": full_name,
+            "first_name": parts[0],
+            "surname": parts[1] if len(parts) > 1 else parts[0],
             "dob": "1990-01-01",
             "join_date": "2024-01-01",
             "membership_status": "active",
             "is_coach": False,
             "is_first_aider": False,
-            "parental_consent_obtained": False,
         },
     )
     r.raise_for_status()
@@ -118,7 +121,9 @@ def test_promote_button_visible_for_admin(page: Page) -> None:
     page.wait_for_load_state("networkidle")
 
     expect(page.locator(_GRADE_CARD_TITLE)).to_be_visible(timeout=8000)
-    expect(page.get_by_role("button", name="Edit member grade")).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="Edit member grade")).to_be_visible(
+        timeout=8000
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -170,9 +175,9 @@ def test_promote_button_removed_edit_button_present(page: Page) -> None:
     expect(page.get_by_role("button", name="Promote member")).not_to_be_visible()
 
     # New "Edit grade" button must be visible
-    expect(
-        page.get_by_role("button", name="Edit member grade")
-    ).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="Edit member grade")).to_be_visible(
+        timeout=8000
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,4 +251,6 @@ def test_grade_card_updates_without_page_reload_after_set_grade(page: Page) -> N
     assert sentinel is True, "Page was reloaded — grade card must update without reload"
 
     # Grade card <p> shows the new grade (scoped to <p> to avoid hidden Select trigger div)
-    expect(page.locator("p", has_text="Shodan (1-dan)").first).to_be_visible(timeout=8000)
+    expect(page.locator("p", has_text="Shodan (1-dan)").first).to_be_visible(
+        timeout=8000
+    )

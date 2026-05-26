@@ -52,18 +52,19 @@ def _inject_cookie(page: Page, token: str) -> None:
 
 def _create_member_via_api(admin_token: str, full_name: str) -> str:
     """Create a member via admin API and return the member ID."""
+    parts = full_name.split(" ", 1)
     r = requests.post(
         f"{API_BASE}/members",
         cookies=_cookie_dict(admin_token),
         json={
             "email": f"member-{uuid.uuid4().hex[:8]}@dojo.test",
-            "full_name": full_name,
+            "first_name": parts[0],
+            "surname": parts[1] if len(parts) > 1 else parts[0],
             "dob": "1990-01-01",
             "join_date": "2024-01-01",
             "membership_status": "active",
             "is_coach": False,
             "is_first_aider": False,
-            "parental_consent_obtained": False,
         },
     )
     r.raise_for_status()
@@ -72,16 +73,19 @@ def _create_member_via_api(admin_token: str, full_name: str) -> str:
 
 def _create_linked_member_via_api(member_token: str, full_name: str) -> str:
     """Create a member record linked to the member token's sub via PUT /users/me/member."""
+    parts = full_name.split(" ", 1)
     r = requests.put(
         f"{API_BASE}/users/me/member",
         cookies=_cookie_dict(member_token),
-        json={"full_name": full_name},
+        json={"first_name": parts[0], "surname": parts[1] if len(parts) > 1 else parts[0]},
     )
     r.raise_for_status()
     return r.json()["id"]
 
 
-def _propose_grade_via_api(member_token: str, member_id: str, grade: str = "ROKKYUU") -> str:
+def _propose_grade_via_api(
+    member_token: str, member_id: str, grade: str = "ROKKYUU"
+) -> str:
     """Submit a grade proposal as the member and return the entry ID."""
     r = requests.post(
         f"{API_BASE}/members/{member_id}/grades/propose",
@@ -133,8 +137,7 @@ def test_admin_sees_approve_and_reject_buttons_on_pending_entry(page: Page) -> N
     expect(page.locator("#grade-history-list")).to_be_visible(timeout=5000)
 
     # Approve and Reject buttons must be visible for the pending entry
-    approve_btn = page.get_by_role("button", name=lambda n: "Approve" in n if n else False).first
-    # Use aria-label pattern from the implementation: "Approve {display_name}"
+    # aria-label pattern from the implementation: "Approve {display_name}"
     approve_btn = page.locator('button[aria-label^="Approve"]').first
     reject_btn = page.locator('button[aria-label^="Reject"]').first
 
@@ -220,9 +223,9 @@ def test_reject_removes_entry_from_history_without_reload(page: Page) -> None:
     )
 
     entries_after = entries_after_locator.count()
-    assert entries_after < entries_before, (
-        f"Expected fewer history entries after rejection, got {entries_after} (was {entries_before})"
-    )
+    assert (
+        entries_after < entries_before
+    ), f"Expected fewer history entries after rejection, got {entries_after} (was {entries_before})"
 
     # Confirm no page reload occurred
     sentinel = page.evaluate("window.__noReload")

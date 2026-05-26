@@ -145,12 +145,15 @@ class SqlGradeRepository(AbstractGradeRepository):
 
     async def list_pending(self) -> list[dict[str, Any]]:
         result = await self._session.execute(
-            select(GradeHistory, Member.full_name)
+            select(GradeHistory, Member.display_name, Member.first_name, Member.surname)
             .join(Member, GradeHistory.member_id == Member.id)
             .where(GradeHistory.status == "pending")
             .order_by(GradeHistory.promoted_at.asc())
         )
         return [
-            {**_to_dict(gh), "member_name": full_name}
-            for gh, full_name in result.all()
+            {
+                **_to_dict(gh),
+                "member_name": display_name or f"{first_name} {surname}",
+            }
+            for gh, display_name, first_name, surname in result.all()
         ]

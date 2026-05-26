@@ -104,7 +104,7 @@ class SqlAttendanceRepository:
 
     async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
         result = await self._session.execute(
-            select(Attendance, Member.full_name)
+            select(Attendance, Member.display_name, Member.first_name, Member.surname)
             .outerjoin(
                 Member,
                 or_(
@@ -115,7 +115,11 @@ class SqlAttendanceRepository:
             .where(Attendance.session_id == session_id)
         )
         return [
-            {**_attendance_to_dict(row.Attendance), "display_name": row.full_name}
+            {
+                **_attendance_to_dict(row.Attendance),
+                "display_name": row.display_name
+                or (f"{row.first_name} {row.surname}" if row.first_name else None),
+            }
             for row in result.all()
         ]
 
@@ -144,12 +148,22 @@ class SqlAttendanceRepository:
         self._session.add(obj)
         await self._session.flush()
         result = await self._session.execute(
-            select(Attendance, Member.full_name)
-            .outerjoin(Member, or_(Attendance.member_id == Member.id, Attendance.member_id == Member.user_id))
+            select(Attendance, Member.display_name, Member.first_name, Member.surname)
+            .outerjoin(
+                Member,
+                or_(
+                    Attendance.member_id == Member.id,
+                    Attendance.member_id == Member.user_id,
+                ),
+            )
             .where(Attendance.id == obj.id)
         )
         row = result.one()
-        return {**_attendance_to_dict(row.Attendance), "display_name": row.full_name}
+        return {
+            **_attendance_to_dict(row.Attendance),
+            "display_name": row.display_name
+            or (f"{row.first_name} {row.surname}" if row.first_name else None),
+        }
 
     async def remove_attendance(self, session_id: str, member_id: str) -> bool:
         result = await self._session.execute(

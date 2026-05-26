@@ -90,18 +90,19 @@ def _api_create_session(admin_token: str, date: str = "2299-06-01") -> dict:
 
 
 def _api_create_member(admin_token: str, full_name: str) -> dict:
+    parts = full_name.split(" ", 1)
     r = requests.post(
         f"{API_URL}/members",
         cookies=_cookie_dict(admin_token),
         json={
             "email": f"member-{uuid.uuid4().hex[:8]}@dojo.test",
-            "full_name": full_name,
+            "first_name": parts[0],
+            "surname": parts[1] if len(parts) > 1 else parts[0],
             "dob": "1990-01-01",
             "join_date": "2024-01-01",
             "membership_status": "active",
             "is_coach": False,
             "is_first_aider": False,
-            "parental_consent_obtained": False,
         },
     )
     r.raise_for_status()
@@ -115,11 +116,12 @@ def _api_create_member_with_user_id(member_sub: str, full_name: str) -> dict:
     The self-access check in GET /members/{id}/attendance uses
     get_by_user_id(claims.sub) which will match this member's user_id.
     """
+    parts = full_name.split(" ", 1)
     member_token = _make_token("member", sub=member_sub)
     r = requests.put(
         f"{API_URL}/users/me/member",
         cookies=_cookie_dict(member_token),
-        json={"full_name": full_name},
+        json={"first_name": parts[0], "surname": parts[1] if len(parts) > 1 else parts[0]},
     )
     r.raise_for_status()
     return r.json()

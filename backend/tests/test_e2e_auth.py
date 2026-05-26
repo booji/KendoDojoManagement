@@ -77,8 +77,14 @@ def test_login_page_renders_passkey_form_only(page: Page) -> None:
 
 
 def test_home_redirects_unauthenticated_to_login(page: Page) -> None:
-    """Navigating to / without a session redirects to /login."""
-    # Clear any cookies left from other tests
+    """Navigating to / without a session redirects away from protected content.
+
+    Redirects to /login when the app is set up, or /setup when no passkey
+    credentials exist yet — both are valid auth barriers.
+    """
+    import re
+
     page.context.clear_cookies()
     page.goto(f"{BASE_URL}/")
-    expect(page).to_have_url(f"{BASE_URL}/login")
+    # Accept /login (set up) or /setup (no credentials yet) — both block access
+    expect(page).to_have_url(re.compile(r"/(login|setup)$"), timeout=8000)

@@ -1,5 +1,5 @@
 """
-Unit tests for issue #25 — Member self-update API.
+Unit tests for issue #25 — Member self-update API, updated for issue #158.
 
 Uses StubRepository pattern — NO real DB. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
@@ -10,6 +10,11 @@ Acceptance criteria exercised here:
   3. Admin-only fields sent to PUT /users/me/member are rejected (422) or silently ignored
   4. PUT /users/me/member creates a new Member record if none linked (first-save onboarding)
   5. Both endpoints return 401 for unauthenticated requests
+
+Issue #158 changes:
+  - full_name replaced by first_name + surname + display_name
+  - parental_consent_obtained removed
+  - dob is now nullable
 """
 
 from __future__ import annotations
@@ -44,7 +49,9 @@ def _member_override():
 def _seed_record(**overrides) -> dict[str, Any]:
     base: dict[str, Any] = {
         "email": "self@dojo.test",
-        "full_name": "Self Member",
+        "first_name": "Self",
+        "surname": "Member",
+        "display_name": None,
         "dob": "1990-06-15",
         "join_date": "2024-01-10",
         "membership_status": "active",
@@ -52,7 +59,6 @@ def _seed_record(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Emergency Contact",
         "emergency_contact_phone": "+447700900001",
-        "parental_consent_obtained": False,
         "user_id": _USER_SUB,
     }
     base.update(overrides)
@@ -123,7 +129,9 @@ class StubMemberRepo:
             results = [
                 r
                 for r in results
-                if term in r["full_name"].lower() or term in r["email"].lower()
+                if term in r["first_name"].lower()
+                or term in r["surname"].lower()
+                or term in r["email"].lower()
             ]
         return results
 
@@ -165,7 +173,8 @@ async def test_get_my_member_returns_own_record(member_repo) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == "self@dojo.test"
-    assert body["full_name"] == "Self Member"
+    assert body["first_name"] == "Self"
+    assert body["surname"] == "Member"
     assert "id" in body
 
 
@@ -195,7 +204,7 @@ async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
 
 @pytest.mark.anyio
 async def test_get_my_member_response_schema(member_repo) -> None:
-    """Response includes all expected MemberResponse fields."""
+    """Response includes all expected MemberResponse fields for issue #158."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
@@ -209,18 +218,25 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     expected_fields = {
         "id",
         "email",
-        "full_name",
+        "first_name",
+        "surname",
+        "display_name",
+        "dob",
         "join_date",
         "membership_status",
         "is_coach",
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "parental_consent_obtained",
         "is_minor",
     }
     for field in expected_fields:
         assert field in body, f"Missing field in response: {field}"
+    # Legacy fields must be absent
+    assert "full_name" not in body, "full_name must not appear in MemberResponse"
+    assert (
+        "parental_consent_obtained" not in body
+    ), "parental_consent_obtained must not appear in MemberResponse"
 
 
 @pytest.mark.anyio
@@ -245,8 +261,8 @@ async def test_get_my_member_only_returns_own_record(member_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_put_my_member_updates_full_name(member_repo) -> None:
-    """PUT updates full_name and returns updated record."""
+async def test_put_my_member_updates_first_name(member_repo) -> None:
+    """PUT updates first_name and returns updated record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record())
 
@@ -255,11 +271,47 @@ async def test_put_my_member_updates_full_name(member_repo) -> None:
     ) as c:
         response = await c.put(
             "/users/me/member",
-            json={"full_name": "Updated Self Name"},
+            json={"first_name": "UpdatedFirst"},
         )
 
     assert response.status_code == 200
-    assert response.json()["full_name"] == "Updated Self Name"
+    assert response.json()["first_name"] == "UpdatedFirst"
+
+
+@pytest.mark.anyio
+async def test_put_my_member_updates_surname(member_repo) -> None:
+    """PUT updates surname and returns updated record."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"surname": "UpdatedSurname"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["surname"] == "UpdatedSurname"
+
+
+@pytest.mark.anyio
+async def test_put_my_member_updates_display_name(member_repo) -> None:
+    """PUT updates display_name and returns updated record."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"display_name": "Taro-san"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Taro-san"
 
 
 @pytest.mark.anyio
@@ -315,7 +367,7 @@ async def test_put_my_member_update_persists(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.put("/users/me/member", json={"full_name": "Persisted Name"})
+        await c.put("/users/me/member", json={"first_name": "Persisted"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -323,7 +375,7 @@ async def test_put_my_member_update_persists(member_repo) -> None:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
-    assert get_response.json()["full_name"] == "Persisted Name"
+    assert get_response.json()["first_name"] == "Persisted"
 
 
 @pytest.mark.anyio
@@ -334,7 +386,7 @@ async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
     ) as c:
         response = await c.put(
             "/users/me/member",
-            json={"full_name": "Hacker"},
+            json={"first_name": "Hacker"},
         )
 
     assert response.status_code == 401
@@ -412,27 +464,6 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
         assert response.json()["is_first_aider"] is False
 
 
-@pytest.mark.anyio
-async def test_put_my_member_parental_consent_is_rejected_or_ignored(
-    member_repo,
-) -> None:
-    """parental_consent_obtained is an admin-only field."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    await member_repo.add(_seed_record(parental_consent_obtained=False))
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.put(
-            "/users/me/member",
-            json={"parental_consent_obtained": True},
-        )
-
-    assert response.status_code in (200, 422)
-    if response.status_code == 200:
-        assert response.json()["parental_consent_obtained"] is False
-
-
 # ---------------------------------------------------------------------------
 # AC4 — PUT /users/me/member creates a new Member record if none exists
 # ---------------------------------------------------------------------------
@@ -449,7 +480,8 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
         response = await c.put(
             "/users/me/member",
             json={
-                "full_name": "Brand New Member",
+                "first_name": "Brand",
+                "surname": "New",
                 "dob": "1995-08-22",
                 "emergency_contact_name": "Parent",
                 "emergency_contact_phone": "+447700900111",
@@ -459,7 +491,8 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
     assert response.status_code in (200, 201)
     body = response.json()
     assert "id" in body
-    assert body["full_name"] == "Brand New Member"
+    assert body["first_name"] == "Brand"
+    assert body["surname"] == "New"
 
 
 @pytest.mark.anyio
@@ -473,7 +506,8 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
         await c.put(
             "/users/me/member",
             json={
-                "full_name": "Onboarded Member",
+                "first_name": "Onboarded",
+                "surname": "Member",
                 "dob": "1992-04-10",
             },
         )
@@ -484,4 +518,5 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
-    assert get_response.json()["full_name"] == "Onboarded Member"
+    assert get_response.json()["first_name"] == "Onboarded"
+    assert get_response.json()["surname"] == "Member"

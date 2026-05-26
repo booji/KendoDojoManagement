@@ -43,7 +43,9 @@ def _admin_override():
 def _seed_admin_member(**overrides) -> dict[str, Any]:
     base: dict[str, Any] = {
         "email": "admin@dojo.test",
-        "full_name": "Admin User",
+        "first_name": "Admin",
+        "surname": "User",
+        "display_name": None,
         "dob": "1985-03-10",
         "join_date": "2020-01-01",
         "membership_status": "active",
@@ -51,7 +53,6 @@ def _seed_admin_member(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Admin Contact",
         "emergency_contact_phone": "+447700900002",
-        "parental_consent_obtained": False,
         "user_id": _ADMIN_SUB,
     }
     base.update(overrides)
@@ -122,7 +123,9 @@ class StubMemberRepo:
             results = [
                 r
                 for r in results
-                if term in r["full_name"].lower() or term in r["email"].lower()
+                if term in r["first_name"].lower()
+                or term in r["surname"].lower()
+                or term in r["email"].lower()
             ]
         return results
 
@@ -164,7 +167,8 @@ async def test_admin_get_my_member_returns_200_with_linked_record(member_repo) -
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == "admin@dojo.test"
-    assert body["full_name"] == "Admin User"
+    assert body["first_name"] == "Admin"
+    assert body["surname"] == "User"
     assert "id" in body
 
 
@@ -199,7 +203,8 @@ async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) 
         response = await c.put(
             "/users/me/member",
             json={
-                "full_name": "New Admin Member",
+                "first_name": "New Admin",
+                "surname": "Member",
                 "dob": "1985-03-10",
                 "emergency_contact_name": "Admin Emergency",
                 "emergency_contact_phone": "+447700900002",
@@ -209,7 +214,8 @@ async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) 
     assert response.status_code in (200, 201)
     body = response.json()
     assert "id" in body
-    assert body["full_name"] == "New Admin Member"
+    assert body["first_name"] == "New Admin"
+    assert body["surname"] == "Member"
 
 
 @pytest.mark.anyio
@@ -223,7 +229,8 @@ async def test_admin_put_my_member_created_record_is_retrievable(member_repo) ->
         put_resp = await c.put(
             "/users/me/member",
             json={
-                "full_name": "Retrievable Admin",
+                "first_name": "Retrievable",
+                "surname": "Admin",
                 "dob": "1980-07-04",
             },
         )
@@ -236,7 +243,8 @@ async def test_admin_put_my_member_created_record_is_retrievable(member_repo) ->
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
-    assert get_response.json()["full_name"] == "Retrievable Admin"
+    assert get_response.json()["first_name"] == "Retrievable"
+    assert get_response.json()["surname"] == "Admin"
 
 
 # ---------------------------------------------------------------------------
@@ -255,11 +263,11 @@ async def test_admin_put_my_member_updates_existing_record(member_repo) -> None:
     ) as c:
         response = await c.put(
             "/users/me/member",
-            json={"full_name": "Updated Admin Name"},
+            json={"first_name": "Updated Admin"},
         )
 
     assert response.status_code == 200
-    assert response.json()["full_name"] == "Updated Admin Name"
+    assert response.json()["first_name"] == "Updated Admin"
 
 
 @pytest.mark.anyio
@@ -271,7 +279,7 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.put("/users/me/member", json={"full_name": "Updated Admin Name"})
+        await c.put("/users/me/member", json={"first_name": "Updated Admin"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -279,7 +287,7 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
         get_response = await c.get("/users/me/member")
 
     assert get_response.status_code == 200
-    assert get_response.json()["full_name"] == "Updated Admin Name"
+    assert get_response.json()["first_name"] == "Updated Admin"
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +308,8 @@ async def test_admin_created_member_record_appears_in_members_list(member_repo) 
         put_resp = await c.put(
             "/users/me/member",
             json={
-                "full_name": "Listed Admin Member",
+                "first_name": "Listed Admin",
+                "surname": "Member",
                 "dob": "1975-11-22",
             },
         )
@@ -332,7 +341,8 @@ async def test_admin_member_record_email_matches_admin_email_in_list(
         await c.put(
             "/users/me/member",
             json={
-                "full_name": "Admin In List",
+                "first_name": "Admin In",
+                "surname": "List",
                 "dob": "1970-01-15",
             },
         )

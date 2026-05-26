@@ -57,7 +57,8 @@ def _api_headers(token: str) -> dict:
 def _create_member(page: Page, token: str) -> str:
     payload = {
         "email": f"member-{uuid.uuid4().hex[:8]}@dojo.test",
-        "full_name": f"Test Member {uuid.uuid4().hex[:6]}",
+        "first_name": "Test",
+        "surname": f"Member {uuid.uuid4().hex[:6]}",
         "dob": "1990-01-01",
         "join_date": "2024-01-01",
     }

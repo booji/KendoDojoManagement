@@ -68,7 +68,9 @@ async def checkin_to_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
         )
-    record = await attendance_repo.check_in(str(session_id), current_user.sub, current_user.sub)
+    record = await attendance_repo.check_in(
+        str(session_id), current_user.sub, current_user.sub
+    )
     await uow.commit()
     return AttendanceRead(**record)
 

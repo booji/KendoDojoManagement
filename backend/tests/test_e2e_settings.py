@@ -31,13 +31,17 @@ API_URL = "http://localhost:8000"
 
 
 def _register_api(email: str) -> str:
-    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
+    resp = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"}
+    )
     resp.raise_for_status()
     return resp.json()["sub"]
 
 
 def _login_api(email: str) -> str:
-    resp = requests.post(f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"})
+    resp = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "admin"}
+    )
     resp.raise_for_status()
     return resp.cookies["access_token"]
 

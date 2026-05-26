@@ -109,6 +109,7 @@ def _navigate_to_test_month(page: Page) -> None:
 def _navigate_fast(page: Page, target_label: str) -> None:
     """Navigate the calendar to target_label by clicking Next period the required number of times."""
     import datetime
+
     today = datetime.date.today()
     target_year, target_month = 2090, 6
     months_ahead = (target_year - today.year) * 12 + (target_month - today.month)

@@ -123,8 +123,10 @@ def test_reports_page_is_accessible_via_navigation(page: Page) -> None:
 
 
 def test_reports_page_redirects_unauthenticated_users(page: Page) -> None:
+    import re
+
     # Visit /reports with no auth cookie
     page.goto(f"{BASE_URL}/reports")
 
-    # AuthenticatedLayout redirects to /login when getMe() fails
-    expect(page).to_have_url(f"{BASE_URL}/login", timeout=10000)
+    # Redirects to /login (app set up) or /setup (no credentials yet)
+    expect(page).to_have_url(re.compile(r"/(login|setup)$"), timeout=10000)

@@ -23,7 +23,6 @@ import os
 import tempfile
 import uuid
 
-import bcrypt
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
@@ -56,7 +55,6 @@ def _seed_user_sync(db_path: str, email: str) -> str:
             User(
                 id=user_id,
                 email=email,
-                hashed_password=bcrypt.hashpw(b"unused", bcrypt.gensalt()).decode(),
                 role="admin",
                 is_active=True,
             )

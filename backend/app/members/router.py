@@ -22,8 +22,10 @@ _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
 
-def _compute_is_minor(dob: str) -> bool:
-    """Return True if the person is under 18 years old as of today."""
+def _compute_is_minor(dob: str | None) -> bool:
+    """Return True if person is under 18 today. Returns False when dob is None."""
+    if not dob:
+        return False
     birth = date.fromisoformat(dob) if isinstance(dob, str) else dob
     today = date.today()
     age = (
@@ -33,20 +35,21 @@ def _compute_is_minor(dob: str) -> bool:
 
 
 def _to_response(record: dict[str, Any]) -> MemberResponse:
-    dob = record.get("dob", "")
-    is_minor = _compute_is_minor(dob) if dob else False
+    dob = record.get("dob")
     return MemberResponse(
         id=record["id"],
         email=record["email"],
-        full_name=record["full_name"],
+        first_name=record["first_name"],
+        surname=record["surname"],
+        display_name=record.get("display_name"),
+        dob=dob,
         join_date=str(record.get("join_date", "")),
         membership_status=record["membership_status"],
         is_coach=record["is_coach"],
         is_first_aider=record["is_first_aider"],
         emergency_contact_name=record.get("emergency_contact_name"),
         emergency_contact_phone=record.get("emergency_contact_phone"),
-        parental_consent_obtained=record.get("parental_consent_obtained", False),
-        is_minor=is_minor,
+        is_minor=_compute_is_minor(dob),
     )
 
 
@@ -64,7 +67,8 @@ async def create_member(
 ) -> MemberResponse:
     data = payload.model_dump()
     # Convert date fields to ISO strings for storage
-    data["dob"] = data["dob"].isoformat()
+    if data["dob"] is not None:
+        data["dob"] = data["dob"].isoformat()
     data["join_date"] = data["join_date"].isoformat()
     try:
         record = await repo.add(data)

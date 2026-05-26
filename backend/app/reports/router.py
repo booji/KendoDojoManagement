@@ -96,7 +96,7 @@ async def members_csv(
     members = await repo.members_report()
     output = io.StringIO()
     writer = csv.DictWriter(
-        output, fieldnames=["member_id", "full_name", "join_date", "current_grade"]
+        output, fieldnames=["member_id", "display_name", "join_date", "current_grade"]
     )
     writer.writeheader()
     writer.writerows(_sanitize_row(r) for r in members)

@@ -1,22 +1,24 @@
 """
-Unit / integration tests for issue #6 — Member CRUD.
+Unit / integration tests for issue #6 — Member CRUD, updated for issue #158.
 
 Uses StubRepository pattern — NO real DB. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
-  1. Member schema: UUID, email, full name, DOB, join date, membership status,
-     is_coach, is_first_aider, emergency contact name/phone, federation number,
-     parental_consent_obtained
-  2. is_minor derived at read time from DOB (not stored)
+  1. Member schema: UUID, email, first_name, surname, display_name, DOB (nullable),
+     join date, membership status, is_coach, is_first_aider, emergency contact
+     name/phone, federation number. NO full_name, NO parental_consent_obtained.
+  2. is_minor derived at read time from DOB (not stored); returns False when dob is null
   3. POST /members creates a member (admin only)
   4. GET /members/{id} returns profile (admin sees all; member sees own only)
   5. PUT /members/{id} updates any field (admin only)
   6. DELETE /members/{id} deactivates the member (sets status to inactive)
   7. GET /members supports filtering by status and search by name/email
-  8. PRD testing decisions: valid create, missing required fields, is_minor edge
-     cases, update persists, deactivate sets inactive, filter by status, search,
-     parental consent flag
+
+Issue #158 changes:
+  - Drop full_name → add first_name (required), surname (required), display_name (nullable)
+  - Drop parental_consent_obtained
+  - Make dob nullable
 """
 
 from __future__ import annotations
@@ -56,7 +58,8 @@ def _member_override():
 def _valid_member_payload(**overrides) -> dict[str, Any]:
     base: dict[str, Any] = {
         "email": "taro@dojo.test",
-        "full_name": "Taro Yamada",
+        "first_name": "Taro",
+        "surname": "Yamada",
         "dob": "1990-06-15",
         "join_date": "2024-01-10",
         "membership_status": "active",
@@ -64,7 +67,6 @@ def _valid_member_payload(**overrides) -> dict[str, Any]:
         "is_first_aider": False,
         "emergency_contact_name": "Hanako Yamada",
         "emergency_contact_phone": "+447700900000",
-        "parental_consent_obtained": False,
     }
     base.update(overrides)
     return base
@@ -128,7 +130,9 @@ class StubMemberRepo:
             results = [
                 r
                 for r in results
-                if term in r["full_name"].lower() or term in r["email"].lower()
+                if term in r["first_name"].lower()
+                or term in r["surname"].lower()
+                or term in r["email"].lower()
             ]
         return results
 
@@ -167,14 +171,13 @@ async def test_admin_can_create_member(member_repo) -> None:
     body = response.json()
     assert "id" in body
     assert body["email"] == "taro@dojo.test"
-    assert body["full_name"] == "Taro Yamada"
+    assert body["first_name"] == "Taro"
+    assert body["surname"] == "Yamada"
     assert body["membership_status"] == "active"
     assert body["is_coach"] is False
     assert body["is_first_aider"] is False
-    assert body["parental_consent_obtained"] is False
-    assert (
-        "dob" not in body or "is_minor" in body
-    )  # is_minor derived, not stored DOB raw
+    assert "parental_consent_obtained" not in body
+    assert "full_name" not in body
 
 
 @pytest.mark.anyio
@@ -191,18 +194,25 @@ async def test_create_member_response_schema_has_all_required_fields(
     expected_fields = {
         "id",
         "email",
-        "full_name",
+        "first_name",
+        "surname",
+        "display_name",
+        "dob",
         "join_date",
         "membership_status",
         "is_coach",
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "parental_consent_obtained",
         "is_minor",
     }
     for field in expected_fields:
         assert field in body, f"Missing field: {field}"
+    # These fields must NOT be present
+    assert "full_name" not in body, "full_name must be absent from response"
+    assert (
+        "parental_consent_obtained" not in body
+    ), "parental_consent_obtained must be absent from response"
 
 
 @pytest.mark.anyio
@@ -233,7 +243,7 @@ async def test_create_member_unauthenticated_returns_401(member_repo) -> None:
 @pytest.mark.anyio
 async def test_create_member_missing_required_fields_returns_422(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    # Missing email, full_name, dob, join_date
+    # Missing email, first_name, surname, join_date
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -254,10 +264,53 @@ async def test_create_member_missing_email_returns_422(member_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_create_member_missing_dob_returns_422(member_repo) -> None:
+async def test_create_member_missing_first_name_returns_422(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    payload = _valid_member_payload()
+    del payload["first_name"]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post("/members", json=payload)
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_create_member_missing_surname_returns_422(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    payload = _valid_member_payload()
+    del payload["surname"]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post("/members", json=payload)
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_create_member_dob_is_optional(member_repo) -> None:
+    """AC2b: dob is now optional — omitting it must succeed (201)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = _valid_member_payload()
     del payload["dob"]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post("/members", json=payload)
+    assert response.status_code == 201
+
+
+@pytest.mark.anyio
+async def test_create_member_with_full_name_returns_422(member_repo) -> None:
+    """AC2a: payload with full_name but no first_name/surname must be rejected (422)."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    # Send legacy full_name without the required first_name / surname fields
+    payload = {
+        "email": "legacy@dojo.test",
+        "full_name": "Taro Yamada",
+        "join_date": "2024-01-10",
+        "membership_status": "active",
+    }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -337,6 +390,21 @@ async def test_is_minor_true_one_day_before_18th_birthday(member_repo) -> None:
         )
     assert resp.status_code == 201
     assert resp.json()["is_minor"] is True
+
+
+@pytest.mark.anyio
+async def test_is_minor_false_when_dob_is_null(member_repo) -> None:
+    """AC3: is_minor returns False (not an error) when dob is absent/null."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    payload = _valid_member_payload()
+    del payload["dob"]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        resp = await c.post("/members", json=payload)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["is_minor"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +497,7 @@ async def test_get_member_unauthenticated_returns_401(member_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_admin_can_update_member_field(member_repo) -> None:
+async def test_admin_can_update_member_first_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -440,11 +508,26 @@ async def test_admin_can_update_member_field(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.put(
-            f"/members/{member_id}", json={"full_name": "Taro Updated"}
-        )
+        response = await c.put(f"/members/{member_id}", json={"first_name": "Jiro"})
     assert response.status_code == 200
-    assert response.json()["full_name"] == "Taro Updated"
+    assert response.json()["first_name"] == "Jiro"
+
+
+@pytest.mark.anyio
+async def test_admin_can_update_member_surname(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        create_resp = await c.post("/members", json=_valid_member_payload())
+    member_id = create_resp.json()["id"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(f"/members/{member_id}", json={"surname": "Tanaka"})
+    assert response.status_code == 200
+    assert response.json()["surname"] == "Tanaka"
 
 
 @pytest.mark.anyio
@@ -477,7 +560,7 @@ async def test_update_member_not_found_returns_404(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.put(f"/members/{fake_id}", json={"full_name": "Ghost"})
+        response = await c.put(f"/members/{fake_id}", json={"first_name": "Ghost"})
     assert response.status_code == 404
 
 
@@ -499,7 +582,7 @@ async def test_member_cannot_update_member(member_repo) -> None:
     ) as c:
         response = await c.put(
             f"/members/{member_id}",
-            json={"full_name": "Hacked"},
+            json={"first_name": "Hacked"},
             cookies={"access_token": token},
         )
     assert response.status_code == 403
@@ -653,13 +736,17 @@ async def test_get_members_filter_by_inactive_status(member_repo) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_members_search_by_name(member_repo) -> None:
+async def test_get_members_search_by_first_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
-        _valid_member_payload(email="musashi@dojo.test", full_name="Musashi Miyamoto")
+        _valid_member_payload(
+            email="musashi@dojo.test", first_name="Musashi", surname="Miyamoto"
+        )
     )
     await member_repo.add(
-        _valid_member_payload(email="kojiro@dojo.test", full_name="Sasaki Kojiro")
+        _valid_member_payload(
+            email="kojiro@dojo.test", first_name="Sasaki", surname="Kojiro"
+        )
     )
 
     async with AsyncClient(
@@ -669,17 +756,44 @@ async def test_get_members_search_by_name(member_repo) -> None:
     assert response.status_code == 200
     results = response.json()
     assert len(results) == 1
-    assert results[0]["full_name"] == "Musashi Miyamoto"
+    assert results[0]["first_name"] == "Musashi"
+    assert results[0]["surname"] == "Miyamoto"
+
+
+@pytest.mark.anyio
+async def test_get_members_search_by_surname(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    await member_repo.add(
+        _valid_member_payload(
+            email="musashi@dojo.test", first_name="Musashi", surname="Miyamoto"
+        )
+    )
+    await member_repo.add(
+        _valid_member_payload(
+            email="kojiro@dojo.test", first_name="Sasaki", surname="Kojiro"
+        )
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/members?search=kojiro")
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 1
+    assert results[0]["surname"] == "Kojiro"
 
 
 @pytest.mark.anyio
 async def test_get_members_search_by_email(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
-        _valid_member_payload(email="findme@dojo.test", full_name="Someone")
+        _valid_member_payload(email="findme@dojo.test", first_name="Find", surname="Me")
     )
     await member_repo.add(
-        _valid_member_payload(email="other@dojo.test", full_name="Other Person")
+        _valid_member_payload(
+            email="other@dojo.test", first_name="Other", surname="Person"
+        )
     )
 
     async with AsyncClient(
@@ -702,40 +816,64 @@ async def test_get_members_unauthenticated_returns_401(member_repo) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PRD testing decisions — parental consent
+# AC1 (issue #158) — MemberResponse field-shape assertions
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_parental_consent_can_be_set_and_read_back(member_repo) -> None:
+async def test_member_response_has_no_legacy_fields(member_repo) -> None:
+    """AC1: MemberResponse must NOT contain full_name or parental_consent_obtained."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    payload = _valid_member_payload(parental_consent_obtained=True)
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        create_resp = await c.post("/members", json=payload)
-    assert create_resp.status_code == 201
-    member_id = create_resp.json()["id"]
-    assert create_resp.json()["parental_consent_obtained"] is True
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        get_resp = await c.get(f"/members/{member_id}")
-    assert get_resp.status_code == 200
-    assert get_resp.json()["parental_consent_obtained"] is True
+        response = await c.post("/members", json=_valid_member_payload())
+    assert response.status_code == 201
+    body = response.json()
+    assert "full_name" not in body, "full_name must not appear in MemberResponse"
+    assert (
+        "parental_consent_obtained" not in body
+    ), "parental_consent_obtained must not appear in MemberResponse"
 
 
 @pytest.mark.anyio
-async def test_parental_consent_defaults_to_false(member_repo) -> None:
+async def test_member_response_includes_display_name(member_repo) -> None:
+    """AC1: MemberResponse includes display_name (nullable)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    payload = _valid_member_payload()
-
+    # Without display_name in payload — field must be present (null)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        create_resp = await c.post("/members", json=payload)
-    assert create_resp.status_code == 201
-    assert create_resp.json()["parental_consent_obtained"] is False
+        response = await c.post("/members", json=_valid_member_payload())
+    assert response.status_code == 201
+    body = response.json()
+    assert "display_name" in body
+
+    # With display_name explicitly set
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response2 = await c.post(
+            "/members",
+            json=_valid_member_payload(
+                email="named@dojo.test", display_name="Taro-san"
+            ),
+        )
+    assert response2.status_code == 201
+    assert response2.json()["display_name"] == "Taro-san"
+
+
+@pytest.mark.anyio
+async def test_member_response_includes_dob(member_repo) -> None:
+    """AC1: MemberResponse includes dob (nullable)."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/members", json=_valid_member_payload(dob="1990-06-15")
+        )
+    assert response.status_code == 201
+    body = response.json()
+    assert "dob" in body
+    assert body["dob"] == "1990-06-15"

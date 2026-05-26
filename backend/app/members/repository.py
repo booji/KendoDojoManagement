@@ -35,7 +35,9 @@ def _to_dict(obj: Member) -> dict[str, Any]:
     return {
         "id": obj.id,
         "email": obj.email,
-        "full_name": obj.full_name,
+        "first_name": obj.first_name,
+        "surname": obj.surname,
+        "display_name": obj.display_name,
         "dob": obj.dob,
         "join_date": obj.join_date,
         "membership_status": obj.membership_status,
@@ -43,7 +45,6 @@ def _to_dict(obj: Member) -> dict[str, Any]:
         "is_first_aider": obj.is_first_aider,
         "emergency_contact_name": obj.emergency_contact_name,
         "emergency_contact_phone": obj.emergency_contact_phone,
-        "parental_consent_obtained": obj.parental_consent_obtained,
         "user_id": obj.user_id,
     }
 
@@ -131,6 +132,8 @@ class SqlMemberRepository:
             rows = [
                 r
                 for r in rows
-                if term in r["full_name"].lower() or term in r["email"].lower()
+                if term in r["first_name"].lower()
+                or term in r["surname"].lower()
+                or term in r["email"].lower()
             ]
         return rows

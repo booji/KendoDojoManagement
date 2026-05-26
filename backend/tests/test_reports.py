@@ -61,7 +61,7 @@ class StubReportRepository:
         self._sessions: list[dict[str, Any]] = []
         # List of attendance dicts: {id, session_id, member_id, visitor_name, ...}
         self._attendance: list[dict[str, Any]] = []
-        # List of member dicts: {id, full_name, email, join_date, ...}
+        # List of member dicts: {id, display_name, email, join_date, ...}
         self._members: list[dict[str, Any]] = []
         # List of grade history dicts: {id, member_id, grade, promoted_at, ...}
         self._grades: list[dict[str, Any]] = []
@@ -83,13 +83,13 @@ class StubReportRepository:
 
     def seed_member(
         self,
-        full_name: str = "Test Member",
+        display_name: str = "Test Member",
         join_date: str = "2024-01-01",
     ) -> dict[str, Any]:
         record = {
             "id": str(uuid.uuid4()),
-            "full_name": full_name,
-            "email": f"{full_name.lower().replace(' ', '.')}@test.com",
+            "display_name": display_name,
+            "email": f"{display_name.lower().replace(' ', '.')}@test.com",
             "join_date": join_date,
             "membership_status": "active",
         }
@@ -171,7 +171,7 @@ class StubReportRepository:
             result.append(
                 {
                     "member_id": member["id"],
-                    "full_name": member["full_name"],
+                    "display_name": member["display_name"],
                     "join_date": member["join_date"],
                     "current_grade": current_grade,
                 }
@@ -366,7 +366,7 @@ async def test_members_report_returns_all_members(
     assert m1["id"] in member_ids
     assert m2["id"] in member_ids
     for entry in body:
-        assert "full_name" in entry
+        assert "display_name" in entry
         assert "join_date" in entry
         assert "current_grade" in entry
 
@@ -483,7 +483,7 @@ async def test_members_csv_content_type(
 async def test_members_csv_has_correct_columns(
     report_repo: StubReportRepository,
 ) -> None:
-    """Members CSV has member_id, full_name, join_date, and current_grade columns."""
+    """Members CSV has member_id, display_name, join_date, and current_grade columns."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     m = report_repo.seed_member("Alice Kendo", "2024-01-01")
     report_repo.seed_grade(m["id"], "SHODAN", "2025-01-01T10:00:00")
@@ -498,7 +498,7 @@ async def test_members_csv_has_correct_columns(
     assert len(lines) >= 2
     header = lines[0].lower()
     assert "member_id" in header
-    assert "full_name" in header
+    assert "display_name" in header
     assert "join_date" in header
     assert "current_grade" in header
 
