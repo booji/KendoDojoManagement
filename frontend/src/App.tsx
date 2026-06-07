@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletC
 import { getMe } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
 import { checkSetupAvailable } from "@/api/setup"
+import { getMyMember } from "@/api/users"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
@@ -23,6 +24,7 @@ import SetupPage from "@/pages/SetupPage"
 import RecoveryRedeemPage from "@/pages/RecoveryRedeemPage"
 import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 import SessionDetailPage from "@/pages/SessionDetailPage"
+import OnboardingPage from "@/pages/OnboardingPage"
 
 type LayoutContext = { user: UserClaims }
 
@@ -68,6 +70,34 @@ const RequireAdmin = () => {
   return user.role === "admin" ? <Outlet context={{ user } satisfies LayoutContext} /> : <Navigate to="/" replace />
 }
 
+// Wraps profile-required routes — redirects to /onboarding if profile is incomplete.
+const RequireProfile = () => {
+  const { user } = useOutletContext<LayoutContext>()
+  const [ready, setReady] = useState(false)
+  const [redirect, setRedirect] = useState(false)
+
+  useEffect(() => {
+    getMyMember()
+      .then((member) => {
+        const incomplete =
+          member === null ||
+          !member.first_name ||
+          !member.surname ||
+          !member.dob
+        setRedirect(incomplete)
+        setReady(true)
+      })
+      .catch(() => {
+        // On error, allow through — don't block the user
+        setReady(true)
+      })
+  }, [])
+
+  if (!ready) return null
+  if (redirect) return <Navigate to="/onboarding" replace />
+  return <Outlet context={{ user } satisfies LayoutContext} />
+}
+
 const App = () => (
   <ThemeProvider>
     <DojoSettingsProvider>
@@ -82,21 +112,27 @@ const App = () => (
 
           {/* Authenticated routes — wrapped in AppShell */}
           <Route element={<AuthenticatedLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/sessions" element={<SessionsPage />} />
-            <Route path="/sessions/:id" element={<SessionDetailPage />} />
-            <Route path="/attendance" element={<AttendancePage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/checkin/:token" element={<CheckinPage />} />
+            {/* Onboarding: authenticated but NOT profile-gated */}
+            <Route path="/onboarding" element={<OnboardingPage />} />
 
-            {/* Admin-only routes */}
-            <Route element={<RequireAdmin />}>
-              <Route path="/members" element={<MembersPage />} />
-              <Route path="/members/:id" element={<MemberDetailPage />} />
-              <Route path="/grades" element={<GradesPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/admin/settings" element={<AdminSettingsPage />} />
+            {/* Profile-required routes */}
+            <Route element={<RequireProfile />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/sessions" element={<SessionsPage />} />
+              <Route path="/sessions/:id" element={<SessionDetailPage />} />
+              <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/checkin/:token" element={<CheckinPage />} />
+
+              {/* Admin-only routes */}
+              <Route element={<RequireAdmin />}>
+                <Route path="/members" element={<MembersPage />} />
+                <Route path="/members/:id" element={<MemberDetailPage />} />
+                <Route path="/grades" element={<GradesPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/admin/settings" element={<AdminSettingsPage />} />
+              </Route>
             </Route>
           </Route>
         </Routes>
