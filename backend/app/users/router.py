@@ -73,7 +73,20 @@ async def put_my_member(
     record = await repo.get_by_user_id(claims.sub)
 
     if record is None:
-        # First-save onboarding — create a new Member record
+        # First-save onboarding — all required fields must be present
+        missing: list[str] = []
+        if not data.get("first_name"):
+            missing.append("first_name")
+        if not data.get("surname"):
+            missing.append("surname")
+        if data.get("dob") is None:
+            missing.append("dob")
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Missing required fields for first save: {', '.join(missing)}",
+            )
+        # Create a new Member record
         new_data: dict[str, Any] = {
             "email": claims.email,
             "first_name": data.get("first_name", ""),
