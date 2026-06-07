@@ -6,7 +6,7 @@ export type SessionSummary = {
 
 export type MemberAttendanceRate = {
   member_id: string
-  full_name: string
+  display_name: string
   sessions_attended: number
   attendance_rate: number
 }
@@ -18,7 +18,7 @@ export type AttendanceReport = {
 
 export type MemberReport = {
   member_id: string
-  full_name: string
+  display_name: string
   join_date: string
   current_grade: string | null
 }

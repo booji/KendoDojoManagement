@@ -489,9 +489,9 @@ async def test_promote_endpoint_removed_returns_404(member_repo, grade_repo) -> 
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
-    assert response.status_code == 404, (
-        f"POST /members/{{id}}/promote must be removed; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 404
+    ), f"POST /members/{{id}}/promote must be removed; got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -513,9 +513,9 @@ async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> N
             json={"grade": "SHODAN", "awarded_at": "2025-01-15T10:00:00+00:00"},
         )
 
-    assert response.status_code == 201, (
-        f"Expected 201 Created, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 201
+    ), f"Expected 201 Created, got {response.status_code}: {response.text}"
     body = response.json()
     assert body["grade"] == "SHODAN"
     assert body["status"] == "confirmed"
@@ -537,9 +537,10 @@ async def test_post_grades_non_admin_forbidden(member_repo, grade_repo) -> None:
             json={"grade": "SHODAN"},
         )
 
-    assert response.status_code in (401, 403), (
-        f"Non-admin must be rejected; got {response.status_code}"
-    )
+    assert response.status_code in (
+        401,
+        403,
+    ), f"Non-admin must be rejected; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -583,22 +584,23 @@ async def test_post_grades_awarded_at_defaults_to_now(member_repo, grade_repo) -
 
     after = datetime.now(UTC)
 
-    assert response.status_code == 201, (
-        f"Expected 201 Created, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 201
+    ), f"Expected 201 Created, got {response.status_code}: {response.text}"
     body = response.json()
-    assert "awarded_at" in body or "promoted_at" in body, (
-        "Response must include an awarded_at (or promoted_at) timestamp"
-    )
+    assert (
+        "awarded_at" in body or "promoted_at" in body
+    ), "Response must include an awarded_at (or promoted_at) timestamp"
     ts_raw = body.get("awarded_at") or body.get("promoted_at")
     ts = datetime.fromisoformat(ts_raw)
     # Normalise to UTC for comparison
     if ts.tzinfo is None:
         import datetime as _dt
+
         ts = ts.replace(tzinfo=_dt.UTC)
-    assert before <= ts <= after, (
-        f"Server timestamp {ts} must be between {before} and {after}"
-    )
+    assert (
+        before <= ts <= after
+    ), f"Server timestamp {ts} must be between {before} and {after}"
 
 
 # ---------------------------------------------------------------------------
@@ -622,9 +624,9 @@ async def test_post_grades_invalid_grade_value_returns_422(
             json={"grade": "NOTAGRADE"},
         )
 
-    assert response.status_code == 422, (
-        f"Invalid grade must return 422, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Invalid grade must return 422, got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -641,9 +643,9 @@ async def test_post_grades_mukyuu_returns_422(member_repo, grade_repo) -> None:
             json={"grade": "MUKYUU"},
         )
 
-    assert response.status_code == 422, (
-        f"MUKYUU must not be assignable via POST /grades; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"MUKYUU must not be assignable via POST /grades; got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -676,9 +678,9 @@ async def test_get_grades_omits_assigned_by_for_non_admin(
     history = response.json()
     assert len(history) == 1
     entry = history[0]
-    assert "assigned_by" not in entry, (
-        "Non-admin callers must not see assigned_by in grade history"
-    )
+    assert (
+        "assigned_by" not in entry
+    ), "Non-admin callers must not see assigned_by in grade history"
 
 
 @pytest.mark.anyio
@@ -756,13 +758,13 @@ async def test_current_grade_is_latest_confirmed_by_awarded_at(
     ) as c:
         response = await c.get(f"/members/{member_id}/grades/current")
 
-    assert response.status_code == 200, (
-        f"GET /members/{{id}}/grades/current must exist; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"GET /members/{{id}}/grades/current must exist; got {response.status_code}"
     body = response.json()
-    assert body["grade"] == "SANDAN", (
-        f"Current grade must be the latest confirmed entry by awarded_at; got {body.get('grade')}"
-    )
+    assert (
+        body["grade"] == "SANDAN"
+    ), f"Current grade must be the latest confirmed entry by awarded_at; got {body.get('grade')}"
 
 
 @pytest.mark.anyio
@@ -798,9 +800,9 @@ async def test_current_grade_ignores_non_confirmed_entries(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["grade"] == "SHODAN", (
-        f"Non-confirmed entries must not affect current grade; got {body.get('grade')}"
-    )
+    assert (
+        body["grade"] == "SHODAN"
+    ), f"Non-confirmed entries must not affect current grade; got {body.get('grade')}"
 
 
 # ---------------------------------------------------------------------------
@@ -830,16 +832,16 @@ async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
             json={"grade": "ROKKYUU"},
         )
 
-    assert response.status_code == 201, (
-        f"Should be able to assign ROKKYUU directly; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 201
+    ), f"Should be able to assign ROKKYUU directly; got {response.status_code}"
     body = response.json()
     assert body["grade"] == "ROKKYUU"
     # No phantom MUKYUU entry should have been created
     history = grade_repo._history
-    assert len(history) == 1, (
-        f"Only one entry should exist — no phantom MUKYUU; found {len(history)}"
-    )
+    assert (
+        len(history) == 1
+    ), f"Only one entry should exist — no phantom MUKYUU; found {len(history)}"
     assert history[0]["grade"] == "ROKKYUU"
 
 
@@ -855,9 +857,9 @@ async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None
         response = await c.post(f"/members/{member_id}/promote")
 
     # The bug-causing endpoint must be removed
-    assert response.status_code == 404, (
-        f"POST /promote must be gone (404); got {response.status_code}"
-    )
+    assert (
+        response.status_code == 404
+    ), f"POST /promote must be gone (404); got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -879,15 +881,15 @@ async def test_propose_creates_pending_entry(member_repo, grade_repo) -> None:
             json={"grade": "SHODAN"},
         )
 
-    assert response.status_code == 201, (
-        f"Expected 201 Created, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 201
+    ), f"Expected 201 Created, got {response.status_code}: {response.text}"
     body = response.json()
     assert body["grade"] == "SHODAN"
     assert body["status"] == "pending"
-    assert body.get("assigned_by") is None, (
-        "Self-proposed grade must have assigned_by=None"
-    )
+    assert (
+        body.get("assigned_by") is None
+    ), "Self-proposed grade must have assigned_by=None"
     assert body["member_id"] == member_id
 
 
@@ -907,9 +909,9 @@ async def test_propose_own_record_member_cannot_propose_for_other(
             json={"grade": "SHODAN"},
         )
 
-    assert response.status_code == 403, (
-        f"Member must not be able to propose for another member; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 403
+    ), f"Member must not be able to propose for another member; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -926,9 +928,9 @@ async def test_propose_admin_forbidden(member_repo, grade_repo) -> None:
             json={"grade": "SHODAN"},
         )
 
-    assert response.status_code == 403, (
-        f"Admin must not be able to use the member-only propose endpoint; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 403
+    ), f"Admin must not be able to use the member-only propose endpoint; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -946,18 +948,18 @@ async def test_propose_pending_entry_visible_to_own_member(
             f"/members/{member_id}/grades/propose",
             json={"grade": "SHODAN"},
         )
-        assert propose_response.status_code == 201, (
-            f"Propose step failed: {propose_response.status_code}: {propose_response.text}"
-        )
+        assert (
+            propose_response.status_code == 201
+        ), f"Propose step failed: {propose_response.status_code}: {propose_response.text}"
 
         history_response = await c.get(f"/members/{member_id}/grades")
 
     assert history_response.status_code == 200
     history = history_response.json()
     pending_entries = [e for e in history if e.get("status") == "pending"]
-    assert len(pending_entries) >= 1, (
-        "Pending entry must be visible to the proposing member in their own grade history"
-    )
+    assert (
+        len(pending_entries) >= 1
+    ), "Pending entry must be visible to the proposing member in their own grade history"
     assert pending_entries[0]["grade"] == "SHODAN"
 
 
@@ -979,9 +981,9 @@ async def test_propose_pending_entry_not_visible_to_other_member(
             f"/members/{_MEMBER_A_ID}/grades/propose",
             json={"grade": "SHODAN"},
         )
-    assert propose_response.status_code == 201, (
-        f"Propose step must succeed; got {propose_response.status_code}: {propose_response.text}"
-    )
+    assert (
+        propose_response.status_code == 201
+    ), f"Propose step must succeed; got {propose_response.status_code}: {propose_response.text}"
 
     # MEMBER_B tries to read MEMBER_A's grade history — must be 403
     app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
@@ -990,9 +992,9 @@ async def test_propose_pending_entry_not_visible_to_other_member(
     ) as c:
         response = await c.get(f"/members/{_MEMBER_A_ID}/grades")
 
-    assert response.status_code == 403, (
-        f"Member B must not be able to read Member A's grades; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 403
+    ), f"Member B must not be able to read Member A's grades; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -1009,9 +1011,9 @@ async def test_propose_mukyuu_returns_422(member_repo, grade_repo) -> None:
             json={"grade": "MUKYUU"},
         )
 
-    assert response.status_code == 422, (
-        f"MUKYUU must not be proposable; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"MUKYUU must not be proposable; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -1028,6 +1030,6 @@ async def test_propose_invalid_grade_returns_422(member_repo, grade_repo) -> Non
             json={"grade": "NOTAGRADE"},
         )
 
-    assert response.status_code == 422, (
-        f"Invalid grade must return 422; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Invalid grade must return 422; got {response.status_code}"

@@ -99,12 +99,8 @@ class SqlFederationRepository:
         if type is not None:
             stmt = stmt.where(Federation.type == type)
         if continental_grouping is not None:
-            stmt = stmt.where(
-                Federation.continental_grouping == continental_grouping
-            )
-        stmt = stmt.order_by(
-            Federation.is_pinned.desc(), asc(Federation.name)
-        )
+            stmt = stmt.where(Federation.continental_grouping == continental_grouping)
+        stmt = stmt.order_by(Federation.is_pinned.desc(), asc(Federation.name))
         result = await self._session.execute(stmt)
         rows = [_to_dict(r) for r in result.scalars().all()]
         if search is not None:

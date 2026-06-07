@@ -108,7 +108,9 @@ def test_member_can_checkin_to_session_via_ui(page: Page) -> None:
     _create_session(page, admin_token, "2099-07-15")
 
     member_token = _make_token("member")
-    page.set_viewport_size({"width": 375, "height": 667})  # mobile: shows SessionCardList
+    page.set_viewport_size(
+        {"width": 375, "height": 667}
+    )  # mobile: shows SessionCardList
     _set_cookie(page, member_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
@@ -176,7 +178,9 @@ def test_admin_can_generate_checkin_token_via_ui(page: Page) -> None:
     admin_token = _make_token("admin")
     _create_session(page, admin_token, "2099-07-29")
 
-    page.set_viewport_size({"width": 375, "height": 667})  # mobile: shows SessionCardList with share button
+    page.set_viewport_size(
+        {"width": 375, "height": 667}
+    )  # mobile: shows SessionCardList with share button
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")

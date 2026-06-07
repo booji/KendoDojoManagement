@@ -76,16 +76,16 @@ async def put_my_member(
         # First-save onboarding — create a new Member record
         new_data: dict[str, Any] = {
             "email": claims.email,
-            "full_name": data.get("full_name", ""),
-            # Placeholder DOB — user should update this in Settings
-            "dob": data.get("dob", "1900-01-01"),
+            "first_name": data.get("first_name", ""),
+            "surname": data.get("surname", ""),
+            "display_name": data.get("display_name"),
+            "dob": data.get("dob"),
             "join_date": date.today().isoformat(),
             "membership_status": "active",
             "is_coach": False,
             "is_first_aider": False,
             "emergency_contact_name": data.get("emergency_contact_name"),
             "emergency_contact_phone": data.get("emergency_contact_phone"),
-            "parental_consent_obtained": False,
             "user_id": claims.sub,
         }
         try:

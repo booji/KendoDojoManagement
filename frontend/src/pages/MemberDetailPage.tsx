@@ -80,7 +80,9 @@ const Field = ({ label, value }: { label: string; value: string | null | boolean
 
 type EditFormState = {
   email: string
-  full_name: string
+  first_name: string
+  surname: string
+  display_name: string
   dob: string
   join_date: string
   membership_status: MembershipStatus
@@ -89,13 +91,14 @@ type EditFormState = {
   emergency_contact_name: string
   emergency_contact_phone: string
   federation_number: string
-  parental_consent_obtained: boolean
 }
 
 const memberToForm = (m: MemberResponse): EditFormState => ({
   email: m.email,
-  full_name: m.full_name,
-  dob: "",  // dob not returned by API — leave blank to avoid overwriting
+  first_name: m.first_name,
+  surname: m.surname,
+  display_name: m.display_name ?? "",
+  dob: "",
   join_date: m.join_date,
   membership_status: m.membership_status,
   is_coach: m.is_coach,
@@ -103,7 +106,6 @@ const memberToForm = (m: MemberResponse): EditFormState => ({
   emergency_contact_name: m.emergency_contact_name ?? "",
   emergency_contact_phone: m.emergency_contact_phone ?? "",
   federation_number: m.federation_number ?? "",
-  parental_consent_obtained: m.parental_consent_obtained,
 })
 
 type EditFormProps = {
@@ -119,13 +121,34 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
   <form onSubmit={onSubmit} className="space-y-4" aria-label="Edit member form">
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div className="space-y-1">
-        <Label htmlFor="edit_full_name">Full name *</Label>
+        <Label htmlFor="edit_first_name">First name *</Label>
         <Input
-          id="edit_full_name"
-          value={form.full_name}
-          onChange={(e) => onChange("full_name", e.target.value)}
+          id="edit_first_name"
+          value={form.first_name}
+          onChange={(e) => onChange("first_name", e.target.value)}
           required
           aria-required="true"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="edit_surname">Surname *</Label>
+        <Input
+          id="edit_surname"
+          value={form.surname}
+          onChange={(e) => onChange("surname", e.target.value)}
+          required
+          aria-required="true"
+        />
+      </div>
+
+      <div className="space-y-1 sm:col-span-2">
+        <Label htmlFor="edit_display_name">Display name</Label>
+        <Input
+          id="edit_display_name"
+          value={form.display_name}
+          onChange={(e) => onChange("display_name", e.target.value)}
+          placeholder="Optional — overrides first name + surname in lists"
         />
       </div>
 
@@ -233,16 +256,6 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
           aria-label="Is first aider"
         />
         First Aider
-      </label>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input
-          type="checkbox"
-          className="rounded"
-          checked={form.parental_consent_obtained}
-          onChange={(e) => onChange("parental_consent_obtained", e.target.checked)}
-          aria-label="Parental consent obtained"
-        />
-        Parental consent obtained
       </label>
     </div>
 
@@ -1276,7 +1289,9 @@ const MemberDetailPage = () => {
     try {
       const payload: UpdateMemberRequest = {
         email: form.email,
-        full_name: form.full_name,
+        first_name: form.first_name,
+        surname: form.surname,
+        display_name: form.display_name || null,
         join_date: form.join_date,
         membership_status: form.membership_status,
         is_coach: form.is_coach,
@@ -1284,7 +1299,6 @@ const MemberDetailPage = () => {
         emergency_contact_name: form.emergency_contact_name || null,
         emergency_contact_phone: form.emergency_contact_phone || null,
         federation_number: form.federation_number || null,
-        parental_consent_obtained: form.parental_consent_obtained,
         ...(form.dob ? { dob: form.dob } : {}),
       }
       const updated = await updateMember(id, payload)
@@ -1365,7 +1379,7 @@ const MemberDetailPage = () => {
       {/* Name + status header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">{member.full_name}</h1>
+          <h1 className="text-xl font-semibold">{member.display_name ?? `${member.first_name} ${member.surname}`}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{member.email}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <StatusBadge status={member.membership_status} />
@@ -1397,7 +1411,7 @@ const MemberDetailPage = () => {
               variant="outline"
               size="sm"
               onClick={startEdit}
-              aria-label={`Edit ${member.full_name}`}
+              aria-label={`Edit ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
             >
               <PencilIcon aria-hidden="true" />
               Edit
@@ -1444,7 +1458,6 @@ const MemberDetailPage = () => {
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Join date" value={new Date(member.join_date).toLocaleDateString("default", { day: "numeric", month: "long", year: "numeric" })} />
               <Field label="Federation number" value={member.federation_number} />
-              <Field label="Parental consent" value={member.parental_consent_obtained} />
             </CardContent>
           </Card>
 
@@ -1465,7 +1478,7 @@ const MemberDetailPage = () => {
           <AttendanceHistoryCard memberId={member.id} />
 
           {isAdmin && (
-            <RecoveryTokenCard memberId={member.id} memberName={member.full_name} />
+            <RecoveryTokenCard memberId={member.id} memberName={member.display_name ?? `${member.first_name} ${member.surname}`} />
           )}
         </>
       )}
@@ -1473,7 +1486,7 @@ const MemberDetailPage = () => {
       {/* Deactivate confirm */}
       <DeactivateDialog
         open={deactivateOpen}
-        memberName={member.full_name}
+        memberName={member.display_name ?? `${member.first_name} ${member.surname}`}
         onConfirm={handleDeactivate}
         onClose={() => setDeactivateOpen(false)}
         loading={deactivating}

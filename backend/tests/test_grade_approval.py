@@ -254,17 +254,15 @@ async def test_approve_pending_entry_returns_200_and_confirmed_status(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            f"/members/{member_id}/grades/{entry_id}/approve"
-        )
+        response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert response.status_code == 200, (
-        f"Expected 200 OK, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"Expected 200 OK, got {response.status_code}: {response.text}"
     body = response.json()
-    assert body["status"] == "confirmed", (
-        f"Entry status must be 'confirmed' after approval; got {body.get('status')!r}"
-    )
+    assert (
+        body["status"] == "confirmed"
+    ), f"Entry status must be 'confirmed' after approval; got {body.get('status')!r}"
 
 
 @pytest.mark.anyio
@@ -279,17 +277,15 @@ async def test_approve_sets_assigned_by_from_auth_token(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            f"/members/{member_id}/grades/{entry_id}/approve"
-        )
+        response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert response.status_code == 200, (
-        f"Expected 200 OK, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"Expected 200 OK, got {response.status_code}: {response.text}"
     body = response.json()
-    assert body.get("assigned_by") == _ADMIN.sub, (
-        f"assigned_by must be set to the approving admin's sub; got {body.get('assigned_by')!r}"
-    )
+    assert (
+        body.get("assigned_by") == _ADMIN.sub
+    ), f"assigned_by must be set to the approving admin's sub; got {body.get('assigned_by')!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +294,7 @@ async def test_approve_sets_assigned_by_from_auth_token(
 
 
 @pytest.mark.anyio
-async def test_approve_nonexistent_entry_returns_404(
-    member_repo, grade_repo
-) -> None:
+async def test_approve_nonexistent_entry_returns_404(member_repo, grade_repo) -> None:
     """AC2: Approving an entry that doesn't exist → 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     member_id = _MEMBER_A_ID
@@ -309,13 +303,11 @@ async def test_approve_nonexistent_entry_returns_404(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            f"/members/{member_id}/grades/{nonexistent_id}/approve"
-        )
+        response = await c.post(f"/members/{member_id}/grades/{nonexistent_id}/approve")
 
-    assert response.status_code == 404, (
-        f"Expected 404 Not Found, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 Not Found, got {response.status_code}: {response.text}"
 
 
 @pytest.mark.anyio
@@ -330,13 +322,11 @@ async def test_approve_already_confirmed_entry_returns_409(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            f"/members/{member_id}/grades/{entry_id}/approve"
-        )
+        response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert response.status_code == 409, (
-        f"Expected 409 Conflict for already-confirmed entry, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 409
+    ), f"Expected 409 Conflict for already-confirmed entry, got {response.status_code}: {response.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -354,13 +344,11 @@ async def test_delete_pending_entry_returns_204(member_repo, grade_repo) -> None
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.delete(
-            f"/members/{member_id}/grades/{entry_id}"
-        )
+        response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert response.status_code == 204, (
-        f"Expected 204 No Content, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 204
+    ), f"Expected 204 No Content, got {response.status_code}: {response.text}"
 
 
 @pytest.mark.anyio
@@ -383,9 +371,7 @@ async def test_delete_pending_entry_removes_it_from_history(
 
     assert history_resp.status_code == 200
     ids = [e["id"] for e in history_resp.json()]
-    assert entry_id not in ids, (
-        "Deleted entry must not appear in grade history"
-    )
+    assert entry_id not in ids, "Deleted entry must not appear in grade history"
 
 
 # ---------------------------------------------------------------------------
@@ -403,13 +389,11 @@ async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> No
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.delete(
-            f"/members/{member_id}/grades/{entry_id}"
-        )
+        response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert response.status_code == 409, (
-        f"Expected 409 Conflict when deleting confirmed entry, got {response.status_code}: {response.text}"
-    )
+    assert (
+        response.status_code == 409
+    ), f"Expected 409 Conflict when deleting confirmed entry, got {response.status_code}: {response.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -427,13 +411,11 @@ async def test_approve_non_admin_returns_403(member_repo, grade_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            f"/members/{member_id}/grades/{entry_id}/approve"
-        )
+        response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert response.status_code == 403, (
-        f"Non-admin must be rejected with 403; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 403
+    ), f"Non-admin must be rejected with 403; got {response.status_code}"
 
 
 @pytest.mark.anyio
@@ -446,10 +428,8 @@ async def test_delete_non_admin_returns_403(member_repo, grade_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.delete(
-            f"/members/{member_id}/grades/{entry_id}"
-        )
+        response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert response.status_code == 403, (
-        f"Non-admin must be rejected with 403; got {response.status_code}"
-    )
+    assert (
+        response.status_code == 403
+    ), f"Non-admin must be rejected with 403; got {response.status_code}"

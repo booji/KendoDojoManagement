@@ -118,7 +118,8 @@ class SqlReportRepository(AbstractReportRepository):
             rows.append(
                 {
                     "member_id": member.id,
-                    "full_name": member.full_name,
+                    "display_name": member.display_name
+                    or f"{member.first_name} {member.surname}",
                     "join_date": member.join_date,
                     "current_grade": latest_grade.grade if latest_grade else None,
                 }

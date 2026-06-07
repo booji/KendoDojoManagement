@@ -51,7 +51,9 @@ class StubPasskeyRepo:
     async def get(self, passkey_id: str) -> dict[str, Any] | None:
         return self._store.get(passkey_id)
 
-    async def update_label(self, passkey_id: str, user_id: str, label: str) -> dict[str, Any] | None:
+    async def update_label(
+        self, passkey_id: str, user_id: str, label: str
+    ) -> dict[str, Any] | None:
         record = self._store.get(passkey_id)
         if record is None or record["user_id"] != user_id:
             return None
@@ -180,9 +182,7 @@ def clear_overrides():
 
 def _capture_security_logs(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
     """Parse captured log records from the security_events logger as JSON."""
-    records = [
-        r for r in caplog.records if r.name == "security_events"
-    ]
+    records = [r for r in caplog.records if r.name == "security_events"]
     results = []
     for record in records:
         results.append(json.loads(record.getMessage()))
@@ -289,7 +289,9 @@ def test_log_timestamp_is_iso_string(caplog: pytest.LogCaptureFixture) -> None:
 # ===========================================================================
 
 
-def test_optional_user_id_omitted_when_not_passed(caplog: pytest.LogCaptureFixture) -> None:
+def test_optional_user_id_omitted_when_not_passed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """user_id must NOT appear in the log when not provided."""
     from app.core.security_logger import log_security_event
 
@@ -300,7 +302,9 @@ def test_optional_user_id_omitted_when_not_passed(caplog: pytest.LogCaptureFixtu
     assert "user_id" not in logs[0]
 
 
-def test_optional_ip_address_omitted_when_not_passed(caplog: pytest.LogCaptureFixture) -> None:
+def test_optional_ip_address_omitted_when_not_passed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """ip_address must NOT appear in the log when not provided."""
     from app.core.security_logger import log_security_event
 
@@ -311,7 +315,9 @@ def test_optional_ip_address_omitted_when_not_passed(caplog: pytest.LogCaptureFi
     assert "ip_address" not in logs[0]
 
 
-def test_optional_detail_omitted_when_not_passed(caplog: pytest.LogCaptureFixture) -> None:
+def test_optional_detail_omitted_when_not_passed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """detail must NOT appear in the log when not provided."""
     from app.core.security_logger import log_security_event
 
@@ -327,7 +333,9 @@ def test_optional_detail_omitted_when_not_passed(caplog: pytest.LogCaptureFixtur
 # ===========================================================================
 
 
-def test_optional_user_id_included_when_passed(caplog: pytest.LogCaptureFixture) -> None:
+def test_optional_user_id_included_when_passed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """user_id must appear in the log when explicitly provided."""
     from app.core.security_logger import log_security_event
 
@@ -342,7 +350,9 @@ def test_optional_user_id_included_when_passed(caplog: pytest.LogCaptureFixture)
     assert logs[0].get("user_id") == "test-user-123"
 
 
-def test_optional_ip_address_included_when_passed(caplog: pytest.LogCaptureFixture) -> None:
+def test_optional_ip_address_included_when_passed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """ip_address must appear in the log when explicitly provided."""
     from app.core.security_logger import log_security_event
 
@@ -624,8 +634,7 @@ async def test_account_lockout_emits_log(
 
     logs = _capture_security_logs(caplog)
     assert any(
-        log["event_type"] == "login_lockout"
-        for log in logs
+        log["event_type"] == "login_lockout" for log in logs
     ), f"Expected login_lockout event, got: {logs}"
 
 
@@ -722,8 +731,6 @@ async def test_recovery_redeem_failure_emits_log(
 
     user_id = str(uuid.uuid4())
     async with db_client.begin() as conn:
-        import bcrypt as _bcrypt
-
         await conn.execute(
             insert(DbUser).values(
                 id=user_id,
@@ -750,7 +757,9 @@ async def test_recovery_redeem_failure_emits_log(
 
 
 @pytest.mark.anyio
-async def test_admin_token_generation_emits_log(caplog: pytest.LogCaptureFixture) -> None:
+async def test_admin_token_generation_emits_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """POST /auth/recovery/admin-token must emit an admin_token_generated/success event."""
     from sqlalchemy import insert
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -764,8 +773,6 @@ async def test_admin_token_generation_emits_log(caplog: pytest.LogCaptureFixture
 
     target_user_id = str(uuid.uuid4())
     async with eng.begin() as conn:
-        import bcrypt as _bcrypt
-
         await conn.execute(
             insert(DbUser).values(
                 id=target_user_id,
@@ -848,7 +855,9 @@ async def test_checkin_token_generation_emits_log(
 
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: admin_claims
     app.dependency_overrides[get_checkin_token_repo] = lambda: checkin_token_repo
-    app.dependency_overrides[get_session_instance_repo] = lambda: _StubSessionInstanceRepoWithData()
+    app.dependency_overrides[get_session_instance_repo] = (
+        lambda: _StubSessionInstanceRepoWithData()
+    )
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(

@@ -180,7 +180,9 @@ async def db_session() -> AsyncSession:
             nested = await conn.begin_nested()
 
             session_factory = async_sessionmaker(
-                bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+                bind=conn,
+                expire_on_commit=False,
+                join_transaction_mode="create_savepoint",
             )
             session = session_factory()
 

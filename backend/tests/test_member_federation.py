@@ -412,9 +412,7 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
 # ---------------------------------------------------------------------------
 
 
-async def test_add_membership_with_renewal_date(
-    member_repo, fed_repo, mf_repo
-) -> None:
+async def test_add_membership_with_renewal_date(member_repo, fed_repo, mf_repo) -> None:
     """AC4: renewal_date is stored when provided."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -453,9 +451,7 @@ async def test_add_membership_without_renewal_date(
 # ---------------------------------------------------------------------------
 
 
-async def test_renewal_status_none_when_no_date(
-    member_repo, fed_repo, mf_repo
-) -> None:
+async def test_renewal_status_none_when_no_date(member_repo, fed_repo, mf_repo) -> None:
     """AC5/AC18: renewal_status is None when no renewal_date."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -585,9 +581,7 @@ async def test_admin_can_edit_federation_membership(
     assert response.json()["member_number"] == "NEW-999"
 
 
-async def test_admin_can_update_renewal_date(
-    member_repo, fed_repo, mf_repo
-) -> None:
+async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> None:
     """AC6: Admin can update the renewal_date on an existing membership."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     membership = await mf_repo.add(

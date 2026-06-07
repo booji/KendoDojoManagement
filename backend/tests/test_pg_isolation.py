@@ -57,8 +57,8 @@ async def test_data_isolation_between_tests_a(db_session: AsyncSession) -> None:
     # Insert our sentinel so test B (if run after A) would see it without rollback
     await db_session.execute(
         text(
-            "INSERT INTO members (id, full_name, email, dob, join_date, membership_status, is_coach, is_first_aider, parental_consent_obtained) "
-            "VALUES (:id, :name, :email, '1990-01-01', '2020-01-01', 'active', false, false, false)"
+            "INSERT INTO members (id, first_name, surname, email, join_date, membership_status, is_coach, is_first_aider) "
+            "VALUES (:id, :name, 'Sentinel', :email, '2020-01-01', 'active', false, false)"
         ),
         {
             "id": "00000000-0000-0000-0000-000000000001",
@@ -69,7 +69,7 @@ async def test_data_isolation_between_tests_a(db_session: AsyncSession) -> None:
 
     # Test B's sentinel must not be here
     result = await db_session.execute(
-        text("SELECT COUNT(*) FROM members WHERE full_name = :name"),
+        text("SELECT COUNT(*) FROM members WHERE first_name = :name"),
         {"name": _SENTINEL_B},
     )
     count = result.scalar_one()
@@ -92,8 +92,8 @@ async def test_data_isolation_between_tests_b(db_session: AsyncSession) -> None:
     # Insert our sentinel so test A (if run after B) would see it without rollback
     await db_session.execute(
         text(
-            "INSERT INTO members (id, full_name, email, dob, join_date, membership_status, is_coach, is_first_aider, parental_consent_obtained) "
-            "VALUES (:id, :name, :email, '1990-01-01', '2020-01-01', 'active', false, false, false)"
+            "INSERT INTO members (id, first_name, surname, email, join_date, membership_status, is_coach, is_first_aider) "
+            "VALUES (:id, :name, 'Sentinel', :email, '2020-01-01', 'active', false, false)"
         ),
         {
             "id": "00000000-0000-0000-0000-000000000002",
@@ -104,7 +104,7 @@ async def test_data_isolation_between_tests_b(db_session: AsyncSession) -> None:
 
     # Test A's sentinel must not be here (it should have been rolled back)
     result = await db_session.execute(
-        text("SELECT COUNT(*) FROM members WHERE full_name = :name"),
+        text("SELECT COUNT(*) FROM members WHERE first_name = :name"),
         {"name": _SENTINEL_A},
     )
     count = result.scalar_one()

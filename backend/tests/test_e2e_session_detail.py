@@ -57,7 +57,9 @@ def _api_headers(token: str) -> dict:
     return {"Cookie": f"access_token={token}"}
 
 
-def _create_session(page: Page, token: str, *, info: str | None = None, coach_notes: str | None = None) -> str:
+def _create_session(
+    page: Page, token: str, *, info: str | None = None, coach_notes: str | None = None
+) -> str:
     types_resp = page.request.get(
         f"{API_URL}/session-types",
         headers=_api_headers(token),
@@ -92,7 +94,8 @@ def _create_session(page: Page, token: str, *, info: str | None = None, coach_no
 def test_admin_sees_coach_notes_on_session_detail_page(page: Page) -> None:
     admin_token = _make_token("admin")
     session_id = _create_session(
-        page, admin_token,
+        page,
+        admin_token,
         info="Public info here",
         coach_notes="Secret coach note",
     )
@@ -108,7 +111,8 @@ def test_admin_sees_coach_notes_on_session_detail_page(page: Page) -> None:
 def test_member_does_not_see_coach_notes_on_session_detail_page(page: Page) -> None:
     admin_token = _make_token("admin")
     session_id = _create_session(
-        page, admin_token,
+        page,
+        admin_token,
         info="Public info here",
         coach_notes="Secret coach note",
     )

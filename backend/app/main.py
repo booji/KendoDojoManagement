@@ -68,14 +68,21 @@ async def _init_db() -> None:
                 result = await conn.execute(select(SessionType))
                 if not result.fetchone():
                     await conn.execute(
-                        insert(SessionType).values(id=str(uuid4()), name="General Training")
+                        insert(SessionType).values(
+                            id=str(uuid4()), name="General Training"
+                        )
                     )
             return
         except Exception as exc:
             if attempt == 9:
                 raise
             delay = 2**attempt
-            _log.warning("DB not ready (attempt %d/10): %s — retrying in %ds", attempt + 1, exc, delay)
+            _log.warning(
+                "DB not ready (attempt %d/10): %s — retrying in %ds",
+                attempt + 1,
+                exc,
+                delay,
+            )
             await asyncio.sleep(delay)
 
 
