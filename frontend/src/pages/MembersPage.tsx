@@ -71,7 +71,9 @@ const RoleBadges = ({ member }: { member: MemberResponse }) => (
 
 type AddMemberFormState = {
   email: string
-  full_name: string
+  first_name: string
+  surname: string
+  display_name: string
   dob: string
   join_date: string
   membership_status: MembershipStatus
@@ -80,12 +82,13 @@ type AddMemberFormState = {
   emergency_contact_name: string
   emergency_contact_phone: string
   federation_number: string
-  parental_consent_obtained: boolean
 }
 
 const defaultFormState = (): AddMemberFormState => ({
   email: "",
-  full_name: "",
+  first_name: "",
+  surname: "",
+  display_name: "",
   dob: "",
   join_date: new Date().toISOString().slice(0, 10),
   membership_status: "active",
@@ -94,7 +97,6 @@ const defaultFormState = (): AddMemberFormState => ({
   emergency_contact_name: "",
   emergency_contact_phone: "",
   federation_number: "",
-  parental_consent_obtained: false,
 })
 
 type AddMemberDialogProps = {
@@ -123,8 +125,10 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
     try {
       const payload: CreateMemberRequest = {
         email: form.email,
-        full_name: form.full_name,
-        dob: form.dob,
+        first_name: form.first_name,
+        surname: form.surname,
+        display_name: form.display_name || null,
+        dob: form.dob || undefined,
         join_date: form.join_date,
         membership_status: form.membership_status,
         is_coach: form.is_coach,
@@ -132,7 +136,6 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
         emergency_contact_name: form.emergency_contact_name || null,
         emergency_contact_phone: form.emergency_contact_phone || null,
         federation_number: form.federation_number || null,
-        parental_consent_obtained: form.parental_consent_obtained,
       }
       const created = await createMember(payload)
       onCreated(created)
@@ -156,15 +159,39 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
 
         <form onSubmit={handleSubmit} id="add-member-form" className="space-y-4 py-2">
           {/* Name */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="first_name">First name *</Label>
+              <Input
+                id="first_name"
+                value={form.first_name}
+                onChange={(e) => set("first_name", e.target.value)}
+                required
+                aria-required="true"
+                placeholder="Jane"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="surname">Surname *</Label>
+              <Input
+                id="surname"
+                value={form.surname}
+                onChange={(e) => set("surname", e.target.value)}
+                required
+                aria-required="true"
+                placeholder="Smith"
+              />
+            </div>
+          </div>
+
+          {/* Display name */}
           <div className="space-y-1">
-            <Label htmlFor="full_name">Full name *</Label>
+            <Label htmlFor="display_name">Display name</Label>
             <Input
-              id="full_name"
-              value={form.full_name}
-              onChange={(e) => set("full_name", e.target.value)}
-              required
-              aria-required="true"
-              placeholder="Jane Smith"
+              id="display_name"
+              value={form.display_name}
+              onChange={(e) => set("display_name", e.target.value)}
+              placeholder="Optional — overrides first name + surname in lists"
             />
           </div>
 
@@ -285,16 +312,6 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
               />
               First Aider
             </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                className="rounded"
-                checked={form.parental_consent_obtained}
-                onChange={(e) => set("parental_consent_obtained", e.target.checked)}
-                aria-label="Parental consent obtained"
-              />
-              Parental consent obtained
-            </label>
           </div>
 
           {error !== null && (
@@ -333,11 +350,11 @@ const MemberRow = ({ member, onClick }: MemberRowProps) => (
     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
     tabIndex={0}
     role="row"
-    aria-label={`View ${member.full_name}`}
+    aria-label={`View ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
   >
     <td className="py-3 pl-4 pr-2 font-medium">
       <div className="flex flex-col gap-0.5">
-        <span>{member.full_name}</span>
+        <span>{member.display_name ?? `${member.first_name} ${member.surname}`}</span>
         <span className="text-xs text-muted-foreground">{member.email}</span>
       </div>
     </td>
@@ -366,12 +383,12 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
     tabIndex={0}
     role="button"
-    aria-label={`View ${member.full_name}`}
+    aria-label={`View ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
   >
     <CardContent className="py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium truncate">{member.full_name}</p>
+          <p className="font-medium truncate">{member.display_name ?? `${member.first_name} ${member.surname}`}</p>
           <p className="text-xs text-muted-foreground truncate">{member.email}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <StatusBadge status={member.membership_status} />

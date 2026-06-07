@@ -43,22 +43,28 @@ import { Pencil, Trash2, Check, X, ShieldAlert } from "lucide-react"
 // ── Form state ────────────────────────────────────────────────────────────────
 
 type FormState = {
-  full_name: string
+  first_name: string
+  surname: string
+  display_name: string
   dob: string
   emergency_contact_name: string
   emergency_contact_phone: string
 }
 
 const EMPTY_FORM: FormState = {
-  full_name: "",
+  first_name: "",
+  surname: "",
+  display_name: "",
   dob: "",
   emergency_contact_name: "",
   emergency_contact_phone: "",
 }
 
 const memberToForm = (m: MemberResponse): FormState => ({
-  full_name: m.full_name ?? "",
-  dob: "",  // dob is not returned by the API — leave blank to avoid overwriting
+  first_name: m.first_name,
+  surname: m.surname,
+  display_name: m.display_name ?? "",
+  dob: "",
   emergency_contact_name: m.emergency_contact_name ?? "",
   emergency_contact_phone: m.emergency_contact_phone ?? "",
 })
@@ -105,7 +111,7 @@ const ProfileSummary = ({
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Full name" value={member.full_name} />
+          <Field label="Name" value={`${member.first_name} ${member.surname}`} />
           <Field label="Email" value={member.email} />
           <Field label="Date of birth" value={null} />
           <Field label="Join date" value={member.join_date} />
@@ -954,7 +960,9 @@ const SettingsPage = () => {
     setSaving(true)
 
     const payload: MyMemberUpdateRequest = {
-      full_name: form.full_name || undefined,
+      first_name: form.first_name || undefined,
+      surname: form.surname || undefined,
+      display_name: form.display_name || null,
       emergency_contact_name: form.emergency_contact_name || null,
       emergency_contact_phone: form.emergency_contact_phone || null,
       ...(form.dob ? { dob: form.dob } : {}),
@@ -1007,14 +1015,36 @@ const SettingsPage = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5" aria-label="Personal details form">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor="settings_full_name">Full name</Label>
+                <div className="space-y-1">
+                  <Label htmlFor="settings_first_name">First name</Label>
                   <Input
-                    id="settings_full_name"
-                    value={form.full_name}
-                    onChange={(e) => handleChange("full_name", e.target.value)}
-                    placeholder="Your full name"
-                    autoComplete="name"
+                    id="settings_first_name"
+                    value={form.first_name}
+                    onChange={(e) => handleChange("first_name", e.target.value)}
+                    placeholder="Jane"
+                    autoComplete="given-name"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="settings_surname">Surname</Label>
+                  <Input
+                    id="settings_surname"
+                    value={form.surname}
+                    onChange={(e) => handleChange("surname", e.target.value)}
+                    placeholder="Smith"
+                    autoComplete="family-name"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="settings_display_name">Display name</Label>
+                  <Input
+                    id="settings_display_name"
+                    value={form.display_name}
+                    onChange={(e) => handleChange("display_name", e.target.value)}
+                    placeholder="Optional — overrides first name + surname in lists"
+                    autoComplete="nickname"
                   />
                 </div>
 

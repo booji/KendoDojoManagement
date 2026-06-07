@@ -215,7 +215,7 @@ const AttendanceSection = () => {
                         className="border-t border-foreground/5 hover:bg-muted/30"
                       >
                         <td className="py-2.5 pl-4 pr-2 font-medium">
-                          {m.full_name}
+                          {m.display_name}
                         </td>
                         <td className="py-2.5 px-2 text-right tabular-nums hidden sm:table-cell">
                           {m.sessions_attended}
@@ -349,7 +349,7 @@ const MembersSection = () => {
                       className="border-t border-foreground/5 hover:bg-muted/30"
                     >
                       <td className="py-2.5 pl-4 pr-2 font-medium">
-                        {m.full_name}
+                        {m.display_name}
                       </td>
                       <td className="py-2.5 px-2 text-muted-foreground hidden sm:table-cell">
                         {m.current_grade ?? "—"}

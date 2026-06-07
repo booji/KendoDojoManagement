@@ -5,7 +5,10 @@ export type MembershipStatus = "active" | "inactive" | "suspended"
 export type MemberResponse = {
   id: string
   email: string
-  full_name: string
+  first_name: string
+  surname: string
+  display_name: string | null
+  dob: string | null
   join_date: string
   membership_status: MembershipStatus
   is_coach: boolean
@@ -13,14 +16,15 @@ export type MemberResponse = {
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
   federation_number: string | null
-  parental_consent_obtained: boolean
   is_minor: boolean
 }
 
 export type CreateMemberRequest = {
   email: string
-  full_name: string
-  dob: string
+  first_name: string
+  surname: string
+  display_name?: string | null
+  dob?: string
   join_date: string
   membership_status?: MembershipStatus
   is_coach?: boolean
@@ -28,12 +32,13 @@ export type CreateMemberRequest = {
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
   federation_number?: string | null
-  parental_consent_obtained?: boolean
 }
 
 export type UpdateMemberRequest = {
   email?: string
-  full_name?: string
+  first_name?: string
+  surname?: string
+  display_name?: string | null
   dob?: string
   join_date?: string
   membership_status?: MembershipStatus
@@ -42,7 +47,6 @@ export type UpdateMemberRequest = {
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
   federation_number?: string | null
-  parental_consent_obtained?: boolean
 }
 
 export type ListMembersParams = {
@@ -150,7 +154,9 @@ export const updateMember = async (
 }
 
 export type MyMemberUpdateRequest = {
-  full_name?: string
+  first_name?: string
+  surname?: string
+  display_name?: string | null
   dob?: string
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
