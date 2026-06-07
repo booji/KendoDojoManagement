@@ -1,5 +1,6 @@
 """
 Playwright browser tests for issue #27/#28 — Settings page: Personal Details.
+Updated for issue #158/#159 (first_name/surname/display_name/dob fields).
 
 Acceptance criteria:
   1. /settings shows a Personal Details section
@@ -63,14 +64,16 @@ def _inject_cookie(page: Page, token: str) -> None:
 
 def _create_member_record(
     token: str,
-    full_name: str = "Alice Kendo",
+    first_name: str = "Alice",
+    surname: str = "Kendo",
     emergency_contact_name: str = "Bob Kendo",
     emergency_contact_phone: str = "07700900000",
 ) -> dict:
     resp = requests.put(
         f"{API_URL}/users/me/member",
         json={
-            "full_name": full_name,
+            "first_name": first_name,
+            "surname": surname,
             "dob": "1990-05-15",
             "emergency_contact_name": emergency_contact_name,
             "emergency_contact_phone": emergency_contact_phone,
@@ -103,13 +106,14 @@ def test_settings_summary_shows_member_record_values(page: Page) -> None:
     email = f"ac2_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Prepop Tester")
+    _create_member_record(token, first_name="Prepop", surname="Tester")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
     # Values are visible in the read-only summary
-    expect(page.get_by_text("Prepop Tester")).to_be_visible()
+    expect(page.get_by_text("Prepop")).to_be_visible()
+    expect(page.get_by_text("Tester")).to_be_visible()
     expect(page.get_by_text("Bob Kendo")).to_be_visible()
 
 
@@ -120,18 +124,18 @@ def test_settings_save_returns_to_summary_with_updated_values(page: Page) -> Non
     email = f"ac3_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Original Name")
+    _create_member_record(token, first_name="Original", surname="Name")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
     page.get_by_role("button", name="Edit").click()
-    page.get_by_label("Full name").fill("Updated Name")
+    page.get_by_label("First name").fill("Updated")
     page.get_by_role("button", name="Save changes").click()
 
     # Returns to view mode showing the new value
-    expect(page.get_by_text("Updated Name")).to_be_visible()
-    expect(page.get_by_label("Full name")).not_to_be_visible()
+    expect(page.get_by_text("Updated")).to_be_visible()
+    expect(page.get_by_label("First name")).not_to_be_visible()
 
 
 # ── AC4 — Backend error surfaces as inline error message ─────────────────────
@@ -141,7 +145,7 @@ def test_settings_backend_error_shows_inline_message(page: Page) -> None:
     email = f"ac4_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Error Tester")
+    _create_member_record(token, first_name="Error", surname="Tester")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
@@ -157,12 +161,12 @@ def test_settings_backend_error_shows_inline_message(page: Page) -> None:
 
     page.route("**/api/users/me/member", handle_route, times=1)
 
-    page.get_by_label("Full name").fill("Will Fail")
+    page.get_by_label("First name").fill("Will Fail")
     page.get_by_role("button", name="Save changes").click()
 
     # Error message appears; stays in edit mode
     expect(page.get_by_role("alert")).to_be_visible()
-    expect(page.get_by_label("Full name")).to_be_visible()
+    expect(page.get_by_label("First name")).to_be_visible()
 
 
 # ── AC5 — No Member record: "Set up profile", save creates the record ─────────
@@ -182,14 +186,15 @@ def test_settings_set_up_profile_when_no_member_record(page: Page) -> None:
     page.get_by_role("button", name="Set up profile").click()
 
     # Form shown with empty fields
-    expect(page.get_by_label("Full name")).to_have_value("")
+    expect(page.get_by_label("First name")).to_have_value("")
 
-    page.get_by_label("Full name").fill("New Member")
+    page.get_by_label("First name").fill("New")
+    page.get_by_label("Surname").fill("Member")
     page.get_by_role("button", name="Save changes").click()
 
     # Returns to summary showing the new name
-    expect(page.get_by_text("New Member")).to_be_visible()
-    expect(page.get_by_label("Full name")).not_to_be_visible()
+    expect(page.get_by_text("New")).to_be_visible()
+    expect(page.get_by_label("First name")).not_to_be_visible()
 
 
 # ── AC6 — /profile redirects to /settings ────────────────────────────────────
@@ -249,19 +254,19 @@ def test_settings_edit_name_persists_after_reload(page: Page) -> None:
     email = f"ac8_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Before Reload")
+    _create_member_record(token, first_name="Before", surname="Reload")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
     page.get_by_role("button", name="Edit").click()
-    page.get_by_label("Full name").fill("After Reload")
+    page.get_by_label("First name").fill("After")
     page.get_by_role("button", name="Save changes").click()
 
     page.reload()
 
-    # After reload, summary shows the updated name
-    expect(page.get_by_text("After Reload")).to_be_visible()
+    # After reload, summary shows the updated first name
+    expect(page.get_by_text("After")).to_be_visible()
 
 
 # ── AC9 — Default view is read-only summary (no form) ────────────────────────
@@ -271,16 +276,16 @@ def test_settings_shows_read_only_summary_by_default(page: Page) -> None:
     email = f"ac9_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Summary User")
+    _create_member_record(token, first_name="Summary", surname="User")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
     # Summary visible
-    expect(page.get_by_text("Summary User")).to_be_visible()
+    expect(page.get_by_text("Summary")).to_be_visible()
     expect(page.get_by_role("button", name="Edit")).to_be_visible()
     # Form inputs NOT visible
-    expect(page.get_by_label("Full name")).not_to_be_visible()
+    expect(page.get_by_label("First name")).not_to_be_visible()
 
 
 # ── AC10 — Edit button shows the form ────────────────────────────────────────
@@ -290,7 +295,7 @@ def test_settings_edit_button_shows_form(page: Page) -> None:
     email = f"ac10_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Edit Button User")
+    _create_member_record(token, first_name="Edit", surname="User")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
@@ -298,8 +303,9 @@ def test_settings_edit_button_shows_form(page: Page) -> None:
     page.get_by_role("button", name="Edit").click()
 
     # Form inputs now visible, pre-filled
-    expect(page.get_by_label("Full name")).to_be_visible()
-    expect(page.get_by_label("Full name")).to_have_value("Edit Button User")
+    expect(page.get_by_label("First name")).to_be_visible()
+    expect(page.get_by_label("First name")).to_have_value("Edit")
+    expect(page.get_by_label("Surname")).to_have_value("User")
     expect(page.get_by_role("button", name="Cancel")).to_be_visible()
     expect(page.get_by_role("button", name="Save changes")).to_be_visible()
 
@@ -311,19 +317,19 @@ def test_settings_cancel_returns_to_summary_without_saving(page: Page) -> None:
     email = f"ac11_{uuid.uuid4().hex[:8]}@dojo.test"
     _register_api(email)
     token = _login_api(email)
-    _create_member_record(token, full_name="Cancel Test User")
+    _create_member_record(token, first_name="Cancel", surname="User")
 
     _inject_cookie(page, token)
     page.goto(f"{BASE_URL}/settings")
 
     page.get_by_role("button", name="Edit").click()
-    page.get_by_label("Full name").fill("Should Not Save")
+    page.get_by_label("First name").fill("ShouldNotSave")
     page.get_by_role("button", name="Cancel").click()
 
     # Returns to summary — original value shown, form gone
-    expect(page.get_by_text("Cancel Test User")).to_be_visible()
-    expect(page.get_by_label("Full name")).not_to_be_visible()
-    expect(page.get_by_text("Should Not Save")).not_to_be_visible()
+    expect(page.get_by_text("Cancel")).to_be_visible()
+    expect(page.get_by_label("First name")).not_to_be_visible()
+    expect(page.get_by_text("ShouldNotSave")).not_to_be_visible()
 
 
 # ── AC12 — Save returns to summary with updated values ───────────────────────
@@ -335,3 +341,38 @@ def test_settings_cancel_returns_to_summary_without_saving(page: Page) -> None:
 )
 def test_settings_save_returns_to_summary_alias() -> None:
     pass
+
+
+# ── AC#159 — DOB visible in read-only summary ────────────────────────────────
+
+
+def test_settings_summary_shows_dob(page: Page) -> None:
+    email = f"ac159dob_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    _create_member_record(token, first_name="Dob", surname="Tester")
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    # DOB from the API ("1990-05-15") should be visible in the summary
+    expect(page.get_by_text("1990-05-15")).to_be_visible()
+
+
+# ── AC#159 — Display name visible as separate field ──────────────────────────
+
+
+def test_settings_summary_shows_display_name_field(page: Page) -> None:
+    email = f"ac159dn_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    requests.put(
+        f"{API_URL}/users/me/member",
+        json={"first_name": "Taro", "surname": "Yamada", "display_name": "Taro-san"},
+        cookies={"access_token": token},
+    ).raise_for_status()
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    expect(page.get_by_text("Taro-san")).to_be_visible()

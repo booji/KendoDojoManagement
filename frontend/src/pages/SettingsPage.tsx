@@ -104,16 +104,21 @@ const ProfileSummary = ({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Personal Details</CardTitle>
+        <div>
+          <CardTitle>Personal Details</CardTitle>
+          <p className="text-sm text-muted-foreground mt-0.5">{formatMemberName(member)}</p>
+        </div>
         <Button variant="outline" size="sm" onClick={onEdit}>
           Edit
         </Button>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Name" value={`${member.first_name} ${member.surname}`} />
+          <Field label="First name" value={member.first_name} />
+          <Field label="Surname" value={member.surname} />
+          <Field label="Display name" value={member.display_name} />
           <Field label="Email" value={member.email} />
-          <Field label="Date of birth" value={null} />
+          <Field label="Date of birth" value={member.dob} />
           <Field label="Join date" value={member.join_date} />
           <Field label="Membership status" value={member.membership_status} />
           <Field label="Emergency contact" value={member.emergency_contact_name} />
@@ -130,6 +135,11 @@ const ProfileSummary = ({
     </Card>
   )
 }
+
+// ── Name formatting ───────────────────────────────────────────────────────────
+
+const formatMemberName = (m: MemberResponse): string =>
+  m.display_name ?? `${m.first_name} ${m.surname}`
 
 // ── Date formatting ───────────────────────────────────────────────────────────
 
