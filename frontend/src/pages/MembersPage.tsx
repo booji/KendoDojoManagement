@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { listMembers, createMember } from "@/api/members"
+import { listMembers, createMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
 import { Button } from "@/components/ui/button"
@@ -211,14 +211,12 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
 
           {/* DOB */}
           <div className="space-y-1">
-            <Label htmlFor="dob">Date of birth *</Label>
+            <Label htmlFor="dob">Date of birth</Label>
             <Input
               id="dob"
               type="date"
               value={form.dob}
               onChange={(e) => set("dob", e.target.value)}
-              required
-              aria-required="true"
             />
           </div>
 
@@ -350,11 +348,11 @@ const MemberRow = ({ member, onClick }: MemberRowProps) => (
     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
     tabIndex={0}
     role="row"
-    aria-label={`View ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
+    aria-label={`View ${formatMemberName(member)}`}
   >
     <td className="py-3 pl-4 pr-2 font-medium">
       <div className="flex flex-col gap-0.5">
-        <span>{member.display_name ?? `${member.first_name} ${member.surname}`}</span>
+        <span>{formatMemberName(member)}</span>
         <span className="text-xs text-muted-foreground">{member.email}</span>
       </div>
     </td>
@@ -383,12 +381,12 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick() }}
     tabIndex={0}
     role="button"
-    aria-label={`View ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
+    aria-label={`View ${formatMemberName(member)}`}
   >
     <CardContent className="py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium truncate">{member.display_name ?? `${member.first_name} ${member.surname}`}</p>
+          <p className="font-medium truncate">{formatMemberName(member)}</p>
           <p className="text-xs text-muted-foreground truncate">{member.email}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <StatusBadge status={member.membership_status} />

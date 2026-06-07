@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, getMyMember, updateMember, deactivateMember } from "@/api/members"
+import { getMember, getMyMember, updateMember, deactivateMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
@@ -1379,7 +1379,7 @@ const MemberDetailPage = () => {
       {/* Name + status header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">{member.display_name ?? `${member.first_name} ${member.surname}`}</h1>
+          <h1 className="text-xl font-semibold">{formatMemberName(member)}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{member.email}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <StatusBadge status={member.membership_status} />
@@ -1411,7 +1411,7 @@ const MemberDetailPage = () => {
               variant="outline"
               size="sm"
               onClick={startEdit}
-              aria-label={`Edit ${member.display_name ?? `${member.first_name} ${member.surname}`}`}
+              aria-label={`Edit ${formatMemberName(member)}`}
             >
               <PencilIcon aria-hidden="true" />
               Edit
@@ -1456,6 +1456,10 @@ const MemberDetailPage = () => {
               <CardTitle>Membership details</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="First name" value={member.first_name} />
+              <Field label="Surname" value={member.surname} />
+              <Field label="Display name" value={member.display_name} />
+              <Field label="Date of birth" value={member.dob !== null ? new Date(member.dob).toLocaleDateString("default", { day: "numeric", month: "long", year: "numeric" }) : null} />
               <Field label="Join date" value={new Date(member.join_date).toLocaleDateString("default", { day: "numeric", month: "long", year: "numeric" })} />
               <Field label="Federation number" value={member.federation_number} />
             </CardContent>
@@ -1478,7 +1482,7 @@ const MemberDetailPage = () => {
           <AttendanceHistoryCard memberId={member.id} />
 
           {isAdmin && (
-            <RecoveryTokenCard memberId={member.id} memberName={member.display_name ?? `${member.first_name} ${member.surname}`} />
+            <RecoveryTokenCard memberId={member.id} memberName={formatMemberName(member)} />
           )}
         </>
       )}
@@ -1486,7 +1490,7 @@ const MemberDetailPage = () => {
       {/* Deactivate confirm */}
       <DeactivateDialog
         open={deactivateOpen}
-        memberName={member.display_name ?? `${member.first_name} ${member.surname}`}
+        memberName={formatMemberName(member)}
         onConfirm={handleDeactivate}
         onClose={() => setDeactivateOpen(false)}
         loading={deactivating}

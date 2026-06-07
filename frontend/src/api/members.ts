@@ -205,6 +205,9 @@ export const updateMyMember = async (
   return res.json() as Promise<MemberResponse>
 }
 
+export const formatMemberName = (member: Pick<MemberResponse, "display_name" | "first_name" | "surname">): string =>
+  member.display_name ?? `${member.first_name} ${member.surname}`
+
 export const deactivateMember = async (id: string): Promise<MemberResponse> => {
   const res = await fetch(`/api/members/${id}`, {
     method: "DELETE",
