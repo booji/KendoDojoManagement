@@ -520,3 +520,51 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
     assert get_response.status_code == 200
     assert get_response.json()["first_name"] == "Onboarded"
     assert get_response.json()["surname"] == "Member"
+
+
+# ---------------------------------------------------------------------------
+# AC #159 — Partial-update field isolation and blank-dob preservation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_put_my_member_display_name_only_preserves_first_and_surname(
+    member_repo,
+) -> None:
+    """Saving only display_name must not overwrite first_name or surname."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(first_name="Taro", surname="Yamada"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"display_name": "Taro-san"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["display_name"] == "Taro-san"
+    assert body["first_name"] == "Taro"
+    assert body["surname"] == "Yamada"
+
+
+@pytest.mark.anyio
+async def test_put_my_member_omitting_dob_preserves_existing_dob(
+    member_repo,
+) -> None:
+    """Sending no dob field must not clear the existing date of birth."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(dob="1990-06-15"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"display_name": "NoDobChange"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["dob"] == "1990-06-15"
