@@ -8,6 +8,7 @@ import { setMemberGrade, proposeGrade, getGradeHistory, approveGrade, rejectGrad
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
+import { formatMemberDate } from "@/lib/date"
 import {
   listFederations,
   getMemberFederations,
@@ -521,11 +522,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
                             </span>
                           )}
                           <span className="text-muted-foreground text-xs">
-                            {new Date(entry.promoted_at).toLocaleDateString("default", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })}
+                            {formatMemberDate(entry.promoted_at)}
                           </span>
                           {isAdmin && entry.status === "pending" && (
                             <span className="flex gap-1 ml-auto">
@@ -741,11 +738,7 @@ const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
                   <li key={record.id} className="text-sm">
                     <span className="font-mono text-xs">{record.session_id.slice(0, 8)}…</span>
                     <span className="text-muted-foreground ml-2 text-xs">
-                      {new Date(record.checked_in_at).toLocaleDateString("default", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                      {formatMemberDate(record.checked_in_at)}
                     </span>
                   </li>
                 ))}
@@ -1459,8 +1452,8 @@ const MemberDetailPage = () => {
               <Field label="First name" value={member.first_name} />
               <Field label="Surname" value={member.surname} />
               <Field label="Display name" value={member.display_name} />
-              <Field label="Date of birth" value={member.dob !== null ? new Date(member.dob).toLocaleDateString("default", { day: "numeric", month: "long", year: "numeric" }) : null} />
-              <Field label="Join date" value={new Date(member.join_date).toLocaleDateString("default", { day: "numeric", month: "long", year: "numeric" })} />
+              <Field label="Date of birth" value={member.dob !== null ? formatMemberDate(member.dob) : null} />
+              <Field label="Join date" value={formatMemberDate(member.join_date)} />
               <Field label="Federation number" value={member.federation_number} />
             </CardContent>
           </Card>

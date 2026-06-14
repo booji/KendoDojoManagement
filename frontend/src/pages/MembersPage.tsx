@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { listMembers, createMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
+import { formatMemberDate, formatShortDate } from "@/lib/date"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -363,11 +364,7 @@ const MemberRow = ({ member, onClick }: MemberRowProps) => (
       <RoleBadges member={member} />
     </td>
     <td className="py-3 pl-2 pr-4 text-sm text-muted-foreground hidden md:table-cell">
-      {new Date(member.join_date).toLocaleDateString("default", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })}
+      {formatMemberDate(member.join_date)}
     </td>
   </tr>
 )
@@ -394,10 +391,7 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
           </div>
         </div>
         <span className="text-xs text-muted-foreground shrink-0">
-          {new Date(member.join_date).toLocaleDateString("default", {
-            month: "short",
-            year: "numeric",
-          })}
+          {formatShortDate(member.join_date)}
         </span>
       </div>
     </CardContent>

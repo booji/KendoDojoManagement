@@ -16,12 +16,15 @@ import {
   approveGrade,
   rejectGrade,
 } from "@/api/grades"
+import { formatMemberDate } from "@/lib/date"
 
 const formatDate = (value: string | null): string => {
   if (!value) return "Not provided"
-  const d = new Date(value)
-  if (isNaN(d.getTime())) return "Not provided"
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+  try {
+    return formatMemberDate(value)
+  } catch {
+    return "Not provided"
+  }
 }
 
 const TableSkeleton = () => (

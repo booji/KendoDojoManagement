@@ -39,6 +39,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Pencil, Trash2, Check, X, ShieldAlert } from "lucide-react"
+import { formatMemberDate } from "@/lib/date"
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -140,13 +141,6 @@ const ProfileSummary = ({
 
 const formatMemberName = (m: MemberResponse): string =>
   m.display_name ?? `${m.first_name} ${m.surname}`
-
-// ── Date formatting ───────────────────────────────────────────────────────────
-
-const formatDate = (iso: string): string => {
-  const d = new Date(iso)
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-}
 
 // ── Passkey row ───────────────────────────────────────────────────────────────
 
@@ -264,10 +258,10 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
       </div>
       <div className="flex gap-4 flex-wrap">
         <span className="text-xs text-muted-foreground">
-          Added {formatDate(passkey.created_at)}
+          Added {formatMemberDate(passkey.created_at)}
         </span>
         <span className="text-xs text-muted-foreground">
-          Last used: {passkey.last_used_at !== null ? formatDate(passkey.last_used_at) : "Never"}
+          Last used: {passkey.last_used_at !== null ? formatMemberDate(passkey.last_used_at) : "Never"}
         </span>
       </div>
       {rowError !== null && (
