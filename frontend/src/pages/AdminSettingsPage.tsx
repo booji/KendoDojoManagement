@@ -920,7 +920,7 @@ const AdminFederationCatalogue = () => {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const AdminSettingsPage = () => (
-  <div className="px-4 py-6 max-w-2xl mx-auto space-y-8">
+  <div className="px-4 py-6 space-y-8">
     <h1 className="text-xl font-semibold">Admin Settings</h1>
 
     <section aria-labelledby="branding-heading">

@@ -232,7 +232,7 @@ const MemberDashboardPage = () => {
   }
 
   return (
-    <div className="px-4 py-6 max-w-2xl mx-auto space-y-6">
+    <div className="px-4 py-6 space-y-6">
       <h1 className="text-xl font-semibold">Dashboard</h1>
 
       {loading && <DashboardSkeletons />}
