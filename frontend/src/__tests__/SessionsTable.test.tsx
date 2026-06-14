@@ -1,8 +1,6 @@
 /**
  * Tests for SessionsTable component (issue #91).
  *
- * Component does NOT exist yet — all tests are in the red phase.
- *
  * Acceptance criteria covered:
  *   AC1 — rows render with correct Date, Type, Time, Duration values
  *   AC2 — upcoming-only filter hides past rows by default
@@ -18,7 +16,6 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
-// Module under test — does NOT exist yet (red phase)
 import SessionsTable from "@/components/SessionsTable"
 
 // ── Mock @/api/attendance ─────────────────────────────────────────────────────

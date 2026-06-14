@@ -1,8 +1,6 @@
 /**
  * Unit tests for the List/Calendar toggle on SessionsPage (issue #93).
  *
- * The feature does not exist yet — all tests are in the red phase.
- *
  * Acceptance criteria covered:
  *   AC1 — List and Calendar toggle buttons are present in the toolbar at desktop
  *   AC2 — Clicking "Calendar" replaces content area with CalendarView
@@ -16,7 +14,6 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
-// Module under test — does NOT yet have the toggle (red phase)
 import SessionsPage from "@/pages/SessionsPage"
 
 // ── Mock @/api/sessions ───────────────────────────────────────────────────────

@@ -1,8 +1,6 @@
 /**
  * Unit tests for SessionDetailPage (issue #54).
  *
- * The component does not exist yet — all tests are expected to fail (red phase).
- *
  * Acceptance criteria covered:
  *   AC1 — route /sessions/:id renders correctly for a valid session ID
  *   AC2 — member view shows required fields; coach_notes is NOT rendered
@@ -20,7 +18,6 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 
-// The component under test — does NOT exist yet (red phase)
 import SessionDetailPage from "@/pages/SessionDetailPage"
 
 // ── Shared fixtures ────────────────────────────────────────────────────────────
