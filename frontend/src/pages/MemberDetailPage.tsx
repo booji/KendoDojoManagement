@@ -1331,7 +1331,7 @@ const MemberDetailPage = () => {
   // Loading state
   if (member === null && loadError === null) {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto space-y-4">
+      <div className="px-4 py-6 space-y-4">
         <Skeleton className="h-6 w-24" />
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-48 w-full rounded-xl" />
@@ -1343,7 +1343,7 @@ const MemberDetailPage = () => {
   // Error state
   if (loadError !== null) {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto">
+      <div className="px-4 py-6">
         <Button
           variant="ghost"
           size="sm"
@@ -1364,7 +1364,7 @@ const MemberDetailPage = () => {
   if (member === null) return null
 
   return (
-    <div className="px-4 py-6 max-w-2xl mx-auto space-y-6">
+    <div className="px-4 py-6 space-y-6">
       {/* Back nav */}
       <Button
         variant="ghost"

@@ -125,7 +125,7 @@ const AttendanceSection = () => {
                 No sessions in this date range.
               </p>
             ) : (
-              <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+              <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
                 <table
                   className="w-full text-sm"
                   role="table"
@@ -180,7 +180,7 @@ const AttendanceSection = () => {
             {report.member_rates.length === 0 ? (
               <p className="text-sm text-muted-foreground">No member data.</p>
             ) : (
-              <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+              <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
                 <table
                   className="w-full text-sm"
                   role="table"
@@ -314,7 +314,7 @@ const MembersSection = () => {
           {report.length === 0 ? (
             <p className="text-sm text-muted-foreground">No members found.</p>
           ) : (
-            <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+            <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
               <table
                 className="w-full text-sm"
                 role="table"
@@ -376,7 +376,7 @@ const MembersSection = () => {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const ReportsPage = () => (
-  <div className="px-4 py-6 max-w-4xl mx-auto">
+  <div className="px-4 py-6">
     <h1 className="text-xl font-semibold mb-6">Reports</h1>
 
     <Tabs defaultValue="attendance">

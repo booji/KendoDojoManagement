@@ -993,7 +993,7 @@ const SettingsPage = () => {
 
   if (loadState.status === "loading") {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto space-y-4">
+      <div className="px-4 py-6 space-y-4">
         <Skeleton className="h-7 w-32" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
@@ -1002,7 +1002,7 @@ const SettingsPage = () => {
 
   if (loadState.status === "error") {
     return (
-      <div className="px-4 py-6 max-w-2xl mx-auto">
+      <div className="px-4 py-6">
         <h1 className="text-xl font-semibold mb-4">Settings</h1>
         <p className="text-sm text-destructive" role="alert">
           {loadState.message}
@@ -1012,7 +1012,7 @@ const SettingsPage = () => {
   }
 
   return (
-    <div className="px-4 py-6 mx-auto space-y-6 max-w-2xl">
+    <div className="px-4 py-6 space-y-6">
       <h1 className="text-xl font-semibold">Settings</h1>
 
       {!editing ? (

@@ -283,7 +283,7 @@ const SessionDetailPage = () => {
 
   if (state.kind === "loading") {
     return (
-      <div className="px-4 py-6 max-w-6xl mx-auto">
+      <div className="px-4 py-6">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     )
@@ -291,7 +291,7 @@ const SessionDetailPage = () => {
 
   if (state.kind === "error") {
     return (
-      <div className="px-4 py-6 max-w-6xl mx-auto">
+      <div className="px-4 py-6">
         <p className="text-sm text-destructive">{state.message}</p>
       </div>
     )
@@ -302,7 +302,7 @@ const SessionDetailPage = () => {
 
   if (editing) {
     return (
-      <div className="px-4 py-6 max-w-6xl mx-auto">
+      <div className="px-4 py-6">
         <h1 className="text-xl font-semibold mb-4">Edit Session</h1>
         <EditForm
           session={session}
@@ -317,7 +317,7 @@ const SessionDetailPage = () => {
   }
 
   return (
-    <div className="px-4 py-6 space-y-6 max-w-6xl mx-auto">
+    <div className="px-4 py-6 space-y-6">
       <h1 className="text-xl font-semibold">Session Detail</h1>
 
       {/* Details card — full width, metadata in a grid on desktop */}

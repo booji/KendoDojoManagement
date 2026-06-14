@@ -547,7 +547,7 @@ const SessionsPage = () => {
 
   if (sessions === null) {
     return (
-      <div className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+      <div className="px-4 py-6 space-y-4">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-20 w-full rounded-xl" />
         <Skeleton className="h-20 w-full rounded-xl" />
@@ -560,7 +560,7 @@ const SessionsPage = () => {
   const isAdmin = role === "admin"
 
   return (
-    <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-6 max-w-screen-xl mx-auto"}>
+    <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-6"}>
       {/* Page toolbar */}
       <div className={pageView === "calendar" ? "flex items-center justify-between gap-4 px-4 py-3 border-b shrink-0" : "flex items-center justify-between gap-4"}>
         <h1 className="text-xl font-semibold">Sessions</h1>
