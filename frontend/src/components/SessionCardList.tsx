@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { format } from "date-fns"
 import { formatShortDate } from "@/lib/date"
 
 // ── Date/time helpers ─────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ const startOfWeek = (date: Date): Date => {
 
 const weekLabel = (weekStart: Date): string => {
   const day = weekStart.getDate()
-  const month = weekStart.toLocaleString("default", { month: "short" })
+  const month = format(weekStart, "MMM")
   return `Week of ${day} ${month}`
 }
 
