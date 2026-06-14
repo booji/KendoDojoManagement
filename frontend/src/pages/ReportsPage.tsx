@@ -7,6 +7,7 @@ import {
 } from "@/api/reports"
 import type { AttendanceReport, MemberReport } from "@/api/reports"
 import { isApiError } from "@/api/auth"
+import { formatSessionDate, formatMemberDate } from "@/lib/date"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -154,12 +155,7 @@ const AttendanceSection = () => {
                         className="border-t border-foreground/5 hover:bg-muted/30"
                       >
                         <td className="py-2.5 pl-4 pr-2">
-                          {new Date(s.scheduled_at).toLocaleDateString("default", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
+                          {formatSessionDate(s.scheduled_at)}
                         </td>
                         <td className="py-2.5 pl-2 pr-4 text-right tabular-nums">
                           {s.headcount}
@@ -355,11 +351,7 @@ const MembersSection = () => {
                         {m.current_grade ?? "—"}
                       </td>
                       <td className="py-2.5 pl-2 pr-4 text-right text-muted-foreground">
-                        {new Date(m.join_date).toLocaleDateString("default", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
+                        {formatMemberDate(m.join_date)}
                       </td>
                     </tr>
                   ))}

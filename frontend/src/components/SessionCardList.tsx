@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { formatShortDate } from "@/lib/date"
 
 // ── Date/time helpers ─────────────────────────────────────────────────────────
 
@@ -51,10 +52,7 @@ const groupByWeek = (
 
 const formatTime = (startTime: string): string => startTime
 
-const formatDate = (date: string): string => {
-  const d = new Date(`${date}T00:00:00`)
-  return d.toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short" })
-}
+const formatDate = (date: string): string => formatShortDate(date)
 
 // ── Per-session check-in / share UI state ────────────────────────────────────
 

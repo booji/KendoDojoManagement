@@ -6,16 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-
-// ── Date helpers ───────────────────────────────────────────────────────────────
-
-const formatDate = (date: string): string =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("default", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
+import { formatSessionDate } from "@/lib/date"
 
 const formatTime = (startTime: string): string => startTime
 
@@ -263,7 +254,7 @@ const MemberDashboardPage = () => {
                       {typeMap.get(nextSession.session_type_id) ?? "Session"}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(nextSession.date)}
+                      {formatSessionDate(nextSession.date)}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {formatTime(nextSession.start_time)}&nbsp;&middot;&nbsp;

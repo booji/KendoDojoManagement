@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import type { SessionInstance } from "@/api/sessions"
 import { checkIn } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
+import { formatSessionDate } from "@/lib/date"
 
 export type SessionsTableProps = {
   sessions: SessionInstance[]
@@ -10,10 +11,7 @@ export type SessionsTableProps = {
   isAdmin: boolean
 }
 
-const formatDate = (dateStr: string): string => {
-  const d = new Date(`${dateStr}T00:00:00`)
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
-}
+const formatDate = (dateStr: string): string => formatSessionDate(dateStr)
 
 const isUpcoming = (s: SessionInstance): boolean =>
   new Date(`${s.date}T${s.start_time}`) >= new Date()
