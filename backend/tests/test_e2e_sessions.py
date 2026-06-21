@@ -2,7 +2,7 @@
 E2E browser tests for issue #4 — Session management.
 
 Acceptance criteria:
-  1. Session type table is seeded with "General Training" on first run
+  1. Session type table is seeded with the default spread (issue #173) on first run
   2. Admin can create additional session types via POST /session-types
   3. Admin can create a recurring session template via POST /sessions/templates
   4. Session instances are generated from a template up to a configurable horizon
@@ -65,12 +65,18 @@ def _api_headers(token: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# AC1 — Session type seeded with "General Training"
+# AC1 — Session types seeded with the default spread (issue #173)
 # ---------------------------------------------------------------------------
 
 
-def test_general_training_session_type_exists_by_default(page: Page) -> None:
-    """GET /session-types returns a list that includes 'General Training'."""
+def test_default_session_types_exist_by_default(page: Page) -> None:
+    """GET /session-types returns the seeded default spread with hex colours.
+
+    On a fresh database the 13 defaults from app.sessions.seed are present and
+    each carries a distinct, valid hex colour.
+    """
+    from app.sessions.seed import DEFAULT_SESSION_TYPES
+
     token = _make_token("admin")
     response = page.request.get(
         f"{API_URL}/session-types",
@@ -78,8 +84,11 @@ def test_general_training_session_type_exists_by_default(page: Page) -> None:
     )
     assert response.status == 200
     types = response.json()
-    names = [t["name"] for t in types]
-    assert "General Training" in names, f"Expected 'General Training' in {names}"
+    by_name = {t["name"]: t for t in types}
+
+    for name, colour in DEFAULT_SESSION_TYPES:
+        assert name in by_name, f"Expected default '{name}' in {list(by_name)}"
+        assert by_name[name]["colour"] == colour
 
 
 # ---------------------------------------------------------------------------

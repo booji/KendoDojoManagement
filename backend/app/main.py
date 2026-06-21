@@ -3,7 +3,6 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from uuid import uuid4
 
 _log = logging.getLogger(__name__)
 
@@ -12,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import insert, select
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse
 
@@ -41,8 +39,8 @@ from app.members.router import router as members_router
 from app.reports.router import router as reports_router
 from app.routers.health import router as health_router
 from app.routers.setup import router as setup_router
-from app.sessions.db_models import SessionType
 from app.sessions.router import router as sessions_router
+from app.sessions.seed import seed_session_types
 from app.settings.router import router as settings_router
 from app.users.router import router as users_router
 
@@ -65,13 +63,7 @@ async def _init_db() -> None:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             async with engine.begin() as conn:
-                result = await conn.execute(select(SessionType))
-                if not result.fetchone():
-                    await conn.execute(
-                        insert(SessionType).values(
-                            id=str(uuid4()), name="General Training"
-                        )
-                    )
+                await seed_session_types(conn)
             return
         except Exception as exc:
             if attempt == 9:
