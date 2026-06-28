@@ -3,8 +3,14 @@ import { useParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeSanitize from "rehype-sanitize"
-import { getSession, updateSession, cancelSession, deleteTemplate } from "@/api/sessions"
-import type { SessionInstance, SessionInstanceUpdate } from "@/api/sessions"
+import {
+  getSession,
+  updateSession,
+  cancelSession,
+  deleteTemplate,
+  getSessionTypes,
+} from "@/api/sessions"
+import type { SessionInstance, SessionInstanceUpdate, SessionType } from "@/api/sessions"
 import { getMe } from "@/api/auth"
 import { checkIn, getSessionAttendance } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -14,6 +20,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
 // ── MarkdownField ─────────────────────────────────────────────────────────────
@@ -72,14 +85,20 @@ const MarkdownField = ({
 
 type EditFormProps = {
   session: SessionInstance
+  sessionTypes: SessionType[]
   onSave: (updated: SessionInstance) => void
   onCancel: () => void
 }
 
-const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
+const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) => {
+  const firstSegment = session.segments[0]
+  const [title, setTitle] = useState(session.title)
   const [date, setDate] = useState(session.date)
-  const [startTime, setStartTime] = useState(session.start_time)
-  const [durationMinutes, setDurationMinutes] = useState(String(session.duration_minutes))
+  const [startTime, setStartTime] = useState(firstSegment?.start_time ?? session.start_time)
+  const [durationMinutes, setDurationMinutes] = useState(
+    String(firstSegment?.duration_minutes ?? session.duration_minutes),
+  )
+  const [typeId, setTypeId] = useState(firstSegment?.type_ids[0] ?? "")
   const [location, setLocation] = useState(session.location ?? "")
   const [notes, setNotes] = useState(session.notes ?? "")
   const [info, setInfo] = useState(session.info ?? "")
@@ -92,16 +111,37 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    const mins = parseInt(durationMinutes, 10)
+    if (!title.trim()) {
+      setError("Title is required.")
+      return
+    }
+    if (!typeId) {
+      setError("Please select a session type.")
+      return
+    }
+    if (isNaN(mins) || mins < 1) {
+      setError("Duration must be a positive number.")
+      return
+    }
+
     setSubmitting(true)
     try {
       const payload: Partial<SessionInstanceUpdate> = {
+        title: title.trim(),
         date,
-        start_time: startTime,
-        duration_minutes: parseInt(durationMinutes, 10),
         location: location.trim() || null,
         notes: notes.trim() || null,
         info: info.trim() || null,
         coach_notes: coachNotes.trim() || null,
+        segments: [
+          {
+            start_time: startTime,
+            duration_minutes: mins,
+            type_ids: [typeId],
+          },
+        ],
       }
       const updated = await updateSession(session.id, payload)
       onSave(updated)
@@ -118,6 +158,31 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-title">Title</Label>
+        <Input
+          id="edit-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="min-h-[44px]"
+          required
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-session-type">Session type</Label>
+        <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
+          <SelectTrigger id="edit-session-type" className="min-h-[44px]">
+            <SelectValue placeholder="Select type…">
+              {typeId ? (sessionTypes.find((t) => t.id === typeId)?.name ?? "Select type…") : undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {sessionTypes.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="space-y-1.5">
         <Label htmlFor="edit-date">Date</Label>
         <Input
@@ -208,7 +273,13 @@ const EditForm = ({ session, onSave, onCancel }: EditFormProps) => {
 type PageState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "loaded"; session: SessionInstance; role: "admin" | "member"; attendance: AttendanceRecord[] }
+  | {
+      kind: "loaded"
+      session: SessionInstance
+      role: "admin" | "member"
+      attendance: AttendanceRecord[]
+      sessionTypes: SessionType[]
+    }
 
 const SessionDetailPage = () => {
   const { id } = useParams<{ id: string }>()
@@ -222,10 +293,15 @@ const SessionDetailPage = () => {
 
   useEffect(() => {
     if (!id) return
-    Promise.all([getSession(id), getMe(), getSessionAttendance(id).catch(() => [])])
-      .then(([session, me, attendance]) => {
+    Promise.all([
+      getSession(id),
+      getMe(),
+      getSessionAttendance(id).catch(() => []),
+      getSessionTypes().catch(() => []),
+    ])
+      .then(([session, me, attendance, sessionTypes]) => {
         const attendanceList = Array.isArray(attendance) ? attendance : []
-        setState({ kind: "loaded", session, role: me.role, attendance: attendanceList })
+        setState({ kind: "loaded", session, role: me.role, attendance: attendanceList, sessionTypes })
         if (session.template_id !== null) {
           setTimeout(() => setShowSeriesCancel(true), 0)
         }
@@ -297,8 +373,9 @@ const SessionDetailPage = () => {
     )
   }
 
-  const { session, role, attendance } = state
+  const { session, role, attendance, sessionTypes } = state
   const isAdmin = role === "admin"
+  const typeById = new Map<string, SessionType>(sessionTypes.map((t) => [t.id, t]))
 
   if (editing) {
     return (
@@ -306,6 +383,7 @@ const SessionDetailPage = () => {
         <h1 className="text-xl font-semibold mb-4">Edit Session</h1>
         <EditForm
           session={session}
+          sessionTypes={sessionTypes}
           onSave={(updated) => {
             setState({ ...state, session: updated })
             setEditing(false)
@@ -318,7 +396,7 @@ const SessionDetailPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">Session Detail</h1>
+      <h1 className="text-xl font-semibold">{session.title}</h1>
 
       {/* Details card — full width, metadata in a grid on desktop */}
       <Card>
@@ -343,6 +421,47 @@ const SessionDetailPage = () => {
               </div>
             )}
           </div>
+
+          {/* Per-segment breakdown */}
+          {session.segments.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-sm text-muted-foreground">Segments</p>
+              <ul className="space-y-1.5">
+                {session.segments.map((segment, idx) => {
+                  const endMinutes =
+                    Number(segment.start_time.slice(0, 2)) * 60 +
+                    Number(segment.start_time.slice(3, 5)) +
+                    segment.duration_minutes
+                  const endTime = `${String(Math.floor(endMinutes / 60) % 24).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`
+                  const types = segment.type_ids
+                    .map((tid) => typeById.get(tid))
+                    .filter((t): t is SessionType => t !== undefined)
+                  return (
+                    <li
+                      key={segment.id ?? idx}
+                      className="flex items-center gap-2 text-sm rounded-md border px-3 py-2"
+                    >
+                      <span className="font-medium tabular-nums">
+                        {segment.start_time.slice(0, 5)}–{endTime}
+                      </span>
+                      <span className="flex items-center gap-1.5 flex-wrap">
+                        {types.map((t) => (
+                          <span key={t.id} className="inline-flex items-center gap-1">
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
+                              aria-hidden="true"
+                            />
+                            {t.name}
+                          </span>
+                        ))}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
 
           {session.cancelled && (
             <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">

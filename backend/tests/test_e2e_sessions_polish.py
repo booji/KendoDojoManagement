@@ -75,10 +75,15 @@ def _ensure_session(page: Page, admin_token: str) -> str:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": "Polish Test Session",
                 "date": "2099-07-15",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )

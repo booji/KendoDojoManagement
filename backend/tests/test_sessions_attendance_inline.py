@@ -233,10 +233,17 @@ def test_session_instance_read_has_attendance_count_field() -> None:
     """SessionInstanceRead must have an attendance_count field defaulting to 0."""
     instance = SessionInstanceRead(
         id=str(uuid.uuid4()),
-        session_type_id=str(uuid.uuid4()),
+        title="Test Session",
         date="2099-01-01",
         start_time="19:00",
         duration_minutes=90,
+        segments=[
+            {
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "type_ids": [str(uuid.uuid4())],
+            }
+        ],
     )
     assert instance.attendance_count == 0
 
@@ -245,10 +252,17 @@ def test_session_instance_read_has_is_checked_in_field() -> None:
     """SessionInstanceRead must have an is_checked_in field defaulting to False."""
     instance = SessionInstanceRead(
         id=str(uuid.uuid4()),
-        session_type_id=str(uuid.uuid4()),
+        title="Test Session",
         date="2099-01-01",
         start_time="19:00",
         duration_minutes=90,
+        segments=[
+            {
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "type_ids": [str(uuid.uuid4())],
+            }
+        ],
     )
     assert instance.is_checked_in is False
 
@@ -272,10 +286,15 @@ async def test_list_sessions_includes_attendance_count(
     # Seed one future session
     session = await instance_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "Keiko",
             "date": "2099-03-01",
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
     session_id = session["id"]
@@ -307,18 +326,28 @@ async def test_list_sessions_includes_is_checked_in_for_member(
     # Seed two future sessions
     checked_in_session = await instance_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "Keiko",
             "date": "2099-04-01",
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
     not_checked_in_session = await instance_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "Keiko",
             "date": "2099-04-08",
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
 

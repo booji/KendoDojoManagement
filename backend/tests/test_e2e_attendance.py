@@ -79,10 +79,15 @@ def _create_session(
         headers={**_api_headers(token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": "Attendance Test Session",
                 "date": date,
-                "start_time": start_time,
-                "duration_minutes": 60,
+                "segments": [
+                    {
+                        "start_time": start_time,
+                        "duration_minutes": 60,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )

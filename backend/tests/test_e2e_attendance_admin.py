@@ -79,10 +79,11 @@ def _api_create_session(admin_token: str, date: str = "2299-06-01") -> dict:
         f"{API_URL}/sessions",
         cookies=_cookie_dict(admin_token),
         json={
-            "session_type_id": type_id,
+            "title": "Attendance Admin Test Session",
             "date": date,
-            "start_time": "18:00",
-            "duration_minutes": 90,
+            "segments": [
+                {"start_time": "18:00", "duration_minutes": 90, "type_ids": [type_id]}
+            ],
         },
     )
     r.raise_for_status()
@@ -121,7 +122,10 @@ def _api_create_member_with_user_id(member_sub: str, full_name: str) -> dict:
     r = requests.put(
         f"{API_URL}/users/me/member",
         cookies=_cookie_dict(member_token),
-        json={"first_name": parts[0], "surname": parts[1] if len(parts) > 1 else parts[0]},
+        json={
+            "first_name": parts[0],
+            "surname": parts[1] if len(parts) > 1 else parts[0],
+        },
     )
     r.raise_for_status()
     return r.json()

@@ -136,7 +136,7 @@ def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
     session_resp = page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=f'{{"session_type_id": "{type_id}", "date": "{_TEST_DATE}", "start_time": "{_TEST_TIME}", "duration_minutes": 90}}',
+        data=f'{{"title": "Colour Test", "date": "{_TEST_DATE}", "segments": [{{"start_time": "{_TEST_TIME}", "duration_minutes": 90, "type_ids": ["{type_id}"]}}]}}',
     )
     assert session_resp.status == 201
     session_id = session_resp.json()["id"]
@@ -179,7 +179,7 @@ def test_cancelled_sessions_remain_grey_regardless_of_type_colour(page: Page) ->
     session_resp = page.request.post(
         f"{API_URL}/sessions",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=f'{{"session_type_id": "{type_id}", "date": "{_TEST_DATE}", "start_time": "20:00", "duration_minutes": 90}}',
+        data=f'{{"title": "Colour Test", "date": "{_TEST_DATE}", "segments": [{{"start_time": "20:00", "duration_minutes": 90, "type_ids": ["{type_id}"]}}]}}',
     )
     assert session_resp.status == 201
     session_id = session_resp.json()["id"]

@@ -17,6 +17,7 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
+from app.sessions.envelope import session_time_envelope
 from app.sessions.ical import build_ical
 from app.sessions.models import (
     GenerateRequest,
@@ -24,6 +25,7 @@ from app.sessions.models import (
     SessionInstanceRead,
     SessionInstanceUpdate,
     SessionTemplateCreate,
+    SessionTemplateRead,
     SessionTemplateUpdate,
     SessionTypeCreate,
     SessionTypeRead,
@@ -39,9 +41,36 @@ from app.sessions.service import generate_instances, needs_rolling_extension
 router = APIRouter(tags=["sessions"])
 
 
+def _with_envelope(raw: dict[str, Any]) -> dict[str, Any]:
+    """Derive start_time/duration_minutes from the session's segments.
+
+    Repositories that already compute the envelope (e.g. the SQL repo) leave
+    these fields untouched; stub repositories that store the raw payload
+    verbatim get the envelope computed here so the response always carries
+    it, regardless of which repository produced the record.
+    """
+    segments = raw.get("segments") or []
+    if not segments:
+        return raw
+    start_time, end_time = session_time_envelope(segments)
+    duration_minutes = _minutes_between(start_time, end_time)
+    return {**raw, "start_time": start_time, "duration_minutes": duration_minutes}
+
+
+def _minutes_between(start: str, end: str) -> int:
+    sh, sm = (int(p) for p in start.split(":"))
+    eh, em = (int(p) for p in end.split(":"))
+    return (eh * 60 + em) - (sh * 60 + sm)
+
+
 def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply SessionInstanceRead defaults to fill in any missing optional fields."""
-    return SessionInstanceRead.model_validate(raw).model_dump()
+    return SessionInstanceRead.model_validate(_with_envelope(raw)).model_dump()
+
+
+def _normalize_template(raw: dict[str, Any]) -> dict[str, Any]:
+    """Apply SessionTemplateRead defaults to fill in any missing optional fields."""
+    return SessionTemplateRead.model_validate(_with_envelope(raw)).model_dump()
 
 
 _TypeRepo = Annotated[AbstractSessionTypeRepository, Depends(get_session_type_repo)]
@@ -85,11 +114,26 @@ async def update_session_type(
     return result
 
 
+def _enrich_segments_with_type_names(
+    segments: list[dict[str, Any]], types: dict[str, str]
+) -> list[dict[str, Any]]:
+    return [
+        {**seg, "type_names": [types.get(tid, "") for tid in seg.get("type_ids", [])]}
+        for seg in segments
+    ]
+
+
 @router.get("/sessions/ical")
 async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
     sessions = await repo.list_upcoming()
     types = {t["id"]: t["name"] for t in await type_repo.list()}
-    enriched = [{**s, "title": types.get(s["session_type_id"], "")} for s in sessions]
+    enriched = [
+        {
+            **s,
+            "segments": _enrich_segments_with_type_names(s.get("segments", []), types),
+        }
+        for s in sessions
+    ]
     content = build_ical(enriched)
     return Response(content=content, media_type="text/calendar; charset=utf-8")
 
@@ -125,7 +169,7 @@ async def create_session_template(
 ) -> dict[str, Any]:
     result = await repo.add(payload.model_dump())
     await uow.commit()
-    return result
+    return _normalize_template(result)
 
 
 @router.get("/sessions/templates/{template_id}")
@@ -139,7 +183,7 @@ async def get_session_template(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    return template
+    return _normalize_template(template)
 
 
 @router.post("/sessions/templates/{template_id}/generate")
@@ -171,7 +215,7 @@ async def generate_session_instances(
     results = []
     for data in instance_data_list:
         record = await instance_repo.add(data)
-        results.append(record)
+        results.append(_normalize_instance(record))
     await uow.commit()
     return results
 
@@ -210,8 +254,24 @@ async def cancel_session_instance(
     return _normalize_instance(record)
 
 
+def _strip_segment_coach_notes(segments: Any) -> Any:
+    """Null out per-segment coach_notes; tolerate a missing/empty segments list."""
+    if not segments:
+        return segments
+    return [{**s, "coach_notes": None} for s in segments]
+
+
 def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [{**r, "coach_notes": None} for r in records]
+    # Strip both the session-level and every per-segment coach_notes — both are
+    # admin-only and must never reach a non-admin member.
+    return [
+        {
+            **r,
+            "coach_notes": None,
+            "segments": _strip_segment_coach_notes(r.get("segments")),
+        }
+        for r in records
+    ]
 
 
 def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -313,6 +373,7 @@ async def get_session_instance(
     result = _normalize_instance(record)
     if claims.role != "admin":
         result["coach_notes"] = None
+        result["segments"] = _strip_segment_coach_notes(result.get("segments"))
     return result
 
 
@@ -357,7 +418,7 @@ async def update_session_template(
     for inst_data in instance_data_list:
         await instance_repo.add(inst_data)
     await uow.commit()
-    return template
+    return _normalize_template(template)
 
 
 @router.delete("/sessions/templates/{template_id}")
@@ -376,4 +437,4 @@ async def delete_session_template(
     today = date.today()
     await instance_repo.cancel_future_for_template(str(template_id), today)
     await uow.commit()
-    return template
+    return _normalize_template(template)

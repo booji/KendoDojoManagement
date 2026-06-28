@@ -200,15 +200,27 @@ def instance_repo() -> StubSessionInstanceRepo:
 # ---------------------------------------------------------------------------
 
 
+def _segment(
+    *,
+    start_time: str = "19:00",
+    duration_minutes: int = 90,
+    coach_notes: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "start_time": start_time,
+        "duration_minutes": duration_minutes,
+        "coach_notes": coach_notes,
+        "type_ids": [str(uuid.uuid4())],
+    }
+
+
 async def _seed_template(template_repo: StubSessionTemplateRepo) -> dict[str, Any]:
     """Add a minimal template directly to the stub store."""
     return await template_repo.add(
         {
-            "session_type_id": str(uuid.uuid4()),
             "title": "Weekly Keiko",
             "start_date": "2026-01-05",  # a Monday
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [_segment()],
             "recurrence": "weekly",
             "day_of_week": 0,  # Monday
             "location": "Main Hall",
@@ -222,14 +234,14 @@ async def _seed_instance(
     template_id: str | None = None,
     instance_date: str = "2099-06-02",
     coach_notes: str | None = None,
+    segment_coach_notes: str | None = None,
 ) -> dict[str, Any]:
     """Add a minimal session instance directly to the stub store."""
     return await instance_repo.add(
         {
-            "session_type_id": str(uuid.uuid4()),
+            "title": "Weekly Keiko",
             "date": instance_date,
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [_segment(coach_notes=segment_coach_notes)],
             "template_id": template_id,
             "location": "Main Hall",
             "info": None,
@@ -293,6 +305,46 @@ async def test_get_session_instance_member_sees_null_coach_notes(
     assert body["coach_notes"] is None
 
 
+@pytest.mark.anyio
+async def test_get_session_instance_member_sees_null_segment_coach_notes(
+    instance_repo,
+) -> None:
+    """Member GET /sessions/{id} must also null per-segment coach_notes."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    inst = await _seed_instance(
+        instance_repo, segment_coach_notes="Per-segment secret for admin only"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(f"/sessions/{inst['id']}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["segments"]
+    assert all(seg["coach_notes"] is None for seg in body["segments"])
+
+
+@pytest.mark.anyio
+async def test_list_sessions_member_sees_null_segment_coach_notes(
+    instance_repo,
+) -> None:
+    """Member GET /sessions must null per-segment coach_notes on every row."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await _seed_instance(
+        instance_repo, segment_coach_notes="Per-segment secret for admin only"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/sessions")
+    assert response.status_code == 200
+    rows = response.json()
+    assert rows
+    for row in rows:
+        for seg in row.get("segments", []):
+            assert seg["coach_notes"] is None
+
+
 # ---------------------------------------------------------------------------
 # AC3 — PUT /sessions/{id}: updates only the addressed instance
 # ---------------------------------------------------------------------------
@@ -320,8 +372,7 @@ async def test_put_session_instance_updates_target_only(
     update_payload = {
         "location": "Updated Dojo",
         "info": "Special session",
-        "start_time": "20:00",
-        "duration_minutes": 60,
+        "segments": [_segment(start_time="20:00", duration_minutes=60)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -337,8 +388,8 @@ async def test_put_session_instance_updates_target_only(
     sibling_after = await instance_repo.get(sibling["id"])
     assert sibling_after is not None
     assert sibling_after.get("location") != "Updated Dojo"
-    assert sibling_after.get("start_time") == "19:00"
-    assert sibling_after.get("duration_minutes") == 90
+    assert sibling_after["segments"][0]["start_time"] == "19:00"
+    assert sibling_after["segments"][0]["duration_minutes"] == 90
 
 
 # ---------------------------------------------------------------------------
@@ -363,8 +414,7 @@ async def test_patch_template_regenerates_future_instances(
     )
 
     update_payload = {
-        "start_time": "20:00",
-        "duration_minutes": 60,
+        "segments": [_segment(start_time="20:00", duration_minutes=60)],
         "location": "New Location",
     }
     async with AsyncClient(
@@ -406,7 +456,7 @@ async def test_patch_template_leaves_past_instances_untouched(
         instance_date=past_date,
     )
 
-    update_payload = {"start_time": "20:00", "duration_minutes": 60}
+    update_payload = {"segments": [_segment(start_time="20:00", duration_minutes=60)]}
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -419,10 +469,10 @@ async def test_patch_template_leaves_past_instances_untouched(
     past_after = await instance_repo.get(past_inst["id"])
     assert past_after is not None, "Past instance must not be deleted"
     assert (
-        past_after["start_time"] == "19:00"
+        past_after["segments"][0]["start_time"] == "19:00"
     ), "Past instance start_time must be unchanged"
     assert (
-        past_after["duration_minutes"] == 90
+        past_after["segments"][0]["duration_minutes"] == 90
     ), "Past instance duration must be unchanged"
 
 

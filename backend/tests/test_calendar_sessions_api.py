@@ -180,13 +180,16 @@ async def _seed_session(
     title: str | None = None,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
-        "session_type_id": _TYPE_ID,
+        "title": title or "Keiko",
         "date": session_date,
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "type_ids": [_TYPE_ID],
+            }
+        ],
     }
-    if title is not None:
-        data["title"] = title
     record = await repo.add(data)
     if cancelled:
         await repo.cancel(record["id"])
@@ -232,7 +235,7 @@ async def test_range_query_response_has_required_fields(
     type_repo, template_repo, instance_repo
 ) -> None:
     """Each session in the range response has id, date, start_time, duration_minutes,
-    cancelled, and session_type_id fields."""
+    cancelled, and segments fields."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     await _seed_session(instance_repo, "2099-06-10")
@@ -253,7 +256,7 @@ async def test_range_query_response_has_required_fields(
         assert "start_time" in s, f"Missing 'start_time' in {s}"
         assert "duration_minutes" in s, f"Missing 'duration_minutes' in {s}"
         assert "cancelled" in s, f"Missing 'cancelled' in {s}"
-        assert "session_type_id" in s, f"Missing 'session_type_id' in {s}"
+        assert "segments" in s, f"Missing 'segments' in {s}"
 
 
 @pytest.mark.anyio

@@ -217,11 +217,15 @@ async def _seed_instance(
 ) -> dict[str, Any]:
     return await instance_repo.add(
         {
-            "session_type_id": session_type_id or str(uuid.uuid4()),
             "title": title,
             "date": instance_date,
-            "start_time": start_time,
-            "duration_minutes": duration_minutes,
+            "segments": [
+                {
+                    "start_time": start_time,
+                    "duration_minutes": duration_minutes,
+                    "type_ids": [session_type_id or str(uuid.uuid4())],
+                }
+            ],
             "template_id": str(uuid.uuid4()),
             "location": location,
             "info": info,
@@ -272,9 +276,11 @@ async def test_ical_endpoint_returns_valid_ical_structure(
 
 @pytest.mark.anyio
 async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) -> None:
-    """Each session instance must appear as a VEVENT with SUMMARY set to its session type name."""
+    """Each session instance must appear as a VEVENT with SUMMARY set to its title."""
     t = type_repo.seed(str(uuid.uuid4()), "Men Waza Practice")
-    await _seed_instance(instance_repo, session_type_id=t["id"])
+    await _seed_instance(
+        instance_repo, title="Men Waza Practice", session_type_id=t["id"]
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -322,14 +328,17 @@ async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
 async def test_ical_feed_includes_description_from_info(
     instance_repo, type_repo
 ) -> None:
-    """VEVENT must include DESCRIPTION set to the info field."""
+    """VEVENT must include DESCRIPTION containing the info field."""
     await _seed_instance(instance_repo, info="Practice focus: kote strikes")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
-    assert "DESCRIPTION:Practice focus: kote strikes" in body
+    description_line = next(
+        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+    )
+    assert "Practice focus: kote strikes" in description_line
 
 
 @pytest.mark.anyio
@@ -347,10 +356,11 @@ async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> N
 
 
 @pytest.mark.anyio
-async def test_ical_feed_omits_description_when_info_null(
+async def test_ical_feed_description_omits_info_when_info_null(
     instance_repo, type_repo
 ) -> None:
-    """VEVENT must not include a DESCRIPTION line when info is None."""
+    """When info is None, DESCRIPTION still appears (segment breakdown) but
+    must not contain a trailing info line."""
     await _seed_instance(instance_repo, info=None)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -359,7 +369,11 @@ async def test_ical_feed_omits_description_when_info_null(
     assert response.status_code == 200
     body = response.text
     assert "BEGIN:VEVENT" in body
-    assert "DESCRIPTION" not in body
+    description_line = next(
+        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+    )
+    # Only the segment breakdown line should be present, e.g. "19:00-20:30 ..."
+    assert "19:00-20:30" in description_line
 
 
 # ---------------------------------------------------------------------------
@@ -495,18 +509,25 @@ async def test_ical_feed_includes_all_upcoming_sessions(
     instance_repo, type_repo
 ) -> None:
     """Every upcoming non-cancelled instance appears as its own VEVENT."""
-    ta = type_repo.seed(str(uuid.uuid4()), "Session A")
-    tb = type_repo.seed(str(uuid.uuid4()), "Session B")
-    tc = type_repo.seed(str(uuid.uuid4()), "Cancelled Session")
+    ta = type_repo.seed(str(uuid.uuid4()), "Type A")
+    tb = type_repo.seed(str(uuid.uuid4()), "Type B")
+    tc = type_repo.seed(str(uuid.uuid4()), "Type C")
     await _seed_instance(
-        instance_repo, session_type_id=ta["id"], instance_date="2099-06-02"
+        instance_repo,
+        title="Session A",
+        session_type_id=ta["id"],
+        instance_date="2099-06-02",
     )
     await _seed_instance(
-        instance_repo, session_type_id=tb["id"], instance_date="2099-06-09"
+        instance_repo,
+        title="Session B",
+        session_type_id=tb["id"],
+        instance_date="2099-06-09",
     )
     # Cancelled — must NOT appear
     await _seed_instance(
         instance_repo,
+        title="Cancelled Session",
         session_type_id=tc["id"],
         instance_date="2099-06-16",
         cancelled=True,
@@ -558,8 +579,13 @@ def test_build_ical_excludes_cancelled_sessions() -> None:
             "id": "uid-active",
             "title": "Active Session",
             "date": "2099-07-01",
-            "start_time": "19:00",
-            "duration_minutes": 60,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 60,
+                    "type_names": ["General"],
+                }
+            ],
             "location": None,
             "info": None,
             "cancelled": False,
@@ -568,8 +594,13 @@ def test_build_ical_excludes_cancelled_sessions() -> None:
             "id": "uid-cancelled",
             "title": "Cancelled Session",
             "date": "2099-07-08",
-            "start_time": "19:00",
-            "duration_minutes": 60,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 60,
+                    "type_names": ["General"],
+                }
+            ],
             "location": None,
             "info": None,
             "cancelled": True,
@@ -589,8 +620,14 @@ def test_build_ical_strips_admin_only_fields() -> None:
             "id": "uid-secret",
             "title": "Tameshigiri Night",
             "date": "2099-07-15",
-            "start_time": "18:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "18:00",
+                    "duration_minutes": 90,
+                    "coach_notes": "SECRET segment guidance",
+                    "type_names": ["Tameshigiri"],
+                }
+            ],
             "location": "Dojo",
             "info": "Public info",
             "coach_notes": "SECRET coach guidance",
@@ -604,7 +641,10 @@ def test_build_ical_strips_admin_only_fields() -> None:
     assert "checkin_url" not in result.lower()
     # Public fields should be present
     assert "SUMMARY:Tameshigiri Night" in result
-    assert "DESCRIPTION:Public info" in result
+    description_line = next(
+        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+    )
+    assert "Public info" in description_line
 
 
 def test_build_ical_dtend_calculated_from_duration() -> None:
@@ -614,8 +654,13 @@ def test_build_ical_dtend_calculated_from_duration() -> None:
             "id": "uid-dur",
             "title": "Duration Test",
             "date": "2099-08-01",
-            "start_time": "18:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "18:00",
+                    "duration_minutes": 90,
+                    "type_names": ["General"],
+                }
+            ],
             "location": None,
             "info": None,
             "cancelled": False,
@@ -635,8 +680,13 @@ def test_build_ical_vevent_ends_with_end_vevent() -> None:
             "id": "uid-term",
             "title": "Termination Check",
             "date": "2099-09-01",
-            "start_time": "10:00",
-            "duration_minutes": 60,
+            "segments": [
+                {
+                    "start_time": "10:00",
+                    "duration_minutes": 60,
+                    "type_names": ["General"],
+                }
+            ],
             "location": None,
             "info": None,
             "cancelled": False,
@@ -653,8 +703,13 @@ def test_build_ical_escapes_crlf_injection_in_summary() -> None:
             "id": "uid-inject",
             "title": "Training\r\nSTATUS:CONFIRMED\r\nATTACH:http://evil.example/",
             "date": "2099-10-01",
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_names": ["General"],
+                }
+            ],
             "location": "Dojo\nINJECTED:yes",
             "info": "Normal info\r\nX-INJECTED:yes",
             "cancelled": False,

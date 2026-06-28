@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import copy
 from datetime import date, timedelta
 from typing import Any
+
+
+def _copy_segments(template: dict[str, Any]) -> list[dict[str, Any]]:
+    """Deep-copy a template's segments (and their type links) so that each
+    generated instance gets independently editable segment data — no shared
+    rows between the template and its generated instances, or between
+    sibling instances."""
+    return copy.deepcopy(template.get("segments") or [])
 
 
 def generate_instances(
@@ -17,6 +26,9 @@ def generate_instances(
     - Old style: day_of_week (single int) + weekly recurrence (backwards compat)
 
     Dates already in existing_dates (as ISO strings) are skipped.
+
+    Each generated instance is given its own deep copy of the template's
+    segments so subsequent edits to one instance never affect another.
     """
     start = date.fromisoformat(template["start_date"])
     existing = existing_dates or set()
@@ -42,12 +54,11 @@ def generate_instances(
             if iso not in existing:
                 instances.append(
                     {
-                        "session_type_id": template["session_type_id"],
+                        "title": template["title"],
                         "date": iso,
-                        "start_time": template["start_time"],
-                        "duration_minutes": template["duration_minutes"],
                         "template_id": template["id"],
                         "notes": None,
+                        "segments": _copy_segments(template),
                     }
                 )
             current += timedelta(weeks=interval_weeks)

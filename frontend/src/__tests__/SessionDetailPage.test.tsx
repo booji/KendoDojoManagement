@@ -25,9 +25,11 @@ import SessionDetailPage from "@/pages/SessionDetailPage"
 const SESSION_ID = "aaaabbbb-0000-0000-0000-000000000001"
 const TEMPLATE_ID = "tttttttt-0000-0000-0000-000000000002"
 
+const TYPE_ID = "stst-0001-0000-0000-000000000000"
+
 const BASE_SESSION = {
   id: SESSION_ID,
-  session_type_id: "stst-0001-0000-0000-000000000000",
+  title: "Evening Practice",
   date: "2026-04-20",
   start_time: "19:00",
   duration_minutes: 90,
@@ -38,7 +40,20 @@ const BASE_SESSION = {
   info: "Some **markdown** info",
   coach_notes: null,
   checkin_url: null,
+  segments: [
+    {
+      id: "seg-0001",
+      start_time: "19:00",
+      duration_minutes: 90,
+      coach_notes: null,
+      type_ids: [TYPE_ID],
+    },
+  ],
 }
+
+const SESSION_TYPES = [
+  { id: TYPE_ID, name: "General Training", colour: "#3366ff" },
+]
 
 const ADMIN_SESSION = {
   ...BASE_SESSION,
@@ -85,6 +100,12 @@ function mockFetch(responses: Record<string, { status: number; body: unknown }>)
           headers: { "Content-Type": "application/json" },
         })
       }
+    }
+    if (url.includes("/session-types")) {
+      return new Response(JSON.stringify(SESSION_TYPES), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     }
     return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
   })
@@ -140,7 +161,7 @@ describe("AC2 — member view", () => {
   it("renders the start time", async () => {
     renderDetailPage()
     await waitFor(() => {
-      expect(screen.getByText(/19:00/)).toBeInTheDocument()
+      expect(screen.getAllByText(/19:00/).length).toBeGreaterThan(0)
     })
   })
 
@@ -148,7 +169,7 @@ describe("AC2 — member view", () => {
     renderDetailPage()
     await waitFor(() => {
       // Wait for the page to load fully (date visible)
-      expect(screen.getByText(/19:00/)).toBeInTheDocument()
+      expect(screen.getAllByText(/19:00/).length).toBeGreaterThan(0)
     })
     expect(screen.queryByText(/coach.*notes/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/admin.only/i)).not.toBeInTheDocument()
@@ -223,6 +244,9 @@ describe("AC4 — check-in button", () => {
           JSON.stringify({ role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
+      }
+      if (url.includes("/session-types")) {
+        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
       }
       return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
     })
@@ -354,6 +378,9 @@ describe("AC7 — edit form", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }
+      if (url.includes("/session-types")) {
+        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
+      }
       return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
     })
 
@@ -404,6 +431,9 @@ describe("AC8 — cancel controls", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }
+      if (url.includes("/session-types")) {
+        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
+      }
       return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
     })
 
@@ -449,6 +479,9 @@ describe("AC8 — cancel controls", () => {
           JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
+      }
+      if (url.includes("/session-types")) {
+        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
       }
       return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
     })
