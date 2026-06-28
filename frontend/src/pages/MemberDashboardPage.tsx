@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { getSessions, getSessionTypes } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { checkIn } from "@/api/attendance"
+import { distinctSessionTypes } from "@/lib/sessionTypes"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -170,7 +171,7 @@ const MonthCalendar = ({ sessions, year, month }: MonthCalendarProps) => {
 
 const MemberDashboardPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
-  const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
+  const [typeMap, setTypeMap] = useState<Map<string, SessionType>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [checkin, setCheckin] = useState<CheckinStatus>({ kind: "idle" })
@@ -190,7 +191,7 @@ const MemberDashboardPage = () => {
               new Date(`${b.date}T${b.start_time}`).getTime(),
           )
         setSessions(upcoming)
-        setTypeMap(new Map(types.map((t) => [t.id, t.name])))
+        setTypeMap(new Map(types.map((t) => [t.id, t])))
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load sessions")
@@ -250,8 +251,16 @@ const MemberDashboardPage = () => {
                 <div className="flex items-center gap-3">
                   <SessionBadge date={nextSession.date} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {typeMap.get(nextSession.session_type_id) ?? "Session"}
+                    <p className="font-medium truncate flex items-center gap-1.5">
+                      {nextSession.title}
+                      {distinctSessionTypes(nextSession.segments, typeMap).map((t) => (
+                        <span
+                          key={t.id}
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
+                          aria-hidden="true"
+                        />
+                      ))}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {formatSessionDate(nextSession.date)}

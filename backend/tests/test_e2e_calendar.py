@@ -79,10 +79,15 @@ def _create_test_session(page: Page, admin_token: str, date: str = _TEST_DATE) -
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": session_type["name"],
                 "date": date,
-                "start_time": _TEST_TIME,
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": _TEST_TIME,
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )

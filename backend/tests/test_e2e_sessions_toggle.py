@@ -77,10 +77,15 @@ def _create_today_session(page: Page, admin_token: str) -> str:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": "Toggle Test Session",
                 "date": today,
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )

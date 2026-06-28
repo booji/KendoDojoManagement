@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { getSessionsForRange, getSessionTypes } from "@/api/sessions"
 import type { SessionInstance, SessionType } from "@/api/sessions"
+import { distinctSessionTypes } from "@/lib/sessionTypes"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,16 +69,30 @@ const parseHour = (time: string): number => {
 
 type SessionChipProps = {
   session: SessionInstance
-  sessionType: SessionType | undefined
-  label: string
+  types: SessionType[]
   isAdmin: boolean
   compact?: boolean
 }
 
-const SessionChip = ({ session, sessionType, label, isAdmin, compact = false }: SessionChipProps) => {
+const TypePipRow = ({ types }: { types: SessionType[] }) => {
+  if (types.length === 0) return null
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-1" aria-hidden="true">
+      {types.map((t) => (
+        <span
+          key={t.id}
+          className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: t.colour ?? "currentColor" }}
+        />
+      ))}
+    </span>
+  )
+}
+
+const SessionChip = ({ session, types, isAdmin, compact = false }: SessionChipProps) => {
   const navigate = useNavigate()
   const cancelled = session.cancelled && isAdmin
-  const colour = sessionType?.colour ?? null
+  const colour = types[0]?.colour ?? null
 
   const colourStyle =
     !cancelled && colour !== null
@@ -101,9 +116,10 @@ const SessionChip = ({ session, sessionType, label, isAdmin, compact = false }: 
       ]
         .filter(Boolean)
         .join(" ")}
-      aria-label={`${label}${cancelled ? " (cancelled)" : ""}`}
+      aria-label={`${session.title}${cancelled ? " (cancelled)" : ""}`}
     >
-      {session.start_time.slice(0, 5)} {label}
+      {session.start_time.slice(0, 5)} {session.title}
+      <TypePipRow types={types} />
     </button>
   )
 }
@@ -171,8 +187,7 @@ const MonthGrid = ({ anchor, byDate, typeMap, isAdmin }: MonthGridProps) => {
                 <SessionChip
                   key={s.id}
                   session={s}
-                  sessionType={typeMap.get(s.session_type_id)}
-                  label={typeMap.get(s.session_type_id)?.name ?? "Session"}
+                  types={distinctSessionTypes(s.segments, typeMap)}
                   isAdmin={isAdmin}
                   compact
                 />
@@ -280,9 +295,8 @@ const WeekGrid = ({ anchor, byDate, typeMap, isAdmin }: WeekGridProps) => {
                   20
                 )
                 const cancelled = s.cancelled && isAdmin
-                const sessionType = typeMap.get(s.session_type_id)
-                const label = sessionType?.name ?? "Session"
-                const colour = sessionType?.colour ?? null
+                const types = distinctSessionTypes(s.segments, typeMap)
+                const colour = types[0]?.colour ?? null
 
                 const colourStyle =
                   !cancelled && colour !== null
@@ -309,11 +323,12 @@ const WeekGrid = ({ anchor, byDate, typeMap, isAdmin }: WeekGridProps) => {
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    aria-label={`${label}${cancelled ? " (cancelled)" : ""} at ${s.start_time}`}
+                    aria-label={`${s.title}${cancelled ? " (cancelled)" : ""} at ${s.start_time}`}
                   >
                     <span className="font-medium">{s.start_time.slice(0, 5)}</span>
                     <br />
-                    {label}
+                    {s.title}
+                    <TypePipRow types={types} />
                   </button>
                 )
               })}
@@ -368,7 +383,7 @@ const AgendaView = ({ sessions, typeMap, isAdmin }: AgendaViewProps) => {
           <ul className="space-y-2">
             {group.items.map((s) => {
               const cancelled = s.cancelled && isAdmin
-              const label = typeMap.get(s.session_type_id)?.name ?? "Session"
+              const types = distinctSessionTypes(s.segments, typeMap)
               return (
                 <li key={s.id}>
                   <button
@@ -381,17 +396,18 @@ const AgendaView = ({ sessions, typeMap, isAdmin }: AgendaViewProps) => {
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    aria-label={`${label}${cancelled ? " (cancelled)" : ""}`}
+                    aria-label={`${s.title}${cancelled ? " (cancelled)" : ""}`}
                   >
                     <p
                       className={[
-                        "font-medium text-sm",
+                        "font-medium text-sm flex items-center",
                         cancelled ? "line-through text-muted-foreground" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                     >
-                      {label}
+                      {s.title}
+                      <TypePipRow types={types} />
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {s.start_time.slice(0, 5)} &middot; {s.duration_minutes} min

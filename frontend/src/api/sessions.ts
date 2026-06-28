@@ -4,12 +4,27 @@ export type SessionType = {
   colour: string | null
 }
 
+export type Segment = {
+  id?: string
+  start_time: string // "HH:MM"
+  duration_minutes: number
+  coach_notes: string | null
+  type_ids: string[]
+}
+
+export type SegmentInput = {
+  start_time: string // "HH:MM"
+  duration_minutes: number
+  coach_notes?: string | null
+  type_ids: string[]
+}
+
 export type SessionInstance = {
   id: string
-  session_type_id: string
+  title: string
   date: string
-  start_time: string
-  duration_minutes: number
+  start_time: string // derived envelope value
+  duration_minutes: number // derived envelope value
   location: string | null
   template_id: string | null
   cancelled: boolean
@@ -19,16 +34,17 @@ export type SessionInstance = {
   checkin_url: string | null
   attendance_count: number
   is_checked_in: boolean
+  segments: Segment[]
 }
 
 export type SessionInstanceUpdate = {
+  title: string
   date: string
-  start_time: string
-  duration_minutes: number
   location: string | null
   notes: string | null
   info: string | null
   coach_notes: string | null
+  segments: SegmentInput[]
 }
 
 export const getSessions = async (): Promise<SessionInstance[]> => {
@@ -93,13 +109,12 @@ export const deleteTemplate = async (templateId: string): Promise<void> => {
 }
 
 export type SessionInstanceCreate = {
-  session_type_id: string
+  title: string
   date: string // "YYYY-MM-DD"
-  start_time: string // "HH:MM"
-  duration_minutes: number
   location: string | null
   info: string | null
   coach_notes: string | null
+  segments: SegmentInput[]
 }
 
 export const createSession = async (
@@ -119,30 +134,28 @@ export const createSession = async (
 }
 
 export type SessionTemplateCreate = {
-  session_type_id: string
   title: string
   start_date: string       // "YYYY-MM-DD"
-  start_time: string       // "HH:MM"
-  duration_minutes: number
   recurrence_days: number[] // Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
   interval_weeks: 1 | 2
   location: string | null
   info: string | null
   coach_notes: string | null
+  segments: SegmentInput[]
 }
 
 export type SessionTemplate = {
   id: string
-  session_type_id: string
   title: string
   start_date: string
-  start_time: string
-  duration_minutes: number
+  start_time: string // derived envelope value
+  duration_minutes: number // derived envelope value
   recurrence_days: number[]
   interval_weeks: number
   location: string | null
   info: string | null
   coach_notes: string | null
+  segments: Segment[]
 }
 
 export const createSessionTemplate = async (

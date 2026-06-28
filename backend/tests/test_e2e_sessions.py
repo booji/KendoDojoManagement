@@ -130,13 +130,13 @@ def test_admin_can_create_recurring_session_template_via_ui(page: Page) -> None:
     type_id = types_resp.json()[0]["id"]
 
     payload = {
-        "session_type_id": type_id,
         "title": "Thursday Evening Keiko",
         "start_date": "2099-07-03",
-        "start_time": "19:00",
-        "duration_minutes": 90,
         "recurrence": "weekly",
         "day_of_week": 3,
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+        ],
     }
     resp = page.request.post(
         f"{API_URL}/sessions/templates",
@@ -179,13 +179,17 @@ def test_generating_instances_from_template_shows_them_in_session_list(
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
                 "title": "E2E Template",
                 "start_date": next_thursday.isoformat(),
-                "start_time": "18:30",
-                "duration_minutes": 60,
                 "recurrence": "weekly",
                 "day_of_week": 3,
+                "segments": [
+                    {
+                        "start_time": "18:30",
+                        "duration_minutes": 60,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
@@ -236,10 +240,15 @@ def test_admin_can_create_adhoc_session_via_ui(page: Page) -> None:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": type_name,
                 "date": "2099-09-10",
-                "start_time": "20:00",
-                "duration_minutes": 75,
+                "segments": [
+                    {
+                        "start_time": "20:00",
+                        "duration_minutes": 75,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
@@ -285,13 +294,17 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
                 "title": "Cancel Test Template",
                 "start_date": "2099-10-02",
-                "start_time": "19:00",
-                "duration_minutes": 90,
                 "recurrence": "weekly",
                 "day_of_week": 3,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
@@ -360,10 +373,15 @@ def test_authenticated_member_sees_upcoming_sessions_list(page: Page) -> None:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": type_name,
                 "date": "2099-11-05",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
@@ -407,10 +425,15 @@ def test_session_list_renders_correctly_on_mobile(page: Page) -> None:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": type_name,
                 "date": "2099-12-03",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
@@ -442,10 +465,15 @@ def test_session_list_renders_correctly_on_desktop(page: Page) -> None:
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": type_name,
                 "date": "2099-12-10",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )

@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import type { SessionInstance } from "@/api/sessions"
+import type { SessionInstance, SessionType } from "@/api/sessions"
 import { checkIn } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
 import { formatSessionDate } from "@/lib/date"
+import { distinctSessionTypes } from "@/lib/sessionTypes"
 
 export type SessionsTableProps = {
   sessions: SessionInstance[]
-  typeMap: Map<string, string>
+  typeMap: Map<string, SessionType>
   isAdmin: boolean
 }
 
@@ -66,6 +67,9 @@ const SessionsTable = ({ sessions, typeMap, isAdmin }: SessionsTableProps) => {
               Date
             </th>
             <th className="text-left font-medium text-muted-foreground text-xs uppercase tracking-wider py-2 px-3">
+              Title
+            </th>
+            <th className="text-left font-medium text-muted-foreground text-xs uppercase tracking-wider py-2 px-3">
               Type
             </th>
             <th className="text-left font-medium text-muted-foreground text-xs uppercase tracking-wider py-2 px-3">
@@ -101,12 +105,26 @@ const SessionsTable = ({ sessions, typeMap, isAdmin }: SessionsTableProps) => {
                   to={`/sessions/${session.id}`}
                   className="block after:absolute after:inset-0 after:content-[''] relative"
                   tabIndex={-1}
-                  aria-label={`${formatDate(session.date)} ${typeMap.get(session.session_type_id) ?? ""}`}
+                  aria-label={`${formatDate(session.date)} ${session.title}`}
                 >
                   {formatDate(session.date)}
                 </Link>
               </td>
-              <td className="py-2 px-3">{typeMap.get(session.session_type_id) ?? ""}</td>
+              <td className="py-2 px-3">{session.title}</td>
+              <td className="py-2 px-3">
+                <div className="flex items-center gap-2">
+                  {distinctSessionTypes(session.segments, typeMap).map((t) => (
+                    <span key={t.id} className="inline-flex items-center gap-1 text-xs">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
+                        aria-hidden="true"
+                      />
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </td>
               <td className="py-2 px-3">{session.start_time}</td>
               <td className="py-2 px-3">{session.duration_minutes} min</td>
               <td className="py-2 px-3">{session.location ?? "—"}</td>

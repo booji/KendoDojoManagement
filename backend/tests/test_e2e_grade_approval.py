@@ -77,7 +77,10 @@ def _create_linked_member_via_api(member_token: str, full_name: str) -> str:
     r = requests.put(
         f"{API_BASE}/users/me/member",
         cookies=_cookie_dict(member_token),
-        json={"first_name": parts[0], "surname": parts[1] if len(parts) > 1 else parts[0]},
+        json={
+            "first_name": parts[0],
+            "surname": parts[1] if len(parts) > 1 else parts[0],
+        },
     )
     r.raise_for_status()
     return r.json()["id"]

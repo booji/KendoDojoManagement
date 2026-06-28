@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { format } from "date-fns"
 import { formatShortDate } from "@/lib/date"
+import { distinctSessionTypes } from "@/lib/sessionTypes"
 
 // ── Date/time helpers ─────────────────────────────────────────────────────────
 
@@ -416,16 +417,40 @@ const SessionAttendancePanel = ({ sessionId }: SessionAttendancePanelProps) => {
   )
 }
 
+// ── Session type pips ──────────────────────────────────────────────────────────
+
+type TypePipsProps = {
+  segments: SessionInstance["segments"]
+  typeMap: Map<string, SessionType>
+}
+
+const TypePips = ({ segments, typeMap }: TypePipsProps) => {
+  const types = distinctSessionTypes(segments, typeMap)
+  if (types.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-1 mt-1" aria-label="Session types">
+      {types.map((t) => (
+        <span
+          key={t.id}
+          className="h-2 w-2 rounded-full shrink-0"
+          style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
+          title={t.name}
+        />
+      ))}
+    </div>
+  )
+}
+
 // ── SessionCardList ───────────────────────────────────────────────────────────
 
 export type SessionCardListProps = {
   sessions: SessionInstance[]
-  typeMap: Map<string, string>
+  typeMap: Map<string, SessionType>
   role: "admin" | "member" | null
-  sessionTypes: SessionType[]
 }
 
-const SessionCardList = ({ sessions, typeMap, role }: SessionCardListProps) => {
+const SessionCardList = ({ sessions, role, typeMap }: SessionCardListProps) => {
   const navigate = useNavigate()
   const isAdmin = role === "admin"
   const groups = groupByWeek(sessions)
@@ -459,7 +484,7 @@ const SessionCardList = ({ sessions, typeMap, role }: SessionCardListProps) => {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="font-medium truncate">
-                              {typeMap.get(session.session_type_id) ?? "Unknown"}
+                              {session.title}
                             </p>
                             <p className="text-sm text-muted-foreground mt-0.5">
                               {formatDate(session.date)}&nbsp;&middot;&nbsp;
@@ -471,6 +496,7 @@ const SessionCardList = ({ sessions, typeMap, role }: SessionCardListProps) => {
                                 {session.location}
                               </p>
                             )}
+                            <TypePips segments={session.segments} typeMap={typeMap} />
                           </div>
                           {cancelled && (
                             <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">

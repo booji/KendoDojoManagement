@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
@@ -28,9 +28,13 @@ vi.mock("@/api/attendance", () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+const SEGMENTS_T1 = [
+  { id: "seg-1", start_time: "19:00", duration_minutes: 90, coach_notes: null, type_ids: ["t1"] },
+]
+
 const pastSession = {
   id: "s-past",
-  session_type_id: "t1",
+  title: "General Training",
   date: "2020-01-01",
   start_time: "19:00",
   duration_minutes: 90,
@@ -43,11 +47,12 @@ const pastSession = {
   checkin_url: null,
   attendance_count: 5,
   is_checked_in: false,
+  segments: SEGMENTS_T1,
 }
 
 const upcomingSession = {
   id: "s-upcoming",
-  session_type_id: "t1",
+  title: "General Training",
   date: "2099-01-01",
   start_time: "19:00",
   duration_minutes: 90,
@@ -60,6 +65,7 @@ const upcomingSession = {
   checkin_url: null,
   attendance_count: 3,
   is_checked_in: false,
+  segments: SEGMENTS_T1,
 }
 
 const cancelledSession = {
@@ -68,7 +74,7 @@ const cancelledSession = {
   cancelled: true,
 }
 
-const typeMap = new Map([["t1", "General Training"]])
+const typeMap = new Map([["t1", { id: "t1", name: "General Training", colour: "#3366ff" }]])
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -108,7 +114,7 @@ describe("AC1 — row data", () => {
   it("renders the session type name from the typeMap", () => {
     renderTable({ sessions: [upcomingSession] })
 
-    expect(screen.getByText("General Training")).toBeInTheDocument()
+    expect(screen.getAllByText("General Training").length).toBeGreaterThan(0)
   })
 
   it("renders the start time", () => {

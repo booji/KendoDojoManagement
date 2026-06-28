@@ -139,6 +139,9 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
   const [open, setOpen] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
 
+  // Title
+  const [title, setTitle] = useState("")
+
   // Session type
   const [typeId, setTypeId] = useState("")
 
@@ -155,7 +158,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
   const [date, setDate] = useState("")
 
   // Recurring
-  const [recurringTitle, setRecurringTitle] = useState("")
   const [startDate, setStartDate] = useState("")
   const [selectedDays, setSelectedDays] = useState<number[]>([])
   const [intervalWeeks, setIntervalWeeks] = useState<1 | 2>(1)
@@ -166,6 +168,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 
   const reset = () => {
     setIsRecurring(false)
+    setTitle("")
     setTypeId("")
     setTime("")
     setDuration("90")
@@ -175,7 +178,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
     setInfoPreview(false)
     setCoachNotesPreview(false)
     setDate("")
-    setRecurringTitle("")
     setStartDate("")
     setSelectedDays([])
     setIntervalWeeks(1)
@@ -188,6 +190,11 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
     setFormError(null)
 
     const mins = parseInt(duration, 10)
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      setFormError("Title is required.")
+      return
+    }
     if (!typeId) {
       setFormError("Please select a session type.")
       return
@@ -201,6 +208,14 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
       return
     }
 
+    const segments = [
+      {
+        start_time: time,
+        duration_minutes: mins,
+        type_ids: [typeId],
+      },
+    ]
+
     if (!isRecurring) {
       if (!date) {
         setFormError("Date is required.")
@@ -209,13 +224,12 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
       setSubmitting(true)
       try {
         const created = await createSession({
-          session_type_id: typeId,
+          title: trimmedTitle,
           date,
-          start_time: time,
-          duration_minutes: mins,
           location: location.trim() || null,
           info: info.trim() || null,
           coach_notes: coachNotes.trim() || null,
+          segments,
         })
         onCreated(created)
         setOpen(false)
@@ -241,16 +255,14 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
       setSubmitting(true)
       try {
         await createSessionTemplate({
-          session_type_id: typeId,
-          title: recurringTitle.trim() || "Recurring session",
+          title: trimmedTitle,
           start_date: startDate,
-          start_time: time,
-          duration_minutes: mins,
           recurrence_days: selectedDays,
           interval_weeks: intervalWeeks,
           location: location.trim() || null,
           info: info.trim() || null,
           coach_notes: coachNotes.trim() || null,
+          segments,
         })
         onRefresh()
         setOpen(false)
@@ -277,6 +289,19 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
           <DialogTitle>Create Session</DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 mt-2">
+
+          {/* Title */}
+          <div className="space-y-1.5">
+            <Label htmlFor="session-title">Title</Label>
+            <Input
+              id="session-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Monday evening practice"
+              className="min-h-[44px]"
+              required
+            />
+          </div>
 
           {/* Session type */}
           <div className="space-y-1.5">
@@ -318,30 +343,18 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             </div>
           )}
 
-          {/* Recurring: title, start date, days, interval */}
+          {/* Recurring: start date */}
           {isRecurring && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="recurring-title">Template title (optional)</Label>
-                <Input
-                  id="recurring-title"
-                  value={recurringTitle}
-                  onChange={(e) => setRecurringTitle(e.target.value)}
-                  placeholder="e.g. Monday evening practice"
-                  className="min-h-[44px]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="start-date">Start date</Label>
-                <Input
-                  id="start-date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="min-h-[44px]"
-                />
-              </div>
-            </>
+            <div className="space-y-1.5">
+              <Label htmlFor="start-date">Start date</Label>
+              <Input
+                id="start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="min-h-[44px]"
+              />
+            </div>
           )}
 
           {/* Start time */}
@@ -497,7 +510,7 @@ type PageView = "list" | "calendar"
 const SessionsPage = () => {
   const [sessions, setSessions] = useState<SessionInstance[] | null>(null)
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
-  const [typeMap, setTypeMap] = useState<Map<string, string>>(new Map())
+  const [typeMap, setTypeMap] = useState<Map<string, SessionType>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pageView, setPageView] = useState<PageView>("list")
@@ -508,7 +521,7 @@ const SessionsPage = () => {
         setSessions(fetchedSessions)
         setSessionTypes(fetchedTypes)
         setTypeMap(
-          new Map(fetchedTypes.map((t: SessionType) => [t.id, t.name]))
+          new Map(fetchedTypes.map((t: SessionType) => [t.id, t]))
         )
         setRole(me.role)
       })
@@ -601,7 +614,7 @@ const SessionsPage = () => {
         <>
           {/* Mobile: card list */}
           <div className="md:hidden">
-            <SessionCardList sessions={sessions} typeMap={typeMap} role={role} sessionTypes={sessionTypes} />
+            <SessionCardList sessions={sessions} typeMap={typeMap} role={role} />
           </div>
           {/* Desktop: data table */}
           <div className="hidden md:block">

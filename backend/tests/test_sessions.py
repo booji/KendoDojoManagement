@@ -12,6 +12,9 @@ Acceptance criteria exercised here:
   5. Admin can create an ad-hoc session via POST /sessions
   6. Admin can cancel a single session instance without affecting its template
   7. GET /sessions returns upcoming sessions visible to authenticated users
+
+Updated for issue #174 — sessions (instance and template) now carry a
+`segments` array instead of a single session_type_id/start_time/duration.
 """
 
 from __future__ import annotations
@@ -50,6 +53,16 @@ def _admin_override():
 
 def _member_override():
     return _MEMBER
+
+
+def _one_segment(type_id: str, **overrides: Any) -> dict[str, Any]:
+    segment = {
+        "start_time": "19:00",
+        "duration_minutes": 90,
+        "type_ids": [type_id],
+    }
+    segment.update(overrides)
+    return segment
 
 
 # ---------------------------------------------------------------------------
@@ -126,30 +139,6 @@ class StubSessionInstanceRepo:
         record = {"id": new_id, "cancelled": False, **data}
         self._store[new_id] = record
         return record
-
-    async def generate_from_template(
-        self, template: dict[str, Any], horizon: date
-    ) -> list[dict[str, Any]]:
-        """Generate instances from template up to the horizon date."""
-        # Simple weekly recurrence for stub purposes
-        from datetime import timedelta
-
-        instances = []
-        start = date.fromisoformat(template["start_date"])
-        current = start
-        while current <= horizon:
-            record = await self.add(
-                {
-                    "template_id": template["id"],
-                    "session_type_id": template["session_type_id"],
-                    "date": current.isoformat(),
-                    "start_time": template.get("start_time", "19:00"),
-                    "duration_minutes": template.get("duration_minutes", 90),
-                }
-            )
-            instances.append(record)
-            current += timedelta(weeks=1)
-        return instances
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
         record = self._store.get(instance_id)
@@ -285,13 +274,11 @@ async def test_admin_can_create_session_template(type_repo, template_repo) -> No
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
     payload = {
-        "session_type_id": type_id,
         "title": "Tuesday Evening Keiko",
         "start_date": "2026-05-06",
-        "start_time": "19:00",
-        "duration_minutes": 90,
         "recurrence": "weekly",
         "day_of_week": 1,  # Tuesday
+        "segments": [_one_segment(type_id)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -312,13 +299,11 @@ async def test_member_cannot_create_session_template(template_repo) -> None:
     )
     token = encode_token(member_claims)
     payload = {
-        "session_type_id": str(uuid.uuid4()),
         "title": "Attempt",
         "start_date": "2026-05-06",
-        "start_time": "19:00",
-        "duration_minutes": 90,
         "recurrence": "weekly",
         "day_of_week": 1,
+        "segments": [_one_segment(str(uuid.uuid4()))],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -355,13 +340,11 @@ async def test_generate_creates_instances_up_to_horizon(
 
     # Create a template first
     template_payload = {
-        "session_type_id": type_id,
         "title": "Weekly Thursday",
         "start_date": "2026-05-07",
-        "start_time": "18:30",
-        "duration_minutes": 90,
         "recurrence": "weekly",
         "day_of_week": 3,
+        "segments": [_one_segment(type_id)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -413,11 +396,10 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
     payload = {
-        "session_type_id": type_id,
+        "title": "Summer Session",
         "date": "2026-06-15",
-        "start_time": "10:00",
-        "duration_minutes": 60,
         "notes": "Special summer session",
+        "segments": [_one_segment(type_id, start_time="10:00", duration_minutes=60)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -438,10 +420,11 @@ async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> N
     )
     token = encode_token(member_claims)
     payload = {
-        "session_type_id": str(uuid.uuid4()),
+        "title": "Attempt",
         "date": "2026-06-15",
-        "start_time": "10:00",
-        "duration_minutes": 60,
+        "segments": [
+            _one_segment(str(uuid.uuid4()), start_time="10:00", duration_minutes=60)
+        ],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -460,7 +443,10 @@ async def test_create_adhoc_session_missing_date_returns_422(instance_repo) -> N
     ) as c:
         response = await c.post(
             "/sessions",
-            json={"session_type_id": str(uuid.uuid4()), "start_time": "10:00"},
+            json={
+                "title": "Missing Date",
+                "segments": [_one_segment(str(uuid.uuid4()))],
+            },
         )
     assert response.status_code == 422
 
@@ -479,10 +465,9 @@ async def test_admin_can_cancel_session_instance(
 
     # Create an ad-hoc session to cancel
     create_payload = {
-        "session_type_id": type_id,
+        "title": "Cancel Me",
         "date": "2026-07-01",
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [_one_segment(type_id)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -512,13 +497,11 @@ async def test_cancelling_instance_does_not_affect_template(
 
     # Create template
     tmpl_payload = {
-        "session_type_id": type_id,
         "title": "Persistent Template",
         "start_date": "2026-08-06",
-        "start_time": "19:00",
-        "duration_minutes": 90,
         "recurrence": "weekly",
         "day_of_week": 3,
+        "segments": [_one_segment(type_id)],
     }
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -579,10 +562,9 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
         create_resp = await c.post(
             "/sessions",
             json={
-                "session_type_id": type_id,
+                "title": "Member Cancel Attempt",
                 "date": "2026-09-01",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [_one_segment(type_id)],
             },
         )
     assert create_resp.status_code == 201
@@ -618,10 +600,9 @@ async def test_get_sessions_returns_upcoming_for_member(
     future_date = "2099-01-01"
     await instance_repo.add(
         {
-            "session_type_id": list(type_repo._store.keys())[0],
+            "title": "Future Session",
             "date": future_date,
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [_one_segment(list(type_repo._store.keys())[0])],
         }
     )
     async with AsyncClient(
@@ -651,10 +632,9 @@ async def test_get_sessions_excludes_cancelled(type_repo, instance_repo) -> None
     # Add a future session then cancel it
     inst = await instance_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "To Be Cancelled",
             "date": "2099-02-01",
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [_one_segment(type_id)],
         }
     )
     await instance_repo.cancel(inst["id"])

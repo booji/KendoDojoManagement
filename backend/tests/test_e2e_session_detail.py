@@ -67,10 +67,11 @@ def _create_session(
     type_id = types_resp.json()[0]["id"]
 
     payload: dict = {
-        "session_type_id": type_id,
+        "title": "Detail Test Session",
         "date": "2099-12-01",
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+        ],
     }
     if info is not None:
         payload["info"] = info

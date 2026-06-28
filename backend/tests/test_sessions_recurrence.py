@@ -227,10 +227,15 @@ def test_generate_multi_day() -> None:
     spacing between same-day occurrences."""
     template = {
         "id": str(uuid.uuid4()),
-        "session_type_id": str(uuid.uuid4()),
+        "title": "Multi-day Template",
         "start_date": "2025-01-06",  # Monday 6 Jan 2025
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "type_ids": [str(uuid.uuid4())],
+            }
+        ],
         "recurrence_days": [1, 3],  # Tuesday, Thursday
         "interval_weeks": 2,
     }
@@ -274,10 +279,15 @@ def test_generate_idempotent() -> None:
 
     template = {
         "id": str(uuid.uuid4()),
-        "session_type_id": str(uuid.uuid4()),
+        "title": "Idempotent Template",
         "start_date": "2025-03-04",  # Tuesday
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {
+                "start_time": "19:00",
+                "duration_minutes": 90,
+                "type_ids": [str(uuid.uuid4())],
+            }
+        ],
         "recurrence_days": [1],  # Tuesday only
         "interval_weeks": 1,
     }
@@ -325,11 +335,11 @@ async def test_rolling_extension_triggered(
     # start_date in the past so existing instances land near today
     start = today - timedelta(days=7)
     tmpl_payload = {
-        "session_type_id": type_id,
         "title": "Rolling Extension Test",
         "start_date": start.isoformat(),
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+        ],
         "recurrence_days": [start.weekday()],
         "interval_weeks": 1,
     }
@@ -345,10 +355,15 @@ async def test_rolling_extension_triggered(
     await instance_repo.add(
         {
             "template_id": template_id,
-            "session_type_id": type_id,
+            "title": "Rolling Extension Test",
             "date": near_future.isoformat(),
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
 
@@ -385,29 +400,17 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
     type_id = list(type_repo._store.keys())[0]
 
     # Seed instances: one inside range, one before, one after
+    def _segment() -> dict[str, Any]:
+        return {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+
     await instance_repo.add(
-        {
-            "session_type_id": type_id,
-            "date": "2025-01-15",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }
+        {"title": "Keiko", "date": "2025-01-15", "segments": [_segment()]}
     )
     await instance_repo.add(
-        {
-            "session_type_id": type_id,
-            "date": "2024-12-31",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }
+        {"title": "Keiko", "date": "2024-12-31", "segments": [_segment()]}
     )
     await instance_repo.add(
-        {
-            "session_type_id": type_id,
-            "date": "2025-02-01",
-            "start_time": "19:00",
-            "duration_minutes": 90,
-        }
+        {"title": "Keiko", "date": "2025-02-01", "segments": [_segment()]}
     )
 
     async with AsyncClient(
@@ -448,18 +451,28 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
 
     await minimal_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "Keiko",
             "date": past_date,
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
     await minimal_repo.add(
         {
-            "session_type_id": type_id,
+            "title": "Keiko",
             "date": future_date,
-            "start_time": "19:00",
-            "duration_minutes": 90,
+            "segments": [
+                {
+                    "start_time": "19:00",
+                    "duration_minutes": 90,
+                    "type_ids": [type_id],
+                }
+            ],
         }
     )
 
@@ -542,10 +555,11 @@ async def test_new_instance_fields(type_repo) -> None:
     type_id = list(type_repo._store.keys())[0]
 
     payload = {
-        "session_type_id": type_id,
+        "title": "New Instance Fields",
         "date": "2099-06-15",
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+        ],
     }
 
     async with AsyncClient(
@@ -579,11 +593,11 @@ async def test_new_template_fields(type_repo, template_repo) -> None:
     type_id = list(type_repo._store.keys())[0]
 
     payload = {
-        "session_type_id": type_id,
         "title": "Multi-day Template",
         "start_date": "2026-01-06",
-        "start_time": "19:00",
-        "duration_minutes": 90,
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+        ],
         "recurrence_days": [1, 3],
         "interval_weeks": 2,
         "info": "Bring your bogu",

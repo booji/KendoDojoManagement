@@ -85,10 +85,15 @@ def test_session_card_list_renders_week_grouped_cards(page: Page) -> None:
         headers=headers,
         data=json.dumps(
             {
-                "session_type_id": type_id,
+                "title": type_name,
                 "date": "2099-07-14",
-                "start_time": "19:00",
-                "duration_minutes": 90,
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
             }
         ),
     )
