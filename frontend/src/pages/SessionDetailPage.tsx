@@ -10,7 +10,8 @@ import {
   deleteTemplate,
   getSessionTypes,
 } from "@/api/sessions"
-import type { SessionInstance, SessionInstanceUpdate, SessionType } from "@/api/sessions"
+import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput } from "@/api/sessions"
+import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
 import { checkIn, getSessionAttendance } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -20,13 +21,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
 // ── MarkdownField ─────────────────────────────────────────────────────────────
@@ -91,14 +85,18 @@ type EditFormProps = {
 }
 
 const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) => {
-  const firstSegment = session.segments[0]
   const [title, setTitle] = useState(session.title)
   const [date, setDate] = useState(session.date)
-  const [startTime, setStartTime] = useState(firstSegment?.start_time ?? session.start_time)
-  const [durationMinutes, setDurationMinutes] = useState(
-    String(firstSegment?.duration_minutes ?? session.duration_minutes),
+  // Deep copy of segments — SegmentEditor manages its own internal draft state,
+  // but we keep a copy here so we can include it in the submit payload.
+  const [segments, setSegments] = useState<SegmentInput[]>(
+    session.segments.map((s) => ({
+      start_time: s.start_time,
+      duration_minutes: s.duration_minutes,
+      coach_notes: s.coach_notes,
+      type_ids: [...s.type_ids],
+    })),
   )
-  const [typeId, setTypeId] = useState(firstSegment?.type_ids[0] ?? "")
   const [location, setLocation] = useState(session.location ?? "")
   const [notes, setNotes] = useState(session.notes ?? "")
   const [info, setInfo] = useState(session.info ?? "")
@@ -112,18 +110,27 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
     e.preventDefault()
     setError(null)
 
-    const mins = parseInt(durationMinutes, 10)
     if (!title.trim()) {
       setError("Title is required.")
       return
     }
-    if (!typeId) {
-      setError("Please select a session type.")
+    if (segments.length === 0) {
+      setError("At least one segment is required.")
       return
     }
-    if (isNaN(mins) || mins < 1) {
-      setError("Duration must be a positive number.")
-      return
+    for (const seg of segments) {
+      if (!seg.start_time) {
+        setError("Each segment must have a start time.")
+        return
+      }
+      if (seg.duration_minutes < 1) {
+        setError("Each segment must have a positive duration.")
+        return
+      }
+      if (seg.type_ids.length === 0) {
+        setError("Each segment must have at least one session type.")
+        return
+      }
     }
 
     setSubmitting(true)
@@ -135,13 +142,7 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         notes: notes.trim() || null,
         info: info.trim() || null,
         coach_notes: coachNotes.trim() || null,
-        segments: [
-          {
-            start_time: startTime,
-            duration_minutes: mins,
-            type_ids: [typeId],
-          },
-        ],
+        segments,
       }
       const updated = await updateSession(session.id, payload)
       onSave(updated)
@@ -169,21 +170,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="edit-session-type">Session type</Label>
-        <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
-          <SelectTrigger id="edit-session-type" className="min-h-[44px]">
-            <SelectValue placeholder="Select type…">
-              {typeId ? (sessionTypes.find((t) => t.id === typeId)?.name ?? "Select type…") : undefined}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {sessionTypes.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1.5">
         <Label htmlFor="edit-date">Date</Label>
         <Input
           id="edit-date"
@@ -195,26 +181,12 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="edit-start-time">Start time</Label>
-        <Input
-          id="edit-start-time"
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="min-h-[44px]"
-          required
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="edit-duration">Duration (minutes)</Label>
-        <Input
-          id="edit-duration"
-          type="number"
-          min={1}
-          value={durationMinutes}
-          onChange={(e) => setDurationMinutes(e.target.value)}
-          className="min-h-[44px]"
-          required
+        <Label>Segments</Label>
+        <SegmentEditor
+          segments={segments}
+          sessionTypes={sessionTypes}
+          onChange={setSegments}
+          showCoachNotes
         />
       </div>
       <div className="space-y-1.5">
