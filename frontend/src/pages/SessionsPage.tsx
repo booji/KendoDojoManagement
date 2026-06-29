@@ -8,7 +8,8 @@ import {
   createSession,
   createSessionTemplate,
 } from "@/api/sessions"
-import type { SessionInstance, SessionType } from "@/api/sessions"
+import type { SessionInstance, SessionType, SegmentInput } from "@/api/sessions"
+import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
 import {
   Dialog,
@@ -135,6 +136,13 @@ type CreateDialogProps = {
   onRefresh: () => void
 }
 
+const DEFAULT_SEGMENT: SegmentInput = {
+  start_time: "",
+  duration_minutes: 90,
+  coach_notes: null,
+  type_ids: [],
+}
+
 const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialogProps) => {
   const [open, setOpen] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
@@ -142,12 +150,10 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
   // Title
   const [title, setTitle] = useState("")
 
-  // Session type
-  const [typeId, setTypeId] = useState("")
+  // Segments (multi-segment editor)
+  const [segments, setSegments] = useState<SegmentInput[]>([{ ...DEFAULT_SEGMENT }])
 
   // Common fields
-  const [time, setTime] = useState("")
-  const [duration, setDuration] = useState("90")
   const [location, setLocation] = useState("")
   const [info, setInfo] = useState("")
   const [coachNotes, setCoachNotes] = useState("")
@@ -169,9 +175,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
   const reset = () => {
     setIsRecurring(false)
     setTitle("")
-    setTypeId("")
-    setTime("")
-    setDuration("90")
+    setSegments([{ ...DEFAULT_SEGMENT }])
     setLocation("")
     setInfo("")
     setCoachNotes("")
@@ -189,32 +193,29 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
     e.preventDefault()
     setFormError(null)
 
-    const mins = parseInt(duration, 10)
     const trimmedTitle = title.trim()
     if (!trimmedTitle) {
       setFormError("Title is required.")
       return
     }
-    if (!typeId) {
-      setFormError("Please select a session type.")
+    if (segments.length === 0) {
+      setFormError("At least one segment is required.")
       return
     }
-    if (!time) {
-      setFormError("Start time is required.")
-      return
+    for (const seg of segments) {
+      if (!seg.start_time) {
+        setFormError("Each segment must have a start time.")
+        return
+      }
+      if (seg.duration_minutes < 1) {
+        setFormError("Each segment must have a positive duration.")
+        return
+      }
+      if (seg.type_ids.length === 0) {
+        setFormError("Each segment must have at least one session type.")
+        return
+      }
     }
-    if (isNaN(mins) || mins < 1) {
-      setFormError("Duration must be a positive number.")
-      return
-    }
-
-    const segments = [
-      {
-        start_time: time,
-        duration_minutes: mins,
-        type_ids: [typeId],
-      },
-    ]
 
     if (!isRecurring) {
       if (!date) {
@@ -303,23 +304,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             />
           </div>
 
-          {/* Session type */}
-          <div className="space-y-1.5">
-            <Label htmlFor="session-type">Session type</Label>
-            <Select value={typeId} onValueChange={(v) => { if (v !== null) setTypeId(v) }}>
-              <SelectTrigger id="session-type" className="min-h-[44px]">
-                <SelectValue placeholder="Select type…">
-                  {typeId ? (sessionTypes.find(t => t.id === typeId)?.name ?? "Select type…") : undefined}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {sessionTypes.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* Recurring toggle */}
           <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
             <Checkbox
@@ -357,28 +341,13 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             </div>
           )}
 
-          {/* Start time */}
+          {/* Segments */}
           <div className="space-y-1.5">
-            <Label htmlFor="session-time">Start time</Label>
-            <Input
-              id="session-time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="min-h-[44px]"
-            />
-          </div>
-
-          {/* Duration */}
-          <div className="space-y-1.5">
-            <Label htmlFor="session-duration">Duration (minutes)</Label>
-            <Input
-              id="session-duration"
-              type="number"
-              min={1}
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="min-h-[44px]"
+            <Label>Segments</Label>
+            <SegmentEditor
+              segments={segments}
+              sessionTypes={sessionTypes}
+              onChange={setSegments}
             />
           </div>
 
