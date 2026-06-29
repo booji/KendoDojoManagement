@@ -28,6 +28,13 @@ interface SegmentEditorProps {
   segments: SegmentInput[]
   sessionTypes: SessionType[]
   onChange: (segments: SegmentInput[]) => void
+  /**
+   * Whether to render the per-segment coach-notes field. Coach notes are
+   * admin-only data, so this defaults to false: the security invariant lives
+   * in the component, not only at the call site. Admin create/edit forms
+   * opt in explicitly.
+   */
+  showCoachNotes?: boolean
 }
 
 // ── Default for a newly added segment ────────────────────────────────────────
@@ -48,6 +55,7 @@ const SegmentEditor = ({
   segments: initialSegments,
   sessionTypes,
   onChange,
+  showCoachNotes = false,
 }: SegmentEditorProps) => {
   // Canonical segment data — source of truth for type_ids, start_time, coach_notes,
   // and the numeric duration_minutes.
@@ -119,7 +127,9 @@ const SegmentEditor = ({
             <Input
               id={`seg-${idx}-start`}
               type="text"
+              inputMode="numeric"
               placeholder="HH:MM"
+              pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
               value={seg.start_time}
               onChange={(e) => applyPatch(idx, { start_time: e.target.value })}
               className="min-h-[44px]"
@@ -175,19 +185,21 @@ const SegmentEditor = ({
             </div>
           )}
 
-          {/* Coach notes */}
-          <div className="space-y-1.5">
-            <Label htmlFor={`seg-${idx}-notes`}>Coach notes</Label>
-            <Input
-              id={`seg-${idx}-notes`}
-              value={seg.coach_notes ?? ""}
-              onChange={(e) =>
-                applyPatch(idx, { coach_notes: e.target.value || null })
-              }
-              placeholder="Optional notes for coaches"
-              className="min-h-[44px]"
-            />
-          </div>
+          {/* Coach notes — admin-only; rendered only when opted in */}
+          {showCoachNotes && (
+            <div className="space-y-1.5">
+              <Label htmlFor={`seg-${idx}-notes`}>Coach notes</Label>
+              <Input
+                id={`seg-${idx}-notes`}
+                value={seg.coach_notes ?? ""}
+                onChange={(e) =>
+                  applyPatch(idx, { coach_notes: e.target.value || null })
+                }
+                placeholder="Optional notes for coaches"
+                className="min-h-[44px]"
+              />
+            </div>
+          )}
 
           {/* Remove — only present when there are multiple segments */}
           {segs.length > 1 && (

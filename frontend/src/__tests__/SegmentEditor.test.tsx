@@ -43,7 +43,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import SegmentEditor from "@/components/SegmentEditor"
@@ -75,6 +75,7 @@ function renderEditor(
   segments: SegmentInput[],
   onChange = vi.fn(),
   types = SESSION_TYPES,
+  showCoachNotes = true,
 ) {
   return {
     onChange,
@@ -83,6 +84,7 @@ function renderEditor(
         segments={segments}
         sessionTypes={types}
         onChange={onChange}
+        showCoachNotes={showCoachNotes}
       />,
     ),
   }
@@ -310,6 +312,12 @@ describe("AC-unit-8 — editing coach_notes", () => {
     const notesInput = screen.getByLabelText(/coach notes/i) as HTMLInputElement
     // An untouched notes field should have an empty value
     expect(notesInput.value === "" || notesInput.value === null).toBe(true)
+  })
+
+  it("hides the coach_notes field by default (admin-only data, opt-in)", () => {
+    renderEditor([BLANK_SEGMENT], vi.fn(), SESSION_TYPES, false)
+
+    expect(screen.queryByLabelText(/coach notes/i)).not.toBeInTheDocument()
   })
 })
 

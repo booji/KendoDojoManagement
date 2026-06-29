@@ -186,6 +186,7 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
           segments={segments}
           sessionTypes={sessionTypes}
           onChange={setSegments}
+          showCoachNotes
         />
       </div>
       <div className="space-y-1.5">

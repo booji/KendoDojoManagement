@@ -348,6 +348,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
               segments={segments}
               sessionTypes={sessionTypes}
               onChange={setSegments}
+              showCoachNotes
             />
           </div>
 
