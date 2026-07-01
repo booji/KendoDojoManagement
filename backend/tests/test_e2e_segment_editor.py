@@ -107,6 +107,7 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
     admin_token = _make_token("admin")
     type_id = _get_type_ids(page, admin_token, count=1)[0]
 
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
@@ -158,6 +159,7 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     type_ids = _get_type_ids(page, admin_token, count=2)
     type_a, type_b = type_ids[0], type_ids[1]
 
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
@@ -226,6 +228,7 @@ def test_each_segment_row_has_optional_coach_notes_field(
     admin_token = _make_token("admin")
     type_id = _get_type_ids(page, admin_token, count=1)[0]
 
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
@@ -293,6 +296,7 @@ def test_segment_editor_is_usable_on_mobile_viewport(
     # 1. Set viewport to 375×667 (iPhone SE)
     page.set_viewport_size({"width": 375, "height": 667})
 
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
@@ -336,6 +340,7 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     admin_token = _make_token("admin")
     type_id = _get_type_ids(page, admin_token, count=1)[0]
 
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
@@ -404,6 +409,7 @@ def test_edit_form_replaces_full_segment_set_on_save(
     session_id = created["id"]
 
     # 2. Navigate to the session detail page as admin
+    _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions/{session_id}")
     expect(
