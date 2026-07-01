@@ -155,6 +155,53 @@ async def create_session_type(
         ) from exc
 
 
+def _type_referenced_in_segments(segments: list[dict[str, Any]], type_id: str) -> bool:
+    return any(type_id in seg.get("type_ids", []) for seg in segments)
+
+
+def _type_is_referenced(
+    type_id: str,
+    templates: list[dict[str, Any]],
+    instances: list[dict[str, Any]],
+) -> bool:
+    for record in templates:
+        if _type_referenced_in_segments(record.get("segments", []), type_id):
+            return True
+    for record in instances:
+        if _type_referenced_in_segments(record.get("segments", []), type_id):
+            return True
+    return False
+
+
+@router.delete("/session-types/{type_id}")
+async def delete_session_type(
+    type_id: uuid.UUID,
+    _claims: _Admin,
+    repo: _TypeRepo,
+    template_repo: _TmplRepo,
+    instance_repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    existing = await repo.get(str(type_id))
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
+        )
+    templates = await template_repo.list()
+    instances = await instance_repo.list()
+    if _type_is_referenced(str(type_id), templates, instances):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Session type '{existing['name']}' cannot be deleted because it is"
+                " referenced by one or more session segments."
+            ),
+        )
+    deleted = await repo.delete(str(type_id))
+    await uow.commit()
+    return deleted  # type: ignore[return-value]
+
+
 # ---------------------------------------------------------------------------
 # Session templates
 # ---------------------------------------------------------------------------
