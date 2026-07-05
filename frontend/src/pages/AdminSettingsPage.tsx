@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getDojoSettings, updateDojoSettings, uploadDojoLogo } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
-import { getSessionTypes, updateSessionTypeColour, createSessionType } from "@/api/sessions"
+import {
+  getSessionTypes,
+  updateSessionTypeColour,
+  createSessionType,
+  deleteSessionType,
+} from "@/api/sessions"
 import type { SessionType } from "@/api/sessions"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import {
@@ -41,7 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Pencil, Pin } from "lucide-react"
+import { Pencil, Pin, Trash2 } from "lucide-react"
 
 // ── WCAG luminance helpers ─────────────────────────────────────────────────────
 
@@ -320,7 +325,7 @@ const DojoBrandingSection = () => {
 
 // ── Session Types section ─────────────────────────────────────────────────────
 
-const SessionTypesSection = () => {
+export const SessionTypesSection = () => {
   const [sessionTypes, setSessionTypes] = useState<SessionType[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveErrors, setSaveErrors] = useState<Record<string, string | null>>({})
@@ -328,6 +333,11 @@ const SessionTypesSection = () => {
   const [newName, setNewName] = useState("")
   const [addStatus, setAddStatus] = useState<"idle" | "saving" | "error">("idle")
   const [addError, setAddError] = useState<string | null>(null)
+
+  // Deletion: which type is pending confirmation, plus in-flight/error state.
+  const [pendingDelete, setPendingDelete] = useState<SessionType | null>(null)
+  const [deleteStatus, setDeleteStatus] = useState<"idle" | "deleting">("idle")
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     getSessionTypes()
@@ -384,6 +394,29 @@ const SessionTypesSection = () => {
     }
   }
 
+  const handleConfirmDelete = async () => {
+    if (pendingDelete === null) return
+    const target = pendingDelete
+    setDeleteStatus("deleting")
+    setDeleteError(null)
+    try {
+      await deleteSessionType(target.id)
+      setSessionTypes((prev) =>
+        prev !== null ? prev.filter((t) => t.id !== target.id) : prev
+      )
+      setPendingDelete(null)
+    } catch (err: unknown) {
+      // On 409 the type is still referenced — keep it in the list and show why.
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to delete session type"
+      setDeleteError(msg)
+    } finally {
+      setDeleteStatus("idle")
+    }
+  }
+
   if (sessionTypes === null && loadError === null) {
     return (
       <div className="space-y-3">
@@ -430,6 +463,7 @@ const SessionTypesSection = () => {
   }
 
   return (
+    <>
     <div className="space-y-4">
       {(sessionTypes ?? []).map((t) => {
         const status = saveStatuses[t.id] ?? "idle"
@@ -449,16 +483,30 @@ const SessionTypesSection = () => {
               <span className="text-sm font-mono text-muted-foreground">
                 {t.colour ?? "default"}
               </span>
-              {status === "saving" && (
-                <span className="text-sm text-muted-foreground ml-auto" aria-live="polite">
-                  Saving…
-                </span>
-              )}
-              {status === "saved" && (
-                <span className="text-sm text-green-600 dark:text-green-400 ml-auto" aria-live="polite">
-                  Saved!
-                </span>
-              )}
+              <div className="ml-auto flex items-center gap-2">
+                {status === "saving" && (
+                  <span className="text-sm text-muted-foreground" aria-live="polite">
+                    Saving…
+                  </span>
+                )}
+                {status === "saved" && (
+                  <span className="text-sm text-green-600 dark:text-green-400" aria-live="polite">
+                    Saved!
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => {
+                    setDeleteError(null)
+                    setPendingDelete(t)
+                  }}
+                  aria-label={`Delete ${t.name}`}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
             </div>
             {error !== null && (
               <p className="text-sm text-destructive" role="alert">
@@ -470,6 +518,51 @@ const SessionTypesSection = () => {
       })}
       {addForm}
     </div>
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o && deleteStatus !== "deleting") {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete session type</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{pendingDelete?.name}</span>?
+            This cannot be undone.
+          </p>
+          {deleteError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingDelete(null)
+                setDeleteError(null)
+              }}
+              disabled={deleteStatus === "deleting"}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+              disabled={deleteStatus === "deleting"}
+            >
+              {deleteStatus === "deleting" ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
