@@ -94,6 +94,8 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
       start_time: s.start_time,
       duration_minutes: s.duration_minutes,
       coach_notes: s.coach_notes,
+      title: s.title,
+      note: s.note,
       type_ids: [...s.type_ids],
     })),
   )
@@ -411,23 +413,31 @@ const SessionDetailPage = () => {
                   return (
                     <li
                       key={segment.id ?? idx}
-                      className="flex items-center gap-2 text-sm rounded-md border px-3 py-2"
+                      className="flex flex-col gap-1 text-sm rounded-md border px-3 py-2"
                     >
-                      <span className="font-medium tabular-nums">
-                        {segment.start_time.slice(0, 5)}–{endTime}
-                      </span>
-                      <span className="flex items-center gap-1.5 flex-wrap">
-                        {types.map((t) => (
-                          <span key={t.id} className="inline-flex items-center gap-1">
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
-                              aria-hidden="true"
-                            />
-                            {t.name}
-                          </span>
-                        ))}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium tabular-nums">
+                          {segment.start_time.slice(0, 5)}–{endTime}
+                        </span>
+                        <span className="flex items-center gap-1.5 flex-wrap">
+                          {types.map((t) => (
+                            <span key={t.id} className="inline-flex items-center gap-1">
+                              <span
+                                className="h-2 w-2 rounded-full shrink-0"
+                                style={{ backgroundColor: t.colour ?? "var(--muted-foreground)" }}
+                                aria-hidden="true"
+                              />
+                              {t.name}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                      {segment.title && (
+                        <p className="font-medium">{segment.title}</p>
+                      )}
+                      {segment.note && (
+                        <p className="text-muted-foreground">{segment.note}</p>
+                      )}
                     </li>
                   )
                 })}

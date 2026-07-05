@@ -176,6 +176,56 @@ describe("AC2 — member view", () => {
   })
 })
 
+// ── Issue #182 — per-segment public title & note in the breakdown ─────────────
+
+describe("issue #182 — segment title & note", () => {
+  const SESSION_WITH_TITLE_NOTE = {
+    ...BASE_SESSION,
+    segments: [
+      {
+        id: "seg-0001",
+        start_time: "20:00",
+        duration_minutes: 30,
+        coach_notes: null,
+        title: "Footwork drills",
+        note: "today focus nuki-do",
+        type_ids: [TYPE_ID],
+      },
+    ],
+  }
+
+  it("renders the segment title and note in the breakdown", async () => {
+    mockFetch({
+      [`/sessions/${SESSION_ID}`]: { status: 200, body: SESSION_WITH_TITLE_NOTE },
+      [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+    })
+
+    renderDetailPage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Footwork drills")).toBeInTheDocument()
+    })
+    expect(screen.getByText("today focus nuki-do")).toBeInTheDocument()
+  })
+
+  it("renders a segment cleanly when title and note are absent", async () => {
+    mockFetch({
+      [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
+      [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+    })
+
+    renderDetailPage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/19:00/).length).toBeGreaterThan(0)
+    })
+    // No empty paragraphs / dangling separators when title & note are absent.
+    expect(screen.queryByText("today focus nuki-do")).not.toBeInTheDocument()
+  })
+})
+
 // ── AC3 — info renders as Markdown ────────────────────────────────────────────
 
 describe("AC3 — Markdown rendering", () => {

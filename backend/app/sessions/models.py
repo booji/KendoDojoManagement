@@ -30,12 +30,45 @@ class SessionTypeUpdate(BaseModel):
 # Segments — shared shape for both SessionInstance and SessionTemplate
 # ---------------------------------------------------------------------------
 
+# Public per-segment free-text length caps. Keep the calendar description
+# readable and bound the field against abuse with huge text.
+_TITLE_MAX_LENGTH = 100
+_NOTE_MAX_LENGTH = 280
+
+
+def _normalize_public_text(
+    value: str | None, max_length: int, field_name: str
+) -> str | None:
+    """Trim surrounding whitespace, coerce empty/whitespace-only to None, and
+    enforce the length cap on the trimmed value. An accidental space must not
+    render a trailing separator in the calendar."""
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    if len(trimmed) > max_length:
+        raise ValueError(f"{field_name} must not exceed {max_length} characters")
+    return trimmed
+
 
 class SegmentCreate(BaseModel):
     start_time: str  # "HH:MM"
     duration_minutes: int
     coach_notes: str | None = None
+    title: str | None = None  # public, optional
+    note: str | None = None  # public, optional
     type_ids: list[str]
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, v: str | None) -> str | None:
+        return _normalize_public_text(v, _TITLE_MAX_LENGTH, "title")
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, v: str | None) -> str | None:
+        return _normalize_public_text(v, _NOTE_MAX_LENGTH, "note")
 
     @field_validator("start_time")
     @classmethod
@@ -70,6 +103,8 @@ class SegmentRead(BaseModel):
     start_time: str
     duration_minutes: int
     coach_notes: str | None = None
+    title: str | None = None
+    note: str | None = None
     type_ids: list[str] = []
 
 
