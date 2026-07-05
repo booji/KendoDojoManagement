@@ -467,3 +467,202 @@ async def test_member_cannot_create_session_with_segments(
             "/sessions", json=payload, cookies={"access_token": token}
         )
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Issue #190 — per-segment `coach_notes` removed entirely (unit tests, no DB)
+#
+# `coach_notes` remains a SESSION-level field (template/instance); only the
+# per-SEGMENT `coach_notes` is being removed. `title` and `note` on segments
+# are unaffected.
+# ---------------------------------------------------------------------------
+
+
+def test_segment_read_model_dump_has_no_coach_notes() -> None:
+    """SegmentRead no longer carries a `coach_notes` field at all."""
+    from app.sessions.models import SegmentRead
+
+    segment = SegmentRead(
+        id="seg-1",
+        start_time="19:00",
+        duration_minutes=60,
+        title="Warm-up",
+        note="Bring your own bokuto",
+        type_ids=["type-1"],
+    )
+    dumped = segment.model_dump()
+    assert "coach_notes" not in dumped
+
+
+def test_segment_read_ignores_extra_coach_notes_key() -> None:
+    """Passing a stray `coach_notes=` to SegmentRead must not surface on the
+    model — Pydantic's default `extra='ignore'` behaviour, since the field no
+    longer exists on the schema."""
+    from app.sessions.models import SegmentRead
+
+    segment = SegmentRead(
+        id="seg-1",
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        coach_notes="Focus on kirikaeshi",
+    )
+    assert not hasattr(segment, "coach_notes")
+    assert "coach_notes" not in segment.model_dump()
+
+
+def test_segment_create_has_no_coach_notes_field() -> None:
+    """SegmentCreate no longer declares a `coach_notes` field."""
+    from app.sessions.models import SegmentCreate
+
+    assert "coach_notes" not in SegmentCreate.model_fields
+
+
+def test_segment_read_has_no_coach_notes_field() -> None:
+    """SegmentRead no longer declares a `coach_notes` field."""
+    from app.sessions.models import SegmentRead
+
+    assert "coach_notes" not in SegmentRead.model_fields
+
+
+def test_segment_create_ignores_extra_coach_notes_key() -> None:
+    """Passing `coach_notes=` into SegmentCreate must not raise and must not
+    surface as an attribute — the field is gone, so it is treated as an
+    ignored extra key."""
+    from app.sessions.models import SegmentCreate
+
+    segment = SegmentCreate(
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        coach_notes="Focus on kirikaeshi",
+    )
+    assert not hasattr(segment, "coach_notes")
+    assert "coach_notes" not in segment.model_dump()
+
+
+def test_segment_create_title_and_note_still_present_and_normalized() -> None:
+    """Segment `title`/`note` are unaffected by the coach_notes removal —
+    still present, still whitespace-trimmed/None-coerced as before."""
+    from app.sessions.models import SegmentCreate
+
+    segment = SegmentCreate(
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        title="  Warm-up  ",
+        note="   ",
+    )
+    assert segment.title == "Warm-up"
+    assert segment.note is None
+
+
+def test_segment_read_title_and_note_still_present() -> None:
+    """Segment `title`/`note` remain on SegmentRead."""
+    from app.sessions.models import SegmentRead
+
+    assert "title" in SegmentRead.model_fields
+    assert "note" in SegmentRead.model_fields
+    segment = SegmentRead(
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        title="Warm-up",
+        note="Bring your own bokuto",
+    )
+    assert segment.title == "Warm-up"
+    assert segment.note == "Bring your own bokuto"
+
+
+def test_session_template_segment_db_model_has_no_coach_notes_column() -> None:
+    """The template-segment DB model no longer has a coach_notes column."""
+    from app.sessions.db_models import SessionTemplateSegment
+
+    assert not hasattr(SessionTemplateSegment, "coach_notes")
+    assert "coach_notes" not in SessionTemplateSegment.__table__.columns
+
+
+def test_session_instance_segment_db_model_has_no_coach_notes_column() -> None:
+    """The instance-segment DB model no longer has a coach_notes column."""
+    from app.sessions.db_models import SessionInstanceSegment
+
+    assert not hasattr(SessionInstanceSegment, "coach_notes")
+    assert "coach_notes" not in SessionInstanceSegment.__table__.columns
+
+
+def test_session_template_create_coach_notes_still_round_trips() -> None:
+    """Session-level coach_notes on the template is untouched by this issue."""
+    from app.sessions.models import SegmentCreate, SessionTemplateCreate
+
+    template = SessionTemplateCreate(
+        title="Tuesday Keiko",
+        start_date="2026-06-30",
+        coach_notes="Bring extra shinai",
+        segments=[
+            SegmentCreate(
+                start_time="19:00", duration_minutes=60, type_ids=["type-1"]
+            )
+        ],
+    )
+    assert template.coach_notes == "Bring extra shinai"
+
+
+def test_session_template_read_coach_notes_still_round_trips() -> None:
+    from app.sessions.models import SessionTemplateRead
+
+    template = SessionTemplateRead(
+        id="tmpl-1",
+        title="Tuesday Keiko",
+        start_date="2026-06-30",
+        start_time="19:00",
+        duration_minutes=60,
+        recurrence="weekly",
+        coach_notes="Bring extra shinai",
+    )
+    assert template.coach_notes == "Bring extra shinai"
+
+
+def test_session_template_update_coach_notes_still_present() -> None:
+    from app.sessions.models import SessionTemplateUpdate
+
+    assert "coach_notes" in SessionTemplateUpdate.model_fields
+    update = SessionTemplateUpdate(coach_notes="Updated note")
+    assert update.coach_notes == "Updated note"
+
+
+def test_session_instance_create_coach_notes_still_round_trips() -> None:
+    from app.sessions.models import SegmentCreate, SessionInstanceCreate
+
+    instance = SessionInstanceCreate(
+        title="Tuesday Keiko",
+        date="2026-06-30",
+        coach_notes="Bring extra shinai",
+        segments=[
+            SegmentCreate(
+                start_time="19:00", duration_minutes=60, type_ids=["type-1"]
+            )
+        ],
+    )
+    assert instance.coach_notes == "Bring extra shinai"
+
+
+def test_session_instance_read_coach_notes_still_round_trips() -> None:
+    from app.sessions.models import SessionInstanceRead
+
+    instance = SessionInstanceRead(
+        id="inst-1",
+        title="Tuesday Keiko",
+        date="2026-06-30",
+        start_time="19:00",
+        duration_minutes=60,
+        coach_notes="Bring extra shinai",
+    )
+    assert instance.coach_notes == "Bring extra shinai"
+
+
+def test_session_instance_update_coach_notes_still_present() -> None:
+    from app.sessions.models import SessionInstanceUpdate
+
+    assert "coach_notes" in SessionInstanceUpdate.model_fields
+    update = SessionInstanceUpdate(coach_notes="Updated note")
+    assert update.coach_notes == "Updated note"
