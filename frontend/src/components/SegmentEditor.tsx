@@ -46,6 +46,8 @@ const newBlankSegment = (): SegmentInput => ({
   start_time: DEFAULT_START_TIME,
   duration_minutes: DEFAULT_DURATION,
   coach_notes: null,
+  title: null,
+  note: null,
   type_ids: [],
 })
 
@@ -184,6 +186,32 @@ const SegmentEditor = ({
               </div>
             </div>
           )}
+
+          {/* Title — public, optional. Always visible (not gated). */}
+          <div className="space-y-1.5">
+            <Label htmlFor={`seg-${idx}-title`}>Title</Label>
+            <Input
+              id={`seg-${idx}-title`}
+              value={seg.title ?? ""}
+              onChange={(e) => applyPatch(idx, { title: e.target.value || null })}
+              maxLength={100}
+              placeholder="Optional short title, e.g. Footwork drills"
+              className="min-h-[44px]"
+            />
+          </div>
+
+          {/* Note — public, optional. Always visible (not gated). */}
+          <div className="space-y-1.5">
+            <Label htmlFor={`seg-${idx}-note`}>Note</Label>
+            <Input
+              id={`seg-${idx}-note`}
+              value={seg.note ?? ""}
+              onChange={(e) => applyPatch(idx, { note: e.target.value || null })}
+              maxLength={280}
+              placeholder="Optional note, e.g. today focus nuki-do"
+              className="min-h-[44px]"
+            />
+          </div>
 
           {/* Coach notes — admin-only; rendered only when opted in */}
           {showCoachNotes && (

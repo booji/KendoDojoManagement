@@ -9,6 +9,8 @@ export type Segment = {
   start_time: string // "HH:MM"
   duration_minutes: number
   coach_notes: string | null
+  title: string | null // public, optional
+  note: string | null // public, optional
   type_ids: string[]
 }
 
@@ -16,6 +18,8 @@ export type SegmentInput = {
   start_time: string // "HH:MM"
   duration_minutes: number
   coach_notes?: string | null
+  title?: string | null // public, optional
+  note?: string | null // public, optional
   type_ids: string[]
 }
 

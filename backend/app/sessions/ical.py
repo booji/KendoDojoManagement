@@ -22,8 +22,10 @@ _PUBLIC_FIELDS = frozenset(
 )
 
 # Per-segment fields allowed into the public breakdown — coach_notes is
-# explicitly excluded.
-_PUBLIC_SEGMENT_FIELDS = frozenset({"start_time", "duration_minutes", "type_names"})
+# explicitly excluded. title and note are public and included.
+_PUBLIC_SEGMENT_FIELDS = frozenset(
+    {"start_time", "duration_minutes", "type_names", "title", "note"}
+)
 
 
 def _dt_to_ical(dt: datetime) -> str:
@@ -49,7 +51,18 @@ def _segment_breakdown_line(segment: dict[str, Any]) -> str:
     end_hour, end_minute = divmod(end_minutes, 60)
     end = f"{end_hour:02d}:{end_minute:02d}"
     types = ", ".join(segment.get("type_names") or [])
-    return f"{start}-{end} {types}"
+    # " - "-joined [time-range, types, title?, note?]. Time-range and types are
+    # always present (a segment requires at least one type); title and note are
+    # only included when present, so a bare segment never renders a dangling
+    # separator. RFC 5545 escaping (applied later) handles any commas/dashes.
+    parts = [f"{start}-{end}", types]
+    title = segment.get("title")
+    if title:
+        parts.append(title)
+    note = segment.get("note")
+    if note:
+        parts.append(note)
+    return " - ".join(parts)
 
 
 def _build_description(session: dict[str, Any]) -> str | None:

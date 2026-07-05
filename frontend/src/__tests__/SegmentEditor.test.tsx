@@ -321,6 +321,39 @@ describe("AC-unit-8 — editing coach_notes", () => {
   })
 })
 
+// ── Issue #182 — public title & note fields ──────────────────────────────────
+
+describe("public title & note (issue #182)", () => {
+  it("renders always-visible Title and Note inputs, even without coach notes", () => {
+    renderEditor([BLANK_SEGMENT], vi.fn(), SESSION_TYPES, false)
+
+    expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^note$/i)).toBeInTheDocument()
+  })
+
+  it("typing in Title flows through onChange", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    renderEditor([BLANK_SEGMENT], onChange)
+
+    await user.type(screen.getByLabelText(/^title$/i), "Footwork drills")
+
+    const lastCall: SegmentInput[] = onChange.mock.lastCall![0]
+    expect(lastCall[0].title).toBe("Footwork drills")
+  })
+
+  it("typing in Note flows through onChange", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    renderEditor([BLANK_SEGMENT], onChange)
+
+    await user.type(screen.getByLabelText(/^note$/i), "today focus nuki-do")
+
+    const lastCall: SegmentInput[] = onChange.mock.lastCall![0]
+    expect(lastCall[0].note).toBe("today focus nuki-do")
+  })
+})
+
 // ── Multi-segment rendering ────────────────────────────────────────────────────
 
 describe("multi-segment rendering", () => {
