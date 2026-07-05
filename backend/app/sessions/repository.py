@@ -26,11 +26,15 @@ class AbstractSessionTypeRepository(Protocol):
 
     async def get_by_name(self, name: str) -> dict[str, Any] | None: ...
 
+    async def get(self, type_id: str) -> dict[str, Any] | None: ...
+
     async def list(self) -> list[dict[str, Any]]: ...
 
     async def update(
         self, type_id: str, colour: str | None
     ) -> dict[str, Any] | None: ...
+
+    async def delete(self, type_id: str) -> dict[str, Any] | None: ...
 
 
 @runtime_checkable
@@ -224,6 +228,13 @@ class SqlSessionTypeRepository:
         obj = result.scalar_one_or_none()
         return _type_to_dict(obj) if obj else None
 
+    async def get(self, type_id: str) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionType).where(SessionType.id == type_id)
+        )
+        obj = result.scalar_one_or_none()
+        return _type_to_dict(obj) if obj else None
+
     async def list(self) -> list[dict[str, Any]]:
         result = await self._session.execute(select(SessionType))
         return [_type_to_dict(row) for row in result.scalars().all()]
@@ -238,6 +249,18 @@ class SqlSessionTypeRepository:
         obj.colour = colour
         await self._session.flush()
         return _type_to_dict(obj)
+
+    async def delete(self, type_id: str) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionType).where(SessionType.id == type_id)
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        record = _type_to_dict(obj)
+        await self._session.delete(obj)
+        await self._session.flush()
+        return record
 
 
 class SqlSessionTemplateRepository:
