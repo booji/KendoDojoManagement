@@ -545,6 +545,81 @@ async def test_ical_feed_includes_all_upcoming_sessions(
 
 
 # ---------------------------------------------------------------------------
+# Issue #177 — multi-segment session driven through the real endpoint path
+# (repo -> type-name enrichment -> build_ical), not just the pure builder.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
+    instance_repo, type_repo
+) -> None:
+    """A two-segment session must, through the live /sessions/ical endpoint,
+    yield exactly one VEVENT whose DTSTART/DTEND span the derived envelope and
+    whose DESCRIPTION carries both segments' breakdowns then the session info —
+    while never leaking segment-level coach_notes."""
+    kihon = type_repo.seed(str(uuid.uuid4()), "Kihon")
+    jigeiko = type_repo.seed(str(uuid.uuid4()), "Jigeiko")
+    await instance_repo.add(
+        {
+            "title": "Tuesday Training",
+            "date": "2099-06-02",
+            "segments": [
+                {
+                    "start_time": "18:30",
+                    "duration_minutes": 70,  # ends 19:40
+                    "coach_notes": "SECRET: footwork focus",
+                    "type_ids": [kihon["id"]],
+                },
+                {
+                    "start_time": "19:45",
+                    "duration_minutes": 90,  # ends 21:15
+                    "coach_notes": "SECRET: sparring pairs",
+                    "type_ids": [kihon["id"], jigeiko["id"]],
+                },
+            ],
+            "location": "Main Dojo",
+            "info": "Bring your bogu",
+            "coach_notes": "SECRET: session-level note",
+            "checkin_url": "https://dojo.example.com/checkin/tok123",
+            "cancelled": False,
+        }
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/sessions/ical")
+
+    assert response.status_code == 200
+    body = response.text
+
+    # Exactly one VEVENT for the whole multi-segment night.
+    assert body.count("BEGIN:VEVENT") == 1
+    assert body.count("END:VEVENT") == 1
+
+    # Envelope: earliest start 18:30 -> latest end 21:15.
+    assert "DTSTART:20990602T183000" in body
+    assert "DTEND:20990602T211500" in body
+
+    description_line = next(
+        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+    )
+    # Both segment breakdowns present, then the public info.
+    assert "18:30-19:40" in description_line
+    assert "19:45-21:15" in description_line
+    assert "Kihon" in description_line
+    assert "Jigeiko" in description_line
+    assert "Bring your bogu" in description_line
+
+    # No private field — session or segment coach_notes, checkin_url — leaks.
+    assert "SECRET" not in body
+    assert "coach_notes" not in body.lower()
+    assert "checkin" not in body.lower()
+    assert "tok123" not in body
+
+
+# ---------------------------------------------------------------------------
 # Unit tests for build_ical (issue #56 — added to close coverage gaps)
 # These test the pure function directly without going through the HTTP layer.
 # ---------------------------------------------------------------------------
