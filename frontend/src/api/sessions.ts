@@ -206,6 +206,25 @@ export const getSessionsForRange = async (
   return res.json() as Promise<SessionInstance[]>
 }
 
+export const deleteSessionType = async (id: string): Promise<void> => {
+  const res = await fetch(`/api/session-types/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  })
+  if (!res.ok) {
+    // The backend returns a 409 with a { detail } message when the type is
+    // still referenced by a segment — surface that message to the admin.
+    let detail: string | null = null
+    try {
+      const body = (await res.json()) as { detail?: unknown }
+      if (typeof body.detail === "string") detail = body.detail
+    } catch {
+      // non-JSON body; fall through to a generic message
+    }
+    throw new Error(detail ?? `Failed to delete session type: ${res.status}`)
+  }
+}
+
 export const updateSessionTypeColour = async (id: string, colour: string | null): Promise<SessionType> => {
   const res = await fetch(`/api/session-types/${id}`, {
     method: "PUT",
