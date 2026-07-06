@@ -345,7 +345,11 @@ async def test_checkin_too_early_detail_reports_correct_open_boundary(
     response = await _post_checkin(session["id"])
 
     assert response.status_code == 403
-    expected_open = start - timedelta(minutes=_DEFAULT_BEFORE_MINUTES)
+    # The seeded session only carries minute-granularity start_time/end_time
+    # (see StubSessionInstanceRepo.seed / _split_date_time), so the boundary
+    # the endpoint reports is necessarily truncated to the minute too.
+    truncated_start = start.replace(second=0, microsecond=0)
+    expected_open = truncated_start - timedelta(minutes=_DEFAULT_BEFORE_MINUTES)
     reported_open = datetime.fromisoformat(response.json()["detail"]["opens_at"])
     assert reported_open == expected_open
 
@@ -394,7 +398,11 @@ async def test_checkin_closed_detail_reports_correct_close_boundary(
     response = await _post_checkin(session["id"])
 
     assert response.status_code == 403
-    expected_close = end + timedelta(minutes=_DEFAULT_AFTER_MINUTES)
+    # The seeded session only carries minute-granularity start_time/end_time
+    # (see StubSessionInstanceRepo.seed / _split_date_time), so the boundary
+    # the endpoint reports is necessarily truncated to the minute too.
+    truncated_end = end.replace(second=0, microsecond=0)
+    expected_close = truncated_end + timedelta(minutes=_DEFAULT_AFTER_MINUTES)
     reported_close = datetime.fromisoformat(response.json()["detail"]["closes_at"])
     assert reported_close == expected_close
 

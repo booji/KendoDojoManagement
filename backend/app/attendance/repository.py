@@ -8,10 +8,12 @@ from typing import Any, Protocol, runtime_checkable
 import bcrypt
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.attendance.db_models import Attendance, CheckinToken
 from app.members.db_models import Member
 from app.sessions.db_models import SessionInstance
+from app.sessions.envelope import session_time_envelope
 
 
 @runtime_checkable
@@ -78,10 +80,19 @@ def _token_to_dict(obj: CheckinToken, plaintext: str | None = None) -> dict[str,
 
 
 def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
+    segments = [
+        {"start_time": s.start_time, "duration_minutes": s.duration_minutes}
+        for s in obj.segments
+    ]
+    start_time, end_time = (
+        session_time_envelope(segments) if segments else ("00:00", "00:00")
+    )
     return {
         "id": obj.id,
         "date": obj.date,
         "cancelled": obj.cancelled,
+        "start_time": start_time,
+        "end_time": end_time,
     }
 
 
@@ -258,7 +269,9 @@ class SqlSessionInstanceRepository:
 
     async def get(self, instance_id: str) -> dict[str, Any] | None:
         result = await self._session.execute(
-            select(SessionInstance).where(SessionInstance.id == instance_id)
+            select(SessionInstance)
+            .options(selectinload(SessionInstance.segments))
+            .where(SessionInstance.id == instance_id)
         )
         obj = result.scalar_one_or_none()
         return _instance_to_dict(obj) if obj else None
@@ -267,7 +280,9 @@ class SqlSessionInstanceRepository:
         self, instance_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None:
         result = await self._session.execute(
-            select(SessionInstance).where(SessionInstance.id == instance_id)
+            select(SessionInstance)
+            .options(selectinload(SessionInstance.segments))
+            .where(SessionInstance.id == instance_id)
         )
         obj = result.scalar_one_or_none()
         if obj is None:
