@@ -28,13 +28,6 @@ interface SegmentEditorProps {
   segments: SegmentInput[]
   sessionTypes: SessionType[]
   onChange: (segments: SegmentInput[]) => void
-  /**
-   * Whether to render the per-segment coach-notes field. Coach notes are
-   * admin-only data, so this defaults to false: the security invariant lives
-   * in the component, not only at the call site. Admin create/edit forms
-   * opt in explicitly.
-   */
-  showCoachNotes?: boolean
 }
 
 // ── Default for a newly added segment ────────────────────────────────────────
@@ -45,7 +38,6 @@ const DEFAULT_START_TIME = "19:00"
 const newBlankSegment = (): SegmentInput => ({
   start_time: DEFAULT_START_TIME,
   duration_minutes: DEFAULT_DURATION,
-  coach_notes: null,
   title: null,
   note: null,
   type_ids: [],
@@ -57,9 +49,8 @@ const SegmentEditor = ({
   segments: initialSegments,
   sessionTypes,
   onChange,
-  showCoachNotes = false,
 }: SegmentEditorProps) => {
-  // Canonical segment data — source of truth for type_ids, start_time, coach_notes,
+  // Canonical segment data — source of truth for type_ids, start_time,
   // and the numeric duration_minutes.
   const [segs, setSegs] = useState<SegmentInput[]>(() =>
     initialSegments.map((s) => ({ ...s, type_ids: [...s.type_ids] })),
@@ -212,22 +203,6 @@ const SegmentEditor = ({
               className="min-h-[44px]"
             />
           </div>
-
-          {/* Coach notes — admin-only; rendered only when opted in */}
-          {showCoachNotes && (
-            <div className="space-y-1.5">
-              <Label htmlFor={`seg-${idx}-notes`}>Coach notes</Label>
-              <Input
-                id={`seg-${idx}-notes`}
-                value={seg.coach_notes ?? ""}
-                onChange={(e) =>
-                  applyPatch(idx, { coach_notes: e.target.value || null })
-                }
-                placeholder="Optional notes for coaches"
-                className="min-h-[44px]"
-              />
-            </div>
-          )}
 
           {/* Remove — only present when there are multiple segments */}
           {segs.length > 1 && (

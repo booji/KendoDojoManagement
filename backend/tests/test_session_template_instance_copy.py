@@ -194,13 +194,11 @@ def test_generate_instances_deep_copies_segments() -> None:
             {
                 "start_time": "19:00",
                 "duration_minutes": 60,
-                "coach_notes": "warm up",
                 "type_ids": [type_a],
             },
             {
                 "start_time": "20:00",
                 "duration_minutes": 30,
-                "coach_notes": None,
                 "type_ids": [type_b],
             },
         ],
@@ -247,13 +245,11 @@ async def test_multi_segment_template_generates_faithful_copy(
             {
                 "start_time": "19:00",
                 "duration_minutes": 60,
-                "coach_notes": "kihon drills",
                 "type_ids": [type_a],
             },
             {
                 "start_time": "20:00",
                 "duration_minutes": 30,
-                "coach_notes": None,
                 "type_ids": [type_b, type_a],
             },
         ],
@@ -278,7 +274,6 @@ async def test_multi_segment_template_generates_faithful_copy(
         assert len(segs) == 2, "both template segments must be copied"
         assert segs[0]["start_time"] == "19:00"
         assert segs[0]["duration_minutes"] == 60
-        assert segs[0]["coach_notes"] == "kihon drills"
         assert segs[0]["type_ids"] == [type_a]
         assert segs[1]["start_time"] == "20:00"
         assert segs[1]["duration_minutes"] == 30
@@ -330,7 +325,6 @@ async def test_editing_instance_leaves_template_and_siblings_unchanged(
                     {
                         "start_time": "06:30",
                         "duration_minutes": 45,
-                        "coach_notes": "special morning session",
                         "type_ids": [type_b],
                     }
                 ]

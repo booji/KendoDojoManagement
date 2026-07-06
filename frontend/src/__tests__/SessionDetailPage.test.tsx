@@ -45,7 +45,6 @@ const BASE_SESSION = {
       id: "seg-0001",
       start_time: "19:00",
       duration_minutes: 90,
-      coach_notes: null,
       type_ids: [TYPE_ID],
     },
   ],

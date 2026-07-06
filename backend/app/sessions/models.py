@@ -55,7 +55,6 @@ def _normalize_public_text(
 class SegmentCreate(BaseModel):
     start_time: str  # "HH:MM"
     duration_minutes: int
-    coach_notes: str | None = None
     title: str | None = None  # public, optional
     note: str | None = None  # public, optional
     type_ids: list[str]
@@ -102,7 +101,6 @@ class SegmentRead(BaseModel):
     id: str | None = None
     start_time: str
     duration_minutes: int
-    coach_notes: str | None = None
     title: str | None = None
     note: str | None = None
     type_ids: list[str] = []

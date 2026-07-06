@@ -301,24 +301,10 @@ async def cancel_session_instance(
     return _normalize_instance(record)
 
 
-def _strip_segment_coach_notes(segments: Any) -> Any:
-    """Null out per-segment coach_notes; tolerate a missing/empty segments list."""
-    if not segments:
-        return segments
-    return [{**s, "coach_notes": None} for s in segments]
-
-
 def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # Strip both the session-level and every per-segment coach_notes — both are
-    # admin-only and must never reach a non-admin member.
-    return [
-        {
-            **r,
-            "coach_notes": None,
-            "segments": _strip_segment_coach_notes(r.get("segments")),
-        }
-        for r in records
-    ]
+    # Strip the session-level coach_notes — admin-only, must never reach a
+    # non-admin member.
+    return [{**r, "coach_notes": None} for r in records]
 
 
 def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -420,7 +406,6 @@ async def get_session_instance(
     result = _normalize_instance(record)
     if claims.role != "admin":
         result["coach_notes"] = None
-        result["segments"] = _strip_segment_coach_notes(result.get("segments"))
     return result
 
 

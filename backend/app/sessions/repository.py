@@ -96,7 +96,6 @@ def _segment_to_dict(
         "id": obj.id,
         "start_time": obj.start_time,
         "duration_minutes": obj.duration_minutes,
-        "coach_notes": obj.coach_notes,
         "title": obj.title,
         "note": obj.note,
         "type_ids": [link.session_type_id for link in obj.type_links],
@@ -180,7 +179,6 @@ def _build_template_segments(
         segment = SessionTemplateSegment(
             start_time=seg["start_time"],
             duration_minutes=seg["duration_minutes"],
-            coach_notes=seg.get("coach_notes"),
             title=seg.get("title"),
             note=seg.get("note"),
             position=position,
@@ -201,7 +199,6 @@ def _build_instance_segments(
         segment = SessionInstanceSegment(
             start_time=seg["start_time"],
             duration_minutes=seg["duration_minutes"],
-            coach_notes=seg.get("coach_notes"),
             title=seg.get("title"),
             note=seg.get("note"),
             position=position,
