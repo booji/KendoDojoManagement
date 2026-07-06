@@ -613,9 +613,12 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     assert "Bring your bogu" in description_line
 
     # No private field — session or segment coach_notes, checkin_url — leaks.
+    # (issue #191 legitimately adds a public "Check in:" line to the feed, so
+    # this no longer forbids the substring "checkin" outright — only the
+    # admin-only checkin_url/token value.)
     assert "SECRET" not in body
     assert "coach_notes" not in body.lower()
-    assert "checkin" not in body.lower()
+    assert "checkin_url" not in body.lower()
     assert "tok123" not in body
 
 

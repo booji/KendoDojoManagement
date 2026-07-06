@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import date, timedelta
 from typing import Annotated, Any
@@ -127,10 +128,14 @@ def _enrich_segments_with_type_names(
 async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
     sessions = await repo.list_upcoming()
     types = {t["id"]: t["name"] for t in await type_repo.list()}
+    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv(
+        "WEBAUTHN_ORIGIN", "http://localhost:5173"
+    )
     enriched = [
         {
             **s,
             "segments": _enrich_segments_with_type_names(s.get("segments", []), types),
+            "checkin_link": f"{origin.rstrip('/')}/checkin/session/{s['id']}",
         }
         for s in sessions
     ]

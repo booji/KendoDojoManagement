@@ -21,11 +21,31 @@ export const checkIn = async (sessionId: string): Promise<AttendanceRecord> => {
   }))
   if (!res.ok) {
     const status = res.status
+    if (status === 401) throw { status, message: "Not authenticated" }
     if (status === 404) throw { status, message: "Session not found" }
-    if (status === 409) throw { status, message: "Session is cancelled" }
+    if (status === 409) {
+      const detail = await readDetail(res)
+      throw { status, message: detail ?? "Session is cancelled" }
+    }
     throw { status, message: "Failed to check in" }
   }
   return res.json() as Promise<AttendanceRecord>
+}
+
+// Reads the `detail` field from a JSON error body without throwing if the
+// body is missing or not JSON. Used to distinguish same-status errors (e.g.
+// two different 409 causes) by message content.
+const readDetail = async (res: Response): Promise<string | null> => {
+  try {
+    const body: unknown = await res.json()
+    if (typeof body === "object" && body !== null && "detail" in body) {
+      const detail = (body as { detail: unknown }).detail
+      return typeof detail === "string" ? detail : null
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 export const getCheckinToken = async (sessionId: string): Promise<CheckinToken> => {

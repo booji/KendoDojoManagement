@@ -20,6 +20,7 @@ import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
 import CheckinPage from "@/pages/CheckinPage"
+import SessionCheckinPage from "@/pages/SessionCheckinPage"
 import SetupPage from "@/pages/SetupPage"
 import RecoveryRedeemPage from "@/pages/RecoveryRedeemPage"
 import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
@@ -123,6 +124,7 @@ const App = () => (
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/checkin/session/:id" element={<SessionCheckinPage />} />
               <Route path="/checkin/:token" element={<CheckinPage />} />
 
               {/* Admin-only routes */}
