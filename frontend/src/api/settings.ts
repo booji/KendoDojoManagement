@@ -2,6 +2,8 @@ export type DojoSettings = {
   dojo_name: string
   logo_url: string | null
   primary_colour: string
+  checkin_window_before_minutes: number
+  checkin_window_after_minutes: number
 }
 
 export const getDojoSettings = async (): Promise<DojoSettings> => {
@@ -13,7 +15,15 @@ export const getDojoSettings = async (): Promise<DojoSettings> => {
 }
 
 export const updateDojoSettings = async (
-  data: Partial<Pick<DojoSettings, "dojo_name" | "primary_colour">>
+  data: Partial<
+    Pick<
+      DojoSettings,
+      | "dojo_name"
+      | "primary_colour"
+      | "checkin_window_before_minutes"
+      | "checkin_window_after_minutes"
+    >
+  >
 ): Promise<DojoSettings> => {
   const res = await fetch("/api/settings/dojo", {
     method: "PUT",
