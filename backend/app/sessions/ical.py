@@ -18,6 +18,7 @@ _PUBLIC_FIELDS = frozenset(
         "info",
         "cancelled",
         "segments",
+        "checkin_link",
     }
 )
 
@@ -75,9 +76,15 @@ def _build_description(session: dict[str, Any]) -> str | None:
     parts = list(breakdown_lines)
     if info:
         parts.append(info)
+    body = "\n".join(parts)
+
+    checkin_link = session.get("checkin_link")
+    if checkin_link:
+        checkin_line = f"Check in: {checkin_link}"
+        return f"{checkin_line}\n\n{body}" if body else checkin_line
     if not parts:
         return None
-    return "\n".join(parts)
+    return body
 
 
 def _build_vevent(session: dict[str, Any]) -> str:
