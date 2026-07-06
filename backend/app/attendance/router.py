@@ -30,6 +30,9 @@ from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_member_repo
 from app.members.repository import AbstractMemberRepository
+from app.sessions.checkin_window import CheckinWindowStatus, classify_checkin_window
+from app.settings.dependencies import get_dojo_settings_repo
+from app.settings.repository import AbstractDojoSettingsRepository
 
 router = APIRouter(tags=["attendance"])
 
@@ -42,6 +45,20 @@ _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
+_SettingsRepo = Annotated[
+    AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)
+]
+
+
+def _session_envelope_datetimes(session: dict) -> tuple[datetime, datetime]:
+    date_str = session["date"]
+    session_start = datetime.strptime(
+        f"{date_str} {session['start_time']}", "%Y-%m-%d %H:%M"
+    )
+    session_end = datetime.strptime(
+        f"{date_str} {session['end_time']}", "%Y-%m-%d %H:%M"
+    )
+    return session_start, session_end
 
 
 @router.post("/sessions/{session_id}/checkin")
@@ -50,6 +67,7 @@ async def checkin_to_session(
     current_user: _Member,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
+    settings_repo: _SettingsRepo,
     uow: _UoW,
 ) -> AttendanceRead:
     session = await session_repo.get(str(session_id))
@@ -67,6 +85,31 @@ async def checkin_to_session(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
+        )
+    session_start, session_end = _session_envelope_datetimes(session)
+    settings = await settings_repo.get()
+    window = classify_checkin_window(
+        session_start=session_start,
+        session_end=session_end,
+        before_minutes=settings["checkin_window_before_minutes"],
+        after_minutes=settings["checkin_window_after_minutes"],
+        now=datetime.now(),
+    )
+    if window.status == CheckinWindowStatus.TOO_EARLY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "reason": "too_early",
+                "opens_at": window.opens_at.isoformat(),
+            },
+        )
+    if window.status == CheckinWindowStatus.CLOSED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "reason": "closed",
+                "closes_at": window.closes_at.isoformat(),
+            },
         )
     record = await attendance_repo.check_in(
         str(session_id), current_user.sub, current_user.sub

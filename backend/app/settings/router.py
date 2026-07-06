@@ -32,9 +32,14 @@ _MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
+_MAX_CHECKIN_WINDOW_MINUTES = 1440
+
+
 class DojoSettingsUpdate(BaseModel):
     dojo_name: str | None = None
     primary_colour: str | None = None
+    checkin_window_before_minutes: int | None = None
+    checkin_window_after_minutes: int | None = None
 
     @field_validator("dojo_name")
     @classmethod
@@ -50,6 +55,15 @@ class DojoSettingsUpdate(BaseModel):
             raise ValueError("primary_colour must be a 6-digit hex string e.g. #1D4ED8")
         return v
 
+    @field_validator("checkin_window_before_minutes", "checkin_window_after_minutes")
+    @classmethod
+    def checkin_window_minutes_range(cls, v: int | None) -> int | None:
+        if v is not None and not (0 <= v <= _MAX_CHECKIN_WINDOW_MINUTES):
+            raise ValueError(
+                f"must be between 0 and {_MAX_CHECKIN_WINDOW_MINUTES} minutes"
+            )
+        return v
+
 
 @router.get("/dojo")
 async def get_dojo_settings(claims: _Member, repo: _SettingsRepo) -> dict[str, Any]:
@@ -59,6 +73,8 @@ async def get_dojo_settings(claims: _Member, repo: _SettingsRepo) -> dict[str, A
         "dojo_name": settings["dojo_name"],
         "logo_url": settings["logo_url"],
         "primary_colour": settings["primary_colour"],
+        "checkin_window_before_minutes": settings["checkin_window_before_minutes"],
+        "checkin_window_after_minutes": settings["checkin_window_after_minutes"],
     }
 
 
@@ -81,12 +97,18 @@ async def update_dojo_settings(
         data["dojo_name"] = payload.dojo_name
     if payload.primary_colour is not None:
         data["primary_colour"] = payload.primary_colour
+    if payload.checkin_window_before_minutes is not None:
+        data["checkin_window_before_minutes"] = payload.checkin_window_before_minutes
+    if payload.checkin_window_after_minutes is not None:
+        data["checkin_window_after_minutes"] = payload.checkin_window_after_minutes
     settings = await repo.update(data)
     await uow.commit()
     return {
         "dojo_name": settings["dojo_name"],
         "logo_url": settings["logo_url"],
         "primary_colour": settings["primary_colour"],
+        "checkin_window_before_minutes": settings["checkin_window_before_minutes"],
+        "checkin_window_after_minutes": settings["checkin_window_after_minutes"],
     }
 
 

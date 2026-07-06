@@ -9,7 +9,29 @@ type PageState =
   | { kind: "already-checked-in" }
   | { kind: "cancelled" }
   | { kind: "not-found" }
+  | { kind: "too-early"; opensAt: string }
+  | { kind: "closed"; closesAt: string }
   | { kind: "error"; message: string }
+
+// Formats an ISO datetime as a short, human-readable local time, e.g.
+// "6:00 PM" or, if not today, "Mon, Jul 6, 6:00 PM". Falls back to the raw
+// string if it can't be parsed.
+const formatBoundaryTime = (iso: string): string => {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  return date.toLocaleString(undefined, {
+    weekday: sameDay ? undefined : "short",
+    month: sameDay ? undefined : "short",
+    day: sameDay ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 // Tokenless check-in page reached from the member iCal feed (issue #191).
 // Reuses the visual layout of the token-based CheckinPage, but drives
@@ -43,10 +65,23 @@ const SessionCheckinPage = () => {
             ? String((err as { message: unknown }).message)
             : ""
 
+        const reason =
+          typeof err === "object" && err !== null && "reason" in err
+            ? String((err as { reason: unknown }).reason)
+            : ""
+        const boundary =
+          typeof err === "object" && err !== null && "boundary" in err
+            ? String((err as { boundary: unknown }).boundary)
+            : ""
+
         if (status === 401) {
           navigate("/login", { replace: true })
         } else if (status === 404) {
           setState({ kind: "not-found" })
+        } else if (status === 403 && reason === "too_early") {
+          setState({ kind: "too-early", opensAt: boundary })
+        } else if (status === 403 && reason === "closed") {
+          setState({ kind: "closed", closesAt: boundary })
         } else if (status === 409 && message === "Already checked in") {
           setState({ kind: "already-checked-in" })
         } else if (status === 409) {
@@ -125,6 +160,44 @@ const SessionCheckinPage = () => {
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold">Session not found</h1>
             <p className="text-muted-foreground">This check-in link is not valid.</p>
+          </div>
+          <Button
+            size="lg"
+            variant="outline"
+            className="min-h-[56px] w-full max-w-xs"
+            onClick={() => navigate("/sessions")}
+          >
+            Go to Sessions
+          </Button>
+        </>
+      )}
+
+      {state.kind === "too-early" && (
+        <>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold">Check-in not open yet</h1>
+            <p className="text-muted-foreground">
+              Check-in opens at {formatBoundaryTime(state.opensAt)}. Please come back then.
+            </p>
+          </div>
+          <Button
+            size="lg"
+            variant="outline"
+            className="min-h-[56px] w-full max-w-xs"
+            onClick={() => navigate("/sessions")}
+          >
+            Go to Sessions
+          </Button>
+        </>
+      )}
+
+      {state.kind === "closed" && (
+        <>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold">Check-in closed</h1>
+            <p className="text-muted-foreground">
+              Check-in closed at {formatBoundaryTime(state.closesAt)}.
+            </p>
           </div>
           <Button
             size="lg"

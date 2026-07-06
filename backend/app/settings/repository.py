@@ -23,6 +23,8 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         "dojo_name": "My Dojo",
         "logo_url": None,
         "primary_colour": "#4F46E5",
+        "checkin_window_before_minutes": 60,
+        "checkin_window_after_minutes": 120,
     }
 
     def __init__(self) -> None:
@@ -60,6 +62,8 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
                 "dojo_name": "My Dojo",
                 "logo_url": None,
                 "primary_colour": "#4F46E5",
+                "checkin_window_before_minutes": 60,
+                "checkin_window_after_minutes": 120,
                 "updated_at": None,
             }
         return {
@@ -67,6 +71,8 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
             "dojo_name": row.dojo_name,
             "logo_url": row.logo_url,
             "primary_colour": row.primary_colour,
+            "checkin_window_before_minutes": row.checkin_window_before_minutes,
+            "checkin_window_after_minutes": row.checkin_window_after_minutes,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
@@ -90,5 +96,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
             "dojo_name": row.dojo_name,
             "logo_url": row.logo_url,
             "primary_colour": row.primary_colour,
+            "checkin_window_before_minutes": row.checkin_window_before_minutes,
+            "checkin_window_after_minutes": row.checkin_window_after_minutes,
             "updated_at": row.updated_at.isoformat(),
         }

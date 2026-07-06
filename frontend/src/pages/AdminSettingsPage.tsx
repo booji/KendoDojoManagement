@@ -323,6 +323,147 @@ const DojoBrandingSection = () => {
   )
 }
 
+// ── Check-in Window section ───────────────────────────────────────────────────
+
+const MAX_WINDOW_MINUTES = 1440
+
+// Validates a check-in window field: must be a non-negative integer <= 1440.
+const validateWindowMinutes = (value: string): string | null => {
+  if (value.trim() === "") return "Required"
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 0) return "Must be a non-negative whole number"
+  if (n > MAX_WINDOW_MINUTES) return `Must be ${MAX_WINDOW_MINUTES} or less`
+  return null
+}
+
+const CheckinWindowSection = () => {
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [beforeMinutes, setBeforeMinutes] = useState("60")
+  const [afterMinutes, setAfterMinutes] = useState("120")
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getDojoSettings()
+      .then((data) => {
+        setBeforeMinutes(String(data.checkin_window_before_minutes))
+        setAfterMinutes(String(data.checkin_window_after_minutes))
+      })
+      .catch((err: unknown) => {
+        const msg =
+          typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to load settings"
+        setLoadError(msg)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [])
+
+  const beforeError = validateWindowMinutes(beforeMinutes)
+  const afterError = validateWindowMinutes(afterMinutes)
+
+  const handleSave = async () => {
+    if (beforeError !== null || afterError !== null) return
+    setSaveStatus("saving")
+    setSaveError(null)
+    try {
+      await updateDojoSettings({
+        checkin_window_before_minutes: Number(beforeMinutes),
+        checkin_window_after_minutes: Number(afterMinutes),
+      })
+      setSaveStatus("saved")
+      setTimeout(() => setSaveStatus("idle"), 2000)
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to save"
+      setSaveError(msg)
+      setSaveStatus("error")
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    )
+  }
+
+  if (loadError !== null) {
+    return (
+      <p className="text-sm text-destructive" role="alert">
+        {loadError}
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Controls how early or late members can check in to a session by default.
+      </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="checkin-window-before">Opens before session (minutes)</Label>
+          <Input
+            id="checkin-window-before"
+            type="number"
+            min={0}
+            max={MAX_WINDOW_MINUTES}
+            value={beforeMinutes}
+            onChange={(e) => setBeforeMinutes(e.target.value)}
+            aria-label="Check-in window opens before session, in minutes"
+          />
+          {beforeError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {beforeError}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="checkin-window-after">Closes after session starts (minutes)</Label>
+          <Input
+            id="checkin-window-after"
+            type="number"
+            min={0}
+            max={MAX_WINDOW_MINUTES}
+            value={afterMinutes}
+            onChange={(e) => setAfterMinutes(e.target.value)}
+            aria-label="Check-in window closes after session starts, in minutes"
+          />
+          {afterError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {afterError}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button
+          onClick={() => void handleSave()}
+          disabled={saveStatus === "saving" || beforeError !== null || afterError !== null}
+          aria-label="Save check-in window"
+          className="min-h-[44px]"
+        >
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved!" : "Save"}
+        </Button>
+      </div>
+      {saveError !== null && (
+        <p className="text-sm text-destructive" role="alert">
+          {saveError}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Session Types section ─────────────────────────────────────────────────────
 
 export const SessionTypesSection = () => {
@@ -1024,6 +1165,16 @@ const AdminSettingsPage = () => (
         Dojo Branding
       </h2>
       <DojoBrandingSection />
+    </section>
+
+    <section aria-labelledby="checkin-window-heading">
+      <h2
+        id="checkin-window-heading"
+        className="text-base font-semibold mb-4 pb-2 border-b border-border"
+      >
+        Check-in Window
+      </h2>
+      <CheckinWindowSection />
     </section>
 
     <section aria-labelledby="session-types-heading">

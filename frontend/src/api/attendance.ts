@@ -14,6 +14,15 @@ export type CheckinToken = {
   expires_at: string
 }
 
+// Structured detail returned by POST /sessions/{id}/checkin when the
+// check-in window (issue #192) rejects the attempt with a 403.
+export type CheckinWindowError = {
+  status: 403
+  reason: "too_early" | "closed"
+  boundary: string // ISO datetime — opens_at for too_early, closes_at for closed
+  message: string
+}
+
 export const checkIn = async (sessionId: string): Promise<AttendanceRecord> => {
   const res = await fetch(new Request(`${location.origin}/api/sessions/${sessionId}/checkin`, {
     method: "POST",
@@ -23,6 +32,24 @@ export const checkIn = async (sessionId: string): Promise<AttendanceRecord> => {
     const status = res.status
     if (status === 401) throw { status, message: "Not authenticated" }
     if (status === 404) throw { status, message: "Session not found" }
+    if (status === 403) {
+      const detail = await readJsonDetail(res)
+      if (
+        typeof detail === "object" &&
+        detail !== null &&
+        "reason" in detail &&
+        (detail.reason === "too_early" || detail.reason === "closed")
+      ) {
+        const boundary = detail.reason === "too_early" ? detail.opens_at : detail.closes_at
+        throw {
+          status,
+          reason: detail.reason,
+          boundary: typeof boundary === "string" ? boundary : "",
+          message: "Check-in window is not open",
+        } satisfies CheckinWindowError
+      }
+      throw { status, message: "Check-in is not currently allowed" }
+    }
     if (status === 409) {
       const detail = await readDetail(res)
       throw { status, message: detail ?? "Session is cancelled" }
@@ -41,6 +68,24 @@ const readDetail = async (res: Response): Promise<string | null> => {
     if (typeof body === "object" && body !== null && "detail" in body) {
       const detail = (body as { detail: unknown }).detail
       return typeof detail === "string" ? detail : null
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Reads the `detail` field from a JSON error body as an opaque object (used
+// for the structured 403 check-in-window payload), returning null if the
+// body is missing, not JSON, or not an object.
+const readJsonDetail = async (res: Response): Promise<Record<string, unknown> | null> => {
+  try {
+    const body: unknown = await res.json()
+    if (typeof body === "object" && body !== null && "detail" in body) {
+      const detail = (body as { detail: unknown }).detail
+      return typeof detail === "object" && detail !== null
+        ? (detail as Record<string, unknown>)
+        : null
     }
     return null
   } catch {

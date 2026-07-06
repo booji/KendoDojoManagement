@@ -64,6 +64,8 @@ class StubDojoSettingsRepo:
                 "dojo_name": "My Dojo",
                 "logo_url": None,
                 "primary_colour": self._DEFAULT_COLOUR,
+                "checkin_window_before_minutes": 60,
+                "checkin_window_after_minutes": 120,
             }
         return dict(self._settings)
 

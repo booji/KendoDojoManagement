@@ -32,6 +32,7 @@ from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
 from app.members.dependencies import get_member_repo
+from app.settings.dependencies import get_dojo_settings_repo
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,9 +101,12 @@ class StubSessionInstanceRepo:
 
     def seed(self, cancelled: bool = False) -> dict[str, Any]:
         new_id = str(uuid.uuid4())
+        now = datetime.now()
         record = {
             "id": new_id,
-            "date": "2099-06-01",
+            "date": now.strftime("%Y-%m-%d"),
+            "start_time": now.strftime("%H:%M"),
+            "end_time": (now + timedelta(minutes=30)).strftime("%H:%M"),
             "cancelled": cancelled,
         }
         self._store[new_id] = record
@@ -246,6 +250,27 @@ class StubCheckinTokenRepo:
         return record
 
 
+class StubDojoSettingsRepo:
+    """In-memory stand-in for the dojo settings repository (check-in window
+    defaults only — issue #192) so these tests never need the real DB."""
+
+    def __init__(self) -> None:
+        self._settings: dict[str, Any] = {
+            "dojo_name": "My Dojo",
+            "logo_url": None,
+            "primary_colour": "#4F46E5",
+            "checkin_window_before_minutes": 60,
+            "checkin_window_after_minutes": 120,
+        }
+
+    async def get(self) -> dict[str, Any]:
+        return dict(self._settings)
+
+    async def update(self, data: dict[str, Any]) -> dict[str, Any]:
+        self._settings.update(data)
+        return dict(self._settings)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -278,6 +303,13 @@ def token_repo() -> StubCheckinTokenRepo:
     return repo
 
 
+@pytest.fixture()
+def settings_repo() -> StubDojoSettingsRepo:
+    repo = StubDojoSettingsRepo()
+    app.dependency_overrides[get_dojo_settings_repo] = lambda: repo
+    return repo
+
+
 # ---------------------------------------------------------------------------
 # AC2 — POST /sessions/{id}/checkin
 # ---------------------------------------------------------------------------
@@ -287,6 +319,7 @@ def token_repo() -> StubCheckinTokenRepo:
 async def test_member_can_checkin_to_session(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
+    settings_repo: StubDojoSettingsRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
