@@ -204,12 +204,10 @@ def _segment(
     *,
     start_time: str = "19:00",
     duration_minutes: int = 90,
-    coach_notes: str | None = None,
 ) -> dict[str, Any]:
     return {
         "start_time": start_time,
         "duration_minutes": duration_minutes,
-        "coach_notes": coach_notes,
         "type_ids": [str(uuid.uuid4())],
     }
 
@@ -234,14 +232,13 @@ async def _seed_instance(
     template_id: str | None = None,
     instance_date: str = "2099-06-02",
     coach_notes: str | None = None,
-    segment_coach_notes: str | None = None,
 ) -> dict[str, Any]:
     """Add a minimal session instance directly to the stub store."""
     return await instance_repo.add(
         {
             "title": "Weekly Keiko",
             "date": instance_date,
-            "segments": [_segment(coach_notes=segment_coach_notes)],
+            "segments": [_segment()],
             "template_id": template_id,
             "location": "Main Hall",
             "info": None,
@@ -303,46 +300,6 @@ async def test_get_session_instance_member_sees_null_coach_notes(
     assert response.status_code == 200
     body = response.json()
     assert body["coach_notes"] is None
-
-
-@pytest.mark.anyio
-async def test_get_session_instance_member_sees_null_segment_coach_notes(
-    instance_repo,
-) -> None:
-    """Member GET /sessions/{id} must also null per-segment coach_notes."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    inst = await _seed_instance(
-        instance_repo, segment_coach_notes="Per-segment secret for admin only"
-    )
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{inst['id']}")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["segments"]
-    assert all(seg["coach_notes"] is None for seg in body["segments"])
-
-
-@pytest.mark.anyio
-async def test_list_sessions_member_sees_null_segment_coach_notes(
-    instance_repo,
-) -> None:
-    """Member GET /sessions must null per-segment coach_notes on every row."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    await _seed_instance(
-        instance_repo, segment_coach_notes="Per-segment secret for admin only"
-    )
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get("/sessions")
-    assert response.status_code == 200
-    rows = response.json()
-    assert rows
-    for row in rows:
-        for seg in row.get("segments", []):
-            assert seg["coach_notes"] is None
 
 
 # ---------------------------------------------------------------------------

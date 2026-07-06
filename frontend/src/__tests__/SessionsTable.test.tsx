@@ -29,7 +29,7 @@ vi.mock("@/api/attendance", () => ({
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const SEGMENTS_T1 = [
-  { id: "seg-1", start_time: "19:00", duration_minutes: 90, coach_notes: null, type_ids: ["t1"] },
+  { id: "seg-1", start_time: "19:00", duration_minutes: 90, type_ids: ["t1"] },
 ]
 
 const pastSession = {

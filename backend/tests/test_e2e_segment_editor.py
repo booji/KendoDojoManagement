@@ -12,7 +12,6 @@ import json
 import os
 import uuid
 
-import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
@@ -72,7 +71,10 @@ def _seed_profile(page: Page, token: str) -> None:
             {"first_name": "Test", "surname": "Admin", "dob": "1990-01-01"}
         ),
     )
-    assert resp.status in (200, 201), f"Profile seed failed: {resp.status} {resp.text()}"
+    assert resp.status in (
+        200,
+        201,
+    ), f"Profile seed failed: {resp.status} {resp.text()}"
 
 
 def _get_type_ids(page: Page, admin_token: str, count: int = 2) -> list[str]:
@@ -211,22 +213,22 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
         f"{API_URL}/sessions/{our_session['id']}", headers=_api_headers(admin_token)
     )
     detail = detail_resp.json()
-    assert len(detail["segments"][0]["type_ids"]) == 2, (
-        f"Expected 2 types in segment 1, got {detail['segments'][0]['type_ids']}"
-    )
+    assert (
+        len(detail["segments"][0]["type_ids"]) == 2
+    ), f"Expected 2 types in segment 1, got {detail['segments'][0]['type_ids']}"
 
 
 # ---------------------------------------------------------------------------
-# AC3 — Each segment can carry optional coach notes
+# Issue #190 — the per-segment coach notes field is removed entirely
 # ---------------------------------------------------------------------------
 
 
-def test_each_segment_row_has_optional_coach_notes_field(
+def test_segment_row_has_no_coach_notes_field(
     page: Page,
 ) -> None:
-    """AC3: Each segment in the editor exposes an optional coach notes field."""
+    """Issue #190: No segment in the editor exposes a coach notes field."""
     admin_token = _make_token("admin")
-    type_id = _get_type_ids(page, admin_token, count=1)[0]
+    _get_type_ids(page, admin_token, count=1)
 
     _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
@@ -235,49 +237,14 @@ def test_each_segment_row_has_optional_coach_notes_field(
     dialog = page.get_by_role("dialog")
     expect(dialog).to_be_visible(timeout=10_000)
 
-    # 2. First segment has a "Coach notes" input
+    # First segment must not have a "Coach notes" input
     seg1 = dialog.locator('[aria-label="Segment 1"]')
-    expect(seg1.get_by_label("Coach notes")).to_be_visible()
+    expect(seg1.get_by_label("Coach notes")).to_have_count(0)
 
-    # 3. Fill the coach note for segment 1
-    seg1.get_by_label("Coach notes").fill("Per-segment admin note")
-
-    # 4. Add a second segment — it also has its own "Coach notes" field
+    # A newly added segment also has no coach notes field
     dialog.get_by_role("button", name="Add segment").click()
     seg2 = dialog.locator('[aria-label="Segment 2"]')
-    expect(seg2.get_by_label("Coach notes")).to_be_visible()
-    # The two fields are independent: segment 2 starts empty
-    expect(seg2.get_by_label("Coach notes")).to_have_value("")
-    # Fill segment 2 note with a different value
-    seg2.get_by_label("Coach notes").fill("Segment 2 note")
-
-    # Fill required fields for both segments
-    dialog.get_by_label("Title").fill("AC3 Coach Notes Test")
-    dialog.get_by_label("Date").fill("2099-11-03")
-    seg1.get_by_label("Start time").fill("18:00")
-    seg2.get_by_label("Start time").fill("19:00")
-    dialog.locator(f'[id="seg-0-type-{type_id}"]').click()
-    dialog.locator(f'[id="seg-1-type-{type_id}"]').click()
-    dialog.get_by_role("button", name="Create Session").click()
-
-    # Wait for dialog to close
-    expect(dialog).not_to_be_visible(timeout=10_000)
-
-    # 5–6. Verify via API that segment 1's coach_notes was persisted
-    sessions_resp = page.request.get(
-        f"{API_URL}/sessions", headers=_api_headers(admin_token)
-    )
-    our_session = next(
-        (s for s in sessions_resp.json() if s["title"] == "AC3 Coach Notes Test"), None
-    )
-    assert our_session is not None, "Created session not found in list"
-    detail_resp = page.request.get(
-        f"{API_URL}/sessions/{our_session['id']}", headers=_api_headers(admin_token)
-    )
-    detail = detail_resp.json()
-    assert detail["segments"][0]["coach_notes"] == "Per-segment admin note", (
-        f"Segment 1 coach_notes mismatch: {detail['segments'][0]['coach_notes']!r}"
-    )
+    expect(seg2.get_by_label("Coach notes")).to_have_count(0)
 
 
 # ---------------------------------------------------------------------------
@@ -304,9 +271,7 @@ def test_segment_editor_is_usable_on_mobile_viewport(
     expect(dialog).to_be_visible(timeout=10_000)
 
     # 3. No horizontal scroll — dialog scrollWidth <= clientWidth
-    scroll_ok: bool = dialog.evaluate(
-        "el => el.scrollWidth <= el.clientWidth + 2"
-    )
+    scroll_ok: bool = dialog.evaluate("el => el.scrollWidth <= el.clientWidth + 2")
     assert scroll_ok, "Dialog has horizontal overflow on mobile (375px)"
 
     # 4. "Add segment" button is visible without horizontal scrolling
@@ -412,9 +377,9 @@ def test_edit_form_replaces_full_segment_set_on_save(
     _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions/{session_id}")
-    expect(
-        page.get_by_role("heading", name="AC6 Edit Segments Test")
-    ).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("heading", name="AC6 Edit Segments Test")).to_be_visible(
+        timeout=15_000
+    )
 
     # 3. Open the edit form — both segments pre-populated
     page.get_by_role("button", name="Edit").click()
@@ -447,15 +412,15 @@ def test_edit_form_replaces_full_segment_set_on_save(
         f"{API_URL}/sessions/{session_id}", headers=_api_headers(admin_token)
     )
     detail = detail_resp.json()
-    assert len(detail["segments"]) == 2, (
-        f"Expected 2 segments after edit, got {len(detail['segments'])}"
-    )
+    assert (
+        len(detail["segments"]) == 2
+    ), f"Expected 2 segments after edit, got {len(detail['segments'])}"
 
     # 7. Reload and verify the segment set matches (removed segment is gone)
     page.reload()
-    expect(
-        page.get_by_role("heading", name="AC6 Edit Segments Test")
-    ).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("heading", name="AC6 Edit Segments Test")).to_be_visible(
+        timeout=15_000
+    )
     # Open edit form to count the current segments
     page.get_by_role("button", name="Edit").click()
     expect(page.locator('[aria-label="Segment 1"]')).to_be_visible(timeout=10_000)

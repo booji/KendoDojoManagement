@@ -16,7 +16,6 @@
  *   SegmentInput = {
  *     start_time: string        // "HH:MM"
  *     duration_minutes: number
- *     coach_notes?: string | null
  *     type_ids: string[]
  *   }
  *
@@ -25,7 +24,6 @@
  * Each segment row must expose:
  *   - a text/time input for start_time (labelled "Start time" or similar)
  *   - a number input for duration_minutes (labelled "Duration" or similar)
- *   - a text area / input for coach_notes (labelled "Coach notes" or similar)
  *   - a multi-select mechanism for type_ids (checkboxes or multi-select)
  *   - a remove button (disabled / absent when only one segment remains)
  * The editor overall must expose:
@@ -39,7 +37,9 @@
  *   AC-unit-5 — a segment row supports selecting multiple types (type_ids > 1)
  *   AC-unit-6 — editing start_time flows through onChange
  *   AC-unit-7 — editing duration_minutes flows through onChange
- *   AC-unit-8 — editing coach_notes flows through onChange
+ *
+ * Issue #190 removed the per-segment coach_notes field entirely; the editor
+ * must no longer render it.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -60,13 +60,12 @@ const SESSION_TYPES: SessionType[] = [
 const BLANK_SEGMENT: SegmentInput = {
   start_time: "19:00",
   duration_minutes: 90,
-  coach_notes: null,
   type_ids: ["type-1"],
 }
 
 const TWO_SEGMENTS: SegmentInput[] = [
-  { start_time: "09:00", duration_minutes: 60, coach_notes: null, type_ids: ["type-1"] },
-  { start_time: "10:00", duration_minutes: 45, coach_notes: null, type_ids: ["type-2"] },
+  { start_time: "09:00", duration_minutes: 60, type_ids: ["type-1"] },
+  { start_time: "10:00", duration_minutes: 45, type_ids: ["type-2"] },
 ]
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -75,7 +74,6 @@ function renderEditor(
   segments: SegmentInput[],
   onChange = vi.fn(),
   types = SESSION_TYPES,
-  showCoachNotes = true,
 ) {
   return {
     onChange,
@@ -84,7 +82,6 @@ function renderEditor(
         segments={segments}
         sessionTypes={types}
         onChange={onChange}
-        showCoachNotes={showCoachNotes}
       />,
     ),
   }
@@ -209,7 +206,7 @@ describe("AC-unit-5 — multiple type selection within a segment row", () => {
     const onChange = vi.fn()
     // Start with a segment that has only type-1 selected
     renderEditor(
-      [{ start_time: "19:00", duration_minutes: 90, coach_notes: null, type_ids: ["type-1"] }],
+      [{ start_time: "19:00", duration_minutes: 90, type_ids: ["type-1"] }],
       onChange,
     )
 
@@ -229,7 +226,7 @@ describe("AC-unit-5 — multiple type selection within a segment row", () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     renderEditor(
-      [{ start_time: "19:00", duration_minutes: 90, coach_notes: null, type_ids: ["type-1"] }],
+      [{ start_time: "19:00", duration_minutes: 90, type_ids: ["type-1"] }],
       onChange,
     )
 
@@ -289,33 +286,11 @@ describe("AC-unit-7 — editing duration_minutes", () => {
   })
 })
 
-// ── AC-unit-8 — Editing coach_notes flows through onChange ────────────────────
+// ── Issue #190 — per-segment coach_notes removed entirely ────────────────────
 
-describe("AC-unit-8 — editing coach_notes", () => {
-  it("typing in the coach_notes field calls onChange with the updated text", async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
-    renderEditor([BLANK_SEGMENT], onChange)
-
-    const notesInput = screen.getByLabelText(/coach notes/i)
-    await user.clear(notesInput)
-    await user.type(notesInput, "Focus on kiri-kaeshi tonight")
-
-    expect(onChange).toHaveBeenCalled()
-    const lastCall: SegmentInput[] = onChange.mock.lastCall![0]
-    expect(lastCall[0].coach_notes).toBe("Focus on kiri-kaeshi tonight")
-  })
-
-  it("coach_notes defaults to null or empty string when untouched", () => {
+describe("issue #190 — no per-segment coach notes", () => {
+  it("never renders a coach notes field for a segment", () => {
     renderEditor([BLANK_SEGMENT])
-
-    const notesInput = screen.getByLabelText(/coach notes/i) as HTMLInputElement
-    // An untouched notes field should have an empty value
-    expect(notesInput.value === "" || notesInput.value === null).toBe(true)
-  })
-
-  it("hides the coach_notes field by default (admin-only data, opt-in)", () => {
-    renderEditor([BLANK_SEGMENT], vi.fn(), SESSION_TYPES, false)
 
     expect(screen.queryByLabelText(/coach notes/i)).not.toBeInTheDocument()
   })
@@ -324,8 +299,8 @@ describe("AC-unit-8 — editing coach_notes", () => {
 // ── Issue #182 — public title & note fields ──────────────────────────────────
 
 describe("public title & note (issue #182)", () => {
-  it("renders always-visible Title and Note inputs, even without coach notes", () => {
-    renderEditor([BLANK_SEGMENT], vi.fn(), SESSION_TYPES, false)
+  it("renders always-visible Title and Note inputs", () => {
+    renderEditor([BLANK_SEGMENT])
 
     expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^note$/i)).toBeInTheDocument()

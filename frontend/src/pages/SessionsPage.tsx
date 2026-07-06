@@ -139,7 +139,6 @@ type CreateDialogProps = {
 const DEFAULT_SEGMENT: SegmentInput = {
   start_time: "",
   duration_minutes: 90,
-  coach_notes: null,
   type_ids: [],
 }
 
@@ -348,7 +347,6 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
               segments={segments}
               sessionTypes={sessionTypes}
               onChange={setSegments}
-              showCoachNotes
             />
           </div>
 

@@ -599,9 +599,7 @@ def test_session_template_create_coach_notes_still_round_trips() -> None:
         start_date="2026-06-30",
         coach_notes="Bring extra shinai",
         segments=[
-            SegmentCreate(
-                start_time="19:00", duration_minutes=60, type_ids=["type-1"]
-            )
+            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=["type-1"])
         ],
     )
     assert template.coach_notes == "Bring extra shinai"
@@ -638,9 +636,7 @@ def test_session_instance_create_coach_notes_still_round_trips() -> None:
         date="2026-06-30",
         coach_notes="Bring extra shinai",
         segments=[
-            SegmentCreate(
-                start_time="19:00", duration_minutes=60, type_ids=["type-1"]
-            )
+            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=["type-1"])
         ],
     )
     assert instance.coach_notes == "Bring extra shinai"

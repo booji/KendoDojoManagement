@@ -93,7 +93,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
     session.segments.map((s) => ({
       start_time: s.start_time,
       duration_minutes: s.duration_minutes,
-      coach_notes: s.coach_notes,
       title: s.title,
       note: s.note,
       type_ids: [...s.type_ids],
@@ -188,7 +187,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
           segments={segments}
           sessionTypes={sessionTypes}
           onChange={setSegments}
-          showCoachNotes
         />
       </div>
       <div className="space-y-1.5">

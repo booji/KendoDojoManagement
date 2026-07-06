@@ -21,8 +21,8 @@ _PUBLIC_FIELDS = frozenset(
     }
 )
 
-# Per-segment fields allowed into the public breakdown — coach_notes is
-# explicitly excluded. title and note are public and included.
+# Per-segment fields allowed into the public breakdown. title and note are
+# public and included.
 _PUBLIC_SEGMENT_FIELDS = frozenset(
     {"start_time", "duration_minutes", "type_names", "title", "note"}
 )
