@@ -1,0 +1,12 @@
+# Nightly trigger for kendo-backup.service. Install to
+# ~kendo/.config/systemd/user/kendo-backup.timer, then:
+#     systemctl --user enable --now kendo-backup.timer
+[Unit]
+Description=Nightly Kendo Postgres backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true          # run on next boot if a scheduled run was missed
+
+[Install]
+WantedBy=timers.target

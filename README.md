@@ -14,6 +14,11 @@ Self-hosted web application for managing the members, sessions, and attendance o
 
 ## Quick start (production)
 
+> **Deploying to a real UAT/PROD host with HTTPS?** Follow the full runbook in
+> **[docs/deployment.md](docs/deployment.md)** — rootless Podman + Quadlet, Traefik
+> for automatic TLS, network segmentation, Podman secrets, and automated backups.
+> The steps below are a minimal single-host HTTP trial only.
+
 **1. Copy and fill in the environment file:**
 
 ```bash

@@ -1,0 +1,7 @@
+# Named volume for Traefik's ACME cert store (acme.json). Keeps issued
+# Let's Encrypt certs across restarts so we don't re-request on every boot.
+[Unit]
+Description=Kendo Traefik ACME storage volume
+
+[Volume]
+VolumeName=kendo-traefik-acme

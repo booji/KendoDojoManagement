@@ -1,14 +1,9 @@
 import os
 
-from fastapi import Request
 from slowapi import Limiter
+
+from app.core.request_ip import client_ip
 
 PER_IP_LIMIT: str = os.getenv("RATE_LIMIT_PER_IP", "20/minute")
 
-
-def _real_ip(request: Request) -> str:
-    # Use the actual peer IP, not X-Forwarded-For, to prevent spoofing.
-    return request.client.host if request.client else "unknown"
-
-
-limiter = Limiter(key_func=_real_ip)
+limiter = Limiter(key_func=client_ip)

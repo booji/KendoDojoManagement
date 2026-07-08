@@ -51,6 +51,7 @@ from app.auth.recovery_service import (
     is_admin_token_valid,
 )
 from app.auth.token import encode_recovery_token, encode_token
+from app.core.request_ip import client_ip
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -282,7 +283,7 @@ async def redeem_recovery_code(
         AbstractAdminTokenRepository, Depends(get_admin_token_repo)
     ],
 ) -> dict[str, str]:
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
 
     result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()

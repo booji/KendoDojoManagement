@@ -1,0 +1,38 @@
+# Traefik DYNAMIC config: route the dojo domain to kendo-app over the edge
+# network. `kendo-app` resolves by container name (both are on kendo-edge).
+# Edit the Host() rule to your real domain.
+
+http:
+  routers:
+    kendo:
+      rule: "Host(`dojo.example.com`)"      # <-- EDIT (match WEBAUTHN_RP_ID)
+      entryPoints:
+        - websecure
+      service: kendo
+      middlewares:
+        - security-headers
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    kendo:
+      loadBalancer:
+        # App listens on 8000 inside the container; no host port is published.
+        servers:
+          - url: "http://kendo-app:8000"
+        passHostHeader: true
+        # NOTE on TRUST_PROXY_XFF safety: Traefik by DEFAULT sets X-Forwarded-For
+        # to the observed remote address and ignores any client-supplied value
+        # (it only trusts inbound XFF if that client IP is listed in an
+        # entryPoint's forwardedHeaders.trustedIPs — which we do NOT set). So the
+        # app receives a trustworthy client IP. Do not enable
+        # forwardedHeaders.insecure on the entryPoints.
+
+  middlewares:
+    security-headers:
+      headers:
+        # HSTS. The app's SecurityHeadersMiddleware still sets the rest; this
+        # only adds transport-level HSTS at the edge (no duplication).
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true

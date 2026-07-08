@@ -1,0 +1,10 @@
+# Edge network: Traefik <-> app. Traefik is the only container publishing host
+# ports. NOT internal — Traefik needs outbound to Let's Encrypt / Cloudflare.
+[Unit]
+Description=Kendo edge network (Traefik <-> app)
+
+[Network]
+NetworkName=kendo-edge
+
+[Install]
+WantedBy=default.target

@@ -11,6 +11,11 @@ JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
+# Trust X-Forwarded-For for client IP (rate limiting, lockout). Enable ONLY when
+# the app is reachable solely through a trusted reverse proxy (Traefik in
+# UAT/PROD) that overwrites the header; leaving it off keeps dev spoof-proof.
+TRUST_PROXY_XFF: bool = os.getenv("TRUST_PROXY_XFF", "false").lower() == "true"
+
 WEBAUTHN_RP_ID: str = os.getenv("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_ORIGIN: str = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")
 WEBAUTHN_CHALLENGE_TTL_SECONDS: int = int(

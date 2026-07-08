@@ -1,0 +1,12 @@
+# Backend network: app <-> db. Internal — no outbound, no host ports. The DB
+# lives only here, so nothing outside this network (including the edge) can
+# reach it.
+[Unit]
+Description=Kendo backend network (app <-> db, internal)
+
+[Network]
+NetworkName=kendo-backend
+Internal=true
+
+[Install]
+WantedBy=default.target

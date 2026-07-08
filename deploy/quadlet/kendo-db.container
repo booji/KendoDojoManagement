@@ -1,0 +1,24 @@
+# PostgreSQL. Backend network only (no host ports, unreachable from the edge).
+# Password comes from a podman secret mounted as a file (POSTGRES_PASSWORD_FILE).
+[Unit]
+Description=Kendo PostgreSQL
+
+[Container]
+ContainerName=kendo-db
+Image=docker.io/library/postgres:16-alpine
+Network=kendo-backend.network
+Volume=kendo-db-data.volume:/var/lib/postgresql/data
+Environment=POSTGRES_USER=kendo
+Environment=POSTGRES_DB=kendo
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+Secret=kendo_postgres_password,type=mount,target=postgres_password
+HealthCmd=pg_isready -U kendo -d kendo
+HealthInterval=5s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

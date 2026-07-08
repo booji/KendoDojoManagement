@@ -1,0 +1,27 @@
+# FastAPI app (serves the built SPA + /api). No published host ports — reachable
+# ONLY via Traefik on the edge network. Straddles both networks: edge (Traefik
+# reaches it) and backend (it reaches the db).
+#
+# Secrets injected as env straight from podman secrets (no config.py change):
+#   - DATABASE_URL (full URL, incl. password)
+#   - JWT_SECRET
+# Non-sensitive config comes from the EnvironmentFile (see deploy/env/).
+[Unit]
+Description=Kendo App
+Requires=kendo-db.service
+After=kendo-db.service
+
+[Container]
+ContainerName=kendo-app
+Image=localhost/kendodojo:latest
+Network=kendo-edge.network
+Network=kendo-backend.network
+EnvironmentFile=%h/kendo/kendo-app.env
+Secret=kendo_database_url,type=env,target=DATABASE_URL
+Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
