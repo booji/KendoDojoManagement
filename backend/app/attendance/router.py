@@ -88,11 +88,23 @@ async def checkin_to_session(
         )
     session_start, session_end = _session_envelope_datetimes(session)
     settings = await settings_repo.get()
+    override_before = session.get("checkin_window_before_minutes")
+    override_after = session.get("checkin_window_after_minutes")
+    effective_before = (
+        override_before
+        if override_before is not None
+        else settings["checkin_window_before_minutes"]
+    )
+    effective_after = (
+        override_after
+        if override_after is not None
+        else settings["checkin_window_after_minutes"]
+    )
     window = classify_checkin_window(
         session_start=session_start,
         session_end=session_end,
-        before_minutes=settings["checkin_window_before_minutes"],
-        after_minutes=settings["checkin_window_after_minutes"],
+        before_minutes=effective_before,
+        after_minutes=effective_after,
         now=datetime.now(),
     )
     if window.status == CheckinWindowStatus.TOO_EARLY:

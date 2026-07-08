@@ -34,6 +34,8 @@ export type SessionInstance = {
   info: string | null
   coach_notes: string | null
   checkin_url: string | null
+  checkin_window_before_minutes: number | null
+  checkin_window_after_minutes: number | null
   attendance_count: number
   is_checked_in: boolean
   segments: Segment[]
@@ -47,6 +49,8 @@ export type SessionInstanceUpdate = {
   info: string | null
   coach_notes: string | null
   segments: SegmentInput[]
+  checkin_window_before_minutes: number | null
+  checkin_window_after_minutes: number | null
 }
 
 export const getSessions = async (): Promise<SessionInstance[]> => {

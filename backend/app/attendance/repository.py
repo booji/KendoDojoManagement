@@ -93,6 +93,8 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "cancelled": obj.cancelled,
         "start_time": start_time,
         "end_time": end_time,
+        "checkin_window_before_minutes": obj.checkin_window_before_minutes,
+        "checkin_window_after_minutes": obj.checkin_window_after_minutes,
     }
 
 

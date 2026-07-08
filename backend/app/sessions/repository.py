@@ -161,6 +161,8 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "info": obj.info,
         "coach_notes": obj.coach_notes,
         "checkin_url": obj.checkin_url,
+        "checkin_window_before_minutes": obj.checkin_window_before_minutes,
+        "checkin_window_after_minutes": obj.checkin_window_after_minutes,
         "segments": segments,
     }
 
