@@ -1,0 +1,8 @@
+# Named volume for Postgres data. Podman-managed => auto SELinux-labeled, so no
+# :Z fiddling. Survives container recreation; destroyed only by explicit
+# `podman volume rm`.
+[Unit]
+Description=Kendo Postgres data volume
+
+[Volume]
+VolumeName=kendo-db-data

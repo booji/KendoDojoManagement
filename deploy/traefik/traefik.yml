@@ -1,0 +1,46 @@
+# Traefik STATIC config. Copy to ~kendo/kendo/traefik/traefik.yml and edit the
+# ACME email. Mounted read-only into the container.
+
+entryPoints:
+  web:
+    address: ":80"
+    # Redirect all plain HTTP to HTTPS.
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+
+providers:
+  # File provider: routers/services/middlewares live in ./dynamic/*.yml.
+  # We deliberately do NOT use the podman socket provider — no socket is mounted
+  # into Traefik, keeping its blast radius minimal.
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: you@example.com            # <-- EDIT
+      storage: /acme/acme.json
+      # ── ACTIVE: DNS-01 via Cloudflare (works behind a firewall / no inbound 80).
+      #    Token supplied as CF_DNS_API_TOKEN_FILE (podman secret). Scope the
+      #    token to Zone:DNS:Edit on the single zone only.
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "1.0.0.1:53"
+      # ── ALTERNATIVE: HTTP-01 (public host with inbound port 80). Comment out
+      #    the dnsChallenge block above and uncomment this instead:
+      # httpChallenge:
+      #   entryPoint: web
+
+api:
+  dashboard: false          # never expose the dashboard
+log:
+  level: INFO

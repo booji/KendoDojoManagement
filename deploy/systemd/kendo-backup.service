@@ -1,0 +1,14 @@
+# systemd USER service (oneshot) that runs the nightly backup. Install to
+# ~kendo/.config/systemd/user/kendo-backup.service. This is a plain user unit
+# (not a Quadlet .container) because it drives `podman exec`, not a container.
+[Unit]
+Description=Kendo Postgres backup
+# Only run if the db container unit is up.
+After=kendo-db.service
+Requires=kendo-db.service
+
+[Service]
+Type=oneshot
+Environment=KENDO_BACKUP_DIR=%h/backups
+Environment=KENDO_BACKUP_KEEP=14
+ExecStart=%h/.local/bin/kendo-backup.sh
