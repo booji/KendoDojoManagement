@@ -423,6 +423,14 @@ async def update_session_instance(
     uow: _UoW,
 ) -> dict[str, Any]:
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    # checkin window overrides are nullable-by-design: an explicitly provided
+    # None clears the override to "use the live dojo default", so it must
+    # survive the generic not-None filter above (which otherwise treats
+    # missing-and-None-are-both-untouched for the rest of this payload).
+    explicitly_set = payload.model_dump(exclude_unset=True)
+    for key in ("checkin_window_before_minutes", "checkin_window_after_minutes"):
+        if key in explicitly_set:
+            data[key] = explicitly_set[key]
     record = await repo.update(str(instance_id), data)
     if record is None:
         raise HTTPException(

@@ -205,6 +205,8 @@ class SessionInstanceRead(BaseModel):
     info: str | None = None
     coach_notes: str | None = None
     checkin_url: str | None = None
+    checkin_window_before_minutes: int | None = None
+    checkin_window_after_minutes: int | None = None
     attendance_count: int = 0
     is_checked_in: bool = False
     segments: list[SegmentRead] = []
@@ -214,12 +216,29 @@ class GenerateRequest(BaseModel):
     horizon: str  # "YYYY-MM-DD" — generate instances up to this date
 
 
+_CHECKIN_WINDOW_MAX_MINUTES = 1440
+
+
+def _validate_checkin_window_minutes(v: int | None) -> int | None:
+    if v is None:
+        return v
+    if v < 0:
+        raise ValueError("checkin window minutes must not be negative")
+    if v > _CHECKIN_WINDOW_MAX_MINUTES:
+        raise ValueError(
+            f"checkin window minutes must not exceed {_CHECKIN_WINDOW_MAX_MINUTES}"
+        )
+    return v
+
+
 class SessionInstanceUpdate(BaseModel):
     title: str | None = None
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
     segments: list[SegmentCreate] | None = None
+    checkin_window_before_minutes: int | None = None
+    checkin_window_after_minutes: int | None = None
 
     @field_validator("segments")
     @classmethod
@@ -229,3 +248,8 @@ class SessionInstanceUpdate(BaseModel):
         if v is not None:
             return _validate_segments_nonempty(v)
         return v
+
+    @field_validator("checkin_window_before_minutes", "checkin_window_after_minutes")
+    @classmethod
+    def validate_checkin_window_minutes(cls, v: int | None) -> int | None:
+        return _validate_checkin_window_minutes(v)

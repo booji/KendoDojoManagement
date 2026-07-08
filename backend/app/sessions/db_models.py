@@ -88,6 +88,12 @@ class SessionInstance(UUIDBase):
     info: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     checkin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    checkin_window_before_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    checkin_window_after_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
 
     segments: Mapped[list["SessionInstanceSegment"]] = relationship(
         back_populates="instance",

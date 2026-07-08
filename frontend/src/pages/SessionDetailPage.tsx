@@ -11,6 +11,8 @@ import {
   getSessionTypes,
 } from "@/api/sessions"
 import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput } from "@/api/sessions"
+import { getDojoSettings } from "@/api/settings"
+import type { DojoSettings } from "@/api/settings"
 import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
 import { checkIn, getSessionAttendance } from "@/api/attendance"
@@ -75,6 +77,23 @@ const MarkdownField = ({
   </div>
 )
 
+const CHECKIN_WINDOW_MAX_MINUTES = 1440
+
+// Blank means "no override — fall back to the live dojo default", so it
+// must resolve to `null` rather than being rejected as invalid.
+const parseCheckinWindowMinutes = (raw: string, label: string): number | null => {
+  const trimmed = raw.trim()
+  if (trimmed === "") return null
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`${label} must be a whole number of minutes.`)
+  }
+  const n = Number(trimmed)
+  if (n > CHECKIN_WINDOW_MAX_MINUTES) {
+    throw new Error(`${label} must be at most ${CHECKIN_WINDOW_MAX_MINUTES} minutes.`)
+  }
+  return n
+}
+
 // ── Edit form ─────────────────────────────────────────────────────────────────
 
 type EditFormProps = {
@@ -104,8 +123,27 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
   const [infoPreview, setInfoPreview] = useState(false)
   const [coachNotes, setCoachNotes] = useState(session.coach_notes ?? "")
   const [coachNotesPreview, setCoachNotesPreview] = useState(false)
+  const [checkinBefore, setCheckinBefore] = useState(
+    session.checkin_window_before_minutes !== null
+      ? String(session.checkin_window_before_minutes)
+      : "",
+  )
+  const [checkinAfter, setCheckinAfter] = useState(
+    session.checkin_window_after_minutes !== null
+      ? String(session.checkin_window_after_minutes)
+      : "",
+  )
+  const [dojoSettings, setDojoSettings] = useState<DojoSettings | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getDojoSettings()
+      .then(setDojoSettings)
+      .catch(() => {
+        // Placeholders simply stay blank if defaults can't be fetched.
+      })
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -134,6 +172,22 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
       }
     }
 
+    let checkinWindowBeforeMinutes: number | null
+    let checkinWindowAfterMinutes: number | null
+    try {
+      checkinWindowBeforeMinutes = parseCheckinWindowMinutes(
+        checkinBefore,
+        "Check-in opens before",
+      )
+      checkinWindowAfterMinutes = parseCheckinWindowMinutes(
+        checkinAfter,
+        "Check-in closes after",
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid check-in window value.")
+      return
+    }
+
     setSubmitting(true)
     try {
       const payload: Partial<SessionInstanceUpdate> = {
@@ -144,6 +198,8 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         info: info.trim() || null,
         coach_notes: coachNotes.trim() || null,
         segments,
+        checkin_window_before_minutes: checkinWindowBeforeMinutes,
+        checkin_window_after_minutes: checkinWindowAfterMinutes,
       }
       const updated = await updateSession(session.id, payload)
       onSave(updated)
@@ -225,6 +281,38 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         onTogglePreview={() => setCoachNotesPreview(p => !p)}
         placeholder="Internal notes for coaches…"
       />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-checkin-before">Check-in opens before (minutes)</Label>
+          <Input
+            id="edit-checkin-before"
+            type="number"
+            min={0}
+            max={CHECKIN_WINDOW_MAX_MINUTES}
+            value={checkinBefore}
+            onChange={(e) => setCheckinBefore(e.target.value)}
+            placeholder={
+              dojoSettings ? String(dojoSettings.checkin_window_before_minutes) : undefined
+            }
+            className="min-h-[44px]"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-checkin-after">Check-in closes after (minutes)</Label>
+          <Input
+            id="edit-checkin-after"
+            type="number"
+            min={0}
+            max={CHECKIN_WINDOW_MAX_MINUTES}
+            value={checkinAfter}
+            onChange={(e) => setCheckinAfter(e.target.value)}
+            placeholder={
+              dojoSettings ? String(dojoSettings.checkin_window_after_minutes) : undefined
+            }
+            className="min-h-[44px]"
+          />
+        </div>
+      </div>
       {error !== null && (
         <p className="text-sm text-destructive" role="alert">{error}</p>
       )}
