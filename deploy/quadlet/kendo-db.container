@@ -8,6 +8,7 @@ ContainerName=kendo-db
 Image=docker.io/library/postgres:16-alpine
 Network=kendo-backend.network
 Volume=kendo-db-data.volume:/var/lib/postgresql/data
+Environment=TZ=Europe/London
 Environment=POSTGRES_USER=kendo
 Environment=POSTGRES_DB=kendo
 Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
