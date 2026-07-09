@@ -31,6 +31,7 @@ from app.dependencies import get_uow
 from app.members.dependencies import get_member_repo
 from app.members.repository import AbstractMemberRepository
 from app.sessions.checkin_window import CheckinWindowStatus, classify_checkin_window
+from app.sessions.envelope import envelope_bounds
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import AbstractDojoSettingsRepository
 
@@ -51,14 +52,9 @@ _SettingsRepo = Annotated[
 
 
 def _session_envelope_datetimes(session: dict) -> tuple[datetime, datetime]:
-    date_str = session["date"]
-    session_start = datetime.strptime(
-        f"{date_str} {session['start_time']}", "%Y-%m-%d %H:%M"
-    )
-    session_end = datetime.strptime(
-        f"{date_str} {session['end_time']}", "%Y-%m-%d %H:%M"
-    )
-    return session_start, session_end
+    # end_time may be "24:00" or beyond when a segment runs to/past midnight;
+    # envelope_bounds rolls those hours into the next day rather than crashing.
+    return envelope_bounds(session["date"], session["start_time"], session["end_time"])
 
 
 @router.post("/sessions/{session_id}/checkin")
