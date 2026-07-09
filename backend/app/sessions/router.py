@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app import config
 from app.attendance.dependencies import get_attendance_repo
 from app.attendance.repository import AbstractAttendanceRepository
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
@@ -139,7 +140,7 @@ async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
         }
         for s in sessions
     ]
-    content = build_ical(enriched)
+    content = build_ical(enriched, tz_name=config.TIMEZONE)
     return Response(content=content, media_type="text/calendar; charset=utf-8")
 
 

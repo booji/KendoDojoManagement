@@ -1,5 +1,9 @@
 FROM python:3.13-slim AS backend-deps
 WORKDIR /app
+# tzdata provides /usr/share/zoneinfo so the TZ env var actually changes the
+# container's local time (Debian slim ships no timezone database otherwise).
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -29,6 +33,10 @@ RUN npm run build
 
 FROM python:3.13-slim AS prod
 WORKDIR /app
+
+# tzdata so the TZ env var honours the configured timezone in production too.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=backend-deps /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=backend-deps /usr/local/bin /usr/local/bin

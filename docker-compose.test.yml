@@ -10,6 +10,7 @@ services:
       - frontend_node_modules:/frontend/node_modules
       - .:/repo:ro
     environment:
+      TZ: Europe/London
       REPO_ROOT: /repo
     env_file:
       - .env.test
@@ -20,6 +21,8 @@ services:
 
   db:
     image: postgres:16-alpine
+    environment:
+      TZ: Europe/London
     env_file:
       - .env.test
     # NO named volume — ephemeral, destroyed on `down`

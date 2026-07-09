@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.sessions.envelope import session_time_envelope
 
@@ -87,13 +88,12 @@ def _build_description(session: dict[str, Any]) -> str | None:
     return body
 
 
-def _build_vevent(session: dict[str, Any]) -> str:
-    uid = session["id"]
-    summary = _escape_text(session.get("title", "") or "")
+def _event_bounds(session: dict[str, Any]) -> tuple[datetime, datetime]:
+    """Return the (start, end) naive local datetimes spanning a session's
+    segment envelope. These wall-clock times are interpreted in the dojo's
+    timezone when a TZID is applied at output time."""
     date_str = session["date"]  # "YYYY-MM-DD"
-    segments = session.get("segments") or []
-
-    start_time_str, end_time_str = session_time_envelope(segments)
+    start_time_str, end_time_str = session_time_envelope(session.get("segments") or [])
 
     year, month, day = (int(p) for p in date_str.split("-"))
     start_hour, start_minute = (int(p) for p in start_time_str.split(":"))
@@ -104,13 +104,24 @@ def _build_vevent(session: dict[str, Any]) -> str:
         # Envelope end wrapped past midnight — shouldn't normally happen for
         # same-day segments, but guard against a degenerate ordering.
         end_dt += timedelta(days=1)
+    return start_dt, end_dt
 
+
+def _build_vevent(session: dict[str, Any], tz_name: str | None = None) -> str:
+    uid = session["id"]
+    summary = _escape_text(session.get("title", "") or "")
+    start_dt, end_dt = _event_bounds(session)
+
+    # With a dojo timezone, tag the wall-clock times with TZID so clients resolve
+    # them against the VTIMEZONE definition (correct instant, DST-aware) instead
+    # of treating them as floating local time.
+    tzid = f";TZID={tz_name}" if tz_name else ""
     lines = [
         "BEGIN:VEVENT",
         f"UID:{uid}",
         f"SUMMARY:{summary}",
-        f"DTSTART:{_dt_to_ical(start_dt)}",
-        f"DTEND:{_dt_to_ical(end_dt)}",
+        f"DTSTART{tzid}:{_dt_to_ical(start_dt)}",
+        f"DTEND{tzid}:{_dt_to_ical(end_dt)}",
     ]
 
     location = session.get("location")
@@ -125,7 +136,98 @@ def _build_vevent(session: dict[str, Any]) -> str:
     return "\r\n".join(lines)
 
 
-def build_ical(sessions: list[dict[str, Any]]) -> str:
+def _fmt_offset(off: timedelta) -> str:
+    """Format a UTC offset as RFC 5545 ±HHMM."""
+    secs = int(off.total_seconds())
+    sign = "-" if secs < 0 else "+"
+    secs = abs(secs)
+    return f"{sign}{secs // 3600:02d}{(secs % 3600) // 60:02d}"
+
+
+def _find_transitions(
+    tz: ZoneInfo, start_utc: datetime, end_utc: datetime
+) -> list[datetime]:
+    """Return the UTC instants in (start_utc, end_utc] at which the zone's
+    offset changes, located by a daily coarse scan refined to the second."""
+    transitions: list[datetime] = []
+    step = timedelta(days=1)
+    cur = start_utc
+    cur_off = cur.astimezone(tz).utcoffset()
+    while cur < end_utc:
+        nxt = min(cur + step, end_utc)
+        nxt_off = nxt.astimezone(tz).utcoffset()
+        if nxt_off != cur_off:
+            lo, hi = cur, nxt
+            while hi - lo > timedelta(seconds=1):
+                mid = lo + (hi - lo) / 2
+                if mid.astimezone(tz).utcoffset() == cur_off:
+                    lo = mid
+                else:
+                    hi = mid
+            transitions.append(hi)
+            cur_off = nxt_off
+        cur = nxt
+    return transitions
+
+
+def _observance(tz: ZoneInfo, instant_utc: datetime) -> str:
+    """Render one STANDARD/DAYLIGHT sub-component for the offset change at the
+    given UTC instant. DTSTART is the local onset expressed in the *previous*
+    offset (TZOFFSETFROM), per RFC 5545 §3.6.5."""
+    before = (instant_utc - timedelta(seconds=1)).astimezone(tz)
+    after = instant_utc.astimezone(tz)
+    off_from = before.utcoffset() or timedelta()
+    off_to = after.utcoffset() or timedelta()
+    kind = "DAYLIGHT" if after.dst() else "STANDARD"
+    onset_local = (instant_utc + off_from).strftime("%Y%m%dT%H%M%S")
+    return "\r\n".join(
+        [
+            f"BEGIN:{kind}",
+            f"DTSTART:{onset_local}",
+            f"TZOFFSETFROM:{_fmt_offset(off_from)}",
+            f"TZOFFSETTO:{_fmt_offset(off_to)}",
+            f"TZNAME:{after.tzname()}",
+            f"END:{kind}",
+        ]
+    )
+
+
+def _build_vtimezone(tz_name: str, moments: list[datetime]) -> str:
+    """Build a VTIMEZONE defining tz_name across the span of the given naive
+    local datetimes: the observance in force at the earliest moment plus every
+    DST transition up to the latest, so each event resolves to the right offset."""
+    tz = ZoneInfo(tz_name)
+    utc_moments = [m.replace(tzinfo=tz).astimezone(UTC) for m in moments]
+    earliest, latest = min(utc_moments), max(utc_moments)
+
+    # Governing observance: the last transition at or before the earliest event
+    # (search back a little over a year to be sure to catch it).
+    prior = _find_transitions(tz, earliest - timedelta(days=400), earliest)
+    instants = ([prior[-1]] if prior else []) + _find_transitions(tz, earliest, latest)
+
+    lines = ["BEGIN:VTIMEZONE", f"TZID:{tz_name}"]
+    if instants:
+        lines.extend(_observance(tz, i) for i in instants)
+    else:
+        # Fixed-offset zone (e.g. UTC): one STANDARD block still defines the TZID.
+        off = earliest.astimezone(tz).utcoffset() or timedelta()
+        lines.append(
+            "\r\n".join(
+                [
+                    "BEGIN:STANDARD",
+                    "DTSTART:19700101T000000",
+                    f"TZOFFSETFROM:{_fmt_offset(off)}",
+                    f"TZOFFSETTO:{_fmt_offset(off)}",
+                    f"TZNAME:{earliest.astimezone(tz).tzname()}",
+                    "END:STANDARD",
+                ]
+            )
+        )
+    lines.append("END:VTIMEZONE")
+    return "\r\n".join(lines)
+
+
+def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> str:
     """Return a valid RFC 5545 iCal string for the given session dicts.
 
     Cancelled sessions are excluded. Only _PUBLIC_FIELDS (and, within each
@@ -137,6 +239,11 @@ def build_ical(sessions: list[dict[str, Any]]) -> str:
     from the min-start/max-end envelope across all of that session's
     segments, and DESCRIPTION listing each segment's time range and types
     followed by the session's public info text.
+
+    When tz_name (an IANA zone) is given, each event's wall-clock times are
+    tagged with TZID and a matching VTIMEZONE component is emitted so clients
+    resolve them to the correct, DST-aware instant. Without it, times are
+    floating (legacy behaviour).
     """
     public = []
     for s in sessions:
@@ -159,9 +266,13 @@ def build_ical(sessions: list[dict[str, Any]]) -> str:
         ]
     )
 
-    events = "\r\n".join(_build_vevent(s) for s in non_cancelled)
+    events = "\r\n".join(_build_vevent(s, tz_name) for s in non_cancelled)
 
     parts = [header]
+    # VTIMEZONE must precede the events that reference its TZID.
+    if tz_name and non_cancelled:
+        moments = [dt for s in non_cancelled for dt in _event_bounds(s)]
+        parts.append(_build_vtimezone(tz_name, moments))
     if events:
         parts.append(events)
     parts.append("END:VCALENDAR")

@@ -598,9 +598,11 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     assert body.count("BEGIN:VEVENT") == 1
     assert body.count("END:VEVENT") == 1
 
-    # Envelope: earliest start 18:30 -> latest end 21:15.
-    assert "DTSTART:20990602T183000" in body
-    assert "DTEND:20990602T211500" in body
+    # Envelope: earliest start 18:30 -> latest end 21:15. Through the live
+    # endpoint the times are dojo-timezone-tagged (TZID), not floating.
+    assert "20990602T183000" in body
+    assert "20990602T211500" in body
+    assert "DTSTART;TZID=" in body
 
     description_line = next(
         line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")

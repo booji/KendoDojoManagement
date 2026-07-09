@@ -422,9 +422,11 @@ def test_ical_feed_produces_one_vevent_with_envelope_and_segment_description() -
     )
     vevent = vevent_blocks[0]
 
-    # Envelope time spans both segments: 09:00 -> 10:30.
-    assert "DTSTART:20990920T090000" in vevent
-    assert "DTEND:20990920T103000" in vevent
+    # Envelope time spans both segments: 09:00 -> 10:30 (dojo-local wall time,
+    # tagged with a TZID now that the feed is timezone-anchored, not floating).
+    assert "DTSTART;TZID=" in vevent
+    assert "20990920T090000" in vevent
+    assert "20990920T103000" in vevent
 
     # DESCRIPTION carries the per-segment breakdown with the type name.
     description_line = next(
