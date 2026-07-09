@@ -143,6 +143,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+# ...but deploy/env holds committed config examples, not a virtualenv.
+!deploy/env/
+!deploy/env/*.example
 
 # Spyder project settings
 .spyderproject
