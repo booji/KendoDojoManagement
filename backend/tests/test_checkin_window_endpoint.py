@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
+from freezegun import freeze_time
 from httpx import ASGITransport, AsyncClient
 
 from app.attendance.dependencies import (
@@ -232,6 +233,18 @@ class StubDojoSettingsRepo:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock():
+    """Pin the wall clock to a fixed midday so sessions seeded relative to
+    ``datetime.now()`` (e.g. now + 90 min for the too-early cases) never roll
+    across midnight. Without this the suite is flaky when run within ~90 min of
+    local midnight — the endpoint and the stub both read the same frozen now, so
+    the window maths stays deterministic regardless of when the tests run (#208).
+    """
+    with freeze_time("2026-07-15 12:00:00"):
+        yield
 
 
 @pytest.fixture(autouse=True)
