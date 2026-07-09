@@ -116,6 +116,26 @@ def test_dtstart_dtend_for_overlapping_segments() -> None:
     assert "DTEND:20991107T203000" in result
 
 
+def test_dtend_at_midnight_does_not_crash() -> None:
+    """A segment running to midnight yields an envelope end of "24:00";
+    DTEND must roll into 00:00 the next day rather than raise on hour=24."""
+    sessions = [
+        _segmented_session(
+            date="2099-11-07",
+            segments=[
+                {
+                    "start_time": "22:00",
+                    "duration_minutes": 120,
+                    "type_names": ["General Training"],
+                }
+            ],
+        )
+    ]
+    result = build_ical(sessions)
+    assert "DTSTART:20991107T220000" in result
+    assert "DTEND:20991108T000000" in result
+
+
 # ---------------------------------------------------------------------------
 # DESCRIPTION: per-segment breakdown, then info
 # ---------------------------------------------------------------------------

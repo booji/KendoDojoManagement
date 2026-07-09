@@ -98,12 +98,11 @@ def _event_bounds(session: dict[str, Any]) -> tuple[datetime, datetime]:
     year, month, day = (int(p) for p in date_str.split("-"))
     start_hour, start_minute = (int(p) for p in start_time_str.split(":"))
     end_hour, end_minute = (int(p) for p in end_time_str.split(":"))
-    start_dt = datetime(year, month, day, start_hour, start_minute, 0)
-    end_dt = datetime(year, month, day, end_hour, end_minute, 0)
-    if end_dt < start_dt:
-        # Envelope end wrapped past midnight — shouldn't normally happen for
-        # same-day segments, but guard against a degenerate ordering.
-        end_dt += timedelta(days=1)
+    midnight = datetime(year, month, day, 0, 0, 0)
+    # end may be 24:00 (or beyond) when a segment runs to/past midnight; add as
+    # an offset from midnight so hours >23 don't blow up the datetime ctor.
+    start_dt = midnight + timedelta(hours=start_hour, minutes=start_minute)
+    end_dt = midnight + timedelta(hours=end_hour, minutes=end_minute)
     return start_dt, end_dt
 
 
