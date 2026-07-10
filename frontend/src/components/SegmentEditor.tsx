@@ -17,9 +17,9 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import SessionTypeMultiSelect from "@/components/SessionTypeMultiSelect"
 import type { SegmentInput, SessionType } from "@/api/sessions"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -143,38 +143,16 @@ const SegmentEditor = ({
             />
           </div>
 
-          {/* Session types — visible checkbox list */}
+          {/* Session types — compact multi-select popover */}
           {sessionTypes.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-sm font-medium leading-none">Session types</p>
-              <div className="flex flex-wrap gap-3 pt-1">
-                {sessionTypes.map((t) => {
-                  const isChecked = seg.type_ids.includes(t.id)
-                  // Prevent deselecting the last remaining type.
-                  const isLastSelected = isChecked && seg.type_ids.length === 1
-                  return (
-                    <div key={t.id} className="flex items-center gap-1.5 min-h-[44px]">
-                      <Checkbox
-                        id={`seg-${idx}-type-${t.id}`}
-                        checked={isChecked}
-                        disabled={isLastSelected}
-                        onCheckedChange={(checked) => {
-                          if (checked === true) {
-                            applyPatch(idx, {
-                              type_ids: [...seg.type_ids, t.id],
-                            })
-                          } else if (!isLastSelected) {
-                            applyPatch(idx, {
-                              type_ids: seg.type_ids.filter((id) => id !== t.id),
-                            })
-                          }
-                        }}
-                      />
-                      <Label htmlFor={`seg-${idx}-type-${t.id}`}>{t.name}</Label>
-                    </div>
-                  )
-                })}
-              </div>
+              <SessionTypeMultiSelect
+                options={sessionTypes}
+                selectedIds={seg.type_ids}
+                onChange={(ids) => applyPatch(idx, { type_ids: ids })}
+                requireOne
+              />
             </div>
           )}
 
