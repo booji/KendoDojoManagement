@@ -24,7 +24,10 @@
  * Each segment row must expose:
  *   - a text/time input for start_time (labelled "Start time" or similar)
  *   - a number input for duration_minutes (labelled "Duration" or similar)
- *   - a multi-select mechanism for type_ids (checkboxes or multi-select)
+ *   - a multi-select mechanism for type_ids — as of issue #199, this is the
+ *     SessionTypeMultiSelect popover control (one trigger per segment row,
+ *     each with a stable accessible name matching /session types/i). Opening
+ *     the Nth segment's trigger reveals its options as role="checkbox" rows.
  *   - a remove button (disabled / absent when only one segment remains)
  * The editor overall must expose:
  *   - an "Add segment" button that appends a blank segment row
@@ -35,6 +38,7 @@
  *   AC-unit-3 — remove control drops a row; onChange called with shorter array
  *   AC-unit-4 — cannot remove the last remaining row
  *   AC-unit-5 — a segment row supports selecting multiple types (type_ids > 1)
+ *     via the SessionTypeMultiSelect popover (issue #199)
  *   AC-unit-6 — editing start_time flows through onChange
  *   AC-unit-7 — editing duration_minutes flows through onChange
  *
@@ -199,6 +203,8 @@ describe("AC-unit-4 — cannot remove the last remaining row", () => {
 })
 
 // ── AC-unit-5 — Segment row supports selecting multiple types ─────────────────
+// (issue #199 — driven through the SessionTypeMultiSelect popover trigger,
+// not a bare checkbox row)
 
 describe("AC-unit-5 — multiple type selection within a segment row", () => {
   it("selecting a second type causes onChange to be called with type_ids of length 2", async () => {
@@ -210,9 +216,12 @@ describe("AC-unit-5 — multiple type selection within a segment row", () => {
       onChange,
     )
 
-    // Select type-2 in addition — look for a checkbox or button labelled "Iaido"
-    const iaidoOption = screen.getByRole("checkbox", { name: /iaido/i })
-      ?? screen.getByRole("option", { name: /iaido/i })
+    // Open the segment's session-type multi-select popover
+    const trigger = screen.getByRole("button", { name: /session types/i })
+    await user.click(trigger)
+
+    // Select type-2 in addition — the popover row for "Iaido"
+    const iaidoOption = await screen.findByRole("checkbox", { name: /iaido/i })
     await user.click(iaidoOption)
 
     expect(onChange).toHaveBeenCalled()
@@ -230,22 +239,25 @@ describe("AC-unit-5 — multiple type selection within a segment row", () => {
       onChange,
     )
 
-    const keikoOption = screen.getByRole("checkbox", { name: /keiko/i })
-      ?? screen.getByRole("option", { name: /keiko/i })
+    const trigger = screen.getByRole("button", { name: /session types/i })
+    await user.click(trigger)
 
-    // If the checkbox is already checked, clicking it would deselect — the
-    // component must either prevent this click or call onChange with type_ids >= 1
-    if (!(keikoOption as HTMLInputElement).disabled) {
-      await user.click(keikoOption)
+    const keikoOption = await screen.findByRole("checkbox", { name: /keiko/i })
+    expect(keikoOption).toHaveAttribute("aria-checked", "true")
 
-      if (onChange.mock.calls.length > 0) {
-        const nextSegments: SegmentInput[] = onChange.mock.calls[0][0]
-        // Should NOT produce an empty type_ids array
-        expect(nextSegments[0].type_ids.length).toBeGreaterThanOrEqual(1)
-      }
-      // If onChange was NOT called — the component silently blocked the deselect.
-      // That is also acceptable; we just don't assert further.
+    // The only remaining selected type — attempting to deselect it must never
+    // produce an empty type_ids array, whether the row is disabled or the click
+    // is silently a no-op.
+    await user.click(keikoOption)
+
+    for (const call of onChange.mock.calls) {
+      const nextSegments: SegmentInput[] = call[0]
+      expect(nextSegments[0].type_ids.length).toBeGreaterThanOrEqual(1)
     }
+    // The type remains selected after the attempted deselect.
+    expect(
+      screen.getByRole("checkbox", { name: /keiko/i }),
+    ).toHaveAttribute("aria-checked", "true")
   })
 })
 
