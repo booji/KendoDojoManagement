@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import type { SessionInstance, SessionType } from "@/api/sessions"
 import { checkIn } from "@/api/attendance"
 import { Button } from "@/components/ui/button"
@@ -42,6 +42,7 @@ const CheckInCell = ({ session }: { session: SessionInstance }) => {
 
 const SessionsTable = ({ sessions, typeMap, isAdmin }: SessionsTableProps) => {
   const [showPast, setShowPast] = useState(false)
+  const navigate = useNavigate()
 
   const filtered = showPast ? sessions : sessions.filter(isUpcoming)
 
@@ -98,13 +99,13 @@ const SessionsTable = ({ sessions, typeMap, isAdmin }: SessionsTableProps) => {
           {filtered.map((session) => (
             <tr
               key={session.id}
-              className={`cursor-pointer hover:bg-muted/50 border-t border-border${session.cancelled ? " opacity-60" : ""}`}
+              className={`relative cursor-pointer hover:bg-muted/50 border-t border-border${session.cancelled ? " opacity-60" : ""}`}
+              onClick={() => navigate(`/sessions/${session.id}`)}
             >
               <td className="py-2 px-3">
                 <Link
                   to={`/sessions/${session.id}`}
-                  className="block after:absolute after:inset-0 after:content-[''] relative"
-                  tabIndex={-1}
+                  className="block after:absolute after:inset-0 after:content-['']"
                   aria-label={`${formatDate(session.date)} ${session.title}`}
                 >
                   {formatDate(session.date)}
@@ -135,7 +136,9 @@ const SessionsTable = ({ sessions, typeMap, isAdmin }: SessionsTableProps) => {
                 {session.cancelled && <span>Cancelled</span>}
               </td>
               <td className="py-2 px-3">
-                <CheckInCell session={session} />
+                <div className="relative z-10">
+                  <CheckInCell session={session} />
+                </div>
               </td>
             </tr>
           ))}

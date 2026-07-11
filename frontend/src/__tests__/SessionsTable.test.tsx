@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
 
 import SessionsTable from "@/components/SessionsTable"
 
@@ -92,6 +92,22 @@ function renderTable({ sessions = [upcomingSession], isAdmin = false }: RenderOp
         isAdmin={isAdmin}
         data-testid="sessions-table"
       />
+    </MemoryRouter>,
+  )
+}
+
+// Renders the table alongside a real detail route so we can assert that
+// clicking navigates to the correct destination (not just that a link exists).
+function renderTableWithRouting({ sessions = [upcomingSession], isAdmin = false }: RenderOptions = {}) {
+  return render(
+    <MemoryRouter initialEntries={["/sessions"]}>
+      <Routes>
+        <Route
+          path="/sessions"
+          element={<SessionsTable sessions={sessions} typeMap={typeMap} isAdmin={isAdmin} />}
+        />
+        <Route path="/sessions/:id" element={<div data-testid="session-detail-page">Detail Page</div>} />
+      </Routes>
     </MemoryRouter>,
   )
 }
@@ -279,5 +295,52 @@ describe("AC7 — check-in button", () => {
     await waitFor(() => {
       expect(mockCheckIn).toHaveBeenCalledWith("s-upcoming")
     })
+  })
+})
+
+// ── Issue #211 — whole-row click opens session detail ────────────────────────
+
+describe("issue #211 — whole-row click", () => {
+  it("navigates to the session detail page when a non-Date cell (Title) is clicked", async () => {
+    const user = userEvent.setup()
+    renderTableWithRouting({ sessions: [upcomingSession] })
+
+    await user.click(screen.getAllByText(upcomingSession.title)[0])
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-detail-page")).toBeInTheDocument()
+    })
+  })
+
+  it("navigates to the session detail page when the Location cell is clicked", async () => {
+    const user = userEvent.setup()
+    renderTableWithRouting({ sessions: [upcomingSession] })
+
+    await user.click(screen.getByText(upcomingSession.location))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-detail-page")).toBeInTheDocument()
+    })
+  })
+
+  it("does NOT navigate away when the Check In button is clicked, and still calls checkIn", async () => {
+    const user = userEvent.setup()
+    mockCheckIn.mockResolvedValue({})
+    renderTableWithRouting({ sessions: [upcomingSession] })
+
+    await user.click(screen.getByRole("button", { name: /check in/i }))
+
+    await waitFor(() => {
+      expect(mockCheckIn).toHaveBeenCalledWith("s-upcoming")
+    })
+    expect(screen.queryByTestId("session-detail-page")).not.toBeInTheDocument()
+  })
+
+  it("exposes a focusable row link with an accessible name containing the date and title", () => {
+    renderTable({ sessions: [upcomingSession] })
+
+    const link = screen.getByRole("link", { name: /2099.*General Training/i })
+    expect(link).toBeInTheDocument()
+    expect(link).not.toHaveAttribute("tabindex", "-1")
   })
 })
