@@ -124,12 +124,12 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
   const [coachNotes, setCoachNotes] = useState(session.coach_notes ?? "")
   const [coachNotesPreview, setCoachNotesPreview] = useState(false)
   const [checkinBefore, setCheckinBefore] = useState(
-    session.checkin_window_before_minutes !== null
+    session.checkin_window_before_minutes != null
       ? String(session.checkin_window_before_minutes)
       : "",
   )
   const [checkinAfter, setCheckinAfter] = useState(
-    session.checkin_window_after_minutes !== null
+    session.checkin_window_after_minutes != null
       ? String(session.checkin_window_after_minutes)
       : "",
   )
