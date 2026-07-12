@@ -23,6 +23,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/ui/page-header"
+import { Section } from "@/components/ui/section"
+import { EmptyState } from "@/components/ui/empty-state"
 import {
   Dialog,
   DialogContent,
@@ -597,7 +600,7 @@ export const SessionTypesSection = () => {
   if (sessionTypes !== null && sessionTypes.length === 0) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">No session types configured.</p>
+        <EmptyState message="No session types configured." />
         {addForm}
       </div>
     )
@@ -932,7 +935,7 @@ const AdminFederationCatalogue = () => {
 
           {catState.status === "ready" && (
             catState.federations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No federations found.</p>
+              <EmptyState message="No federations found." />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -1155,47 +1158,23 @@ const AdminFederationCatalogue = () => {
 
 const AdminSettingsPage = () => (
   <div className="px-4 py-6 space-y-8">
-    <h1 className="text-xl font-semibold">Admin Settings</h1>
+    <PageHeader title="Admin Settings" />
 
-    <section aria-labelledby="branding-heading">
-      <h2
-        id="branding-heading"
-        className="text-base font-semibold mb-4 pb-2 border-b border-border"
-      >
-        Dojo Branding
-      </h2>
+    <Section heading="Dojo Branding">
       <DojoBrandingSection />
-    </section>
+    </Section>
 
-    <section aria-labelledby="checkin-window-heading">
-      <h2
-        id="checkin-window-heading"
-        className="text-base font-semibold mb-4 pb-2 border-b border-border"
-      >
-        Check-in Window
-      </h2>
+    <Section heading="Check-in Window">
       <CheckinWindowSection />
-    </section>
+    </Section>
 
-    <section aria-labelledby="session-types-heading">
-      <h2
-        id="session-types-heading"
-        className="text-base font-semibold mb-4 pb-2 border-b border-border"
-      >
-        Session Types
-      </h2>
+    <Section heading="Session Types">
       <SessionTypesSection />
-    </section>
+    </Section>
 
-    <section aria-labelledby="federation-catalogue-heading">
-      <h2
-        id="federation-catalogue-heading"
-        className="text-base font-semibold mb-4 pb-2 border-b border-border"
-      >
-        Federations
-      </h2>
+    <Section heading="Federations">
       <AdminFederationCatalogue />
-    </section>
+    </Section>
   </div>
 )
 

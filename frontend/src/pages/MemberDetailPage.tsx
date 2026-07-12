@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/ui/page-header"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -42,19 +44,19 @@ import { generateAdminRecoveryToken } from "@/api/recovery"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_CLASSES: Record<MembershipStatus, string> = {
-  active: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300",
-  inactive: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400",
-  suspended: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400",
+const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive"> = {
+  active: "success",
+  inactive: "secondary",
+  suspended: "destructive",
 }
 
 const StatusBadge = ({ status }: { status: MembershipStatus }) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
+  <Badge
+    variant={STATUS_VARIANTS[status]}
     aria-label={`Membership status: ${status}`}
   >
     {status.charAt(0).toUpperCase() + status.slice(1)}
-  </span>
+  </Badge>
 )
 
 // ── Read-only field ───────────────────────────────────────────────────────────
@@ -517,9 +519,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
                         <li key={entry.id} className="text-sm flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{entry.display_name}</span>
                           {entry.status === "pending" && (
-                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300">
-                              awaiting confirmation
-                            </span>
+                            <Badge variant="warning">awaiting confirmation</Badge>
                           )}
                           <span className="text-muted-foreground text-xs">
                             {formatMemberDate(entry.promoted_at)}
@@ -900,18 +900,10 @@ type RenewalBadgeProps = { status: "expiring_soon" | "expired" | null }
 
 const RenewalBadge = ({ status }: RenewalBadgeProps) => {
   if (status === "expired") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400">
-        Expired
-      </span>
-    )
+    return <Badge variant="destructive">Expired</Badge>
   }
   if (status === "expiring_soon") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400">
-        Expiring soon
-      </span>
-    )
+    return <Badge variant="warning">Expiring soon</Badge>
   }
   return null
 }
@@ -1370,56 +1362,43 @@ const MemberDetailPage = () => {
       </Button>
 
       {/* Name + status header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{formatMemberName(member)}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{member.email}</p>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <StatusBadge status={member.membership_status} />
-            {member.is_minor && (
-              <span
-                className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
-                aria-label="Minor — parental consent required"
-              >
-                Minor
-              </span>
-            )}
-            {member.is_coach && (
-              <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground">
-                Coach
-              </span>
-            )}
-            {member.is_first_aider && (
-              <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-foreground">
-                First Aider
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Admin actions */}
-        {isAdmin && !editing && (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={startEdit}
-              aria-label={`Edit ${formatMemberName(member)}`}
-            >
-              <PencilIcon aria-hidden="true" />
-              Edit
-            </Button>
-            {member.membership_status !== "inactive" && (
+      <PageHeader
+        title={formatMemberName(member)}
+        description={member.email}
+        action={
+          isAdmin && !editing ? (
+            <div className="flex gap-2">
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
-                onClick={() => setDeactivateOpen(true)}
+                onClick={startEdit}
+                aria-label={`Edit ${formatMemberName(member)}`}
               >
-                Deactivate
+                <PencilIcon aria-hidden="true" />
+                Edit
               </Button>
-            )}
-          </div>
+              {member.membership_status !== "inactive" && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeactivateOpen(true)}
+                >
+                  Deactivate
+                </Button>
+              )}
+            </div>
+          ) : null
+        }
+      />
+      <div className="flex flex-wrap gap-2 -mt-4">
+        <StatusBadge status={member.membership_status} />
+        {member.is_minor && (
+          <Badge variant="warning" aria-label="Minor — parental consent required">
+            Minor
+          </Badge>
         )}
+        {member.is_coach && <Badge variant="secondary">Coach</Badge>}
+        {member.is_first_aider && <Badge variant="outline">First Aider</Badge>}
       </div>
 
       {/* Edit form */}

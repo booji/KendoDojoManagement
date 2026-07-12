@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog"
 import { Pencil, Trash2, Check, X, ShieldAlert } from "lucide-react"
 import { formatMemberDate } from "@/lib/date"
+import { PageHeader } from "@/components/ui/page-header"
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -590,18 +591,10 @@ type RenewalBadgeProps = { status: "expiring_soon" | "expired" | null }
 
 const RenewalBadge = ({ status }: RenewalBadgeProps) => {
   if (status === "expired") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400">
-        Expired
-      </span>
-    )
+    return <Badge variant="destructive">Expired</Badge>
   }
   if (status === "expiring_soon") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400">
-        Expiring soon
-      </span>
-    )
+    return <Badge variant="warning">Expiring soon</Badge>
   }
   return null
 }
@@ -997,7 +990,9 @@ const SettingsPage = () => {
   if (loadState.status === "error") {
     return (
       <div className="px-4 py-6">
-        <h1 className="text-xl font-semibold mb-4">Settings</h1>
+        <div className="mb-4">
+          <PageHeader title="Settings" />
+        </div>
         <p className="text-sm text-destructive" role="alert">
           {loadState.message}
         </p>
@@ -1007,7 +1002,7 @@ const SettingsPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">Settings</h1>
+      <PageHeader title="Settings" />
 
       {!editing ? (
         <ProfileSummary member={loadState.member} onEdit={handleEdit} />

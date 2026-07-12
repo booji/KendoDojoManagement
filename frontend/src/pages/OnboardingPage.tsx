@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PageHeader } from "@/components/ui/page-header"
 
 type FormState = {
   first_name: string
@@ -63,7 +64,9 @@ const OnboardingPage = () => {
   return (
     <div className="min-h-screen flex items-start justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <h1 className="text-2xl font-semibold mb-6 text-center">Complete your profile</h1>
+        <div className="mb-6">
+          <PageHeader title="Complete your profile" />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Personal details</CardTitle>

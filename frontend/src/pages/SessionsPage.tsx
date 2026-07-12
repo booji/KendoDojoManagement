@@ -40,6 +40,7 @@ import { CalendarIcon } from "lucide-react"
 import SessionCardList from "@/components/SessionCardList"
 import CalendarView from "@/components/CalendarView"
 import SessionsTable from "@/components/SessionsTable"
+import { PageHeader } from "@/components/ui/page-header"
 
 // ── Markdown preview field ─────────────────────────────────────────────────────
 
@@ -543,37 +544,41 @@ const SessionsPage = () => {
   return (
     <div className={pageView === "calendar" ? "flex flex-col h-screen px-0 py-0" : "px-4 py-6 space-y-6"}>
       {/* Page toolbar */}
-      <div className={pageView === "calendar" ? "flex items-center justify-between gap-4 px-4 py-3 border-b shrink-0" : "flex items-center justify-between gap-4"}>
-        <h1 className="text-xl font-semibold">Sessions</h1>
-        <div className="flex items-center gap-2">
-          {/* List / Calendar toggle — desktop only */}
-          <div className="hidden md:flex items-center gap-1">
-            <Button
-              variant={pageView === "list" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPageView("list")}
-              aria-pressed={pageView === "list"}
-            >
-              List
-            </Button>
-            <Button
-              variant={pageView === "calendar" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPageView("calendar")}
-              aria-pressed={pageView === "calendar"}
-            >
-              Calendar
-            </Button>
-          </div>
-          {role !== null && <ICalButton icalUrl={icalUrl} />}
-          {isAdmin && (
-            <CreateSessionDialog
-              sessionTypes={sessionTypes}
-              onCreated={handleCreated}
-              onRefresh={refreshSessions}
-            />
-          )}
-        </div>
+      <div className={pageView === "calendar" ? "px-4 py-3 border-b shrink-0" : undefined}>
+        <PageHeader
+          title="Sessions"
+          action={
+            <div className="flex items-center gap-2">
+              {/* List / Calendar toggle — desktop only */}
+              <div className="hidden md:flex items-center gap-1">
+                <Button
+                  variant={pageView === "list" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPageView("list")}
+                  aria-pressed={pageView === "list"}
+                >
+                  List
+                </Button>
+                <Button
+                  variant={pageView === "calendar" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPageView("calendar")}
+                  aria-pressed={pageView === "calendar"}
+                >
+                  Calendar
+                </Button>
+              </div>
+              {role !== null && <ICalButton icalUrl={icalUrl} />}
+              {isAdmin && (
+                <CreateSessionDialog
+                  sessionTypes={sessionTypes}
+                  onCreated={handleCreated}
+                  onRefresh={refreshSessions}
+                />
+              )}
+            </div>
+          }
+        />
       </div>
 
       {pageView === "calendar" ? (
