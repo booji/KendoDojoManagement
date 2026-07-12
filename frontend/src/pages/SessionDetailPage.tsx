@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronRight } from "lucide-react"
+import { PageHeader } from "@/components/ui/page-header"
 
 // ── MarkdownField ─────────────────────────────────────────────────────────────
 
@@ -440,7 +441,9 @@ const SessionDetailPage = () => {
   if (editing) {
     return (
       <div className="px-4 py-6">
-        <h1 className="text-xl font-semibold mb-4">Edit Session</h1>
+        <div className="mb-4">
+          <PageHeader title="Edit Session" />
+        </div>
         <EditForm
           session={session}
           sessionTypes={sessionTypes}
@@ -456,7 +459,7 @@ const SessionDetailPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">{session.title}</h1>
+      <PageHeader title={session.title} />
 
       {/* Details card — full width, metadata in a grid on desktop */}
       <Card>

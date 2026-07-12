@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/ui/page-header"
 
 type AdminDashboard = {
   active_members: number
@@ -97,17 +98,19 @@ const AdminDashboardPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <Button
-          size="lg"
-          onClick={() => void navigate("/sessions/new")}
-          aria-label="Create a new session"
-          className="min-h-[44px]"
-        >
-          Create Session
-        </Button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        action={
+          <Button
+            size="lg"
+            onClick={() => void navigate("/sessions/new")}
+            aria-label="Create a new session"
+            className="min-h-[44px]"
+          >
+            Create Session
+          </Button>
+        }
+      />
 
       {loading && <DashboardSkeletons />}
 

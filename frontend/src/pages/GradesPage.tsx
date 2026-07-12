@@ -17,6 +17,7 @@ import {
   rejectGrade,
 } from "@/api/grades"
 import { formatMemberDate } from "@/lib/date"
+import { PageHeader } from "@/components/ui/page-header"
 
 const formatDate = (value: string | null): string => {
   if (!value) return "Not provided"
@@ -109,7 +110,7 @@ const GradesPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">Grade management</h1>
+      <PageHeader title="Grade management" />
 
       <Card>
         <CardHeader>

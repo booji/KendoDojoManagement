@@ -25,22 +25,21 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { PlusIcon, SearchIcon } from "lucide-react"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyState } from "@/components/ui/empty-state"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_CLASSES: Record<MembershipStatus, string> = {
-  active: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300",
-  inactive: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400",
-  suspended: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400",
+const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive"> = {
+  active: "success",
+  inactive: "secondary",
+  suspended: "destructive",
 }
 
 const StatusBadge = ({ status }: { status: MembershipStatus }) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
-    aria-label={`Status: ${status}`}
-  >
+  <Badge variant={STATUS_VARIANTS[status]} aria-label={`Status: ${status}`}>
     {status.charAt(0).toUpperCase() + status.slice(1)}
-  </span>
+  </Badge>
 )
 
 // ── Role / Minor badges ───────────────────────────────────────────────────────
@@ -48,10 +47,7 @@ const StatusBadge = ({ status }: { status: MembershipStatus }) => (
 const RoleBadges = ({ member }: { member: MemberResponse }) => (
   <div className="flex flex-wrap gap-1">
     {member.is_minor && (
-      <Badge
-        className="bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300"
-        aria-label="Minor — parental consent required"
-      >
+      <Badge variant="warning" aria-label="Minor — parental consent required">
         Minor
       </Badge>
     )}
@@ -435,16 +431,20 @@ const MembersPage = () => {
   return (
     <div className="px-4 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl font-semibold">Members</h1>
-        <Button
-          size="lg"
-          onClick={() => setAddOpen(true)}
-          aria-label="Add member"
-        >
-          <PlusIcon aria-hidden="true" />
-          <span className="hidden sm:inline">Add member</span>
-        </Button>
+      <div className="mb-6">
+        <PageHeader
+          title="Members"
+          action={
+            <Button
+              size="lg"
+              onClick={() => setAddOpen(true)}
+              aria-label="Add member"
+            >
+              <PlusIcon aria-hidden="true" />
+              <span className="hidden sm:inline">Add member</span>
+            </Button>
+          }
+        />
       </div>
 
       {/* Filters */}
@@ -497,19 +497,15 @@ const MembersPage = () => {
 
       {/* Empty */}
       {members !== null && members.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-sm text-muted-foreground">No members found</p>
-          {(search !== "" || statusFilter !== "all") && (
-            <Button
-              variant="link"
-              className="mt-2"
-              onClick={() => { setSearch(""); setStatusFilter("all") }}
-              aria-label="Clear filters"
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          message="No members found"
+          actionLabel={search !== "" || statusFilter !== "all" ? "Clear filters" : null}
+          onAction={
+            search !== "" || statusFilter !== "all"
+              ? () => { setSearch(""); setStatusFilter("all") }
+              : null
+          }
+        />
       )}
 
       {/* Desktop table */}

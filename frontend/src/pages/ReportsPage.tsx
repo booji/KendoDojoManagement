@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DownloadIcon } from "lucide-react"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyState } from "@/components/ui/empty-state"
 
 // ── Attendance tab ─────────────────────────────────────────────────────────────
 
@@ -122,9 +124,7 @@ const AttendanceSection = () => {
               Sessions ({report.sessions.length})
             </h2>
             {report.sessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No sessions in this date range.
-              </p>
+              <EmptyState message="No sessions in this date range." />
             ) : (
               <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
                 <table
@@ -174,7 +174,7 @@ const AttendanceSection = () => {
               Member attendance rates
             </h2>
             {report.member_rates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No member data.</p>
+              <EmptyState message="No member data." />
             ) : (
               <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
                 <table
@@ -308,7 +308,7 @@ const MembersSection = () => {
             Members ({report.length})
           </h2>
           {report.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members found.</p>
+            <EmptyState message="No members found." />
           ) : (
             <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
               <table
@@ -369,7 +369,9 @@ const MembersSection = () => {
 
 const ReportsPage = () => (
   <div className="px-4 py-6">
-    <h1 className="text-xl font-semibold mb-6">Reports</h1>
+    <div className="mb-6">
+      <PageHeader title="Reports" />
+    </div>
 
     <Tabs defaultValue="attendance">
       <TabsList className="mb-6">

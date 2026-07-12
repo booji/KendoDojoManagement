@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { formatSessionDate } from "@/lib/date"
+import { PageHeader } from "@/components/ui/page-header"
 
 const formatTime = (startTime: string): string => startTime
 
@@ -225,7 +226,7 @@ const MemberDashboardPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <PageHeader title="Dashboard" />
 
       {loading && <DashboardSkeletons />}
 
