@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { getDojoSettings, updateDojoSettings, uploadDojoLogo } from "@/api/settings"
+import {
+  getDojoSettings,
+  updateDojoSettings,
+  uploadDojoLogo,
+  uploadDojoBackground,
+} from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
 import {
   getSessionTypes,
@@ -106,6 +111,18 @@ const DojoBrandingSection = () => {
   const [logoError, setLogoError] = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
+  // Login screen background upload
+  const backgroundFileInputRef = useRef<HTMLInputElement>(null)
+  const [backgroundSaveStatus, setBackgroundSaveStatus] = useState<SaveStatus>("idle")
+  const [backgroundError, setBackgroundError] = useState<string | null>(null)
+  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null)
+
+  // Login screen toggles (auto-save)
+  const [showBackground, setShowBackground] = useState(false)
+  const [showLogo, setShowLogo] = useState(false)
+  const [showName, setShowName] = useState(false)
+  const [toggleError, setToggleError] = useState<string | null>(null)
+
   useEffect(() => {
     getDojoSettings()
       .then((data) => {
@@ -113,6 +130,10 @@ const DojoBrandingSection = () => {
         setDojoName(data.dojo_name)
         setPrimaryColour(data.primary_colour)
         setLogoPreview(data.logo_url)
+        setBackgroundPreview(data.background_image_url)
+        setShowBackground(data.login_show_background)
+        setShowLogo(data.login_show_logo)
+        setShowName(data.login_show_name)
       })
       .catch((err: unknown) => {
         const msg =
@@ -188,6 +209,98 @@ const DojoBrandingSection = () => {
       setLogoSaveStatus("error")
     } finally {
       URL.revokeObjectURL(objectUrl)
+    }
+  }
+
+  const handleBackgroundChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const objectUrl = URL.createObjectURL(file)
+    setBackgroundPreview(objectUrl)
+    setBackgroundSaveStatus("saving")
+    setBackgroundError(null)
+    try {
+      const result = await uploadDojoBackground(file)
+      setBackgroundPreview(result.background_image_url)
+      refreshContext()
+      setBackgroundSaveStatus("saved")
+      setTimeout(() => setBackgroundSaveStatus("idle"), 2000)
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to upload background"
+      setBackgroundError(msg)
+      setBackgroundSaveStatus("error")
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }
+
+  const handleRemoveBackground = async () => {
+    setBackgroundSaveStatus("saving")
+    setBackgroundError(null)
+    try {
+      await updateDojoSettings({ background_image_url: null })
+      setBackgroundPreview(null)
+      refreshContext()
+      setBackgroundSaveStatus("saved")
+      setTimeout(() => setBackgroundSaveStatus("idle"), 2000)
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to remove background"
+      setBackgroundError(msg)
+      setBackgroundSaveStatus("error")
+    }
+  }
+
+  const handleToggleShowBackground = async (checked: boolean) => {
+    setShowBackground(checked)
+    setToggleError(null)
+    try {
+      await updateDojoSettings({ login_show_background: checked })
+      refreshContext()
+    } catch (err: unknown) {
+      setShowBackground(!checked)
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to save"
+      setToggleError(msg)
+    }
+  }
+
+  const handleToggleShowLogo = async (checked: boolean) => {
+    setShowLogo(checked)
+    setToggleError(null)
+    try {
+      await updateDojoSettings({ login_show_logo: checked })
+      refreshContext()
+    } catch (err: unknown) {
+      setShowLogo(!checked)
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to save"
+      setToggleError(msg)
+    }
+  }
+
+  const handleToggleShowName = async (checked: boolean) => {
+    setShowName(checked)
+    setToggleError(null)
+    try {
+      await updateDojoSettings({ login_show_name: checked })
+      refreshContext()
+    } catch (err: unknown) {
+      setShowName(!checked)
+      const msg =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to save"
+      setToggleError(msg)
     }
   }
 
@@ -321,6 +434,96 @@ const DojoBrandingSection = () => {
             {colourError}
           </p>
         )}
+      </div>
+
+      {/* Login Screen */}
+      <div className="space-y-4 border-t border-border pt-6">
+        <h3 className="text-sm font-semibold">Login Screen</h3>
+
+        {/* Background image upload */}
+        <div className="space-y-2">
+          <Label htmlFor="background-upload">Background Image</Label>
+          {backgroundPreview !== null && (
+            <div className="mb-2">
+              <img
+                src={backgroundPreview}
+                alt="Login background preview"
+                className="h-24 w-full max-w-sm rounded-md object-cover border border-border"
+              />
+            </div>
+          )}
+          <div className="flex gap-2 items-center flex-wrap">
+            <Input
+              id="background-upload"
+              ref={backgroundFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => void handleBackgroundChange(e)}
+              aria-label="Upload login screen background"
+              className="flex-1 min-h-[44px] cursor-pointer file:cursor-pointer"
+            />
+            {backgroundPreview !== null && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleRemoveBackground()}
+                disabled={backgroundSaveStatus === "saving"}
+                aria-label="Remove login screen background"
+                className="min-h-[44px] shrink-0"
+              >
+                Remove
+              </Button>
+            )}
+            {backgroundSaveStatus === "saving" && (
+              <span className="text-sm text-muted-foreground" aria-live="polite">
+                Saving…
+              </span>
+            )}
+            {backgroundSaveStatus === "saved" && (
+              <span className="text-sm text-green-600 dark:text-green-400" aria-live="polite">
+                Saved!
+              </span>
+            )}
+          </div>
+          {backgroundError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {backgroundError}
+            </p>
+          )}
+        </div>
+
+        {/* Auto-saving visibility toggles */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="login-show-background"
+              checked={showBackground}
+              onCheckedChange={(v) => void handleToggleShowBackground(v)}
+            />
+            <Label htmlFor="login-show-background">Show background image on login screen</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="login-show-logo"
+              checked={showLogo}
+              onCheckedChange={(v) => void handleToggleShowLogo(v)}
+            />
+            <Label htmlFor="login-show-logo">Show logo on login screen</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="login-show-name"
+              checked={showName}
+              onCheckedChange={(v) => void handleToggleShowName(v)}
+            />
+            <Label htmlFor="login-show-name">Show dojo name on login screen</Label>
+          </div>
+          {toggleError !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {toggleError}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )

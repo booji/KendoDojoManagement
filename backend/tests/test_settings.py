@@ -66,6 +66,10 @@ class StubDojoSettingsRepo:
                 "primary_colour": self._DEFAULT_COLOUR,
                 "checkin_window_before_minutes": 60,
                 "checkin_window_after_minutes": 120,
+                "background_image_url": None,
+                "login_show_background": False,
+                "login_show_logo": False,
+                "login_show_name": False,
             }
         return dict(self._settings)
 

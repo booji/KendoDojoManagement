@@ -25,6 +25,10 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         "primary_colour": "#4F46E5",
         "checkin_window_before_minutes": 60,
         "checkin_window_after_minutes": 120,
+        "background_image_url": None,
+        "login_show_background": False,
+        "login_show_logo": False,
+        "login_show_name": False,
     }
 
     def __init__(self) -> None:
@@ -38,9 +42,11 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         return dict(self._store)
 
     async def update(self, data: dict[str, Any]) -> dict[str, Any]:
+        # Keys explicitly present in `data` are written even when their value
+        # is None (e.g. clearing background_image_url) — only keys absent
+        # from `data` are left untouched.
         for key, value in data.items():
-            if value is not None:
-                self._store[key] = value
+            self._store[key] = value
         self._store["updated_at"] = datetime.utcnow().isoformat()
         return dict(self._store)
 
@@ -64,6 +70,10 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
                 "primary_colour": "#4F46E5",
                 "checkin_window_before_minutes": 60,
                 "checkin_window_after_minutes": 120,
+                "background_image_url": None,
+                "login_show_background": False,
+                "login_show_logo": False,
+                "login_show_name": False,
                 "updated_at": None,
             }
         return {
@@ -73,6 +83,10 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
             "primary_colour": row.primary_colour,
             "checkin_window_before_minutes": row.checkin_window_before_minutes,
             "checkin_window_after_minutes": row.checkin_window_after_minutes,
+            "background_image_url": row.background_image_url,
+            "login_show_background": row.login_show_background,
+            "login_show_logo": row.login_show_logo,
+            "login_show_name": row.login_show_name,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
@@ -86,8 +100,11 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
         if row is None:
             row = DojoSettings(id=str(uuid.uuid4()))
             self._session.add(row)
+        # Keys explicitly present in `data` are written even when their value
+        # is None (e.g. clearing background_image_url) — only keys absent
+        # from `data` are left untouched.
         for key, value in data.items():
-            if value is not None and hasattr(row, key):
+            if hasattr(row, key):
                 setattr(row, key, value)
         row.updated_at = datetime.utcnow()
         await self._session.flush()
@@ -98,5 +115,9 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
             "primary_colour": row.primary_colour,
             "checkin_window_before_minutes": row.checkin_window_before_minutes,
             "checkin_window_after_minutes": row.checkin_window_after_minutes,
+            "background_image_url": row.background_image_url,
+            "login_show_background": row.login_show_background,
+            "login_show_logo": row.login_show_logo,
+            "login_show_name": row.login_show_name,
             "updated_at": row.updated_at.isoformat(),
         }

@@ -115,3 +115,14 @@ app.include_router(federations_router)
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
 os.makedirs(_STATIC_DIR, exist_ok=True)
 app.mount("/static/logos", StaticFiles(directory=_STATIC_DIR), name="logos")
+
+_STATIC_BACKGROUNDS_DIR = os.environ.get(
+    "STATIC_BACKGROUNDS_DIR",
+    os.path.join(os.path.dirname(_STATIC_DIR.rstrip("/")), "backgrounds"),
+)
+os.makedirs(_STATIC_BACKGROUNDS_DIR, exist_ok=True)
+app.mount(
+    "/static/backgrounds",
+    StaticFiles(directory=_STATIC_BACKGROUNDS_DIR),
+    name="backgrounds",
+)
