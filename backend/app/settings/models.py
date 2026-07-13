@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase
@@ -21,6 +21,18 @@ class DojoSettings(UUIDBase):
     )
     checkin_window_after_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, default=120
+    )
+    background_image_url: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    login_show_background: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    login_show_logo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    login_show_name: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)

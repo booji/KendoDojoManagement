@@ -12,6 +12,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.settings.branding import project_branding
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import AbstractDojoSettingsRepository
 from app.settings.wcag import passes_wcag_aa
@@ -26,9 +27,14 @@ _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
+_STATIC_BACKGROUNDS_DIR = os.environ.get(
+    "STATIC_BACKGROUNDS_DIR",
+    os.path.join(os.path.dirname(_STATIC_DIR.rstrip("/")), "backgrounds"),
+)
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 _ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
+_MAX_BACKGROUND_BYTES = 5 * 1024 * 1024  # 5 MB
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
@@ -40,6 +46,10 @@ class DojoSettingsUpdate(BaseModel):
     primary_colour: str | None = None
     checkin_window_before_minutes: int | None = None
     checkin_window_after_minutes: int | None = None
+    background_image_url: str | None = None
+    login_show_background: bool | None = None
+    login_show_logo: bool | None = None
+    login_show_name: bool | None = None
 
     @field_validator("dojo_name")
     @classmethod
@@ -75,6 +85,10 @@ async def get_dojo_settings(claims: _Member, repo: _SettingsRepo) -> dict[str, A
         "primary_colour": settings["primary_colour"],
         "checkin_window_before_minutes": settings["checkin_window_before_minutes"],
         "checkin_window_after_minutes": settings["checkin_window_after_minutes"],
+        "background_image_url": settings["background_image_url"],
+        "login_show_background": settings["login_show_background"],
+        "login_show_logo": settings["login_show_logo"],
+        "login_show_name": settings["login_show_name"],
     }
 
 
@@ -92,15 +106,20 @@ async def update_dojo_settings(
                 status_code=422,
                 detail="primary_colour does not meet WCAG AA contrast requirements",
             )
+    fields_set = payload.model_fields_set
     data: dict[str, Any] = {}
-    if payload.dojo_name is not None:
-        data["dojo_name"] = payload.dojo_name
-    if payload.primary_colour is not None:
-        data["primary_colour"] = payload.primary_colour
-    if payload.checkin_window_before_minutes is not None:
-        data["checkin_window_before_minutes"] = payload.checkin_window_before_minutes
-    if payload.checkin_window_after_minutes is not None:
-        data["checkin_window_after_minutes"] = payload.checkin_window_after_minutes
+    for field in (
+        "dojo_name",
+        "primary_colour",
+        "checkin_window_before_minutes",
+        "checkin_window_after_minutes",
+        "background_image_url",
+        "login_show_background",
+        "login_show_logo",
+        "login_show_name",
+    ):
+        if field in fields_set:
+            data[field] = getattr(payload, field)
     settings = await repo.update(data)
     await uow.commit()
     return {
@@ -109,7 +128,18 @@ async def update_dojo_settings(
         "primary_colour": settings["primary_colour"],
         "checkin_window_before_minutes": settings["checkin_window_before_minutes"],
         "checkin_window_after_minutes": settings["checkin_window_after_minutes"],
+        "background_image_url": settings["background_image_url"],
+        "login_show_background": settings["login_show_background"],
+        "login_show_logo": settings["login_show_logo"],
+        "login_show_name": settings["login_show_name"],
     }
+
+
+@router.get("/branding")
+async def get_branding(repo: _SettingsRepo) -> dict[str, Any]:
+    """Public, unauthenticated — returns the gated login-screen branding view."""
+    settings = await repo.get()
+    return project_branding(settings)
 
 
 @router.post("/logo")
@@ -147,3 +177,40 @@ async def upload_logo(
     await repo.update({"logo_url": logo_url})
     await uow.commit()
     return {"logo_url": logo_url}
+
+
+@router.post("/background")
+async def upload_background(
+    claims: _Admin,
+    repo: _SettingsRepo,
+    uow: _UoW,
+    file: UploadFile = File(...),
+) -> dict[str, str]:
+    """Admin-only — upload a login-screen background image."""
+    if file.content_type not in _ALLOWED_MIME:
+        allowed = ", ".join(sorted(_ALLOWED_MIME))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type. Allowed: {allowed}",
+        )
+    ext = os.path.splitext(file.filename or "background.png")[1].lower() or ".png"
+    if ext not in _ALLOWED_EXT:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported extension. Allowed: {', '.join(sorted(_ALLOWED_EXT))}",
+        )
+    contents = await file.read()
+    if len(contents) > _MAX_BACKGROUND_BYTES:
+        raise HTTPException(
+            status_code=422, detail="Background must be 5 MB or smaller"
+        )
+
+    os.makedirs(_STATIC_BACKGROUNDS_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4()}{ext}"
+    dest = os.path.join(_STATIC_BACKGROUNDS_DIR, filename)
+    with open(dest, "wb") as fh:
+        fh.write(contents)
+    background_image_url = f"/static/backgrounds/{filename}"
+    await repo.update({"background_image_url": background_image_url})
+    await uow.commit()
+    return {"background_image_url": background_image_url}
