@@ -955,7 +955,7 @@ type CatalogueLoadState =
   | { status: "ready"; federations: FederationResponse[] }
   | { status: "error"; message: string }
 
-const AdminFederationCatalogue = () => {
+export const AdminFederationCatalogue = () => {
   const [catState, setCatState] = useState<CatalogueLoadState>({ status: "loading" })
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -1138,7 +1138,28 @@ const AdminFederationCatalogue = () => {
 
           {catState.status === "ready" && (
             catState.federations.length === 0 ? (
-              <EmptyState message="No federations found." />
+              // Filtering is server-side, so an empty list only means the
+              // catalogue itself is empty when nothing is filtering it.
+              debouncedSearch === "" && typeFilter === "" && groupingFilter === "" ? (
+                <EmptyState
+                  message={
+                    <>
+                      No federations yet. Add the ones your members belong to — the{" "}
+                      <a
+                        href="https://www.kendo-fik.org/organization/affiliate"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-4"
+                      >
+                        FIK affiliate list
+                      </a>{" "}
+                      has their official names, abbreviations and websites.
+                    </>
+                  }
+                />
+              ) : (
+                <EmptyState message="No federations found." />
+              )
             ) : (
               <div className="overflow-x-auto">
                 <Table>

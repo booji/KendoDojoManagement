@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 
 interface EmptyStateProps {
-  message: string
+  message: ReactNode
   icon?: ReactNode | null
   actionLabel?: string | null
   onAction?: (() => void) | null

@@ -5,7 +5,6 @@ Uses StubRepository pattern — NO real DB. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
-  2.  Federation list pre-populated and selectable (seeded from FIK affiliates, 67 entries)
   8.  Pinned federations float to top of selection lists
  11.  Admins can add new federations to the catalogue (POST /federations)
  12.  Admins can edit federation metadata (PUT /federations/{id})
@@ -550,26 +549,3 @@ def test_member_db_model_has_no_federation_number_column() -> None:
     assert not hasattr(
         Member, "federation_number"
     ), "federation_number column must be removed from Member model (AC20)"
-
-
-# ---------------------------------------------------------------------------
-# AC2 / Seeding — 67 FIK affiliates in seed data
-# ---------------------------------------------------------------------------
-
-
-def test_federation_seed_data_has_67_entries() -> None:
-    """AC2: Seed data must contain exactly 67 FIK affiliate federations."""
-    from app.federations.seed import FEDERATION_SEED_DATA  # noqa: F401 — red
-
-    assert (
-        len(FEDERATION_SEED_DATA) == 67
-    ), f"Expected 67 seed federations, got {len(FEDERATION_SEED_DATA)}"
-
-
-def test_federation_seed_entries_have_required_fields() -> None:
-    """Each seed entry must have at minimum a 'name' field."""
-    from app.federations.seed import FEDERATION_SEED_DATA
-
-    for entry in FEDERATION_SEED_DATA:
-        assert "name" in entry, f"Seed entry missing 'name': {entry}"
-        assert entry["name"], f"Seed entry has empty name: {entry}"
