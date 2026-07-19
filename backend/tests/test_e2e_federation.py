@@ -23,16 +23,6 @@ def test_member_can_add_federation_membership(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC2 — Federation list pre-populated (FIK affiliates, 67 entries) and selectable
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_federation_list_is_pre_populated_and_selectable(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
 # AC3 — Members can enter a membership number (free text, max 100 chars)
 # ---------------------------------------------------------------------------
 
