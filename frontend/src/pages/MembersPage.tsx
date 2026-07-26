@@ -78,7 +78,6 @@ type AddMemberFormState = {
   is_first_aider: boolean
   emergency_contact_name: string
   emergency_contact_phone: string
-  federation_number: string
 }
 
 const defaultFormState = (): AddMemberFormState => ({
@@ -93,7 +92,6 @@ const defaultFormState = (): AddMemberFormState => ({
   is_first_aider: false,
   emergency_contact_name: "",
   emergency_contact_phone: "",
-  federation_number: "",
 })
 
 type AddMemberDialogProps = {
@@ -132,7 +130,6 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
         is_first_aider: form.is_first_aider,
         emergency_contact_name: form.emergency_contact_name || null,
         emergency_contact_phone: form.emergency_contact_phone || null,
-        federation_number: form.federation_number || null,
       }
       const created = await createMember(payload)
       onCreated(created)
@@ -250,17 +247,6 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
                 <SelectItem value="suspended">Suspended</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Federation number */}
-          <div className="space-y-1">
-            <Label htmlFor="federation_number">Federation number</Label>
-            <Input
-              id="federation_number"
-              value={form.federation_number}
-              onChange={(e) => set("federation_number", e.target.value)}
-              placeholder="Optional"
-            />
           </div>
 
           {/* Emergency contact */}

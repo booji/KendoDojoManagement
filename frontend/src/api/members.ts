@@ -15,7 +15,6 @@ export type MemberResponse = {
   is_first_aider: boolean
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
-  federation_number: string | null
   is_minor: boolean
 }
 
@@ -31,7 +30,6 @@ export type CreateMemberRequest = {
   is_first_aider?: boolean
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
-  federation_number?: string | null
 }
 
 export type UpdateMemberRequest = {
@@ -46,7 +44,6 @@ export type UpdateMemberRequest = {
   is_first_aider?: boolean
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
-  federation_number?: string | null
 }
 
 export type ListMembersParams = {
@@ -160,7 +157,6 @@ export type MyMemberUpdateRequest = {
   dob?: string
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
-  federation_number?: string | null
 }
 
 export const getMyMember = async (): Promise<MemberResponse | null> => {
