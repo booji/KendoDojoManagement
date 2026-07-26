@@ -93,7 +93,6 @@ type EditFormState = {
   is_first_aider: boolean
   emergency_contact_name: string
   emergency_contact_phone: string
-  federation_number: string
 }
 
 const memberToForm = (m: MemberResponse): EditFormState => ({
@@ -108,7 +107,6 @@ const memberToForm = (m: MemberResponse): EditFormState => ({
   is_first_aider: m.is_first_aider,
   emergency_contact_name: m.emergency_contact_name ?? "",
   emergency_contact_phone: m.emergency_contact_phone ?? "",
-  federation_number: m.federation_number ?? "",
 })
 
 type EditFormProps = {
@@ -205,16 +203,6 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
             <SelectItem value="suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-
-      <div className="space-y-1">
-        <Label htmlFor="edit_federation_number">Federation number</Label>
-        <Input
-          id="edit_federation_number"
-          value={form.federation_number}
-          onChange={(e) => onChange("federation_number", e.target.value)}
-          placeholder="Optional"
-        />
       </div>
 
       <div className="space-y-1">
@@ -1283,7 +1271,6 @@ const MemberDetailPage = () => {
         is_first_aider: form.is_first_aider,
         emergency_contact_name: form.emergency_contact_name || null,
         emergency_contact_phone: form.emergency_contact_phone || null,
-        federation_number: form.federation_number || null,
         ...(form.dob ? { dob: form.dob } : {}),
       }
       const updated = await updateMember(id, payload)
@@ -1433,7 +1420,6 @@ const MemberDetailPage = () => {
               <Field label="Display name" value={member.display_name} />
               <Field label="Date of birth" value={member.dob !== null ? formatMemberDate(member.dob) : null} />
               <Field label="Join date" value={formatMemberDate(member.join_date)} />
-              <Field label="Federation number" value={member.federation_number} />
             </CardContent>
           </Card>
 
