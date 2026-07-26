@@ -49,7 +49,7 @@ class SelfUpdateMemberRequest(BaseModel):
 
 class MemberResponse(BaseModel):
     id: str
-    email: str
+    email: str | None
     first_name: str
     surname: str
     display_name: str | None
@@ -61,3 +61,5 @@ class MemberResponse(BaseModel):
     emergency_contact_name: str | None
     emergency_contact_phone: str | None
     is_minor: bool
+    anonymised_at: str | None = None
+    anonymised_by: str | None = None

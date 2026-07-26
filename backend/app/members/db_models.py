@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase, UUIDType
@@ -9,7 +11,9 @@ from app.db.base import UUIDBase, UUIDType
 class Member(UUIDBase):
     __tablename__ = "members"
 
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # Nullable to allow GDPR erasure to scrub email to NULL while keeping the
+    # unique constraint (Postgres treats multiple NULLs as distinct).
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     surname: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -27,3 +31,7 @@ class Member(UUIDBase):
         String(50), nullable=True
     )
     user_id: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
+    anonymised_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    anonymised_by: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
