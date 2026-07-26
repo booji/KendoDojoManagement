@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-MembershipStatus = Literal["active", "inactive", "suspended"]
+MembershipStatus = Literal["active", "inactive", "suspended", "archived"]
 
 
 class CreateMemberRequest(BaseModel):

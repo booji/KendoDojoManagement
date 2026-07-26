@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, getMyMember, updateMember, deactivateMember, formatMemberName } from "@/api/members"
+import { getMember, getMyMember, updateMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
@@ -44,10 +44,11 @@ import { generateAdminRecoveryToken } from "@/api/recovery"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive"> = {
+const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive" | "outline"> = {
   active: "success",
   inactive: "secondary",
   suspended: "destructive",
+  archived: "outline",
 }
 
 const StatusBadge = ({ status }: { status: MembershipStatus }) => (
@@ -201,6 +202,7 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
+            <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -275,46 +277,6 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
       </Button>
     </div>
   </form>
-)
-
-// ── Deactivate confirm dialog ─────────────────────────────────────────────────
-
-type DeactivateDialogProps = {
-  open: boolean
-  memberName: string
-  onConfirm: () => void
-  onClose: () => void
-  loading: boolean
-}
-
-const DeactivateDialog = ({ open, memberName, onConfirm, onClose, loading }: DeactivateDialogProps) => (
-  <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Deactivate member</DialogTitle>
-        <DialogDescription>
-          This will set {memberName}&apos;s status to inactive. You can re-activate them later.
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <Button
-          variant="outline"
-          onClick={onClose}
-          disabled={loading}
-          aria-label="Cancel deactivation"
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={onConfirm}
-          disabled={loading}
-        >
-          {loading ? "Confirming…" : "Confirm"}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
 )
 
 // ── Grade card ────────────────────────────────────────────────────────────────
@@ -1218,9 +1180,6 @@ const MemberDetailPage = () => {
   const [editError, setEditError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [deactivateOpen, setDeactivateOpen] = useState(false)
-  const [deactivating, setDeactivating] = useState(false)
-
   useEffect(() => {
     if (!id) return
     Promise.all([getMember(id), getMe(), getMyMember()])
@@ -1284,21 +1243,6 @@ const MemberDetailPage = () => {
     }
   }
 
-  const handleDeactivate = async () => {
-    if (!id) return
-    setDeactivating(true)
-    try {
-      const updated = await deactivateMember(id)
-      setMember(updated)
-      setDeactivateOpen(false)
-    } catch (err) {
-      // Deactivation errors surface in the load error area
-      setLoadError(isApiError(err) ? err.message : "Failed to deactivate member")
-      setDeactivateOpen(false)
-    } finally {
-      setDeactivating(false)
-    }
-  }
 
   // Loading state
   if (member === null && loadError === null) {
@@ -1364,15 +1308,6 @@ const MemberDetailPage = () => {
                 <PencilIcon aria-hidden="true" />
                 Edit
               </Button>
-              {member.membership_status !== "inactive" && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDeactivateOpen(true)}
-                >
-                  Deactivate
-                </Button>
-              )}
             </div>
           ) : null
         }
@@ -1444,15 +1379,6 @@ const MemberDetailPage = () => {
           )}
         </>
       )}
-
-      {/* Deactivate confirm */}
-      <DeactivateDialog
-        open={deactivateOpen}
-        memberName={formatMemberName(member)}
-        onConfirm={handleDeactivate}
-        onClose={() => setDeactivateOpen(false)}
-        loading={deactivating}
-      />
     </div>
   )
 }

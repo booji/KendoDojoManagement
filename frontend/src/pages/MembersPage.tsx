@@ -30,10 +30,11 @@ import { EmptyState } from "@/components/ui/empty-state"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive"> = {
+const STATUS_VARIANTS: Record<MembershipStatus, "success" | "secondary" | "destructive" | "outline"> = {
   active: "success",
   inactive: "secondary",
   suspended: "destructive",
+  archived: "outline",
 }
 
 const StatusBadge = ({ status }: { status: MembershipStatus }) => (
@@ -461,6 +462,7 @@ const MembersPage = () => {
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
+            <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>

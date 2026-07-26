@@ -1,6 +1,6 @@
 import type { ApiError } from "@/api/auth"
 
-export type MembershipStatus = "active" | "inactive" | "suspended"
+export type MembershipStatus = "active" | "inactive" | "suspended" | "archived"
 
 export type MemberResponse = {
   id: string
@@ -203,22 +203,3 @@ export const updateMyMember = async (
 
 export const formatMemberName = (member: Pick<MemberResponse, "display_name" | "first_name" | "surname">): string =>
   member.display_name ?? `${member.first_name} ${member.surname}`
-
-export const deactivateMember = async (id: string): Promise<MemberResponse> => {
-  const res = await fetch(`/api/members/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
-
-  if (res.status === 401 || res.status === 403) {
-    await throwApiError(res, "Not authorized")
-  }
-  if (res.status === 404) {
-    await throwApiError(res, "Member not found")
-  }
-  if (!res.ok) {
-    await throwApiError(res, "Failed to deactivate member")
-  }
-
-  return res.json() as Promise<MemberResponse>
-}

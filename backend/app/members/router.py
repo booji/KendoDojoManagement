@@ -150,22 +150,3 @@ async def update_member(
     return _to_response(record)
 
 
-# ---------------------------------------------------------------------------
-# DELETE /members/{id} — admin only, deactivates (soft delete)
-# ---------------------------------------------------------------------------
-
-
-@router.delete("/members/{member_id}")
-async def deactivate_member(
-    member_id: uuid.UUID,
-    _claims: _Admin,
-    repo: _Repo,
-    uow: _UoW,
-) -> MemberResponse:
-    record = await repo.deactivate(str(member_id))
-    if record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
-        )
-    await uow.commit()
-    return _to_response(record)
