@@ -145,7 +145,9 @@ def _setup_schema():
     """
     import app.attendance.db_models  # noqa: F401
     import app.auth.db_models  # noqa: F401
+    import app.federations.db_models  # noqa: F401
     import app.grades.db_models  # noqa: F401
+    import app.member_federations.db_models  # noqa: F401
     import app.members.db_models  # noqa: F401
     import app.sessions.db_models  # noqa: F401
     import app.settings.models  # noqa: F401

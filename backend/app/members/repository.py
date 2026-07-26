@@ -44,6 +44,8 @@ def _to_dict(obj: Member) -> dict[str, Any]:
         "emergency_contact_name": obj.emergency_contact_name,
         "emergency_contact_phone": obj.emergency_contact_phone,
         "user_id": obj.user_id,
+        "anonymised_at": obj.anonymised_at,
+        "anonymised_by": obj.anonymised_by,
     }
 
 
@@ -97,8 +99,8 @@ class SqlMemberRepository:
         if obj is None:
             return None
         for key, value in data.items():
-            if value is not None and hasattr(obj, key):
-                if hasattr(value, "isoformat"):
+            if hasattr(obj, key):
+                if hasattr(value, "isoformat") and key != "anonymised_at":
                     value = value.isoformat()
                 setattr(obj, key, value)
         await self._session.flush()
@@ -123,8 +125,8 @@ class SqlMemberRepository:
             rows = [
                 r
                 for r in rows
-                if term in r["first_name"].lower()
-                or term in r["surname"].lower()
-                or term in r["email"].lower()
+                if term in (r["first_name"] or "").lower()
+                or term in (r["surname"] or "").lower()
+                or term in (r["email"] or "").lower()
             ]
         return rows

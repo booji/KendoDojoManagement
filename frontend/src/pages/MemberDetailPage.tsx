@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, getMyMember, updateMember, formatMemberName } from "@/api/members"
+import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
@@ -1180,6 +1180,11 @@ const MemberDetailPage = () => {
   const [editError, setEditError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const [eraseDialogOpen, setEraseDialogOpen] = useState(false)
+  const [eraseConfirmText, setEraseConfirmText] = useState("")
+  const [erasing, setErasing] = useState(false)
+  const [eraseError, setEraseError] = useState<string | null>(null)
+
   useEffect(() => {
     if (!id) return
     Promise.all([getMember(id), getMe(), getMyMember()])
@@ -1195,6 +1200,7 @@ const MemberDetailPage = () => {
 
   const isAdmin = currentUser?.role === "admin"
   const isOwnProfile = !isAdmin && member !== null && myMember !== null && member.id === myMember.id
+  const isErased = member !== null && member.anonymised_at !== null
 
   const startEdit = () => {
     if (member === null) return
@@ -1243,6 +1249,32 @@ const MemberDetailPage = () => {
     }
   }
 
+  const openEraseDialog = () => {
+    setEraseConfirmText("")
+    setEraseError(null)
+    setEraseDialogOpen(true)
+  }
+
+  const closeEraseDialog = () => {
+    setEraseDialogOpen(false)
+    setEraseConfirmText("")
+    setEraseError(null)
+  }
+
+  const handleErase = async () => {
+    if (!id) return
+    setErasing(true)
+    setEraseError(null)
+    try {
+      const updated = await eraseMember(id)
+      setMember(updated)
+      closeEraseDialog()
+    } catch (err) {
+      setEraseError(isApiError(err) ? err.message : "Failed to erase member")
+    } finally {
+      setErasing(false)
+    }
+  }
 
   // Loading state
   if (member === null && loadError === null) {
@@ -1299,15 +1331,28 @@ const MemberDetailPage = () => {
         action={
           isAdmin && !editing ? (
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={startEdit}
-                aria-label={`Edit ${formatMemberName(member)}`}
-              >
-                <PencilIcon aria-hidden="true" />
-                Edit
-              </Button>
+              {member.membership_status === "archived" && !isErased && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={openEraseDialog}
+                  aria-label={`Delete ${formatMemberName(member)} permanently`}
+                >
+                  <Trash2Icon aria-hidden="true" />
+                  Delete permanently
+                </Button>
+              )}
+              {!isErased && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={startEdit}
+                  aria-label={`Edit ${formatMemberName(member)}`}
+                >
+                  <PencilIcon aria-hidden="true" />
+                  Edit
+                </Button>
+              )}
             </div>
           ) : null
         }
@@ -1323,8 +1368,14 @@ const MemberDetailPage = () => {
         {member.is_first_aider && <Badge variant="outline">First Aider</Badge>}
       </div>
 
+      {isErased && (
+        <p className="text-xs text-muted-foreground" role="note">
+          This member's personal data has been erased.
+        </p>
+      )}
+
       {/* Edit form */}
-      {editing && form !== null && (
+      {editing && form !== null && !isErased && (
         <Card>
           <CardHeader>
             <CardTitle>Edit member</CardTitle>
@@ -1379,6 +1430,50 @@ const MemberDetailPage = () => {
           )}
         </>
       )}
+
+      {/* Erase confirmation dialog */}
+      <Dialog open={eraseDialogOpen} onOpenChange={(o) => { if (!o) closeEraseDialog() }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {formatMemberName(member)} permanently?</DialogTitle>
+            <DialogDescription>
+              This permanently erases this member's personal data (name, email, date of
+              birth, emergency contact). This cannot be undone. Type{" "}
+              <strong>{formatMemberName(member)}</strong> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="erase_confirm_input">Type the member's name to confirm</Label>
+            <Input
+              id="erase_confirm_input"
+              value={eraseConfirmText}
+              onChange={(e) => setEraseConfirmText(e.target.value)}
+              placeholder={formatMemberName(member)}
+              autoComplete="off"
+            />
+            {eraseError !== null && (
+              <p className="text-sm text-destructive" role="alert">{eraseError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeEraseDialog}
+              disabled={erasing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleErase()}
+              disabled={erasing || eraseConfirmText !== formatMemberName(member)}
+              aria-label="Confirm delete member permanently"
+            >
+              {erasing ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

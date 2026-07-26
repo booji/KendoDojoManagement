@@ -16,6 +16,8 @@ export type MemberResponse = {
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
   is_minor: boolean
+  anonymised_at: string | null
+  anonymised_by: string | null
 }
 
 export type CreateMemberRequest = {
@@ -196,6 +198,28 @@ export const updateMyMember = async (
   }
   if (!res.ok) {
     await throwApiError(res, "Failed to save your details")
+  }
+
+  return res.json() as Promise<MemberResponse>
+}
+
+export const eraseMember = async (id: string): Promise<MemberResponse> => {
+  const res = await fetch(`/api/members/${id}/erase`, {
+    method: "POST",
+    credentials: "include",
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    await throwApiError(res, "Not authorized")
+  }
+  if (res.status === 404) {
+    await throwApiError(res, "Member not found")
+  }
+  if (res.status === 409) {
+    await throwApiError(res, "Member cannot be erased")
+  }
+  if (!res.ok) {
+    await throwApiError(res, "Failed to erase member")
   }
 
   return res.json() as Promise<MemberResponse>
