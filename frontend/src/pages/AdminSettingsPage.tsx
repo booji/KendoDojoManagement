@@ -14,6 +14,7 @@ import {
 } from "@/api/sessions"
 import type { SessionType } from "@/api/sessions"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
+import { applyPrimaryColour, isTooLightForAccent } from "@/lib/primaryColour"
 import {
   listFederations,
   createFederation,
@@ -55,35 +56,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Pencil, Pin, Trash2 } from "lucide-react"
-
-// ── WCAG luminance helpers ─────────────────────────────────────────────────────
-
-// Parse a hex colour to [r, g, b] in 0–255
-const hexToRgb = (hex: string): [number, number, number] | null => {
-  const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
-  if (!match) return null
-  return [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)]
-}
-
-// Relative luminance per WCAG 2.1
-const relativeLuminance = (r: number, g: number, b: number): number => {
-  const toLinear = (c: number): number => {
-    const s = c / 255
-    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
-  }
-  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
-}
-
-// Returns true if the colour is too light (fails WCAG AA against white background)
-const isTooLight = (hex: string): boolean => {
-  const rgb = hexToRgb(hex)
-  if (!rgb) return false
-  const lum = relativeLuminance(...rgb)
-  // Contrast ratio with white (L=1): (1 + 0.05) / (lum + 0.05)
-  // AA requires >= 4.5 for normal text; flag if contrast < 4.5
-  const contrastWithWhite = 1.05 / (lum + 0.05)
-  return contrastWithWhite < 4.5
-}
 
 // ── Dojo Branding section ─────────────────────────────────────────────────────
 
@@ -172,7 +144,7 @@ const DojoBrandingSection = () => {
     try {
       const updated = await updateDojoSettings({ primary_colour: primaryColour })
       setSettings(updated)
-      document.documentElement.style.setProperty("--primary", primaryColour)
+      applyPrimaryColour(primaryColour)
       refreshContext()
       setColourSaveStatus("saved")
       setTimeout(() => setColourSaveStatus("idle"), 2000)
@@ -322,7 +294,7 @@ const DojoBrandingSection = () => {
     )
   }
 
-  const colourWarning = isTooLight(primaryColour)
+  const colourWarning = isTooLightForAccent(primaryColour)
 
   return (
     <div className="space-y-8">
