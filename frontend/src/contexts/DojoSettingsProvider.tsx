@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { getDojoSettings } from "@/api/settings"
+import { applyPrimaryColour } from "@/lib/primaryColour"
 
 type DojoSettingsContextValue = {
   dojoName: string
@@ -29,7 +30,7 @@ export const DojoSettingsProvider = ({ children }: DojoSettingsProviderProps) =>
     setDojoName(data.dojo_name)
     setLogoUrl(data.logo_url)
     setPrimaryColour(data.primary_colour)
-    document.documentElement.style.setProperty("--primary", data.primary_colour)
+    applyPrimaryColour(data.primary_colour)
   }, [])
 
   const refresh = useCallback(() => {
