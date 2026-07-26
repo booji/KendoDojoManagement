@@ -16,6 +16,18 @@ if not _DATABASE_URL.startswith("postgresql"):
         "DATABASE_URL must be a PostgreSQL URL (postgresql+asyncpg://...). "
         "Run tests via: docker compose -f docker-compose.test.yml run --rm test"
     )
+# The session schema fixture calls Base.metadata.drop_all on teardown, so a
+# misdirected DATABASE_URL (e.g. the dev database) would be wiped wholesale.
+# Refuse to run against anything but a dedicated test database — its name must
+# contain "test" (the compose test DB is "kendo_test").
+_db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
+if "test" not in _db_name.lower():
+    raise RuntimeError(
+        f"Refusing to run tests against database {_db_name!r}: the suite calls "
+        "Base.metadata.drop_all on teardown and would destroy all of its data. "
+        "Point DATABASE_URL at a dedicated test database (name containing "
+        "'test'), e.g. via docker compose -f docker-compose.test.yml."
+    )
 # Pin it back so load_dotenv() in app/config.py can't override it later.
 os.environ["DATABASE_URL"] = _DATABASE_URL
 
