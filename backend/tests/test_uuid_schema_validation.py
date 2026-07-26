@@ -278,19 +278,6 @@ async def test_put_member_bad_uuid_returns_422() -> None:
 
 
 @pytest.mark.anyio
-async def test_delete_member_bad_uuid_returns_422() -> None:
-    """DELETE /members/not-a-uuid should return 422 when member_id is uuid.UUID."""
-    app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.delete(f"/members/{_BAD_UUID}")
-
-    assert response.status_code == 422
-
-
-@pytest.mark.anyio
 async def test_get_member_grades_bad_uuid_returns_422() -> None:
     """GET /members/not-a-uuid/grades should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER

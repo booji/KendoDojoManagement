@@ -22,8 +22,6 @@ class AbstractMemberRepository(Protocol):
         self, member_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None: ...
 
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None: ...
-
     async def list(
         self,
         status: str | None = None,
@@ -106,17 +104,6 @@ class SqlMemberRepository:
         await self._session.flush()
         return _to_dict(obj)
 
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            select(Member).where(Member.id == member_id)
-        )
-        obj = result.scalar_one_or_none()
-        if obj is None:
-            return None
-        obj.membership_status = "inactive"
-        await self._session.flush()
-        return _to_dict(obj)
-
     async def list(
         self,
         status: str | None = None,
@@ -125,6 +112,10 @@ class SqlMemberRepository:
         stmt = select(Member)
         if status is not None:
             stmt = stmt.where(Member.membership_status == status)
+        else:
+            # Archived members are shelved out of the default roster; they are
+            # only returned when explicitly requested via status="archived".
+            stmt = stmt.where(Member.membership_status != "archived")
         result = await self._session.execute(stmt)
         rows = [_to_dict(r) for r in result.scalars().all()]
         if search is not None:

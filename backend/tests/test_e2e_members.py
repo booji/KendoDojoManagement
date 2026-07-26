@@ -152,7 +152,7 @@ def test_admin_can_update_member_via_ui(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC6 — Admin can deactivate a member via UI
+# AC6 — Admin can change a member's status via the edit form (#228)
 # ---------------------------------------------------------------------------
 
 
@@ -160,14 +160,16 @@ def test_admin_can_update_member_via_ui(page: Page) -> None:
     strict=False,
     reason="frontend member detail still reads full_name — UI update is a separate issue from #158",
 )
-def test_admin_can_deactivate_member_via_ui(page: Page) -> None:
+def test_admin_can_change_member_status_via_ui(page: Page) -> None:
     admin_token = _make_token("admin")
-    member_id = _create_member_via_api(admin_token, "Deactivate Test Member")
+    member_id = _create_member_via_api(admin_token, "Status Test Member")
     _inject_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/members/{member_id}")
     page.wait_for_load_state("networkidle")
-    page.get_by_role("button", name="Deactivate", exact=True).click()
-    page.get_by_role("button", name="Confirm").click()
+    page.get_by_role("button", name="Edit").click()
+    page.get_by_label("Membership status").click()
+    page.get_by_role("option", name="Inactive").click()
+    page.get_by_role("button", name="Save").click()
     expect(page.get_by_label("Membership status: inactive")).to_be_visible(timeout=8000)
 
 

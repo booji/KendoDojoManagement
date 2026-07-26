@@ -12,7 +12,7 @@ Acceptance criteria exercised here:
   3. POST /members creates a member (admin only)
   4. GET /members/{id} returns profile (admin sees all; member sees own only)
   5. PUT /members/{id} updates any field (admin only)
-  6. DELETE /members/{id} deactivates the member (sets status to inactive)
+  6. Member status (incl. 'archived') is changed via PUT /members/{id}
   7. GET /members supports filtering by status and search by name/email
 
 Issue #158 changes:
@@ -110,13 +110,6 @@ class StubMemberRepo:
         record.update(data)
         return record
 
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None:
-        record = self._store.get(member_id)
-        if record is None:
-            return None
-        record["membership_status"] = "inactive"
-        return record
-
     async def list(
         self,
         status: str | None = None,
@@ -125,6 +118,8 @@ class StubMemberRepo:
         results = list(self._store.values())
         if status is not None:
             results = [r for r in results if r["membership_status"] == status]
+        else:
+            results = [r for r in results if r["membership_status"] != "archived"]
         if search is not None:
             term = search.lower()
             results = [
@@ -589,85 +584,22 @@ async def test_member_cannot_update_member(member_repo) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC6 — DELETE /members/{id} deactivates (sets status to inactive)
+# #228 — the one-way deactivate DELETE route is removed; status is changed
+# via PUT /members/{id} instead.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_delete_deactivates_member(member_repo) -> None:
+async def test_delete_member_route_removed(member_repo) -> None:
+    """DELETE /members/{id} no longer exists — status changes go through PUT."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        create_resp = await c.post("/members", json=_valid_member_payload())
-    member_id = create_resp.json()["id"]
+    created = await member_repo.add(_valid_member_payload(email="gone@dojo.test"))
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.delete(f"/members/{member_id}")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["membership_status"] == "inactive"
-    assert body["id"] == member_id
-
-
-@pytest.mark.anyio
-async def test_delete_does_not_remove_record(member_repo) -> None:
-    """DELETE should deactivate, not hard-delete. Record still retrievable."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        create_resp = await c.post("/members", json=_valid_member_payload())
-    member_id = create_resp.json()["id"]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        await c.delete(f"/members/{member_id}")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        get_resp = await c.get(f"/members/{member_id}")
-    assert get_resp.status_code == 200
-    assert get_resp.json()["membership_status"] == "inactive"
-
-
-@pytest.mark.anyio
-async def test_delete_nonexistent_member_returns_404(member_repo) -> None:
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    fake_id = str(uuid.uuid4())
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.delete(f"/members/{fake_id}")
-    assert response.status_code == 404
-
-
-@pytest.mark.anyio
-async def test_member_cannot_delete_member(member_repo) -> None:
-    from app.auth.token import encode_token
-
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        create_resp = await c.post("/members", json=_valid_member_payload())
-    member_id = create_resp.json()["id"]
-
-    del app.dependency_overrides[REQUIRE_ADMIN]
-    token = encode_token(_MEMBER_CLAIMS)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.delete(
-            f"/members/{member_id}",
-            cookies={"access_token": token},
-        )
-    assert response.status_code == 403
+        response = await c.delete(f"/members/{created['id']}")
+    assert response.status_code == 405
 
 
 # ---------------------------------------------------------------------------
@@ -877,3 +809,70 @@ async def test_member_response_includes_dob(member_repo) -> None:
     body = response.json()
     assert "dob" in body
     assert body["dob"] == "1990-06-15"
+
+
+# ---------------------------------------------------------------------------
+# #228 — archived status + default list exclusion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_update_member_to_archived(member_repo) -> None:
+    """PUT accepts the 'archived' status and persists it."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(_valid_member_payload(email="arch@dojo.test"))
+    member_id = created["id"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            f"/members/{member_id}", json={"membership_status": "archived"}
+        )
+    assert response.status_code == 200
+    assert response.json()["membership_status"] == "archived"
+
+
+@pytest.mark.anyio
+async def test_list_excludes_archived_by_default(member_repo) -> None:
+    """GET /members with no status filter returns active/inactive/suspended
+    but not archived."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    for email, st in [
+        ("act@dojo.test", "active"),
+        ("ina@dojo.test", "inactive"),
+        ("sus@dojo.test", "suspended"),
+        ("arc@dojo.test", "archived"),
+    ]:
+        await member_repo.add(
+            _valid_member_payload(email=email, membership_status=st)
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/members")
+    assert response.status_code == 200
+    statuses = {r["membership_status"] for r in response.json()}
+    assert statuses == {"active", "inactive", "suspended"}
+
+
+@pytest.mark.anyio
+async def test_list_includes_archived_when_filtered(member_repo) -> None:
+    """GET /members?status=archived returns archived members."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    await member_repo.add(
+        _valid_member_payload(email="a2@dojo.test", membership_status="active")
+    )
+    await member_repo.add(
+        _valid_member_payload(email="arc2@dojo.test", membership_status="archived")
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/members?status=archived")
+    assert response.status_code == 200
+    results = response.json()
+    assert all(r["membership_status"] == "archived" for r in results)
+    assert [r["email"] for r in results] == ["arc2@dojo.test"]
