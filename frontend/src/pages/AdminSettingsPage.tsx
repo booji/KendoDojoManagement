@@ -14,7 +14,7 @@ import {
 } from "@/api/sessions"
 import type { SessionType } from "@/api/sessions"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
-import { applyPrimaryColour, isTooLightForAccent } from "@/lib/primaryColour"
+import { applyPrimaryColour } from "@/lib/primaryColour"
 import {
   listFederations,
   createFederation,
@@ -294,8 +294,6 @@ const DojoBrandingSection = () => {
     )
   }
 
-  const colourWarning = isTooLightForAccent(primaryColour)
-
   return (
     <div className="space-y-8">
       {/* Dojo name */}
@@ -396,11 +394,10 @@ const DojoBrandingSection = () => {
               : "Save"}
           </Button>
         </div>
-        {colourWarning && (
-          <p className="text-sm text-amber-600 dark:text-amber-400" role="status">
-            Warning: this colour may have insufficient contrast for WCAG 2.1 AA compliance when used as text on a light background.
-          </p>
-        )}
+        <p className="text-sm text-muted-foreground">
+          Choose a brand hue; the app derives accessible light- and dark-theme
+          shades from it automatically, so any colour is fine.
+        </p>
         {colourError !== null && (
           <p className="text-sm text-destructive" role="alert">
             {colourError}

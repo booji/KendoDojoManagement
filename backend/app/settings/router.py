@@ -15,7 +15,6 @@ from app.dependencies import get_uow
 from app.settings.branding import project_branding
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import AbstractDojoSettingsRepository
-from app.settings.wcag import passes_wcag_aa
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -100,12 +99,10 @@ async def update_dojo_settings(
     uow: _UoW,
 ) -> dict[str, Any]:
     """Admin-only — update dojo name and/or primary colour."""
-    if payload.primary_colour is not None:
-        if not passes_wcag_aa(payload.primary_colour, "#FFFFFF"):
-            raise HTTPException(
-                status_code=422,
-                detail="primary_colour does not meet WCAG AA contrast requirements",
-            )
+    # Any valid hex is admissible: the frontend treats primary_colour as a brand
+    # *hue* and derives per-theme AA-legible --primary shades from it (issue
+    # #223), so the colour itself no longer has to clear contrast against a
+    # single background. Format is still enforced by the field validator.
     fields_set = payload.model_fields_set
     data: dict[str, Any] = {}
     for field in (

@@ -1,18 +1,27 @@
 /**
  * Tests for the brand primary-colour helpers (@/lib/primaryColour).
  *
- * Regression: a dark custom primary (e.g. #1a1a2e) previously left
- * --primary-foreground at the theme default, giving dark-on-dark button text
- * in dark mode. applyPrimaryColour must always pair the colour with a legible
- * foreground.
+ * Issue #223: the stored brand hex is a *hue*, not a literal accent. Because
+ * WCAG contrast is luminance-based, one fixed colour cannot be an accessible
+ * accent against both a near-white and a near-black page. deriveThemePrimaries
+ * turns the brand hue into a darker light-theme shade and a lighter dark-theme
+ * shade, each guaranteeing AA contrast against its own background *and* against
+ * its paired --primary-foreground.
+ *
+ * Regression (#222): a dark custom primary (e.g. #1a1a2e) must still pair with
+ * a legible foreground on the solid button.
  */
 
 import { describe, it, expect, beforeEach } from "vitest"
 import {
   applyPrimaryColour,
+  deriveThemePrimaries,
   contrastRatio,
   readableForeground,
-  isTooLightForAccent,
+  hexToOklch,
+  oklchToHex,
+  LIGHT_BG,
+  DARK_BG,
 } from "@/lib/primaryColour"
 
 describe("contrastRatio", () => {
@@ -36,34 +45,80 @@ describe("readableForeground", () => {
   it("picks near-black for a light brand colour", () => {
     expect(readableForeground("#ffd700")).toBe("#0a0a0a")
   })
+})
 
-  it("always yields an AA-legible pairing (>= 4.5:1)", () => {
-    for (const hex of ["#1a1a2e", "#4f46e5", "#ffd700", "#7f7f7f", "#f0f0f0"]) {
-      expect(contrastRatio(hex, readableForeground(hex))).toBeGreaterThanOrEqual(4.5)
+describe("hexToOklch / oklchToHex round-trip", () => {
+  it("round-trips in-gamut colours within tolerance", () => {
+    for (const hex of ["#4f46e5", "#1a1a2e", "#ffd700", "#2e7d32", "#c2185b"]) {
+      const { L, C, H } = hexToOklch(hex)
+      const back = hexToOklch(oklchToHex(L, C, H))
+      expect(back.L).toBeCloseTo(L, 2)
+      expect(back.C).toBeCloseTo(C, 2)
+      // hue is meaningless at near-zero chroma; only check when chromatic
+      if (C > 0.02) expect(Math.cos((back.H - H) * (Math.PI / 180))).toBeCloseTo(1, 2)
     }
   })
 })
 
-describe("isTooLightForAccent", () => {
-  it("flags a near-white colour that would vanish as a text accent", () => {
-    expect(isTooLightForAccent("#f0f0f0")).toBe(true)
+describe("deriveThemePrimaries", () => {
+  // The four acceptance-criteria AA conditions, for any brand hue:
+  //  light.primary vs LIGHT_BG, light.primary vs light.primaryForeground,
+  //  dark.primary  vs DARK_BG,  dark.primary  vs dark.primaryForeground.
+  const brands = ["#4f46e5", "#1a1a2e", "#ffd700", "#f0f0f0", "#2e7d32"]
+
+  for (const brand of brands) {
+    it(`yields AA-legible shades in both themes for ${brand}`, () => {
+      const { light, dark } = deriveThemePrimaries(brand)
+
+      expect(contrastRatio(light.primary, LIGHT_BG)).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(light.primary, light.primaryForeground)
+      ).toBeGreaterThanOrEqual(4.5)
+
+      expect(contrastRatio(dark.primary, DARK_BG)).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(dark.primary, dark.primaryForeground)
+      ).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+
+  it("derives distinct shades: dark-theme primary is lighter than light-theme primary", () => {
+    // A dark brand hue must still surface a visible accent in dark mode, which
+    // requires lightening it relative to the light-theme shade.
+    const { light, dark } = deriveThemePrimaries("#1a1a2e")
+    expect(hexToOklch(dark.primary).L).toBeGreaterThan(hexToOklch(light.primary).L)
   })
 
-  it("does not flag a dark brand colour", () => {
-    expect(isTooLightForAccent("#1a1a2e")).toBe(false)
+  it("preserves the brand hue in both derived shades", () => {
+    const brand = "#c2185b"
+    const { H } = hexToOklch(brand)
+    const { light, dark } = deriveThemePrimaries(brand)
+    for (const shade of [light.primary, dark.primary]) {
+      const dh = hexToOklch(shade).H - H
+      expect(Math.cos(dh * (Math.PI / 180))).toBeCloseTo(1, 1)
+    }
   })
 })
 
 describe("applyPrimaryColour", () => {
   beforeEach(() => {
-    document.documentElement.style.removeProperty("--primary")
-    document.documentElement.style.removeProperty("--primary-foreground")
+    document.getElementById("brand-primary")?.remove()
   })
 
-  it("sets both --primary and a contrasting --primary-foreground", () => {
+  it("injects a #brand-primary stylesheet with both :root and .dark rules", () => {
     applyPrimaryColour("#1a1a2e")
-    const style = document.documentElement.style
-    expect(style.getPropertyValue("--primary")).toBe("#1a1a2e")
-    expect(style.getPropertyValue("--primary-foreground")).toBe("#ffffff")
+    const el = document.getElementById("brand-primary")
+    expect(el).not.toBeNull()
+    const css = el?.textContent ?? ""
+    expect(css).toContain(":root")
+    expect(css).toContain(".dark")
+    expect(css).toContain("--primary")
+    expect(css).toContain("--primary-foreground")
+  })
+
+  it("reuses the same style element on repeated calls", () => {
+    applyPrimaryColour("#1a1a2e")
+    applyPrimaryColour("#ffd700")
+    expect(document.querySelectorAll("#brand-primary")).toHaveLength(1)
   })
 })
