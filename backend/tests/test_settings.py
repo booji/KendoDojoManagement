@@ -7,8 +7,8 @@ Acceptance criteria covered here:
   1. GET /settings/dojo returns defaults when no settings saved
      (dojo_name="My Dojo", logo_url=None, primary_colour=default hex)
   2. PUT /settings/dojo persists dojo_name and primary_colour
-  3. PUT /settings/dojo rejects primary_colour that fails WCAG 2.1 AA contrast
-     (4.5:1 against white AND dark background)
+  3. PUT /settings/dojo accepts any valid brand hue; the frontend derives
+     per-theme AA-legible --primary shades from it (issue #223)
   4. PUT /settings/dojo is admin-only (member token → 403)
   5. POST /settings/logo is admin-only (member token → 403)
 """
@@ -204,18 +204,19 @@ async def test_put_dojo_settings_persists_primary_colour(
 
 
 # ---------------------------------------------------------------------------
-# AC3 — PUT /settings/dojo rejects primary_colour that fails WCAG AA contrast
+# AC3 — brand hue is admissible regardless of its own contrast (issue #223)
+# The frontend derives per-theme AA shades from the hue, so the raw colour no
+# longer has to clear contrast against any single background.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_put_dojo_settings_rejects_low_contrast_colour(
+async def test_put_dojo_settings_accepts_light_brand_hue(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
-    """PUT /settings/dojo rejects a primary_colour failing WCAG 2.1 AA (4.5:1) against white."""
+    """A light hue (#FFD700), previously rejected vs white, is now accepted."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    # #FFD700 (yellow) fails 4.5:1 against white
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -224,17 +225,17 @@ async def test_put_dojo_settings_rejects_low_contrast_colour(
             json={"primary_colour": "#FFD700"},
         )
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["primary_colour"] == "#FFD700"
 
 
 @pytest.mark.anyio
-async def test_put_dojo_settings_rejects_colour_failing_against_dark_bg(
+async def test_put_dojo_settings_accepts_near_white_brand_hue(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
-    """PUT /settings/dojo rejects a colour failing 4.5:1 against the dark background."""
+    """A near-white hue (#F0F0F0), previously rejected vs the dark bg, is now accepted."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    # Very light colour: near-white fails against dark background (#1A1A1A)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -243,7 +244,8 @@ async def test_put_dojo_settings_rejects_colour_failing_against_dark_bg(
             json={"primary_colour": "#F0F0F0"},
         )
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["primary_colour"] == "#F0F0F0"
 
 
 # ---------------------------------------------------------------------------
