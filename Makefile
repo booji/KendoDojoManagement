@@ -19,9 +19,13 @@ dev:
 	$(RUNTIME) rm -f kendodojomanagement_db_1 kendodojomanagement_backend_1 kendodojomanagement_frontend_1 2>/dev/null || true
 	$(COMPOSE_DEV) up
 
-## test: Start the test watcher stack
+## test: Start the test watcher stack (rebuilds the image so pinned dev deps are present)
 test:
-	$(COMPOSE_TEST) up
+	# --build rebuilds when the Dockerfile or requirements*.txt change, so a
+	# newly pinned dev dependency (e.g. freezegun) can't be missing from a stale
+	# cached image and masquerade as a collection error (see #221). Docker layer
+	# caching keeps this a no-op when nothing relevant changed.
+	$(COMPOSE_TEST) up --build
 
 ## build: Build the production image
 build:

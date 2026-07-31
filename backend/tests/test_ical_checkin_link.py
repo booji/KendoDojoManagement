@@ -135,7 +135,12 @@ def test_cancelled_session_excluded_even_with_checkin_link() -> None:
     even when a checkin_link is present on the dict."""
     url = "https://dojo.example.com/checkin/session/uid-cancelled"
     sessions = [
-        _session(id="uid-cancelled", title="Cancelled Night", cancelled=True, checkin_link=url),
+        _session(
+            id="uid-cancelled",
+            title="Cancelled Night",
+            cancelled=True,
+            checkin_link=url,
+        ),
         _session(id="uid-active", title="Active Night"),
     ]
     result = build_ical(sessions)

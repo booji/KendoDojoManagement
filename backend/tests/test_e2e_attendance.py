@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
@@ -25,6 +26,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -44,7 +46,11 @@ def _make_token(role: str) -> str:
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 def _set_cookie(page: Page, token: str) -> None:
@@ -70,7 +76,11 @@ def _get_or_create_session_type(page: Page, token: str) -> tuple[str, str]:
 
 
 def _create_session(
-    page: Page, token: str, date: str, start_time: str = "19:00"
+    page: Page,
+    token: str,
+    date: str,
+    start_time: str = "19:00",
+    title: str = "Attendance Test Session",
 ) -> str:
     """Create an ad-hoc session and return its id."""
     type_id, _ = _get_or_create_session_type(page, token)
@@ -79,7 +89,7 @@ def _create_session(
         headers={**_api_headers(token), "Content-Type": "application/json"},
         data=json.dumps(
             {
-                "title": "Attendance Test Session",
+                "title": title,
                 "date": date,
                 "segments": [
                     {
@@ -110,7 +120,18 @@ def _cancel_session(page: Page, token: str, session_id: str) -> None:
 
 def test_member_can_checkin_to_session_via_ui(page: Page) -> None:
     admin_token = _make_token("admin")
-    _create_session(page, admin_token, "2099-07-15")
+    # Start ~30 min from now so the check-in window is open (default opens 60 min
+    # before start). Give the session a unique title so we can target its own card
+    # rather than whatever session happens to sort first in the shared list.
+    soon = datetime.now() + timedelta(minutes=30)
+    title = f"Checkin UI {uuid.uuid4().hex[:8]}"
+    _create_session(
+        page,
+        admin_token,
+        soon.strftime("%Y-%m-%d"),
+        start_time=soon.strftime("%H:%M"),
+        title=title,
+    )
 
     member_token = _make_token("member")
     page.set_viewport_size(
@@ -120,13 +141,14 @@ def test_member_can_checkin_to_session_via_ui(page: Page) -> None:
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # At least one "Check In" button must be visible
-    check_in_btn = page.get_by_role("button", name="Check In").first
+    # Scope to the card for the session we created
+    card = page.locator("li").filter(has_text=title)
+    check_in_btn = card.get_by_role("button", name="Check In")
     expect(check_in_btn).to_be_visible(timeout=8000)
 
-    # Click it and confirm the success state renders
+    # Click it and confirm the success state renders in that card
     check_in_btn.click()
-    expect(page.get_by_text("Checked in!").first).to_be_visible(timeout=8000)
+    expect(card.get_by_text("Checked in!")).to_be_visible(timeout=8000)
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +278,11 @@ def test_admin_can_view_attendance_list_via_ui(page: Page) -> None:
     to verify the data layer is wired correctly and accessible to admins).
     """
     admin_token = _make_token("admin")
-    session_id = _create_session(page, admin_token, "2099-08-12")
+    # Start ~30 min from now so the check-in window is open when the member checks in.
+    soon = datetime.now() + timedelta(minutes=30)
+    session_id = _create_session(
+        page, admin_token, soon.strftime("%Y-%m-%d"), start_time=soon.strftime("%H:%M")
+    )
 
     # Check in as a member via API to seed the attendance record
     member_token = _make_token("member")

@@ -28,6 +28,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -39,11 +40,15 @@ SESSIONS_URL = f"{BASE_URL}/sessions"
 def _make_token(role: str) -> str:
     claims = UserClaims(
         sub=str(uuid.uuid4()),
-        email=f"{role}@dojo.test",
+        email=f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 def _set_cookie(page: Page, token: str) -> None:

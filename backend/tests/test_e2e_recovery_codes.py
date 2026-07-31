@@ -21,6 +21,8 @@ import pytest
 import requests
 from playwright.sync_api import Page, expect
 
+from tests.e2e_support import complete_onboarding
+
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
 
@@ -59,6 +61,7 @@ def _register_and_login(page: Page) -> str:
             }
         ]
     )
+    complete_onboarding(token)
     return email
 
 
@@ -215,6 +218,8 @@ def test_settings_security_shows_regenerate_button_when_codes_exist(page: Page) 
     """Settings > Security shows 'Regenerate' button when recovery codes already exist."""
     email = f"rc-ac6d-{uuid.uuid4().hex[:8]}@dojo.test"
     token = _register_and_get_token(email)
+    # Seed the profile so RequireProfile doesn't bounce /settings to /onboarding (#221).
+    complete_onboarding(token)
     # Generate codes via API first
     s = _authed_session(token)
     s.post(f"{API_URL}/auth/recovery/codes/generate").raise_for_status()

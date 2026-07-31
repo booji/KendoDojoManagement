@@ -266,11 +266,7 @@ async def test_erase_member_not_archived_returns_409() -> None:
 async def test_erase_self_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
-        {
-            "member-1": _member(
-                membership_status="archived", user_id=_ADMIN_CLAIMS.sub
-            )
-        }
+        {"member-1": _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -470,9 +466,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
 
     uow = _DbSessionUnitOfWork(db_session)
     app.dependency_overrides[get_uow] = lambda: uow
-    app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(
-        db_session
-    )
+    app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: UserClaims(
         sub=actor_id, email="actor@dojo.test", role="admin", is_active=True
     )
@@ -489,15 +483,19 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
 
     # --- assert: member row anonymised in place ------------------------------
     row = (
-        await db_session.execute(
-            text(
-                "SELECT first_name, surname, email, display_name, dob, "
-                "emergency_contact_name, emergency_contact_phone, user_id "
-                "FROM members WHERE id = :id"
-            ),
-            {"id": member_id},
+        (
+            await db_session.execute(
+                text(
+                    "SELECT first_name, surname, email, display_name, dob, "
+                    "emergency_contact_name, emergency_contact_phone, user_id "
+                    "FROM members WHERE id = :id"
+                ),
+                {"id": member_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["first_name"] == "Deleted"
     assert row["surname"] == "member"
     assert row["email"] is None

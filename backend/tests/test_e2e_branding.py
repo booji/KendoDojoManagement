@@ -229,9 +229,7 @@ def test_admin_settings_login_screen_toggles_auto_save(page: Page) -> None:
     expect(toggle).to_be_checked()
 
     # Auto-saved without a page action — confirm against the backend directly
-    resp = requests.get(
-        f"{API_URL}/settings/dojo", cookies={"access_token": token}
-    )
+    resp = requests.get(f"{API_URL}/settings/dojo", cookies={"access_token": token})
     resp.raise_for_status()
     assert resp.json()["login_show_name"] is True
 
@@ -269,9 +267,7 @@ def test_admin_settings_login_screen_background_upload(page: Page) -> None:
     assert "/static/backgrounds/" in src
 
     # Confirm the backend actually stored it
-    resp = requests.get(
-        f"{API_URL}/settings/dojo", cookies={"access_token": token}
-    )
+    resp = requests.get(f"{API_URL}/settings/dojo", cookies={"access_token": token})
     resp.raise_for_status()
     assert resp.json()["background_image_url"] is not None
 
@@ -297,9 +293,7 @@ def test_admin_settings_login_screen_background_remove(page: Page) -> None:
     expect(page.get_by_alt_text("Login background preview")).to_have_count(0)
 
     # Persisted server-side
-    resp = requests.get(
-        f"{API_URL}/settings/dojo", cookies={"access_token": token}
-    )
+    resp = requests.get(f"{API_URL}/settings/dojo", cookies={"access_token": token})
     resp.raise_for_status()
     assert resp.json()["background_image_url"] is None
 

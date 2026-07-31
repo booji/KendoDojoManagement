@@ -112,9 +112,7 @@ async def test_get_branding_hides_dojo_name_when_login_show_name_off(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
     """dojo_name never appears for anonymous callers when login_show_name is off."""
-    await settings_repo.update(
-        {"dojo_name": "Secret Dojo", "login_show_name": False}
-    )
+    await settings_repo.update({"dojo_name": "Secret Dojo", "login_show_name": False})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -385,12 +383,11 @@ async def test_post_background_success_persists_background_image_url(
 
     assert upload_resp.status_code == 200
     assert get_resp.status_code == 200
-    assert get_resp.json()["background_image_url"] == upload_resp.json()[
-        "background_image_url"
-    ]
-    assert get_resp.json()["background_image_url"].startswith(
-        "/static/backgrounds/"
+    assert (
+        get_resp.json()["background_image_url"]
+        == upload_resp.json()["background_image_url"]
     )
+    assert get_resp.json()["background_image_url"].startswith("/static/backgrounds/")
 
 
 # ---------------------------------------------------------------------------
@@ -471,10 +468,7 @@ async def test_put_dojo_settings_persists_background_image_url(
         )
 
     assert response.status_code == 200
-    assert (
-        response.json()["background_image_url"]
-        == "/static/backgrounds/manual.png"
-    )
+    assert response.json()["background_image_url"] == "/static/backgrounds/manual.png"
 
 
 @pytest.mark.anyio

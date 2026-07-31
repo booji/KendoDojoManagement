@@ -17,14 +17,13 @@ Acceptance criteria exercised here:
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.dojo_settings_support import StubDojoSettingsRepo
 
 _ADMIN = UserClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
@@ -33,35 +32,6 @@ _ADMIN = UserClaims(
 
 def _admin_override():
     return _ADMIN
-
-
-class StubDojoSettingsRepo:
-    """In-memory stand-in for a dojo settings repository, carrying the new
-    check-in window default minute columns."""
-
-    _DEFAULT_COLOUR = "#4F46E5"
-    _DEFAULT_BEFORE_MINUTES = 60
-    _DEFAULT_AFTER_MINUTES = 120
-
-    def __init__(self) -> None:
-        self._settings: dict[str, Any] | None = None
-
-    async def get(self) -> dict[str, Any]:
-        if self._settings is None:
-            return {
-                "dojo_name": "My Dojo",
-                "logo_url": None,
-                "primary_colour": self._DEFAULT_COLOUR,
-                "checkin_window_before_minutes": self._DEFAULT_BEFORE_MINUTES,
-                "checkin_window_after_minutes": self._DEFAULT_AFTER_MINUTES,
-            }
-        return dict(self._settings)
-
-    async def update(self, data: dict[str, Any]) -> dict[str, Any]:
-        current = await self.get()
-        current.update(data)
-        self._settings = current
-        return dict(self._settings)
 
 
 @pytest.fixture(autouse=True)

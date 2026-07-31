@@ -77,14 +77,33 @@ def _seed_profile(page: Page, token: str) -> None:
     ), f"Profile seed failed: {resp.status} {resp.text()}"
 
 
-def _get_type_ids(page: Page, admin_token: str, count: int = 2) -> list[str]:
+def _get_types(page: Page, admin_token: str, count: int = 2) -> list[dict]:
     resp = page.request.get(
         f"{API_URL}/session-types", headers=_api_headers(admin_token)
     )
     assert resp.status == 200
     types = resp.json()
     assert len(types) >= count, "Not enough seeded session types for this test"
-    return [t["id"] for t in types[:count]]
+    return types[:count]
+
+
+def _get_type_ids(page: Page, admin_token: str, count: int = 2) -> list[str]:
+    return [t["id"] for t in _get_types(page, admin_token, count)]
+
+
+def _select_segment_type(page: Page, segment, type_name: str) -> None:
+    """Tick a session type for a segment via its SessionTypeMultiSelect popover.
+
+    Each segment embeds a ``SessionTypeMultiSelect`` (trigger button labelled
+    "Session types"; options are checkboxes labelled by type name). The popover
+    content is portalled to the document body, so the checkbox is located at the
+    page level. Escape closes the popover so it doesn't overlay other controls.
+    """
+    segment.get_by_role("button", name="Session types").click()
+    # exact match: one type name can be a prefix of another ("Kihon" vs
+    # "Kihon-Keiko-Ho"), and accessible-name matching is substring by default.
+    page.get_by_role("checkbox", name=type_name, exact=True).click()
+    page.keyboard.press("Escape")
 
 
 def _create_session(page: Page, admin_token: str, payload: dict) -> dict:
@@ -107,13 +126,15 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
 ) -> None:
     """AC1: Admin can add/remove multiple segments in the create dialog."""
     admin_token = _make_token("admin")
-    type_id = _get_type_ids(page, admin_token, count=1)[0]
+    type_name = _get_types(page, admin_token, count=1)[0]["name"]
 
     _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
-    dialog = page.get_by_role("dialog")
+    # Scope to the Create Session dialog by name: each segment's SessionTypeMultiSelect
+    # popover is also role="dialog", so an unnamed match is ambiguous once one opens.
+    dialog = page.get_by_role("dialog", name="Create Session")
     expect(dialog).to_be_visible(timeout=10_000)
 
     # 3. "Add segment" button is present
@@ -133,18 +154,18 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
     expect(dialog.locator('[aria-label="Segment 1"]')).to_be_visible()
 
     # 6. Fill required fields and submit with the remaining single segment
-    dialog.get_by_label("Title").fill("AC1 Multi-Segment Test")
+    dialog.locator("#session-title").fill("AC1 Multi-Segment Test")
     dialog.get_by_label("Date").fill("2099-11-01")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    # Click the type checkbox for segment 0 (0-indexed ids, 1-indexed aria-label)
-    dialog.locator(f'[id="seg-0-type-{type_id}"]').click()
+    _select_segment_type(page, seg1, type_name)
     dialog.get_by_role("button", name="Create Session").click()
 
-    # Dialog closes; session appears in the list
-    expect(page.get_by_text("AC1 Multi-Segment Test", exact=False)).to_be_visible(
-        timeout=10_000
-    )
+    # Dialog closes; session appears in the list. Assert the visible desktop-table
+    # cell (the mobile-card copy is present but hidden at this viewport).
+    expect(
+        page.get_by_role("cell", name="AC1 Multi-Segment Test", exact=True)
+    ).to_be_visible(timeout=10_000)
 
 
 # ---------------------------------------------------------------------------
@@ -158,36 +179,35 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
 ) -> None:
     """AC2: Multiple types per segment; overlapping/duplicate types accepted."""
     admin_token = _make_token("admin")
-    type_ids = _get_type_ids(page, admin_token, count=2)
-    type_a, type_b = type_ids[0], type_ids[1]
+    types = _get_types(page, admin_token, count=2)
+    type_a, type_b = types[0]["name"], types[1]["name"]
 
     _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
-    dialog = page.get_by_role("dialog")
+    # Scope to the Create Session dialog by name: each segment's SessionTypeMultiSelect
+    # popover is also role="dialog", so an unnamed match is ambiguous once one opens.
+    dialog = page.get_by_role("dialog", name="Create Session")
     expect(dialog).to_be_visible(timeout=10_000)
 
-    # 2. In segment 1, select both type_a and type_b — both chips/checkboxes active
-    dialog.get_by_label("Title").fill("AC2 Multi-Type Test")
+    # 2. In segment 1, select both type_a and type_b (multiple types per segment)
+    dialog.locator("#session-title").fill("AC2 Multi-Type Test")
     dialog.get_by_label("Date").fill("2099-11-02")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    dialog.locator(f'[id="seg-0-type-{type_a}"]').click()
-    dialog.locator(f'[id="seg-0-type-{type_b}"]').click()
-    # Both checkboxes should now be checked
-    expect(dialog.locator(f'[id="seg-0-type-{type_a}"]')).to_have_attribute(
-        "aria-checked", "true"
-    )
-    expect(dialog.locator(f'[id="seg-0-type-{type_b}"]')).to_have_attribute(
-        "aria-checked", "true"
-    )
+    _select_segment_type(page, seg1, type_a)
+    _select_segment_type(page, seg1, type_b)
+    # Both selected types appear as badges in the segment's trigger
+    trigger1 = seg1.get_by_role("button", name="Session types")
+    expect(trigger1).to_contain_text(type_a)
+    expect(trigger1).to_contain_text(type_b)
 
     # 3. Add a second segment with the same type_a (duplicate type across segments)
     dialog.get_by_role("button", name="Add segment").click()
     seg2 = dialog.locator('[aria-label="Segment 2"]')
     # New segment starts with no type; select type_a (same as segment 1)
-    dialog.locator(f'[id="seg-1-type-{type_a}"]').click()
+    _select_segment_type(page, seg2, type_a)
 
     # 4. Set both segments to the same start_time (overlapping) — no validation error
     seg2.get_by_label("Start time").fill("19:00")
@@ -197,9 +217,9 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     # If validation fails, the dialog stays open and shows an error.
     # Successful submission closes the dialog and shows the session in the list.
     expect(dialog).not_to_be_visible(timeout=10_000)
-    expect(page.get_by_text("AC2 Multi-Type Test", exact=False)).to_be_visible(
-        timeout=10_000
-    )
+    expect(
+        page.get_by_role("cell", name="AC2 Multi-Type Test", exact=True)
+    ).to_be_visible(timeout=10_000)
 
     # Verify via API that segment 1 has 2 type_ids
     sessions_resp = page.request.get(
@@ -234,7 +254,9 @@ def test_segment_row_has_no_coach_notes_field(
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
-    dialog = page.get_by_role("dialog")
+    # Scope to the Create Session dialog by name: each segment's SessionTypeMultiSelect
+    # popover is also role="dialog", so an unnamed match is ambiguous once one opens.
+    dialog = page.get_by_role("dialog", name="Create Session")
     expect(dialog).to_be_visible(timeout=10_000)
 
     # First segment must not have a "Coach notes" input
@@ -267,7 +289,9 @@ def test_segment_editor_is_usable_on_mobile_viewport(
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
-    dialog = page.get_by_role("dialog")
+    # Scope to the Create Session dialog by name: each segment's SessionTypeMultiSelect
+    # popover is also role="dialog", so an unnamed match is ambiguous once one opens.
+    dialog = page.get_by_role("dialog", name="Create Session")
     expect(dialog).to_be_visible(timeout=10_000)
 
     # 3. No horizontal scroll — dialog scrollWidth <= clientWidth
@@ -282,7 +306,8 @@ def test_segment_editor_is_usable_on_mobile_viewport(
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     expect(seg1.get_by_text("Start time", exact=True)).to_be_visible()
     expect(seg1.get_by_text("Duration (minutes)", exact=True)).to_be_visible()
-    expect(seg1.get_by_text("Coach notes", exact=True)).to_be_visible()
+    # (Coach notes was removed from segments in #190 — see
+    # test_segment_row_has_no_coach_notes_field.)
 
     # 6. Add a second segment — both rows still reachable without horizontal scroll
     add_btn.click()
@@ -303,13 +328,15 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
 ) -> None:
     """AC5: The create dialog with one segment is a simple, familiar flow."""
     admin_token = _make_token("admin")
-    type_id = _get_type_ids(page, admin_token, count=1)[0]
+    type_name = _get_types(page, admin_token, count=1)[0]["name"]
 
     _seed_profile(page, admin_token)
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions")
     page.get_by_role("button", name="Create Session").click()
-    dialog = page.get_by_role("dialog")
+    # Scope to the Create Session dialog by name: each segment's SessionTypeMultiSelect
+    # popover is also role="dialog", so an unnamed match is ambiguous once one opens.
+    dialog = page.get_by_role("dialog", name="Create Session")
     expect(dialog).to_be_visible(timeout=10_000)
 
     # 2. Dialog opens with exactly one segment row — no wizard / multi-step prompt
@@ -318,12 +345,12 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     expect(dialog.get_by_role("button", name="Next")).not_to_be_visible()
 
     # 3. Fill title, date, type, start_time, duration
-    dialog.get_by_label("Title").fill("AC5 Single Segment Flow")
+    dialog.locator("#session-title").fill("AC5 Single Segment Flow")
     dialog.get_by_label("Date").fill("2099-11-05")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
     seg1.get_by_label("Duration (minutes)").fill("90")
-    dialog.locator(f'[id="seg-0-type-{type_id}"]').click()
+    _select_segment_type(page, seg1, type_name)
 
     # 4. Submit button is enabled (not disabled before submission)
     submit_btn = dialog.get_by_role("button", name="Create Session")
@@ -332,9 +359,9 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     # 5. Submit — session appears in the session list
     submit_btn.click()
     expect(dialog).not_to_be_visible(timeout=10_000)
-    expect(page.get_by_text("AC5 Single Segment Flow", exact=False)).to_be_visible(
-        timeout=10_000
-    )
+    expect(
+        page.get_by_role("cell", name="AC5 Single Segment Flow", exact=True)
+    ).to_be_visible(timeout=10_000)
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +374,9 @@ def test_edit_form_replaces_full_segment_set_on_save(
 ) -> None:
     """AC6: Editing a session via the edit form replaces all segments."""
     admin_token = _make_token("admin")
-    type_ids = _get_type_ids(page, admin_token, count=2)
-    type_a, type_b = type_ids[0], type_ids[1]
+    types = _get_types(page, admin_token, count=2)
+    type_a, type_b = types[0]["id"], types[1]["id"]
+    type_b_name = types[1]["name"]
 
     # 1. Seed a session with two segments via the API
     created = _create_session(
@@ -398,7 +426,7 @@ def test_edit_form_replaces_full_segment_set_on_save(
     expect(new_seg).to_be_visible()
     new_seg.get_by_label("Start time").fill("20:00")
     # Select type_b for the new segment (different from the seeded segment 2's type)
-    page.locator(f'[id="seg-1-type-{type_b}"]').click()
+    _select_segment_type(page, new_seg, type_b_name)
 
     # 6. Save
     page.get_by_role("button", name="Save").click()

@@ -77,7 +77,7 @@ def _populate_instance() -> None:
                 INSERT INTO passkey_credentials
                     (id, user_id, credential_id, public_key, sign_count, label, created_at)
                 VALUES
-                    (gen_random_uuid()::text, $1, '\\xDEADBEEF', '\\xDEADBEEF', 0, 'seed', now())
+                    (gen_random_uuid(), $1::uuid, '\\xDEADBEEF', '\\xDEADBEEF', 0, 'seed', now())
                 ON CONFLICT DO NOTHING
                 """,
                 user_id,

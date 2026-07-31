@@ -15,8 +15,6 @@ Acceptance criteria covered here:
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -24,6 +22,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
+from tests.dojo_settings_support import StubDojoSettingsRepo
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -45,40 +44,8 @@ def _member_token() -> str:
     return encode_token(_MEMBER)
 
 
-# ---------------------------------------------------------------------------
-# Stub repository
-# ---------------------------------------------------------------------------
-
-
-class StubDojoSettingsRepo:
-    """In-memory stand-in for a dojo settings repository."""
-
-    _DEFAULT_COLOUR = "#4F46E5"  # indigo-600 — expected default
-
-    def __init__(self) -> None:
-        self._settings: dict[str, Any] | None = None
-
-    async def get(self) -> dict[str, Any]:
-        if self._settings is None:
-            return {
-                "dojo_name": "My Dojo",
-                "logo_url": None,
-                "primary_colour": self._DEFAULT_COLOUR,
-                "checkin_window_before_minutes": 60,
-                "checkin_window_after_minutes": 120,
-                "background_image_url": None,
-                "login_show_background": False,
-                "login_show_logo": False,
-                "login_show_name": False,
-            }
-        return dict(self._settings)
-
-    async def update(self, data: dict[str, Any]) -> dict[str, Any]:
-        current = await self.get()
-        current.update(data)
-        self._settings = current
-        return dict(self._settings)
-
+# The dojo settings stub lives in tests/dojo_settings_support.py so its shape
+# stays in step with every other settings test (see issue #221).
 
 # ---------------------------------------------------------------------------
 # Fixtures

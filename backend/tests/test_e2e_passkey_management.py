@@ -17,6 +17,8 @@ import pytest
 import requests
 from playwright.sync_api import Page, expect
 
+from tests.e2e_support import complete_onboarding
+
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
 
@@ -45,6 +47,7 @@ def _register_and_login(page: Page) -> str:
             }
         ]
     )
+    complete_onboarding(token)
     return email
 
 
