@@ -19,14 +19,13 @@ import { EmptyState } from "@/components/ui/empty-state"
 
 // ── Attendance tab ─────────────────────────────────────────────────────────────
 
-const AttendanceSection = () => {
-  const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10)
+const toYMD = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
-  const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
-  const [dateTo, setDateTo] = useState(today)
+const AttendanceSection = () => {
+  const [dateFrom, setDateFrom] = useState(() =>
+    toYMD(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  )
+  const [dateTo, setDateTo] = useState(() => toYMD(Date.now()))
   const [report, setReport] = useState<AttendanceReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)

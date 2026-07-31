@@ -62,7 +62,7 @@ vi.mock("@/components/SessionCardList", () => ({
 // ── Mock SessionsTable (for AC8 desktop integration test) ─────────────────────
 
 vi.mock("@/components/SessionsTable", () => ({
-  default: (props: Record<string, unknown>) => (
+  default: () => (
     <div data-testid="sessions-table" aria-label="Sessions table">
       Sessions table
     </div>

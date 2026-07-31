@@ -158,14 +158,13 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [rowError, setRowError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (editing) {
-      setLabelDraft(passkey.label)
-      setTimeout(() => inputRef.current?.focus(), 0)
-    }
-  }, [editing, passkey.label])
+  // Seed the draft when entering edit mode rather than syncing it in an effect —
+  // the input only mounts while editing, so autoFocus handles the focus.
+  const startEditing = () => {
+    setLabelDraft(passkey.label)
+    setEditing(true)
+  }
 
   const handleSave = async () => {
     const trimmed = labelDraft.trim()
@@ -199,7 +198,7 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
         {editing ? (
           <>
             <Input
-              ref={inputRef}
+              autoFocus
               value={labelDraft}
               onChange={(e) => setLabelDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -237,7 +236,7 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setEditing(true)}
+              onClick={startEditing}
               aria-label="Rename passkey"
               className="h-8 w-8 p-0"
             >
@@ -337,7 +336,6 @@ const SecurityCard = () => {
 
   useEffect(() => {
     loadData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRename = async (id: string, label: string) => {
