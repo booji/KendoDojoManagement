@@ -5,7 +5,7 @@ alembic==1.14.0
 asyncpg==0.31.0
 joserfc==1.7.4
 bcrypt>=4.0.0
-webauthn==2.7.1
+webauthn==3.0.0
 python-dotenv==1.2.2
 pydantic[email]==2.10.3
 typer>=0.9.0
@@ -14,9 +14,9 @@ python-multipart==0.0.32
 
 # Security-pinned transitive dependencies (issue #235).
 # These are pulled transitively but pinned here to guarantee the CVE-fixed
-# versions on a fresh install. cryptography is held <47 because webauthn's
-# pyopenssl dependency caps it there; see PR notes for the residual advisory.
-cryptography>=46.0.7,<47
+# versions on a fresh install. webauthn 3.0.0 requires cryptography>=49.0.0,
+# which clears GHSA-537c-gmf6-5ccf (issue #241).
+cryptography>=49.0.0
 urllib3>=2.7.0
 idna>=3.15
 click>=8.4.2
