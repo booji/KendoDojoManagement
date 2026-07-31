@@ -924,8 +924,15 @@ type CatalogueLoadState =
   | { status: "ready"; federations: FederationResponse[] }
   | { status: "error"; message: string }
 
+// A settled result is tagged with the filters it was fetched for, so a filter
+// change reads as "loading" during render instead of needing an effect to
+// synchronously reset the state.
+type SettledCatalogue = Exclude<CatalogueLoadState, { status: "loading" }> & {
+  filters: string
+}
+
 export const AdminFederationCatalogue = () => {
-  const [catState, setCatState] = useState<CatalogueLoadState>({ status: "loading" })
+  const [catResult, setCatResult] = useState<SettledCatalogue | null>(null)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState("")
@@ -944,21 +951,27 @@ export const AdminFederationCatalogue = () => {
     return () => clearTimeout(t)
   }, [search])
 
+  const filterKey = `${debouncedSearch}|${typeFilter}|${groupingFilter}`
+  const catState: CatalogueLoadState =
+    catResult && catResult.filters === filterKey ? catResult : { status: "loading" }
+
   const loadFederations = useCallback(() => {
-    setCatState({ status: "loading" })
     listFederations({
       search: debouncedSearch || undefined,
       type: typeFilter || undefined,
       continental_grouping: groupingFilter || undefined,
     })
-      .then((feds) => setCatState({ status: "ready", federations: feds }))
+      .then((feds) =>
+        setCatResult({ status: "ready", federations: feds, filters: filterKey })
+      )
       .catch((err: unknown) => {
-        setCatState({
+        setCatResult({
           status: "error",
           message: isApiError(err) ? err.message : "Failed to load federations",
+          filters: filterKey,
         })
       })
-  }, [debouncedSearch, typeFilter, groupingFilter])
+  }, [debouncedSearch, typeFilter, groupingFilter, filterKey])
 
   useEffect(() => {
     loadFederations()

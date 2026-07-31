@@ -223,8 +223,6 @@ describe("AC4 — cancelled session styling", () => {
 
 describe("AC5 — row click navigates", () => {
   it("navigates to /sessions/:id when a row is clicked", async () => {
-    const user = userEvent.setup()
-
     // Use a navigate spy via MemoryRouter — check that a link wraps each row
     // or that the row has a role="link" / onclick that leads to the correct href.
     // The simplest assertion: there is an <a> element pointing to /sessions/s-upcoming.

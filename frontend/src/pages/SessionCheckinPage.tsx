@@ -40,14 +40,13 @@ const formatBoundaryTime = (iso: string): string => {
 const SessionCheckinPage = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [state, setState] = useState<PageState>({ kind: "loading" })
+  const [state, setState] = useState<PageState>(() =>
+    id ? { kind: "loading" } : { kind: "not-found" }
+  )
   const hasFired = useRef(false)
 
   useEffect(() => {
-    if (!id) {
-      setState({ kind: "not-found" })
-      return
-    }
+    if (!id) return
     if (hasFired.current) return
     hasFired.current = true
 

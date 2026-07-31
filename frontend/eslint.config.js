@@ -20,4 +20,27 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // shadcn primitives and context providers co-locate their variant helpers,
+    // contexts and hooks with the component by design. Splitting them would only
+    // buy finer-grained dev HMR, so allow those specific export names instead.
+    files: ['src/components/ui/**/*.tsx', 'src/contexts/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            'badgeVariants',
+            'buttonVariants',
+            'tabsListVariants',
+            'useSidebar',
+            'ThemeContext',
+            'useThemeContext',
+            'useDojoSettings',
+          ],
+        },
+      ],
+    },
+  },
 ])

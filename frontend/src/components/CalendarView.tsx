@@ -431,10 +431,15 @@ type LoadState =
   | { kind: "error"; message: string }
   | { kind: "loaded"; sessions: SessionInstance[]; typeMap: Map<string, SessionType> }
 
+// A settled result is tagged with the range it was fetched for, so a range
+// change reads as "loading" during render instead of needing an effect to
+// synchronously reset the state.
+type SettledResult = Exclude<LoadState, { kind: "loading" }> & { range: string }
+
 const CalendarView = ({ isAdmin }: CalendarViewProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>("month")
   const [anchor, setAnchor] = useState<Date>(() => new Date())
-  const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" })
+  const [result, setResult] = useState<SettledResult | null>(null)
 
   const { from, to } = (() => {
     if (viewMode === "month") {
@@ -451,14 +456,17 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
     }
   })()
 
+  const rangeKey = `${from}|${to}`
+  const loadState: LoadState =
+    result && result.range === rangeKey ? result : { kind: "loading" }
+
   useEffect(() => {
     let cancelled = false
-    setLoadState({ kind: "loading" })
     Promise.all([getSessionsForRange(from, to), getSessionTypes()])
       .then(([sessions, types]: [SessionInstance[], SessionType[]]) => {
         if (cancelled) return
         const typeMap = new Map<string, SessionType>(types.map((t) => [t.id, t]))
-        setLoadState({ kind: "loaded", sessions, typeMap })
+        setResult({ kind: "loaded", sessions, typeMap, range: rangeKey })
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -466,10 +474,10 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
           typeof err === "object" && err !== null && "message" in err
             ? String((err as { message: unknown }).message)
             : "Failed to load sessions"
-        setLoadState({ kind: "error", message })
+        setResult({ kind: "error", message, range: rangeKey })
       })
     return () => { cancelled = true }
-  }, [from, to])
+  }, [from, to, rangeKey])
 
   const handlePrev = () => {
     if (viewMode === "month") setAnchor((d) => subMonths(d, 1))
