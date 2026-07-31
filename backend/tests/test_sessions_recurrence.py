@@ -303,7 +303,7 @@ def test_generate_idempotent() -> None:
         for data in second_batch:
             await repo.add_if_not_exists(data)
 
-    asyncio.get_event_loop().run_until_complete(run())
+    asyncio.run(run())
 
     all_instances = list(repo._store.values())
     dates = [r["date"] for r in all_instances]

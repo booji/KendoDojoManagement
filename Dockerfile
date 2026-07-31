@@ -4,6 +4,9 @@ WORKDIR /app
 # container's local time (Debian slim ships no timezone database otherwise).
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+# Upgrade pip first so the image ships the CVE-fixed pip (issue #235). pip is
+# build-only tooling, but this keeps the image's pip current too.
+RUN pip install --no-cache-dir --upgrade pip
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

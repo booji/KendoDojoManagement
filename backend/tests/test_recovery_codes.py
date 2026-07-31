@@ -276,7 +276,7 @@ def test_stored_records_contain_code_hash_not_plaintext() -> None:
             assert record["used_at"] is None
             assert record["set_id"] == set_id
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_stored_records_have_required_fields() -> None:
@@ -317,7 +317,7 @@ def test_regenerate_invalidates_old_codes() -> None:
                     c["used_at"] is not None
                 ), "Old code was not invalidated after regenerate"
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ def test_count_unused_reflects_actual_unused_codes() -> None:
         count = await repo.count_unused(_USER_A.sub)
         assert count == 2, f"Expected 2 unused codes, got {count}"
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------

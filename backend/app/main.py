@@ -4,8 +4,6 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-_log = logging.getLogger(__name__)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -43,6 +41,8 @@ from app.sessions.router import router as sessions_router
 from app.sessions.seed import seed_session_types
 from app.settings.router import router as settings_router
 from app.users.router import router as users_router
+
+_log = logging.getLogger(__name__)
 
 
 def _rate_limit_exceeded_handler(
