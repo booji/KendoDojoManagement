@@ -67,7 +67,10 @@ def _seed_profile(page: Page, token: str) -> None:
             {"first_name": "Test", "surname": "Admin", "dob": "1990-01-01"}
         ),
     )
-    assert resp.status in (200, 201), f"Profile seed failed: {resp.status} {resp.text()}"
+    assert resp.status in (
+        200,
+        201,
+    ), f"Profile seed failed: {resp.status} {resp.text()}"
 
 
 def _create_session_type(page: Page, admin_token: str, name: str) -> dict:
@@ -130,9 +133,9 @@ def test_admin_can_delete_unreferenced_session_type(page: Page) -> None:
     dialog.get_by_role("button", name="Delete", exact=True).click()
 
     # The type disappears from the list (its delete control is gone).
-    expect(
-        page.get_by_role("button", name=f"Delete {name}")
-    ).not_to_be_visible(timeout=10_000)
+    expect(page.get_by_role("button", name=f"Delete {name}")).not_to_be_visible(
+        timeout=10_000
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -146,9 +149,7 @@ def test_delete_session_type_shows_error_when_referenced_by_segment(page: Page) 
     _seed_profile(page, admin_token)
     name = f"Ref {uuid.uuid4().hex[:6]}"
     created = _create_session_type(page, admin_token, name)
-    _create_session_referencing_type(
-        page, admin_token, created["id"], f"Uses {name}"
-    )
+    _create_session_referencing_type(page, admin_token, created["id"], f"Uses {name}")
 
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/admin/settings")
@@ -177,9 +178,7 @@ def test_referenced_session_type_remains_after_failed_delete(page: Page) -> None
     _seed_profile(page, admin_token)
     name = f"Keep {uuid.uuid4().hex[:6]}"
     created = _create_session_type(page, admin_token, name)
-    _create_session_referencing_type(
-        page, admin_token, created["id"], f"Uses {name}"
-    )
+    _create_session_referencing_type(page, admin_token, created["id"], f"Uses {name}")
 
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/admin/settings")

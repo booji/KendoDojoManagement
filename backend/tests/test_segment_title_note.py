@@ -49,9 +49,7 @@ def _session_with_segment(**seg_overrides):
 
 
 def _description_line(ical: str) -> str:
-    return next(
-        line for line in ical.split("\r\n") if line.startswith("DESCRIPTION:")
-    )
+    return next(line for line in ical.split("\r\n") if line.startswith("DESCRIPTION:"))
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +67,7 @@ def test_segment_line_type_only() -> None:
 
 
 def test_segment_line_with_title() -> None:
-    ical = build_ical(
-        [_session_with_segment(title="Footwork and out of bogu drills")]
-    )
+    ical = build_ical([_session_with_segment(title="Footwork and out of bogu drills")])
     line = _description_line(ical)
     assert "20:00-20:30 - Basics - Footwork and out of bogu drills" in line
 
@@ -97,8 +93,7 @@ def test_segment_line_with_title_and_note() -> None:
     )
     line = _description_line(ical)
     assert (
-        "20:30-21:30 - Kihon - In bogu practice basics - Today focus nuki-do."
-        in line
+        "20:30-21:30 - Kihon - In bogu practice basics - Today focus nuki-do." in line
     )
 
 

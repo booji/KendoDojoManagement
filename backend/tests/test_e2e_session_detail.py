@@ -13,6 +13,7 @@ import json
 import os
 import re
 import uuid
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
@@ -24,6 +25,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -43,7 +45,11 @@ def _make_token(role: str) -> str:
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 def _set_cookie(page: Page, token: str) -> None:
@@ -58,7 +64,13 @@ def _api_headers(token: str) -> dict:
 
 
 def _create_session(
-    page: Page, token: str, *, info: str | None = None, coach_notes: str | None = None
+    page: Page,
+    token: str,
+    *,
+    info: str | None = None,
+    coach_notes: str | None = None,
+    date: str = "2099-12-01",
+    start_time: str = "19:00",
 ) -> str:
     types_resp = page.request.get(
         f"{API_URL}/session-types",
@@ -68,9 +80,9 @@ def _create_session(
 
     payload: dict = {
         "title": "Detail Test Session",
-        "date": "2099-12-01",
+        "date": date,
         "segments": [
-            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+            {"start_time": start_time, "duration_minutes": 90, "type_ids": [type_id]}
         ],
     }
     if info is not None:
@@ -134,7 +146,15 @@ def test_member_does_not_see_coach_notes_on_session_detail_page(page: Page) -> N
 
 def test_member_can_check_in_from_session_detail_page(page: Page) -> None:
     admin_token = _make_token("admin")
-    session_id = _create_session(page, admin_token)
+    # The check-in window (default: opens 60 min before start) must be open, so
+    # schedule the session to start ~30 min from now rather than far in the future.
+    soon = datetime.now() + timedelta(minutes=30)
+    session_id = _create_session(
+        page,
+        admin_token,
+        date=soon.strftime("%Y-%m-%d"),
+        start_time=soon.strftime("%H:%M"),
+    )
 
     member_token = _make_token("member")
     _set_cookie(page, member_token)

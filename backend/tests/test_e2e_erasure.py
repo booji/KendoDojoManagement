@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import uuid
 
-import pytest
 import requests
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
@@ -124,9 +123,7 @@ def test_delete_permanently_only_visible_when_archived(page: Page) -> None:
     # The delete button's accessible name is "Delete {full name} permanently"
     # (see MemberDetailPage.tsx aria-label), so match on that exact label
     # rather than a substring of the visible "Delete permanently" text.
-    delete_button = page.get_by_role(
-        "button", name=f"Delete {full_name} permanently"
-    )
+    delete_button = page.get_by_role("button", name=f"Delete {full_name} permanently")
 
     page.goto(f"{BASE_URL}/members/{member_id}")
     page.wait_for_load_state("networkidle")

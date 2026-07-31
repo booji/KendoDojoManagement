@@ -23,6 +23,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -86,6 +87,9 @@ def test_admin_member_list_shows_passkey_count(page: Page) -> None:
 
 def test_admin_member_detail_has_generate_recovery_token_button(page: Page) -> None:
     admin_token = _make_token("admin")
+    # The acting admin needs their own Member profile, or RequireProfile bounces
+    # every navigation to /onboarding before the member detail page renders (#221).
+    complete_onboarding(admin_token)
     member_id = _create_member(page, admin_token)
 
     _set_cookie(page, admin_token)

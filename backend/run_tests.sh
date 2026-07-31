@@ -34,4 +34,13 @@ done
 
 echo "Both servers ready — running tests"
 cd /app
-exec pytest tests/ -x -q "$@"
+# No -x: a full run reports on the whole suite, so a passing run is evidence
+# and a failing run names every problem at once (see #221). Fail-fast is still
+# available on demand — the script forwards "$@", so pass -x explicitly to
+# stop at the first failure while iterating.
+#
+# PYTEST_TARGET overrides which paths are collected (default: the whole suite),
+# so a single file can be exercised without editing this script, e.g.
+#   docker compose -f docker-compose.test.yml run --rm \
+#     -e PYTEST_TARGET=tests/test_e2e_settings.py test
+exec pytest ${PYTEST_TARGET:-tests/} -q "$@"

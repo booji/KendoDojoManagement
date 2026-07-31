@@ -25,7 +25,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.attendance.dependencies import (
     get_attendance_repo,
-    get_checkin_token_repo,
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_MEMBER

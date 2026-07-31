@@ -1,10 +1,14 @@
 """
-E2E browser test for issue #78 — session type dropdown trigger shows name.
+E2E browser test for issue #78 — session type selector trigger shows name.
 
-Acceptance criteria:
+The single-select SelectTrigger this test originally targeted was replaced by the
+multi-select ``SessionTypeMultiSelect`` (aria-label "Session types"): an empty
+trigger shows "Select session types…", selected types render as name badges, and
+options are checkboxes labelled by name. The acceptance criteria still hold for
+the new control:
   1. Selecting a session type shows the type name in the trigger (not the UUID)
-  2. Placeholder "Select type…" shows when no type is selected
-  3. Dropdown list items are unaffected
+  2. A placeholder is shown when no type is selected
+  3. Dropdown list items display session type names
 """
 
 import os
@@ -22,6 +26,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -37,11 +42,15 @@ API_URL = "http://localhost:8000"
 def _make_token(role: str) -> str:
     claims = UserClaims(
         sub=str(uuid.uuid4()),
-        email=f"{role}@dojo.test",
+        email=f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 def _set_cookie(page: Page, token: str) -> None:
@@ -85,15 +94,15 @@ def test_session_type_trigger_shows_name_after_selection(page: Page) -> None:
     page.get_by_role("button", name="Create Session").click()
     page.wait_for_selector("[role='dialog']")
 
-    # The trigger should show the placeholder before any selection
-    trigger = page.locator("[id='session-type']")
+    # The multi-select trigger should show the placeholder before any selection
+    trigger = page.get_by_role("button", name="Session types").first
     expect(trigger).to_be_visible()
 
-    # Select a session type from the dropdown
+    # Open the popover and tick the first session type
     trigger.click()
-    page.get_by_role("option", name=type_name).click()
+    page.get_by_role("checkbox", name=type_name, exact=True).click()
 
-    # AC1: The trigger must now show the type name, not the raw UUID
+    # AC1: The trigger must now show the type name (as a badge), not the raw UUID
     expect(trigger).to_contain_text(type_name)
 
     # Confirm the trigger does NOT show a bare UUID pattern
@@ -125,8 +134,8 @@ def test_session_type_trigger_shows_placeholder_when_empty(page: Page) -> None:
     page.wait_for_selector("[role='dialog']")
 
     # Before selection the trigger must show the placeholder text
-    trigger = page.locator("[id='session-type']")
-    expect(trigger).to_contain_text("Select type…")
+    trigger = page.get_by_role("button", name="Session types").first
+    expect(trigger).to_contain_text("Select session types…")
 
 
 # ---------------------------------------------------------------------------
@@ -151,10 +160,10 @@ def test_session_type_dropdown_items_show_names(page: Page) -> None:
     page.goto(f"{BASE_URL}/sessions")
     page.wait_for_load_state("networkidle")
 
-    # Open the "New Session" dialog, then open the dropdown
+    # Open the "New Session" dialog, then open the multi-select popover
     page.get_by_role("button", name="Create Session").click()
     page.wait_for_selector("[role='dialog']")
-    page.locator("[id='session-type']").click()
+    page.get_by_role("button", name="Session types").first.click()
 
     # The option in the open list must be visible with the type name
-    expect(page.get_by_role("option", name=type_name)).to_be_visible()
+    expect(page.get_by_role("checkbox", name=type_name, exact=True)).to_be_visible()

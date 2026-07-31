@@ -844,9 +844,7 @@ async def test_list_excludes_archived_by_default(member_repo) -> None:
         ("sus@dojo.test", "suspended"),
         ("arc@dojo.test", "archived"),
     ]:
-        await member_repo.add(
-            _valid_member_payload(email=email, membership_status=st)
-        )
+        await member_repo.add(_valid_member_payload(email=email, membership_status=st))
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

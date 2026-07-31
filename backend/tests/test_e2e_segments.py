@@ -26,6 +26,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -45,7 +46,11 @@ def _make_token(role: str) -> str:
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 def _set_cookie(page: Page, token: str) -> None:
@@ -114,9 +119,9 @@ def test_session_created_via_nested_segments_payload_with_one_segment(
     # expect()'s auto-retry rather than networkidle, which races the SPA fetch.
     _set_cookie(page, admin_token)
     page.goto(f"{BASE_URL}/sessions/{session_id}")
-    expect(
-        page.get_by_role("heading", name="Single Segment Keiko")
-    ).to_be_visible(timeout=15000)
+    expect(page.get_by_role("heading", name="Single Segment Keiko")).to_be_visible(
+        timeout=15000
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +188,14 @@ def test_session_has_required_title_and_no_legacy_type_time_duration_fields(
     page.get_by_role("button", name="Create Session").click()
 
     dialog = page.get_by_role("dialog")
-    expect(dialog.get_by_label("Title")).to_be_visible()
-    dialog.get_by_role("button", name="Create Session").click()
-
-    expect(page.get_by_text("Title is required.")).to_be_visible()
+    # The session Title field (#session-title); a plain "Title" label also matches
+    # the per-segment title input, so scope to the session field to stay unambiguous.
+    # It is marked `required`, so the browser blocks submission of an empty title
+    # via native validation — assert the requirement through the attribute rather
+    # than a custom in-form message (which native validation pre-empts).
+    title_field = dialog.locator("#session-title")
+    expect(title_field).to_be_visible()
+    expect(title_field).to_have_attribute("required", "")
 
 
 # ---------------------------------------------------------------------------
@@ -371,9 +380,7 @@ def test_calendar_chip_shows_title_and_colour_pip_per_distinct_type(
 # ---------------------------------------------------------------------------
 
 
-def test_ical_feed_produces_one_vevent_with_envelope_and_segment_description() -> (
-    None
-):
+def test_ical_feed_produces_one_vevent_with_envelope_and_segment_description() -> None:
     admin_token = _make_token("admin")
     headers = {"Cookie": f"access_token={admin_token}"}
     types_resp = httpx.get(f"{API_URL}/session-types", headers=headers)

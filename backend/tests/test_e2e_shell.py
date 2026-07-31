@@ -21,12 +21,14 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402 (after env var set)
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 # Patch the cached module-level variable in case unit tests ran first and
 # populated it with the stub secret before this file was imported.
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 BASE_URL = "http://localhost:5173"
+API_URL = "http://localhost:8000"
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +40,15 @@ BASE_URL = "http://localhost:5173"
 def _make_token(role: str) -> str:
     claims = UserClaims(
         sub=str(uuid.uuid4()),
-        email=f"{role}@example.com",
+        email=f"{role}-{uuid.uuid4().hex[:6]}@example.com",
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    token = encode_token(claims)
+    # Seed the acting user's Member profile so the RequireProfile gate does
+    # not bounce every navigation to /onboarding before assertions run (#221).
+    complete_onboarding(token)
+    return token
 
 
 @pytest.fixture()
@@ -208,11 +214,17 @@ def test_bottom_tab_bar_touch_targets_are_44px(member_page: Page) -> None:
 
 
 def test_sidebar_header_shows_my_dojo(admin_page: Page) -> None:
-    """AC8: Sidebar header shows 'My Dojo' text."""
+    """AC8: Sidebar header shows the configured dojo name.
+
+    The name defaults to 'My Dojo' but is global mutable state other e2e tests
+    change, so assert whatever the API currently reports rather than the literal
+    default (which would be order-dependent).
+    """
     admin_page.set_viewport_size({"width": 1280, "height": 800})
+    dojo_name = admin_page.request.get(f"{API_URL}/settings/dojo").json()["dojo_name"]
     sidebar = admin_page.locator("[data-slot='sidebar']")
     expect(sidebar).to_be_visible()
-    expect(sidebar.get_by_text("My Dojo")).to_be_visible()
+    expect(sidebar.get_by_text(dojo_name)).to_be_visible()
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +371,9 @@ def test_dojo_name_appears_in_sidebar_header(admin_page: Page) -> None:
     The dojo name defaults to 'My Dojo' when no settings have been configured.
     """
     admin_page.set_viewport_size({"width": 1280, "height": 800})
+    # Dojo name is global mutable state; assert whatever the API currently
+    # reports rather than the literal default (order-dependent otherwise).
+    dojo_name = admin_page.request.get(f"{API_URL}/settings/dojo").json()["dojo_name"]
     sidebar = admin_page.locator("[data-slot='sidebar']")
     expect(sidebar).to_be_visible()
-    # Default dojo name is 'My Dojo' (set in DojoSettingsProvider defaults).
-    expect(sidebar.get_by_text("My Dojo")).to_be_visible()
+    expect(sidebar.get_by_text(dojo_name)).to_be_visible()

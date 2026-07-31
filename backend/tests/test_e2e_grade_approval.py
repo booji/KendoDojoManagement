@@ -23,6 +23,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -45,6 +46,9 @@ def _cookie_dict(token: str) -> dict:
 
 
 def _inject_cookie(page: Page, token: str) -> None:
+    # Ensure the browsing identity has a Member profile so RequireProfile does not
+    # bounce every navigation to /onboarding (#221). Non-clobbering.
+    complete_onboarding(token)
     page.context.add_cookies(
         [{"name": "access_token", "value": token, "url": BASE_URL}]
     )
@@ -80,6 +84,8 @@ def _create_linked_member_via_api(member_token: str, full_name: str) -> str:
         json={
             "first_name": parts[0],
             "surname": parts[1] if len(parts) > 1 else parts[0],
+            # dob is required on first save, else the endpoint returns 422.
+            "dob": "1990-01-01",
         },
     )
     r.raise_for_status()
