@@ -584,6 +584,224 @@ async def test_member_cannot_update_member(member_repo) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Issue: PUT /members/{id} silently drops explicit `null` for clearable PII
+# fields (display_name, dob, emergency_contact_name, emergency_contact_phone)
+# because the router filters `payload.model_dump()` on `v is not None` before
+# building the update dict. Required-by-domain fields (email, first_name,
+# surname, join_date, membership_status, is_coach, is_first_aider) must
+# continue to ignore an explicit null (current behaviour is correct there).
+# ---------------------------------------------------------------------------
+
+
+def _spy_on_update(repo: StubMemberRepo) -> list[dict[str, Any]]:
+    """Wrap repo.update to record the raw `data` dict the router builds,
+    so tests can assert on exactly what would be persisted."""
+    calls: list[dict[str, Any]] = []
+    original_update = repo.update
+
+    async def spy(member_id: str, data: dict[str, Any]):
+        calls.append(data)
+        return await original_update(member_id, data)
+
+    repo.update = spy  # type: ignore[method-assign]
+    return calls
+
+
+@pytest.mark.anyio
+async def test_put_null_emergency_contact_phone_clears_stored_value(
+    member_repo,
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(
+            email="clear-phone@dojo.test", emergency_contact_phone="+447700900001"
+        )
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            f"/members/{member_id}", json={"emergency_contact_phone": None}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["emergency_contact_phone"] is None
+    assert calls[-1].get("emergency_contact_phone") is None
+    assert "emergency_contact_phone" in calls[-1]
+
+    stored = await member_repo.get(member_id)
+    assert stored["emergency_contact_phone"] is None
+
+
+@pytest.mark.anyio
+async def test_put_null_emergency_contact_name_clears_stored_value(
+    member_repo,
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(
+            email="clear-name@dojo.test", emergency_contact_name="Hanako Yamada"
+        )
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            f"/members/{member_id}", json={"emergency_contact_name": None}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["emergency_contact_name"] is None
+    assert calls[-1].get("emergency_contact_name") is None
+    assert "emergency_contact_name" in calls[-1]
+
+    stored = await member_repo.get(member_id)
+    assert stored["emergency_contact_name"] is None
+
+
+@pytest.mark.anyio
+async def test_put_null_display_name_clears_stored_value(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(email="clear-display@dojo.test", display_name="Taro-san")
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(f"/members/{member_id}", json={"display_name": None})
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] is None
+    assert calls[-1].get("display_name") is None
+    assert "display_name" in calls[-1]
+
+    stored = await member_repo.get(member_id)
+    assert stored["display_name"] is None
+
+
+@pytest.mark.anyio
+async def test_put_null_dob_clears_stored_value(member_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(email="clear-dob@dojo.test", dob="1990-06-15")
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(f"/members/{member_id}", json={"dob": None})
+
+    assert response.status_code == 200
+    assert response.json()["dob"] is None
+    assert calls[-1].get("dob") is None
+    assert "dob" in calls[-1]
+
+    stored = await member_repo.get(member_id)
+    assert stored["dob"] is None
+
+
+@pytest.mark.anyio
+async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
+    """A field omitted entirely from the payload must not be touched, even
+    though another clearable field is present in the same request."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(
+            email="omit-field@dojo.test", emergency_contact_phone="+447700900002"
+        )
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(f"/members/{member_id}", json={"first_name": "X"})
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "X"
+    assert response.json()["emergency_contact_phone"] == "+447700900002"
+    assert "emergency_contact_phone" not in calls[-1]
+
+
+@pytest.mark.anyio
+async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> None:
+    """first_name is required-by-domain: an explicit null must be ignored,
+    preserving the existing behaviour for required fields."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(email="keep-first-name@dojo.test", first_name="Taro")
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(f"/members/{member_id}", json={"first_name": None})
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Taro"
+    assert "first_name" not in calls[-1]
+
+
+@pytest.mark.anyio
+async def test_put_null_membership_status_does_not_wipe_stored_value(
+    member_repo,
+) -> None:
+    """membership_status is required-by-domain: explicit null must be ignored."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(email="keep-status@dojo.test", membership_status="active")
+    )
+    member_id = created["id"]
+    calls = _spy_on_update(member_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            f"/members/{member_id}", json={"membership_status": None}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["membership_status"] == "active"
+    assert "membership_status" not in calls[-1]
+
+
+@pytest.mark.anyio
+async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None:
+    """Regression guard: setting a clearable field to a real (non-null) value
+    must continue to work once the fix lands."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    created = await member_repo.add(
+        _valid_member_payload(email="set-real-value@dojo.test", display_name=None)
+    )
+    member_id = created["id"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            f"/members/{member_id}", json={"display_name": "Jiro-san"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Jiro-san"
+
+
+# ---------------------------------------------------------------------------
 # #228 — the one-way deactivate DELETE route is removed; status is changed
 # via PUT /members/{id} instead.
 # ---------------------------------------------------------------------------
