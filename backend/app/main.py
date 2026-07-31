@@ -27,7 +27,6 @@ from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import CORS_ORIGINS
 from app.core.middleware import SecurityHeadersMiddleware
-from app.dashboard.router import router as dashboard_router
 from app.db.base import Base
 from app.db.engine import engine
 from app.federations.router import router as federations_router
@@ -109,7 +108,6 @@ app.include_router(grades_router)
 app.include_router(attendance_router)
 app.include_router(reports_router)
 app.include_router(settings_router)
-app.include_router(dashboard_router)
 app.include_router(federations_router)
 
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
