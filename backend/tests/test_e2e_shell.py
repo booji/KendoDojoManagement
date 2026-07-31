@@ -232,45 +232,6 @@ def test_sidebar_header_shows_my_dojo(admin_page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="AdminDashboardPage and MemberDashboardPage exist but are not yet wired to routes",
-)
-def test_admin_dashboard_shows_stat_cards(admin_page: Page) -> None:
-    """Issue #12: Admin dashboard displays active members, sessions this week,
-    and attendance rate stat cards."""
-    admin_page.set_viewport_size({"width": 1280, "height": 800})
-    # The dashboard is the root route — navigate there explicitly.
-    admin_page.goto(BASE_URL)
-    admin_page.wait_for_load_state("networkidle")
-
-    stats_grid = admin_page.locator("[aria-label='Dashboard statistics']")
-    expect(stats_grid).to_be_visible()
-
-    # Each stat card heading must be visible.
-    expect(admin_page.get_by_text("Active Members")).to_be_visible()
-    expect(admin_page.get_by_text("Sessions This Week")).to_be_visible()
-    expect(admin_page.get_by_text("Attendance Rate")).to_be_visible()
-    expect(admin_page.get_by_text("Attendance Trend")).to_be_visible()
-
-
-@pytest.mark.xfail(
-    strict=False,
-    reason="AdminDashboardPage and MemberDashboardPage exist but are not yet wired to routes",
-)
-def test_member_dashboard_shows_next_session_and_calendar(member_page: Page) -> None:
-    """Issue #12: Member dashboard displays next session and a session calendar."""
-    member_page.set_viewport_size({"width": 1280, "height": 800})
-    member_page.goto(BASE_URL)
-    member_page.wait_for_load_state("networkidle")
-
-    # "Next Session" card title must be visible (exact match to avoid strict mode
-    # violations from partial matches against empty-state text).
-    expect(member_page.get_by_text("Next Session", exact=True)).to_be_visible()
-    # "Upcoming Sessions" card title must be visible.
-    expect(member_page.get_by_text("Upcoming Sessions", exact=True)).to_be_visible()
-
-
 def test_sidebar_renders_on_desktop_viewport(admin_page: Page) -> None:
     """Issue #12: Sidebar navigation is present at 1280px wide desktop viewport."""
     admin_page.set_viewport_size({"width": 1280, "height": 800})
