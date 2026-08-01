@@ -12,7 +12,7 @@ RED PHASE — no production code exists yet. These tests are expected to fail:
 Planned contract (see .claude task brief for issue #229 for full detail):
 
     app/members/erasure.py
-        build_erasure_plan(member: dict) -> ErasurePlan
+        build_erasure_plan() -> ErasurePlan
             .scrub: dict[str, Any]   — field -> anonymised value
             .delete: set[str] | frozenset[str]  — related record type names
         can_erase(actor_user_id: str, member: dict, is_admin: bool,
@@ -109,7 +109,7 @@ def _member(**overrides: Any) -> dict[str, Any]:
 
 class TestBuildErasurePlan:
     def test_scrub_overwrites_pii_fields_with_expected_values(self) -> None:
-        plan = _erasure().build_erasure_plan(_member())
+        plan = _erasure().build_erasure_plan()
         assert plan.scrub["first_name"] == "Deleted"
         assert plan.scrub["surname"] == "member"
         assert plan.scrub["email"] is None
@@ -120,11 +120,12 @@ class TestBuildErasurePlan:
         assert plan.scrub["user_id"] is None
 
     def test_scrub_does_not_alter_id(self) -> None:
-        plan = _erasure().build_erasure_plan(_member(id="keep-this-id"))
-        assert "id" not in plan.scrub or plan.scrub["id"] == "keep-this-id"
+        """The plan never touches the primary key — erasure anonymises in place."""
+        plan = _erasure().build_erasure_plan()
+        assert "id" not in plan.scrub
 
     def test_delete_names_exactly_the_expected_related_record_types(self) -> None:
-        plan = _erasure().build_erasure_plan(_member())
+        plan = _erasure().build_erasure_plan()
         expected = {
             "user",
             "passkey_credentials",
@@ -137,7 +138,7 @@ class TestBuildErasurePlan:
         assert set(plan.delete) == expected
 
     def test_attendance_is_never_scheduled_for_deletion(self) -> None:
-        plan = _erasure().build_erasure_plan(_member())
+        plan = _erasure().build_erasure_plan()
         assert "attendance" not in plan.delete
         assert "attendances" not in plan.delete
 

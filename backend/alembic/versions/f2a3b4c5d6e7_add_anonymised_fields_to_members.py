@@ -27,10 +27,14 @@ def upgrade() -> None:
     )
     # GDPR erasure scrubs email to NULL; Postgres treats multiple NULLs as
     # distinct so the existing unique constraint still holds.
-    op.alter_column("members", "email", existing_type=sa.String(length=255), nullable=True)
+    op.alter_column(
+        "members", "email", existing_type=sa.String(length=255), nullable=True
+    )
 
 
 def downgrade() -> None:
-    op.alter_column("members", "email", existing_type=sa.String(length=255), nullable=False)
+    op.alter_column(
+        "members", "email", existing_type=sa.String(length=255), nullable=False
+    )
     op.drop_column("members", "anonymised_by")
     op.drop_column("members", "anonymised_at")

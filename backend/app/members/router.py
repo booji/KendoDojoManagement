@@ -236,16 +236,14 @@ async def erase_member(
             status_code=status.HTTP_409_CONFLICT, detail=decision.reason
         )
 
-    plan = build_erasure_plan(record)
+    plan = build_erasure_plan()
     session = uow.session
 
     # Children before parent: passkeys/recovery/tokens must go before the
     # users row itself, to satisfy foreign key constraints.
     if target_user_id is not None:
         await session.execute(
-            delete(PasskeyCredential).where(
-                PasskeyCredential.user_id == target_user_id
-            )
+            delete(PasskeyCredential).where(PasskeyCredential.user_id == target_user_id)
         )
         await session.execute(
             delete(RecoveryCode).where(RecoveryCode.user_id == target_user_id)
@@ -275,5 +273,3 @@ async def erase_member(
     updated = await repo.update(member_id, scrub)
     await uow.commit()
     return _to_response(updated)
-
-

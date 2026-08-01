@@ -31,9 +31,7 @@ class SqlAdminDirectory:
         # Mirror count_admins: only an *active* admin counts, so the
         # last-admin guard and the count it compares against share semantics.
         result = await self._session.execute(
-            select(User.role).where(
-                User.id == user_id, User.is_active.is_(True)
-            )
+            select(User.role).where(User.id == user_id, User.is_active.is_(True))
         )
         role = result.scalar_one_or_none()
         return role == "admin"

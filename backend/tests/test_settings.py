@@ -282,3 +282,89 @@ async def test_post_settings_logo_unauthenticated_returns_401() -> None:
         )
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Issue #240 — upload content is sniffed, not trusted
+# ---------------------------------------------------------------------------
+
+_REAL_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("endpoint", ["/settings/logo", "/settings/background"])
+async def test_upload_rejects_payload_that_is_not_really_an_image(
+    settings_repo: StubDojoSettingsRepo,
+    endpoint: str,
+) -> None:
+    """A declared image/png with a non-image body must be rejected.
+
+    content_type and filename are both attacker-controlled; only the bytes
+    are evidence.
+    """
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            endpoint,
+            files={
+                "file": (
+                    "logo.png",
+                    b"<html><script>alert(1)</script></html>",
+                    "image/png",
+                )
+            },
+        )
+
+    assert response.status_code == 422
+    assert "image" in response.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("endpoint", ["/settings/logo", "/settings/background"])
+async def test_upload_rejects_sniffed_type_outside_allowed_set(
+    settings_repo: StubDojoSettingsRepo,
+    endpoint: str,
+) -> None:
+    """An SVG renamed to .png must not slip through — SVG can carry script."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            endpoint,
+            files={
+                "file": (
+                    "logo.png",
+                    b'<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>',
+                    "image/png",
+                )
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_upload_accepts_a_genuine_png(
+    settings_repo: StubDojoSettingsRepo,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """The happy path still works once sniffing is in place."""
+    monkeypatch.setattr("app.settings.router._STATIC_DIR", str(tmp_path))
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/settings/logo",
+            files={"file": ("logo.png", _REAL_PNG, "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["logo_url"].startswith("/static/logos/")

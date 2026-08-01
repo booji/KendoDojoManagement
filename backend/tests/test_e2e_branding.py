@@ -10,6 +10,7 @@ Acceptance criteria exercised here (user-facing):
   - Admin Settings "Login Screen" subsection supports background removal
 """
 
+import re
 import uuid
 
 import requests
@@ -18,7 +19,8 @@ from playwright.sync_api import Page, expect
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000"
 
-_FAKE_PNG = b"fake-png-bytes"
+# Uploads are content-sniffed (#240), so the payload must really be a PNG.
+_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
@@ -61,7 +63,7 @@ def _update_dojo_settings(token: str, **payload) -> dict:
 def _upload_background(token: str) -> str:
     resp = requests.post(
         f"{API_URL}/settings/background",
-        files={"file": ("bg.png", _FAKE_PNG, "image/png")},
+        files={"file": ("bg.png", _PNG_BYTES, "image/png")},
         cookies={"access_token": token},
     )
     resp.raise_for_status()
@@ -71,7 +73,7 @@ def _upload_background(token: str) -> str:
 def _upload_logo(token: str) -> str:
     resp = requests.post(
         f"{API_URL}/settings/logo",
-        files={"file": ("logo.png", _FAKE_PNG, "image/png")},
+        files={"file": ("logo.png", _PNG_BYTES, "image/png")},
         cookies={"access_token": token},
     )
     resp.raise_for_status()
@@ -257,14 +259,16 @@ def test_admin_settings_login_screen_background_upload(page: Page) -> None:
         {
             "name": "background.png",
             "mimeType": "image/png",
-            "buffer": _FAKE_PNG,
+            "buffer": _PNG_BYTES,
         }
     )
 
     preview = page.get_by_alt_text("Login background preview")
+    # The component shows a local blob: preview immediately and only swaps in
+    # the server URL once the upload resolves, so sampling src right away
+    # races the round-trip. to_have_attribute retries until the swap lands.
     expect(preview).to_be_visible()
-    src = preview.get_attribute("src") or ""
-    assert "/static/backgrounds/" in src
+    expect(preview).to_have_attribute("src", re.compile(r"/static/backgrounds/"))
 
     # Confirm the backend actually stored it
     resp = requests.get(f"{API_URL}/settings/dojo", cookies={"access_token": token})

@@ -14,6 +14,7 @@ from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.settings.branding import project_branding
 from app.settings.dependencies import get_dojo_settings_repo
+from app.settings.images import sniff_image_kind
 from app.settings.repository import AbstractDojoSettingsRepository
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -38,6 +39,21 @@ _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 _MAX_CHECKIN_WINDOW_MINUTES = 1440
+
+
+def _reject_if_not_an_image(contents: bytes) -> None:
+    """Raise 422 unless `contents` really is one of the accepted image formats.
+
+    `content_type` and the filename are checked separately, but both are
+    client-supplied. This is the only check that looks at the bytes.
+    """
+    sniffed = sniff_image_kind(contents)
+    if sniffed not in _ALLOWED_MIME:
+        allowed = ", ".join(sorted(_ALLOWED_MIME))
+        raise HTTPException(
+            status_code=422,
+            detail=f"File content is not a supported image. Allowed: {allowed}",
+        )
 
 
 class DojoSettingsUpdate(BaseModel):
@@ -164,6 +180,7 @@ async def upload_logo(
     contents = await file.read()
     if len(contents) > _MAX_LOGO_BYTES:
         raise HTTPException(status_code=422, detail="Logo must be 2 MB or smaller")
+    _reject_if_not_an_image(contents)
 
     os.makedirs(_STATIC_DIR, exist_ok=True)
     filename = f"{uuid.uuid4()}{ext}"
@@ -201,6 +218,7 @@ async def upload_background(
         raise HTTPException(
             status_code=422, detail="Background must be 5 MB or smaller"
         )
+    _reject_if_not_an_image(contents)
 
     os.makedirs(_STATIC_BACKGROUNDS_DIR, exist_ok=True)
     filename = f"{uuid.uuid4()}{ext}"
