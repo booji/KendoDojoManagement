@@ -395,3 +395,40 @@ def test_settings_summary_shows_display_name_field(page: Page) -> None:
     # display_name appears both in the summary header and as its own field; either
     # instance proves it renders, so match the first.
     expect(page.get_by_text("Taro-san").first).to_be_visible()
+
+
+# ── Issue #249 — blanking emergency contact in the UI clears it on save ──────
+
+
+def test_settings_blanking_emergency_contact_clears_it(page: Page) -> None:
+    """Clearing the emergency contact name field in the edit form and saving
+    must remove it from the summary and keep it cleared after a reload.
+
+    Today the backend's PUT /users/me/member strips any field whose value is
+    None (issue #249), so the frontend's "blank input -> null" submission is
+    silently ignored and the old value persists. This is the one criterion
+    from #249 that a browser can meaningfully observe end-to-end, since the
+    edit form on /settings already round-trips this field to the real API.
+    """
+    email = f"ac249ec_{uuid.uuid4().hex[:8]}@dojo.test"
+    _register_api(email)
+    token = _login_api(email)
+    _create_member_record(
+        token,
+        first_name="Clear",
+        surname="Contact",
+        emergency_contact_name="Old Contact",
+    )
+
+    _inject_cookie(page, token)
+    page.goto(f"{BASE_URL}/settings")
+
+    page.get_by_role("button", name="Edit").click()
+    page.get_by_label("Emergency contact name", exact=True).fill("")
+    page.get_by_role("button", name="Save changes").click()
+
+    expect(page.get_by_text("Old Contact")).not_to_be_visible()
+
+    page.reload()
+
+    expect(page.get_by_text("Old Contact")).not_to_be_visible()

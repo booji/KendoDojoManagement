@@ -568,3 +568,181 @@ async def test_put_my_member_omitting_dob_preserves_existing_dob(
 
     assert response.status_code == 200
     assert response.json()["dob"] == "1990-06-15"
+
+
+# ---------------------------------------------------------------------------
+# Issue #249 — explicit null must clear clearable self-service fields, but
+# must never wipe first_name/surname, and omitted fields must stay untouched.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_clears_emergency_contact_phone(
+    member_repo,
+) -> None:
+    """An explicit JSON null for emergency_contact_phone must clear the stored value."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(emergency_contact_phone="+447700900001"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"emergency_contact_phone": None},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["emergency_contact_phone"] is None
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) -> None:
+    """A cleared field via explicit null stays cleared on a subsequent GET."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(emergency_contact_phone="+447700900001"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        await c.put(
+            "/users/me/member",
+            json={"emergency_contact_phone": None},
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        get_response = await c.get("/users/me/member")
+
+    assert get_response.status_code == 200
+    assert get_response.json()["emergency_contact_phone"] is None
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_clears_display_name(member_repo) -> None:
+    """An explicit JSON null for display_name must clear the stored value."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(display_name="Taro-san"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"display_name": None},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] is None
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_clears_emergency_contact_name(
+    member_repo,
+) -> None:
+    """An explicit JSON null for emergency_contact_name must clear the stored value."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(emergency_contact_name="Emergency Contact"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"emergency_contact_name": None},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["emergency_contact_name"] is None
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
+    """An explicit JSON null for dob must clear the stored date of birth.
+
+    dob is clearable via explicit null on this self-service route, matching
+    the admin route's _CLEARABLE_FIELDS semantics — unlike first-save
+    onboarding, where a missing/null dob is still rejected with 422.
+    """
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(dob="1990-06-15"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"dob": None},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["dob"] is None
+
+
+@pytest.mark.anyio
+async def test_put_my_member_omitted_emergency_contact_name_untouched(
+    member_repo,
+) -> None:
+    """A field omitted entirely from the payload must be left untouched."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(emergency_contact_name="Emergency Contact"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"first_name": "StillSelf"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["emergency_contact_name"] == "Emergency Contact"
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
+    member_repo,
+) -> None:
+    """An explicit null for first_name must not clear the stored value.
+
+    first_name is required-by-domain on this route (unlike display_name/dob/
+    emergency_contact_*), so a null there means "leave alone", not "wipe".
+    """
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(first_name="Taro"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"first_name": None, "display_name": "Taro-san"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["first_name"] == "Taro"
+    assert body["display_name"] == "Taro-san"
+
+
+@pytest.mark.anyio
+async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
+    member_repo,
+) -> None:
+    """An explicit null for surname must not clear the stored value."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await member_repo.add(_seed_record(surname="Yamada"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"surname": None, "display_name": "Taro-san"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["surname"] == "Yamada"
+    assert body["display_name"] == "Taro-san"
