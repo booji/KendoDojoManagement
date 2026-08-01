@@ -1,6 +1,9 @@
 fastapi==0.141.1
 uvicorn[standard]==0.32.1
-sqlalchemy==2.0.36
+# [asyncio] pulls greenlet, which async SQLAlchemy needs at runtime. Without the
+# extra it is only present via requirements-dev.txt, so the prod image crashes on
+# the first async connection (`alembic upgrade head` in entrypoint.sh).
+sqlalchemy[asyncio]==2.0.36
 alembic==1.14.0
 asyncpg==0.31.0
 joserfc==1.7.4

@@ -1,3 +1,6 @@
+# Production stack (app + PostgreSQL). Config comes from a .env file next to
+# this one — copy .env.example to .env and fill it in before `up`. For the
+# Podman/Quadlet + Traefik deployment instead, see deploy/ and docs/deployment.md.
 services:
   app:
     build: .
@@ -7,8 +10,30 @@ services:
       TZ: ${TZ:-UTC}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
-      COOKIE_SECURE: ${COOKIE_SECURE}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-15}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Passkeys are bound to the public domain: WEBAUTHN_RP_ID is the bare
+      # host, WEBAUTHN_ORIGIN the full scheme+host the browser sees. Wrong
+      # values mean registration and login ceremonies are rejected.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN}
+      WEBAUTHN_CHALLENGE_TTL_SECONDS: ${WEBAUTHN_CHALLENGE_TTL_SECONDS:-300}
+      # Keep pinned to the single canonical origin — never "*" (auth is
+      # cookie-based). Defaults to WEBAUTHN_ORIGIN inside the app if empty.
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
+      # Only set true when a trusted reverse proxy in front of this stack
+      # overwrites X-Forwarded-For; otherwise clients can spoof their IP and
+      # evade rate limiting and lockout. The published port below is direct,
+      # so the safe default is false.
+      TRUST_PROXY_XFF: ${TRUST_PROXY_XFF:-false}
+      # Upload targets, backed by the static_uploads volume below. Deliberately
+      # not configurable via .env: the paths must match the volume mount, and
+      # they live outside /app/static so they cannot shadow the built SPA.
+      STATIC_DIR: /app/uploads/logos
+      STATIC_BACKGROUNDS_DIR: /app/uploads/backgrounds
+    volumes:
+      - static_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -30,3 +55,6 @@ services:
 
 volumes:
   postgres_data:
+  # Uploaded logos and backgrounds. Without this they land on the container
+  # filesystem and are lost on every restart or image rebuild.
+  static_uploads:
