@@ -21,6 +21,16 @@ TRUST_PROXY_XFF: bool = os.getenv("TRUST_PROXY_XFF", "false").lower() == "true"
 # DST) instead of emitting floating time. Defaults to UTC.
 TIMEZONE: str = os.getenv("TZ", "UTC")
 
+# Minimum wall-clock duration (ms) the passkey begin endpoints must take,
+# regardless of whether the email is known/authorized (real path) or
+# unknown/unauthorized (decoy path). Closes a timing side channel: the real
+# path does strictly more DB work (credential SELECT, pending_challenge
+# UPDATE, commit) than the decoy path, which otherwise lets an attacker
+# enumerate registered emails from response latency alone. This value MUST
+# stay above the real path's p99 latency, or the floor stops masking the
+# asymmetry it exists to hide.
+AUTH_BEGIN_MIN_DURATION_MS: int = int(os.getenv("AUTH_BEGIN_MIN_DURATION_MS", "50"))
+
 WEBAUTHN_RP_ID: str = os.getenv("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_ORIGIN: str = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")
 WEBAUTHN_CHALLENGE_TTL_SECONDS: int = int(

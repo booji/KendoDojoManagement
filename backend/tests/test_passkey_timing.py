@@ -297,8 +297,7 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
             )
 
     diff = abs(
-        statistics.median(authorized_samples)
-        - statistics.median(unauthorized_samples)
+        statistics.median(authorized_samples) - statistics.median(unauthorized_samples)
     )
     assert diff < 0.001  # under 1ms, far below the ~2ms reported signal
 
