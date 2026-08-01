@@ -17,6 +17,9 @@ Image=localhost/kendodojo:latest
 Network=kendo-edge.network
 Network=kendo-backend.network
 EnvironmentFile=%h/kendo/kendo-app.env
+# Persists uploaded logos/backgrounds (STATIC_DIR, STATIC_BACKGROUNDS_DIR in the
+# EnvironmentFile point inside here). Without it they die with the container.
+Volume=kendo-app-uploads.volume:/app/uploads
 Secret=kendo_database_url,type=env,target=DATABASE_URL
 Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
 

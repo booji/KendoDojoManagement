@@ -1,0 +1,12 @@
+# Named volume for uploaded logos and login backgrounds. Without it /app is
+# entirely ephemeral and every upload is lost on container restart or image
+# rebuild. Mounted at /app/uploads — deliberately outside /app/static, which is
+# where the Dockerfile copies the built SPA, so uploads cannot shadow it.
+#
+# Podman-managed => auto SELinux-labeled, so no :Z fiddling. Survives container
+# recreation; destroyed only by explicit `podman volume rm`.
+[Unit]
+Description=Kendo uploads volume
+
+[Volume]
+VolumeName=kendo-app-uploads

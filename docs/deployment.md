@@ -183,7 +183,14 @@ The shipped config uses **Let's Encrypt via Cloudflare DNS-01** — works even w
 
 ## 6. Backups (as `kendo`)
 
-Nightly `pg_dump` (custom format) to `~/backups`, keeping the newest 14, driven by a systemd user timer.
+Nightly backup to `~/backups`, keeping the newest 14 of each artefact, driven by a systemd user timer. Each run writes two files sharing one timestamp:
+
+| File | Contents |
+| --- | --- |
+| `kendo-<stamp>.dump` | Postgres, `pg_dump` custom format |
+| `kendo-uploads-<stamp>.tar` | the `kendo-app-uploads` volume — logos and login backgrounds |
+
+Uploaded images live on a volume, not in the database, so the dump alone does not cover them.
 
 ```bash
 cp deploy/systemd/kendo-backup.service ~/.config/systemd/user/
@@ -201,7 +208,11 @@ ls -lh ~/backups
 
 ```bash
 systemctl --user stop kendo-app
-~/.local/bin/kendo-restore.sh ~/backups/kendo-YYYYmmdd-HHMMSS.dump
+# Second argument is optional; pass the uploads tarball with the same timestamp
+# to restore logos and backgrounds alongside the database.
+~/.local/bin/kendo-restore.sh \
+  ~/backups/kendo-YYYYmmdd-HHMMSS.dump \
+  ~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar
 systemctl --user start kendo-app
 ```
 
@@ -231,6 +242,8 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 | **Upgrade** | `cd ~/src && git pull && podman build -t localhost/kendodojo:latest . && systemctl --user restart kendo-app` |
 | Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-db` |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
+
+> **When a Quadlet unit or the env file changes upstream**, the Upgrade command above is not enough — it rebuilds the image but reuses the units already in `~/.config/containers/systemd/`. Re-run the copy from [§4](#4-install-and-start-the-quadlet-units-as-kendo), refresh `~/kendo/kendo-app.env` against [`deploy/env/kendo-app.env.example`](../deploy/env/kendo-app.env.example), then `systemctl --user daemon-reload && systemctl --user restart kendo-app`.
 
 ---
 
