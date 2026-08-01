@@ -55,13 +55,46 @@ Apply security best practices at all system boundaries:
 
 ## Build / Test / Lint
 
-All backend commands run from `backend/` with the venv active (`. .venv/bin/activate`):
+### Tests — always via Docker
+
+Tests run in Docker, never on the host. `backend/tests/conftest.py` refuses to
+collect unless `DATABASE_URL` is a PostgreSQL URL naming a database whose name
+contains "test", so a bare `pytest` fails at import with a `RuntimeError` before
+a single test runs. Run from the repo root:
+
+```bash
+# Full suite (backend + e2e)
+docker compose -f docker-compose.test.yml run --rm test
+
+# A single file or directory
+docker compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_members.py test
+
+# Extra pytest flags are forwarded, e.g. fail-fast while iterating
+docker compose -f docker-compose.test.yml run --rm test -x
+```
+
+The compose service's entrypoint is `backend/run_tests.sh`, which installs
+frontend deps and starts uvicorn (:8000) and Vite (:5173) *before* invoking
+pytest. The Playwright e2e tests drive those servers.
+
+**Do not pass `--entrypoint bash`** to run pytest directly: that skips
+`run_tests.sh`, so no servers start and every `test_e2e_*` test fails with
+connection-refused — which looks like a large regression but is only a
+misconfigured run. If you genuinely want backend-only tests, keep the entrypoint
+and set `PYTEST_TARGET`, or add `--ignore-glob='tests/test_e2e_*.py'`.
+
+A full run takes ~11 minutes. Do not pipe it through `tail` — the summary line
+is what you need and it is easy to truncate away. Redirect to a file instead.
+
+### Lint, format, dev servers
+
+These run on the host from `backend/` with the venv active:
 
 ```bash
 # Backend
 cd backend
 . .venv/bin/activate
-pytest                  # run tests
 ruff check .            # lint
 ruff format .           # format
 uvicorn app.main:app --reload  # dev server
