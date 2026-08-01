@@ -24,9 +24,15 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
 2. **Red-green TDD.** One failing test → minimum implementation → pass → refactor.
 3. After changes run both — both must pass:
    ```
+   # Lint on the host, from backend/
    .venv/bin/ruff check . --fix
-   .venv/bin/pytest -q
+
+   # Tests in Docker, from the repo root. Bare pytest on the host raises a
+   # RuntimeError in conftest.py, which requires a PostgreSQL DATABASE_URL.
+   docker compose -f docker-compose.test.yml run --rm test
    ```
+   Scope a run with `-e PYTEST_TARGET=tests/test_foo.py`. Never start uvicorn
+   or Vite yourself — the container entrypoint does it.
 4. Register new routers in `app/main.py`.
 5. When a model changes, remind the user to create an Alembic migration:
    ```

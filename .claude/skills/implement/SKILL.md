@@ -78,11 +78,22 @@ Issue #<number> has been partially implemented: failing tests exist in backend/t
 Your job: implement the minimum backend code to make those tests pass.
 
 Follow the pattern: model → repository → router → register in main.py
-After implementation run from backend/ with venv active (. .venv/bin/activate):
+
+Lint on the host, from backend/ with the venv active (. .venv/bin/activate):
   ruff check . --fix
-  pytest -q
+  ruff format .
+
+Tests run in Docker, from the repo root. Bare pytest on the host raises a
+RuntimeError in conftest.py (it requires a PostgreSQL DATABASE_URL):
+  docker compose -f docker-compose.test.yml run --rm test
+
+Never start uvicorn or npm run dev yourself — the container entrypoint
+(run_tests.sh) starts both servers before invoking pytest. Running one in the
+foreground will hang until it times out.
 
 Both must pass with zero errors. Report the pytest output.
+Do not weaken or delete a test to make it pass. If a test encodes a wrong
+expectation, stop and report it rather than editing it.
 If a model changed, remind the user to run Alembic migrations.
 ```
 
@@ -132,58 +143,76 @@ You are the QA agent for KendoDojoManagement.
 
 Read the skill at .claude/skills/tdd/SKILL.md for all rules and conventions, especially the Playwright section and the xfail lifecycle.
 
-## Step 1 — Run unit/integration tests
+## NEVER start servers yourself
+
+Do NOT run `uvicorn` or `npm run dev`. The test container's entrypoint
+(`backend/run_tests.sh`) already starts uvicorn (:8000) and Vite (:5173) and
+waits for both before invoking pytest. Starting them by hand in the foreground
+hangs your turn until it times out, which has burned entire agent runs.
+
+Bare `pytest` on the host also does not work: `backend/tests/conftest.py`
+raises unless `DATABASE_URL` is a PostgreSQL URL naming a "test" database.
+
+## Step 1 — Run the full suite
+
+From the repo root. A full run takes ~11 minutes.
 ```bash
-cd /home/pip/KendoDojoManagement/backend
-. .venv/bin/activate
-pytest -q --ignore=tests/test_e2e_*.py
+docker compose -f docker-compose.test.yml run --rm test \
+  > /tmp/suite.log 2>&1; echo "exit=$?"
+grep -aE "short test summary|[0-9]+ passed" /tmp/suite.log | tail -5
 ```
 
-## Step 2 — Start servers for e2e tests
+Redirect to a file. Do NOT pipe the run through `tail` — the summary line is
+the one thing you need and it is trivially truncated away.
 
-Start both servers as background processes and wait until they are ready:
+Do NOT pass `--entrypoint bash`. That skips `run_tests.sh`, so no servers start
+and every `test_e2e_*` test fails with connection-refused. That looks like a
+catastrophic regression and is only a misconfigured run.
+
+To scope a run to one file, keep the entrypoint and use `PYTEST_TARGET`:
 ```bash
-cd /home/pip/KendoDojoManagement/backend
-. .venv/bin/activate
-uvicorn app.main:app --port 8000 &
-BACKEND_PID=$!
-
-cd /home/pip/KendoDojoManagement/frontend
-npm run dev -- --port 5173 &
-FRONTEND_PID=$!
-
-# Wait for backend
-for i in $(seq 1 20); do
-  curl -sf http://localhost:8000/health && break
-  sleep 1
-done
-
-# Wait for frontend
-for i in $(seq 1 20); do
-  curl -sf http://localhost:5173 && break
-  sleep 1
-done
+docker compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_e2e_foo.py test
 ```
 
-## Step 3 — Promote xfail stubs and run e2e tests
+## Step 2 — Promote xfail stubs
 
 For each file matching `backend/tests/test_e2e_*.py`:
-1. Read the file
-2. For every test still marked `@pytest.mark.xfail`: replace the stub body with real Playwright assertions that verify the acceptance criterion against the live UI at http://localhost:5173
-3. Run the promoted tests: `pytest backend/tests/test_e2e_*.py --headed=false -q`
+1. Read the file.
+2. For every test still marked `@pytest.mark.xfail`: decide first whether the
+   acceptance criterion is genuinely verifiable through a browser. State your
+   reasoning explicitly.
+3. If yes, replace the stub body with real Playwright assertions against the
+   live UI at http://localhost:5173, then re-run (step 1) to verify.
 
-## Step 4 — Tear down servers
-```bash
-kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
-```
+**Judgement required — a stub is not automatically promotable.** Criteria about
+HTTP response indistinguishability, DB state, or raw bytes are better asserted
+at the HTTP layer than through a browser. A WebAuthn ceremony in particular
+cannot complete in headless Chromium without a virtual authenticator.
+
+If a criterion cannot be meaningfully verified in a browser, do NOT fake it and
+do NOT leave a strict xfail that will break CI once behaviour changes. Report
+why, and recommend either converting it to an HTTP-level test in the non-e2e
+suite or what setup a real browser test would require. Never promote a stub
+into an assertion that passes without actually verifying the criterion.
+
+## Step 3 — Investigate every failure before reporting it
+
+A failing test is not automatically a regression. Re-run failures in isolation
+(`PYTEST_TARGET`) — the suite has known contention flakiness under a full run.
+Report whether each failure reproduces in isolation, and whether it touches
+code this issue changed. Say plainly when you have not confirmed a failure
+against `main`.
 
 ## Report
-- Unit test output (step 1)
-- Which xfail stubs were promoted and what assertions were added
-- e2e test output (step 3)
-- Any test that could not be promoted — explain why and escalate
+- Exact suite counts, and the command you actually ran
+- Which xfail stubs were promoted, what assertions were added, and whether you
+  ran them
+- Any stub you declined to promote, and why
+- For each failure: reproduces in isolation? related to this diff?
+- Confirm no stray processes or throwaway files remain
 
-If any test fails (unit or e2e), do NOT mark the work as done.
+Honesty beats a green checkmark. If any test fails, do NOT mark the work done.
 ```
 
 ### Security agent prompt:
