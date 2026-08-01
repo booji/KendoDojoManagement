@@ -212,8 +212,11 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
 
 
 @pytest.mark.anyio
-async def test_login_passkey_begin_unknown_email_returns_404(db_client) -> None:
-    """POST /auth/login/passkey/begin with unknown email returns 404."""
+async def test_login_passkey_begin_unknown_email_returns_200_decoy(db_client) -> None:
+    """POST /auth/login/passkey/begin with unknown email returns 200 with a
+    decoy challenge (issue #239: 404 here was an email-enumeration oracle).
+    See tests/test_passkey_enumeration.py for full enumeration-fix coverage.
+    """
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -221,7 +224,7 @@ async def test_login_passkey_begin_unknown_email_returns_404(db_client) -> None:
             "/auth/login/passkey/begin",
             json={"email": "nobody@dojo.test"},
         )
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 # ── Login complete ────────────────────────────────────────────────────────────
