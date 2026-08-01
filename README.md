@@ -27,6 +27,17 @@ cp .env.example .env
 # Edit .env — set POSTGRES_PASSWORD and JWT_SECRET at minimum
 ```
 
+Passkeys are bound to the origin the browser uses, so also set `WEBAUTHN_RP_ID`
+(bare host), `WEBAUTHN_ORIGIN` (full origin) and `CORS_ORIGINS` to match how you
+reach the app. For a localhost trial the defaults below work:
+
+```
+WEBAUTHN_RP_ID=localhost
+WEBAUTHN_ORIGIN=http://localhost:8000
+CORS_ORIGINS=http://localhost:8000
+COOKIE_SECURE=false   # localhost is not HTTPS, so Secure cookies won't be sent
+```
+
 Generate a JWT secret:
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -45,6 +56,8 @@ podman-compose up -d
 ```
 
 The app runs on port 8000. Alembic migrations run automatically on startup via the entrypoint.
+Uploaded logos and backgrounds persist in the `static_uploads` named volume, and
+the database in `postgres_data` — both survive `down`/`up` and image rebuilds.
 
 ## Development
 
@@ -119,7 +132,7 @@ podman-compose -f docker-compose.test.yml exec test pytest -q
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage build: `backend-deps` → `backend-dev-deps` → `frontend-deps` → `frontend-build` → `prod` |
-| `docker-compose.yml` | Production stack (app + PostgreSQL with named volume) |
+| `docker-compose.yml` | Production stack (app + PostgreSQL, named volumes for db data and uploads) |
 | `docker-compose.dev.yml` | Dev stack with bind-mounted source and hot-reload |
 | `docker-compose.test.yml` | Test watcher stack with ephemeral PostgreSQL |
 | `.env.example` | Template for production secrets |
