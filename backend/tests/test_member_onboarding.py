@@ -232,3 +232,75 @@ async def test_first_save_with_required_fields_only_succeeds(empty_member_repo) 
     assert body["first_name"] == "Taro"
     assert body["surname"] == "Yamada"
     assert "id" in body
+
+
+# ---------------------------------------------------------------------------
+# Issue #249 — an explicit null for a required field on first-save must be
+# treated the same as a missing field, not silently coerced into a value.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_first_save_explicit_null_first_name_returns_422(
+    empty_member_repo,
+) -> None:
+    """PUT with first_name explicitly null (surname + dob present) is still 422."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"first_name": None, "surname": "Yamada", "dob": "1990-06-15"},
+        )
+
+    assert response.status_code == 422, (
+        "Expected 422 when first_name is explicitly null on first-save, "
+        f"got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_first_save_explicit_null_surname_returns_422(
+    empty_member_repo,
+) -> None:
+    """PUT with surname explicitly null (first_name + dob present) is still 422."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"first_name": "Taro", "surname": None, "dob": "1990-06-15"},
+        )
+
+    assert response.status_code == 422, (
+        "Expected 422 when surname is explicitly null on first-save, "
+        f"got {response.status_code}"
+    )
+
+
+@pytest.mark.anyio
+async def test_first_save_explicit_null_dob_returns_422(empty_member_repo) -> None:
+    """PUT with dob explicitly null (first_name + surname present) is still 422.
+
+    dob is clearable on an *existing* record via explicit null, but on
+    first-save it remains a required field — an explicit null must not be
+    treated as "no opinion" and slip through as a create.
+    """
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put(
+            "/users/me/member",
+            json={"first_name": "Taro", "surname": "Yamada", "dob": None},
+        )
+
+    assert response.status_code == 422, (
+        "Expected 422 when dob is explicitly null on first-save, "
+        f"got {response.status_code}"
+    )
