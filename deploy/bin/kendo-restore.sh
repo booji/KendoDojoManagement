@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Restore a kendo Postgres dump produced by kendo-backup.sh.
+# Restore a kendo backup produced by kendo-backup.sh.
 #
-#   Usage: kendo-restore.sh /path/to/kendo-YYYYmmdd-HHMMSS.dump
+#   Usage: kendo-restore.sh /path/to/kendo-YYYYmmdd-HHMMSS.dump [uploads.tar]
+#
+# The optional second argument is the matching kendo-uploads-<stamp>.tar, which
+# restores uploaded logos and login backgrounds into the kendo-app-uploads
+# volume. Pass the tarball sharing the dump's timestamp; omit it to restore the
+# database alone.
 #
 # DESTRUCTIVE: drops and recreates the `kendo` database. Stop the app first so
 # nothing writes mid-restore:
@@ -10,8 +15,10 @@
 #     systemctl --user start kendo-app
 set -euo pipefail
 
-dump="${1:?usage: kendo-restore.sh <dump-file>}"
+dump="${1:?usage: kendo-restore.sh <dump-file> [uploads-tar]}"
+uploads="${2:-}"
 [[ -f "$dump" ]] || { echo "no such file: $dump" >&2; exit 1; }
+[[ -z "$uploads" || -f "$uploads" ]] || { echo "no such file: $uploads" >&2; exit 1; }
 
 read -rp "This will DROP and recreate the 'kendo' database. Type 'yes' to proceed: " ok
 [[ "$ok" == "yes" ]] || { echo "aborted"; exit 1; }
@@ -28,3 +35,11 @@ SQL
 podman exec -i kendo-db pg_restore -U kendo -d kendo --no-owner <"$dump"
 
 echo "restore complete from: $dump"
+
+# Uploads are files on a volume, not rows — restored separately. `volume import`
+# unpacks over the existing contents; it does not empty the volume first, so any
+# file added since the backup survives.
+if [[ -n "$uploads" ]]; then
+  podman volume import kendo-app-uploads "$uploads"
+  echo "uploads restored from: $uploads"
+fi
