@@ -35,8 +35,14 @@ class ErasureDecision:
     reason: str | None = None
 
 
-def build_erasure_plan(member: dict[str, Any]) -> ErasurePlan:
-    """Return the anonymisation plan for `member`. Never touches `id`."""
+def build_erasure_plan() -> ErasurePlan:
+    """Return the anonymisation plan applied to any erased member.
+
+    The plan is the same for every member — it overwrites PII with fixed
+    placeholders rather than deriving anything from the current values — so it
+    takes no arguments. `id` is deliberately absent: erasure anonymises the row
+    in place and must not orphan attendance history.
+    """
     scrub = {
         "first_name": "Deleted",
         "surname": "member",

@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -373,42 +373,55 @@ async def generate_admin_token(
     return {"token": plaintext}
 
 
-class _TestLoginRequest(BaseModel):
-    email: str
-    role: str = "admin"
+# ---------------------------------------------------------------------------
+# Test-only credential-free login
+#
+# This endpoint mints an admin session cookie for any email with no credential
+# whatsoever. It exists so the Playwright suite can get an authenticated
+# browser without a WebAuthn ceremony.
+#
+# It is registered *conditionally* rather than gated inside the handler: if the
+# route does not exist in a production build, no env var, config mistake or
+# future refactor of the handler body can turn it back into an auth bypass.
+# ---------------------------------------------------------------------------
 
+if _ALLOW_TEST_AUTH:
 
-@router.post("/login/test", status_code=200)
-async def test_login(
-    payload: _TestLoginRequest,
-    response: Response,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> dict:
-    """Create-or-get a user and return a JWT cookie. Only active when ALLOW_TEST_AUTH=true."""  # noqa: E501
-    if not _ALLOW_TEST_AUTH:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    result = await uow.session.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(email=payload.email, role=payload.role, is_active=True)
-        uow.session.add(user)
-        await uow.session.flush()
-    await uow.commit()
-    token = encode_token(
-        UserClaims(
-            sub=user.id,
-            email=user.email,
-            role=user.role,
-            is_active=user.is_active,
-            theme=user.theme,
+    class _TestLoginRequest(BaseModel):
+        email: LenientEmail
+        role: Literal["admin", "member"] = "admin"
+
+    @router.post("/login/test", status_code=200)
+    async def test_login(
+        payload: _TestLoginRequest,
+        response: Response,
+        uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    ) -> dict:
+        """Create-or-get a user and return a JWT cookie. Test builds only."""
+        result = await uow.session.execute(
+            select(User).where(User.email == payload.email)
         )
-    )
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="strict",
-        secure=config.COOKIE_SECURE,
-        max_age=60 * int(config.JWT_EXPIRE_MINUTES),
-    )
-    return {"detail": "logged in", "sub": user.id}
+        user = result.scalar_one_or_none()
+        if user is None:
+            user = User(email=payload.email, role=payload.role, is_active=True)
+            uow.session.add(user)
+            await uow.session.flush()
+        await uow.commit()
+        token = encode_token(
+            UserClaims(
+                sub=user.id,
+                email=user.email,
+                role=user.role,
+                is_active=user.is_active,
+                theme=user.theme,
+            )
+        )
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            samesite="strict",
+            secure=config.COOKIE_SECURE,
+            max_age=60 * int(config.JWT_EXPIRE_MINUTES),
+        )
+        return {"detail": "logged in", "sub": user.id}

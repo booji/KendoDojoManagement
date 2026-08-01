@@ -197,6 +197,20 @@ async def test_get_branding_shows_assets_when_toggles_on(
 
 
 # ---------------------------------------------------------------------------
+# Real image headers.
+#
+# Uploads are content-sniffed (#240), so a payload must actually begin with the
+# format's magic bytes. These are the shortest byte strings that genuinely
+# identify each accepted format.
+# ---------------------------------------------------------------------------
+
+_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 32
+_WEBP_BYTES = b"RIFF" + b"\x24\x00\x00\x00" + b"WEBP" + b"\x00" * 32
+_GIF_BYTES = b"GIF89a" + b"\x00" * 32
+
+
+# ---------------------------------------------------------------------------
 # AC3 — POST /settings/background is admin-only, MIME/ext/size validated
 # ---------------------------------------------------------------------------
 
@@ -264,7 +278,7 @@ async def test_post_background_accepts_png(
     ) as c:
         response = await c.post(
             "/settings/background",
-            files={"file": ("bg.png", b"fake-png-bytes", "image/png")},
+            files={"file": ("bg.png", _PNG_BYTES, "image/png")},
         )
 
     assert response.status_code == 200
@@ -284,7 +298,7 @@ async def test_post_background_accepts_jpeg(
     ) as c:
         response = await c.post(
             "/settings/background",
-            files={"file": ("bg.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+            files={"file": ("bg.jpg", _JPEG_BYTES, "image/jpeg")},
         )
 
     assert response.status_code == 200
@@ -302,7 +316,7 @@ async def test_post_background_accepts_webp(
     ) as c:
         response = await c.post(
             "/settings/background",
-            files={"file": ("bg.webp", b"fake-webp-bytes", "image/webp")},
+            files={"file": ("bg.webp", _WEBP_BYTES, "image/webp")},
         )
 
     assert response.status_code == 200
@@ -320,7 +334,7 @@ async def test_post_background_accepts_gif(
     ) as c:
         response = await c.post(
             "/settings/background",
-            files={"file": ("bg.gif", b"fake-gif-bytes", "image/gif")},
+            files={"file": ("bg.gif", _GIF_BYTES, "image/gif")},
         )
 
     assert response.status_code == 200
@@ -332,7 +346,7 @@ async def test_post_background_rejects_files_over_5mb_cap(
 ) -> None:
     """A file larger than the 5 MB cap is rejected with 422."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    oversized = b"0" * (5 * 1024 * 1024 + 1)
+    oversized = _PNG_BYTES + b"0" * (5 * 1024 * 1024 + 1 - len(_PNG_BYTES))
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -351,7 +365,7 @@ async def test_post_background_accepts_file_at_exactly_5mb(
 ) -> None:
     """A file exactly at the 5 MB cap is accepted (only files OVER the cap reject)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    exactly_5mb = b"0" * (5 * 1024 * 1024)
+    exactly_5mb = _PNG_BYTES + b"0" * (5 * 1024 * 1024 - len(_PNG_BYTES))
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -377,7 +391,7 @@ async def test_post_background_success_persists_background_image_url(
     ) as c:
         upload_resp = await c.post(
             "/settings/background",
-            files={"file": ("bg.png", b"fake-png-bytes", "image/png")},
+            files={"file": ("bg.png", _PNG_BYTES, "image/png")},
         )
         get_resp = await c.get("/settings/dojo")
 
