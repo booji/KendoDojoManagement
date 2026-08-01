@@ -62,30 +62,37 @@ def _api_headers(token: str) -> dict:
     return {"Cookie": f"access_token={token}"}
 
 
-def _get_or_create_session_type(page: Page, admin_token: str) -> dict:
-    """Return an existing session type (or the first one found)."""
-    resp = page.request.get(
+def _create_session_type(page: Page, admin_token: str) -> dict:
+    """Create a throwaway session type for one test to mutate.
+
+    These tests must never touch the seeded defaults (#246): they set and clear
+    colours, and the seeded rows ship with colours of their own that a teardown
+    cannot restore. Every test owns a uniquely named type instead.
+    """
+    name = f"Colour Test {uuid.uuid4().hex[:8]}"
+    resp = page.request.post(
         f"{API_URL}/session-types",
-        headers=_api_headers(admin_token),
-    )
-    types = resp.json()
-    assert len(types) > 0, "No session types found — seed data missing"
-    return types[0]
-
-
-def _reset_colour(page: Page, admin_token: str, type_id: str) -> None:
-    """Clear colour back to null after a test."""
-    page.request.put(
-        f"{API_URL}/session-types/{type_id}",
         headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data='{"colour": null}',
+        data=f'{{"name": "{name}"}}',
+    )
+    assert resp.status == 201, f"Could not create session type: {resp.text()}"
+    return resp.json()
+
+
+def _delete_session_type(page: Page, admin_token: str, type_id: str) -> None:
+    """Remove the throwaway type. Best-effort: the API refuses to delete a type
+    still referenced by a session segment, which is fine — an unused extra type
+    affects no other test."""
+    page.request.delete(
+        f"{API_URL}/session-types/{type_id}",
+        headers=_api_headers(admin_token),
     )
 
 
 def test_admin_can_set_colour_on_session_type(page: Page) -> None:
     """AC1: Admin can set a colour on any session type from the admin settings page."""
     admin_token = _make_token("admin")
-    session_type = _get_or_create_session_type(page, admin_token)
+    session_type = _create_session_type(page, admin_token)
     type_id = session_type["id"]
     type_name = session_type["name"]
 
@@ -97,13 +104,13 @@ def test_admin_can_set_colour_on_session_type(page: Page) -> None:
     colour_input = page.get_by_label(f"Colour for {type_name}")
     expect(colour_input).to_be_visible(timeout=10000)
 
-    _reset_colour(page, admin_token, type_id)
+    _delete_session_type(page, admin_token, type_id)
 
 
 def test_session_type_colour_persisted_and_returned(page: Page) -> None:
     """AC2: Colour set via API is persisted and returned on GET /session-types."""
     admin_token = _make_token("admin")
-    session_type = _get_or_create_session_type(page, admin_token)
+    session_type = _create_session_type(page, admin_token)
     type_id = session_type["id"]
     test_colour = "#e74c3c"
 
@@ -125,7 +132,7 @@ def test_session_type_colour_persisted_and_returned(page: Page) -> None:
     assert len(matching) == 1
     assert matching[0]["colour"] == test_colour
 
-    _reset_colour(page, admin_token, type_id)
+    _delete_session_type(page, admin_token, type_id)
 
 
 def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
@@ -133,7 +140,7 @@ def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
 ) -> None:
     """AC3: Calendar chips use admin-chosen colour; fall back to auto-palette when null."""
     admin_token = _make_token("admin")
-    session_type = _get_or_create_session_type(page, admin_token)
+    session_type = _create_session_type(page, admin_token)
     type_id = session_type["id"]
     test_colour = "#3498db"
 
@@ -166,7 +173,7 @@ def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
     assert style != "", "Expected chip to have inline colour style, got empty style"
 
     # Cleanup
-    _reset_colour(page, admin_token, type_id)
+    _delete_session_type(page, admin_token, type_id)
     page.request.post(
         f"{API_URL}/sessions/{session_id}/cancel",
         headers=_api_headers(admin_token),
@@ -176,7 +183,7 @@ def test_calendar_chips_use_admin_chosen_colour_with_auto_palette_fallback(
 def test_cancelled_sessions_remain_grey_regardless_of_type_colour(page: Page) -> None:
     """AC4: Cancelled sessions remain grey (muted) even when type has a colour set."""
     admin_token = _make_token("admin")
-    session_type = _get_or_create_session_type(page, admin_token)
+    session_type = _create_session_type(page, admin_token)
     type_id = session_type["id"]
     test_colour = "#e74c3c"
 
@@ -213,4 +220,4 @@ def test_cancelled_sessions_remain_grey_regardless_of_type_colour(page: Page) ->
         "e74c3c" not in style.lower()
     ), f"Cancelled chip should not have type colour, got style: {style}"
 
-    _reset_colour(page, admin_token, type_id)
+    _delete_session_type(page, admin_token, type_id)
