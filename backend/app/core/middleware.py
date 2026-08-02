@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 
@@ -14,6 +15,8 @@ from app import config
 # session teardown that commit implies -- so it is measurably slower. That
 # delta is a side channel: it enumerates registered emails from response
 # latency alone, without reading a single response body.
+_log = logging.getLogger(__name__)
+
 _CONSTANT_TIME_PATHS = frozenset(
     {
         "/auth/register/passkey/begin",
@@ -49,11 +52,26 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         finally:
-            remaining = (config.AUTH_BEGIN_MIN_DURATION_MS / 1000) - (
-                time.perf_counter() - start
-            )
+            elapsed = time.perf_counter() - start
+            remaining = (config.AUTH_BEGIN_MIN_DURATION_MS / 1000) - elapsed
             if remaining > 0:
                 await asyncio.sleep(remaining)
+            else:
+                # The request already outran the floor, so there is nothing
+                # left to pad and the real-vs-decoy delta is observable again.
+                # This is the one condition that silently voids the fix, so it
+                # has to be visible to an operator rather than inferred from a
+                # breach. No email or user id is logged: the whole point is
+                # that this path must not record who was being probed.
+                _log.warning(
+                    "Constant-time floor exceeded on %s: %.1fms elapsed vs "
+                    "%dms floor. Timing side channel is no longer masked; "
+                    "raise AUTH_BEGIN_MIN_DURATION_MS above the real path's "
+                    "p99 or investigate the slowdown.",
+                    request.url.path,
+                    elapsed * 1000,
+                    config.AUTH_BEGIN_MIN_DURATION_MS,
+                )
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

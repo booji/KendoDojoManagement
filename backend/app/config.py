@@ -1,3 +1,4 @@
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -29,7 +30,28 @@ TIMEZONE: str = os.getenv("TZ", "UTC")
 # enumerate registered emails from response latency alone. This value MUST
 # stay above the real path's p99 latency, or the floor stops masking the
 # asymmetry it exists to hide.
-AUTH_BEGIN_MIN_DURATION_MS: int = int(os.getenv("AUTH_BEGIN_MIN_DURATION_MS", "50"))
+# A non-positive value would make the pad never fire and silently restore the
+# leak, so a typo or a well-meaning "disable this in dev" is treated as
+# misconfiguration rather than honoured. Same for a non-integer.
+_AUTH_BEGIN_MIN_DURATION_DEFAULT = 50
+try:
+    AUTH_BEGIN_MIN_DURATION_MS: int = int(
+        os.getenv("AUTH_BEGIN_MIN_DURATION_MS", str(_AUTH_BEGIN_MIN_DURATION_DEFAULT))
+    )
+except ValueError:
+    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
+    logging.getLogger(__name__).warning(
+        "AUTH_BEGIN_MIN_DURATION_MS is not an integer; falling back to %dms",
+        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
+    )
+if AUTH_BEGIN_MIN_DURATION_MS <= 0:
+    logging.getLogger(__name__).warning(
+        "AUTH_BEGIN_MIN_DURATION_MS must be positive; falling back to %dms. "
+        "A non-positive floor disables timing-side-channel protection on the "
+        "passkey begin endpoints.",
+        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
+    )
+    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
 
 WEBAUTHN_RP_ID: str = os.getenv("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_ORIGIN: str = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:5173")

@@ -330,3 +330,29 @@ async def test_login_begin_floor_is_configurable(db_client, monkeypatch) -> None
     # The higher floor must actually raise the observed duration, not be a
     # no-op setting.
     assert high_elapsed - low_elapsed >= 0.030
+
+
+# ── Misconfiguration must not silently disable the floor ────────────────────
+
+
+@pytest.mark.parametrize("bad_value", ["0", "-1", "not-a-number", ""])
+def test_non_positive_or_invalid_floor_falls_back_to_default(
+    bad_value, monkeypatch
+) -> None:
+    """A zero, negative or non-numeric AUTH_BEGIN_MIN_DURATION_MS must not be
+    honoured.
+
+    Any of these would make `remaining` permanently negative, so the pad would
+    never fire and the timing leak would silently return with no indication
+    that protection had been turned off. Treat it as misconfiguration and fall
+    back to the safe default instead.
+    """
+    import importlib
+
+    monkeypatch.setenv("AUTH_BEGIN_MIN_DURATION_MS", bad_value)
+    reloaded = importlib.reload(config)
+    try:
+        assert reloaded.AUTH_BEGIN_MIN_DURATION_MS == 50
+    finally:
+        monkeypatch.delenv("AUTH_BEGIN_MIN_DURATION_MS", raising=False)
+        importlib.reload(config)
