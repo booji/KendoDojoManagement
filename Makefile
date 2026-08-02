@@ -7,7 +7,9 @@ else
   RUNTIME  := podman
 endif
 
-COMPOSE_DEV  := $(COMPOSE) -f docker-compose.dev.yml
+# --env-file makes .env.dev available for variable substitution in the compose
+# file itself (POSTGRES_PORT), not just inside the containers (#275).
+COMPOSE_DEV  := $(COMPOSE) -f docker-compose.dev.yml --env-file .env.dev
 COMPOSE_TEST := $(COMPOSE) -f docker-compose.test.yml
 COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml
 
