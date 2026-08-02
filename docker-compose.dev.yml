@@ -1,4 +1,7 @@
 # DO NOT USE IN PRODUCTION — dev only, uses weak credentials from .env.dev
+# See docker-compose.yml for why this is set explicitly (#274).
+name: kendodojo-dev
+
 services:
   backend:
     build:
