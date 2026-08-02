@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column(
             "issued_by",
             sa.String(36),
-            sa.ForeignKey("users.id"),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True,
         ),
         sa.Column("redeemed_at", sa.DateTime(timezone=True), nullable=True),

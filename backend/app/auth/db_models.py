@@ -89,7 +89,12 @@ class Invite(UUIDBase):
         DateTime(timezone=True), nullable=False
     )
     issued_by: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=True
+        # SET NULL rather than RESTRICT: erasure deletes the User row, and an
+        # admin who once issued an invite must not become un-erasable. The
+        # invite itself is still worth keeping as an audit record.
+        UUIDType(),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
     redeemed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

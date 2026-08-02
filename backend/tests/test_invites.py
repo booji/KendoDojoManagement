@@ -57,7 +57,7 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.guards import REQUIRE_ADMIN
@@ -1076,3 +1076,48 @@ def test_invite_redemption_routes_are_rate_limited() -> None:
         "app.auth.router.invite_redeem_complete_route",
     ):
         assert endpoint in registered, f"{endpoint} is not rate limited"
+
+
+@pytest.mark.anyio
+async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) -> None:
+    """Erasure deletes the User row (app/members/router.py), so an unqualified
+    FK from invites.issued_by would make an admin who ever issued an invite
+    un-erasable. The issuer reference must drop to NULL and the invite survive.
+
+    This one uses the PostgreSQL `db_session` rather than the SQLite engine the
+    rest of this file uses: SQLite does not enforce foreign keys by default, so
+    it cannot observe the constraint under test at all.
+    """
+    from app.auth.db_models import Invite, User
+
+    admin_id = str(uuid.uuid4())
+    invite_id = str(uuid.uuid4())
+
+    await db_session.execute(
+        insert(User).values(
+            id=admin_id,
+            email=f"issuer-{admin_id}@dojo.test",
+            role="admin",
+            is_active=True,
+        )
+    )
+    await db_session.execute(
+        insert(Invite).values(
+            id=invite_id,
+            email="orphaned@dojo.test",
+            token_hash=_hash_token(f"orphan-token-{invite_id}"),
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
+            issued_by=admin_id,
+            created_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    await db_session.execute(delete(User).where(User.id == admin_id))
+    await db_session.flush()
+
+    row = (
+        await db_session.execute(select(Invite).where(Invite.id == invite_id))
+    ).scalar_one()
+    assert row.issued_by is None
+    assert row.email == "orphaned@dojo.test"
