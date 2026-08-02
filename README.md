@@ -89,18 +89,56 @@ This starts:
 
 The frontend proxies `/api` to the backend, so everything is available at `http://localhost:5173`.
 
+#### Network layout
+
+Two networks, mirroring the Quadlet production deployment in `deploy/quadlet`
+(`kendo-edge` + `kendo-backend`):
+
+| Network | Members | Purpose |
+|---------|---------|---------|
+| `edge` | `frontend`, `backend` | Vite proxies `/api` to the backend; carries the published host ports |
+| `backend` | `backend`, `db` | The only path to PostgreSQL |
+
+`frontend` is **not** on the `backend` network. It runs arbitrary npm
+dependencies with `node_modules` mounted — the least trusted container in the
+stack — so it cannot reach the database at all.
+
+Nothing uses `network_mode: host` any more. Host-networked containers join no
+Compose network, so there was nothing to segment, and the database ended up
+binding host port 5432 directly (see below). Host ports are published 1:1
+(`5173:5173`, `8000:8000`), so every `localhost` URL is unchanged: the browser
+runs on the host and never joins a Compose network, so browser reachability
+depends only on published ports.
+
+Two runtime quirks are worth knowing, both verified on podman 5.6.0:
+
+- **`isolate=true` is what actually enforces the split.** Podman's bridge
+  networks are otherwise mutually routable *by IP* — the frontend cannot resolve
+  `db`, but it can open a socket to the database's `10.89.x.x` address. The
+  `driver_opts` in both Compose files close that. Docker isolates user-defined
+  bridges natively and does not need the option.
+- **The `backend` network is not `internal: true`**, unlike `Internal=true` on
+  `kendo-backend.network` in `deploy/quadlet`. Podman disables DNS on internal
+  networks (`dnsname and internal networks are incompatible`), so the service
+  name `db` stops resolving and the backend cannot connect. The trade is the
+  database's outbound route, which cannot be removed on Podman without also
+  losing service-name DNS.
+
 #### Why the database is on 5433, not 5432
 
-`backend` and `frontend` use host networking; `db` does not. It publishes a
-mapped port on the default bridge network instead, because host networking made
-it bind host port 5432 directly — the conventional PostgreSQL port. Anything
-else on the machine holding that port (a system install, another project's
-stack, a leftover container) claimed it first, and the dev database then exited
-1 while `docker compose up -d db` still reported success. A published port fails
-loudly on a collision, and 5433 avoids the common one entirely.
+`db` publishes a mapped port rather than binding the host's. Host networking
+used to make it bind host port 5432 directly — the conventional PostgreSQL port.
+Anything else on the machine holding that port (a system install, another
+project's stack, a leftover container) claimed it first, and the dev database
+then exited 1 while `docker compose up -d db` still reported success. A
+published port fails loudly on a collision, and 5433 avoids the common one
+entirely.
 
 To run two checkouts of this repo side by side, set a different `POSTGRES_PORT`
 in `.env.dev` and change the port in `DATABASE_URL` in the same file to match.
+The frontend port must stay mapped 1:1 (`5173:5173`): Vite's HMR client infers
+the websocket port from the browser's location, so publishing it on a different
+host port needs `server.hmr.clientPort` set in `frontend/vite.config.ts`.
 
 #### Connecting from the host
 
