@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
+from app.db.base import UUIDType
 
 revision: str = "a3b4c5d6e7f8"
 down_revision: str | None = "f2a3b4c5d6e7"
@@ -21,7 +22,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "invites",
-        sa.Column("id", sa.String(36), primary_key=True),
+        # UUIDType, not String(36): on PostgreSQL the models render UUID
+        # columns as native `uuid`, and a String(36) foreign key against
+        # users.id is rejected outright as a datatype mismatch.
+        sa.Column("id", UUIDType(), primary_key=True),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("first_name", sa.String(100), nullable=False),
         sa.Column("surname", sa.String(100), nullable=False),
@@ -29,7 +33,7 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "issued_by",
-            sa.String(36),
+            UUIDType(),
             sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True,
         ),
