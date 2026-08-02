@@ -1,4 +1,7 @@
 # DO NOT USE IN PRODUCTION — test only
+# See docker-compose.yml for why this is set explicitly (#274).
+name: kendodojo-test
+
 services:
   test:
     build:
