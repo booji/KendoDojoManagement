@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Annotated, Literal
 
 import email_validator as _ev
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 
 
 def _validate_email(v: object) -> str:
@@ -55,3 +56,41 @@ class PasskeyLoginCompleteRequest(BaseModel):
 
 class PasskeyRegisterCompleteResponse(UserClaims):
     show_nudge: bool
+
+
+# --- Invites (#257) ---------------------------------------------------------
+
+
+class InviteCreateRequest(BaseModel):
+    email: LenientEmail
+
+
+class InviteMintResponse(BaseModel):
+    """Returned exactly once, at mint time -- the only place the plaintext
+    invite token is ever exposed."""
+
+    id: str
+    email: str
+    token: str
+    link: str
+    expires_at: datetime
+
+
+class InviteListItem(BaseModel):
+    id: str
+    email: str
+    status: Literal["pending", "redeemed", "expired", "revoked"]
+    issued_by: str | None
+    expires_at: datetime
+    redeemed_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+
+class InviteRedeemBeginRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
+class InviteRedeemCompleteRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    credential: PasskeyCredentialResponse

@@ -21,6 +21,7 @@ _CONSTANT_TIME_PATHS = frozenset(
     {
         "/auth/register/passkey/begin",
         "/auth/login/passkey/begin",
+        "/auth/invites/redeem/begin",
     }
 )
 

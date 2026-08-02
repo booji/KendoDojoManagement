@@ -9,6 +9,7 @@ that repository behind the two questions auth actually asks, per the
 deep-modules convention in CLAUDE.md.
 """
 
+from datetime import date
 from typing import Protocol, runtime_checkable
 
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -21,6 +22,8 @@ class MemberDirectory(Protocol):
 
     async def link_user(self, email: str, user_id: str) -> None: ...
 
+    async def ensure_member_for_email(self, email: str, user_id: str) -> None: ...
+
 
 class RepositoryMemberDirectory:
     def __init__(self, repo: AbstractMemberRepository) -> None:
@@ -32,6 +35,29 @@ class RepositoryMemberDirectory:
     async def link_user(self, email: str, user_id: str) -> None:
         member = await self._repo.get_by_email(email)
         if member is not None:
+            await self._repo.update(member["id"], {"user_id": user_id})
+
+    async def ensure_member_for_email(self, email: str, user_id: str) -> None:
+        """Create-or-link the Member row for an invited email (#257).
+
+        The invite-redemption counterpart to `link_user`: the #239 Member
+        gate assumes the Member row already exists (an admin created it
+        first, making it the implicit invite), but an explicit invite may be
+        issued for an email with no Member row yet. Both paths converge on
+        the same Member.user_id linkage either way.
+        """
+        member = await self._repo.get_by_email(email)
+        if member is None:
+            await self._repo.add(
+                {
+                    "email": email,
+                    "first_name": email.split("@")[0],
+                    "surname": "",
+                    "join_date": date.today().isoformat(),
+                    "user_id": user_id,
+                }
+            )
+        else:
             await self._repo.update(member["id"], {"user_id": user_id})
 
 

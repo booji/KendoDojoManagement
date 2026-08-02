@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.auth.attempt_repository import AbstractAttemptRepository, SqlAttemptRepository
+from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.passkey_repository import AbstractPasskeyRepository, SqlPasskeyRepository
 from app.auth.recovery_repository import (
     AbstractAdminTokenRepository,
@@ -36,3 +37,9 @@ def get_admin_token_repo(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> AbstractAdminTokenRepository:
     return SqlAdminTokenRepository(uow.session)
+
+
+def get_invite_repo(
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> AbstractInviteRepository:
+    return SqlInviteRepository(uow.session)

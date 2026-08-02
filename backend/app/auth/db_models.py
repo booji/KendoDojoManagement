@@ -69,6 +69,39 @@ class RecoveryAttempt(UUIDBase):
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 
+class Invite(UUIDBase):
+    """Admin-issued invite token for passkey registration (#257).
+
+    Only `token_hash` is ever persisted -- the plaintext token is returned to
+    the admin exactly once, at mint time, and never stored. The hash is a
+    deterministic sha256 digest rather than a per-row-salted bcrypt hash,
+    because redemption must look a row up by token alone with no scoping
+    identity known ahead of time (see app.auth.invite_service).
+    """
+
+    __tablename__ = "invites"
+
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    issued_by: Mapped[str | None] = mapped_column(
+        UUIDType(), ForeignKey("users.id"), nullable=True
+    )
+    redeemed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class AdminRecoveryToken(UUIDBase):
     __tablename__ = "admin_recovery_tokens"
 
