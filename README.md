@@ -83,11 +83,41 @@ make dev
 ```
 
 This starts:
-- `backend` — FastAPI with hot-reload on file changes
-- `frontend` — Vite dev server with HMR
-- `db` — PostgreSQL 16
+- `backend` — FastAPI with hot-reload on file changes, on host port 8000
+- `frontend` — Vite dev server with HMR, on host port 5173
+- `db` — PostgreSQL 16, published on host port **5433**
 
 The frontend proxies `/api` to the backend, so everything is available at `http://localhost:5173`.
+
+#### Why the database is on 5433, not 5432
+
+`backend` and `frontend` use host networking; `db` does not. It publishes a
+mapped port on the default bridge network instead, because host networking made
+it bind host port 5432 directly — the conventional PostgreSQL port. Anything
+else on the machine holding that port (a system install, another project's
+stack, a leftover container) claimed it first, and the dev database then exited
+1 while `docker compose up -d db` still reported success. A published port fails
+loudly on a collision, and 5433 avoids the common one entirely.
+
+To run two checkouts of this repo side by side, set a different `POSTGRES_PORT`
+in `.env.dev` and change the port in `DATABASE_URL` in the same file to match.
+
+#### Connecting from the host
+
+The port is published on `127.0.0.1` only — the dev credentials are weak and
+committed to the repo, so the database is deliberately not reachable from the
+LAN. Host-side tooling (`alembic`, `psql`, a one-off script) must point at the
+published port, *not* 5432, and address `127.0.0.1` rather than `localhost`
+(which can resolve to `::1`, where nothing is listening):
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://kendo_dev:kendo_dev_password@127.0.0.1:5433/kendo_dev
+psql -h 127.0.0.1 -p 5433 -U kendo_dev -d kendo_dev
+```
+
+If you get `password authentication failed for user "kendo_dev"` on port 5432,
+you are talking to a *different* PostgreSQL — the credentials are not the
+problem, the port is.
 
 ### Useful `make` targets
 

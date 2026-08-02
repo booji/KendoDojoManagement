@@ -13,8 +13,12 @@ services:
     environment:
       TZ: Europe/London
       WATCHFILES_FORCE_POLLING: "1"
-      # Override env_file value so backend reaches db on localhost (host networking)
-      DATABASE_URL: "postgresql+asyncpg://kendo_dev:kendo_dev_password@localhost:5432/kendo_dev"
+      # Override env_file value: the backend is host-networked, so it reaches the
+      # bridge-networked db through its published host port, not the compose DNS
+      # name. Defaults mirror .env.dev so a bare `docker compose -f
+      # docker-compose.dev.yml up` (without --env-file) still resolves to
+      # something that works.
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kendo_dev}:${POSTGRES_PASSWORD:-kendo_dev_password}@127.0.0.1:${POSTGRES_PORT:-5433}/${POSTGRES_DB:-kendo_dev}"
     env_file:
       - .env.dev
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -38,7 +42,20 @@ services:
 
   db:
     image: postgres:16-alpine
-    network_mode: host
+    # Deliberately NOT network_mode: host (#275). Host networking made the dev
+    # database bind host port 5432 directly, so any other PostgreSQL on the
+    # machine claimed the port first and this container exited 1 while
+    # `docker compose up -d db` still reported success. A published port on the
+    # default bridge network fails loudly on a collision, and 5433 keeps the dev
+    # database off the conventional PostgreSQL port entirely. Override with
+    # POSTGRES_PORT in .env.dev to run two checkouts side by side.
+    #
+    # Bound to 127.0.0.1, not every interface: the dev credentials are weak and
+    # committed to the repo, so the database must not be reachable from the LAN.
+    # Everything that connects to it addresses 127.0.0.1 explicitly rather than
+    # "localhost" — that name can resolve to ::1 first, which is not bound here.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     environment:
       TZ: Europe/London
     env_file:
@@ -46,7 +63,11 @@ services:
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kendo_dev -d kendo_dev"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-kendo_dev} -d ${POSTGRES_DB:-kendo_dev}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
