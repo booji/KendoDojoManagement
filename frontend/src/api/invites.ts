@@ -6,6 +6,8 @@ export type InviteStatus = "pending" | "redeemed" | "expired" | "revoked"
 export type InviteListItem = {
   id: string
   email: string
+  first_name: string
+  surname: string
   status: InviteStatus
   issued_by: string | null
   expires_at: string
@@ -35,12 +37,16 @@ const throwApiError = async (res: Response, defaultMessage: string): Promise<nev
 
 // --- Admin invite management ---
 
-export const issueInvite = async (email: string): Promise<InviteMintResponse> => {
+export const issueInvite = async (
+  email: string,
+  firstName: string,
+  surname: string,
+): Promise<InviteMintResponse> => {
   const res = await fetch("/api/auth/admin/invites", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, first_name: firstName, surname }),
   })
   if (!res.ok) {
     await throwApiError(res, "Failed to issue invite")

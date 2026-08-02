@@ -82,6 +82,10 @@ class Invite(UUIDBase):
     __tablename__ = "invites"
 
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # The admin issuing the invite supplies the invitee's name, so redemption
+    # can create a real Member row rather than guessing from the email.
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    surname: Mapped[str] = mapped_column(String(100), nullable=False)
     token_hash: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=True, index=True
     )

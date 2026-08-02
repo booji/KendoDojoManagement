@@ -141,7 +141,7 @@ def _mint_invite(email: str) -> str:
     admin_token = _real_login("admin")
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
-        json={"email": email},
+        json={"email": email, "first_name": "Test", "surname": "Invitee"},
         cookies={"access_token": admin_token},
         timeout=5,
     )
@@ -178,6 +178,7 @@ def _mark_invite_redeemed(token: str) -> None:
 def _mark_invite_expired(token: str) -> None:
     _run_async(_update_invite_row(token, "expires_at", "now() - interval '1 hour'"))
 
+
 # ── AC1: Invite model persists a token hash, never plaintext ────────────────
 #
 # The storage guarantee itself is covered at the DB layer in
@@ -191,6 +192,8 @@ def test_admin_invite_ui_never_displays_a_token_hash(page: Page) -> None:
     _login_admin_in_browser(page)
     page.goto(f"{BASE_URL}/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
+    page.fill('[data-testid="invite-first-name-input"]', "Test")
+    page.fill('[data-testid="invite-surname-input"]', "Invitee")
     page.fill('[data-testid="invite-email-input"]', email)
     page.click('[data-testid="invite-submit"]')
     page.wait_for_selector('[data-testid="invite-link"]', timeout=5000)
@@ -206,6 +209,8 @@ def test_admin_can_issue_invite_and_sees_copyable_link_once(page: Page) -> None:
     _login_admin_in_browser(page)
     page.goto(f"{BASE_URL}/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
+    page.fill('[data-testid="invite-first-name-input"]', "Test")
+    page.fill('[data-testid="invite-surname-input"]', "Invitee")
     page.fill('[data-testid="invite-email-input"]', email)
     page.click('[data-testid="invite-submit"]')
     page.wait_for_selector('[data-testid="invite-link"]', timeout=5000)
@@ -237,7 +242,7 @@ def test_invite_list_shows_status_and_no_token(page: Page) -> None:
     email = f"list-{uuid.uuid4().hex[:8]}@dojo.test"
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
-        json={"email": email},
+        json={"email": email, "first_name": "Test", "surname": "Invitee"},
         cookies={"access_token": admin_token},
         timeout=5,
     )
@@ -259,7 +264,7 @@ def test_admin_can_revoke_invite_from_list(page: Page) -> None:
     email = f"revoke-{uuid.uuid4().hex[:8]}@dojo.test"
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
-        json={"email": email},
+        json={"email": email, "first_name": "Test", "surname": "Invitee"},
         cookies={"access_token": admin_token},
         timeout=5,
     )
@@ -399,6 +404,8 @@ def test_admin_can_issue_list_and_revoke_invite_end_to_end(page: Page) -> None:
     email = f"roundtrip-{uuid.uuid4().hex[:8]}@dojo.test"
 
     page.goto(f"{BASE_URL}/settings/invites")
+    page.fill('[data-testid="invite-first-name-input"]', "Test")
+    page.fill('[data-testid="invite-surname-input"]', "Invitee")
     page.fill('[data-testid="invite-email-input"]', email)
     page.click('[data-testid="invite-submit"]')
     page.wait_for_selector('[data-testid="invite-link"]', timeout=5000)
@@ -429,10 +436,6 @@ def test_invite_landing_page_route_exists_and_drives_registration(page: Page) ->
     # CardTitle renders as a <div data-slot="card-title">, not a semantic
     # heading — use get_by_text so this doesn't depend on the element type
     # (same caveat as test_e2e_setup.py's setup-page checks).
-    expect(page.get_by_text("Complete your registration")).to_be_visible(
-        timeout=5000
-    )
+    expect(page.get_by_text("Complete your registration")).to_be_visible(timeout=5000)
     page.click('[data-testid="invite-register-button"]')
-    page.wait_for_selector(
-        '[data-testid="invite-register-in-progress"]', timeout=5000
-    )
+    page.wait_for_selector('[data-testid="invite-register-in-progress"]', timeout=5000)

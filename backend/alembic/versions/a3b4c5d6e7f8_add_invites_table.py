@@ -23,6 +23,8 @@ def upgrade() -> None:
         "invites",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("email", sa.String(255), nullable=False),
+        sa.Column("first_name", sa.String(100), nullable=False),
+        sa.Column("surname", sa.String(100), nullable=False),
         sa.Column("token_hash", sa.String(64), nullable=False, unique=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(

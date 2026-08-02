@@ -178,12 +178,38 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
+class _NoUsersResult:
+    def scalar_one_or_none(self) -> None:
+        return None
+
+
+class _NoUsersSession:
+    """Just enough session for the mint route's "does this email already have
+    an account?" check, so the stub-repo tests stay DB-free."""
+
+    async def execute(self, *args: Any, **kwargs: Any) -> _NoUsersResult:
+        return _NoUsersResult()
+
+
+class _StubUow:
+    def __init__(self) -> None:
+        self.session = _NoUsersSession()
+
+    async def commit(self) -> None:
+        return None
+
+    async def rollback(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def invite_repo() -> StubInviteRepo:
-    from app.auth.dependencies import get_invite_repo  # red — doesn't exist yet
+    from app.auth.dependencies import get_invite_repo
+    from app.dependencies import get_uow
 
     repo = StubInviteRepo()
     app.dependency_overrides[get_invite_repo] = lambda: repo
+    app.dependency_overrides[get_uow] = lambda: _StubUow()
     return repo
 
 
@@ -199,7 +225,12 @@ async def test_admin_can_mint_invite(invite_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.post(
-            "/auth/admin/invites", json={"email": "invitee@dojo.test"}
+            "/auth/admin/invites",
+            json={
+                "email": "invitee@dojo.test",
+                "first_name": "New",
+                "surname": "Invitee",
+            },
         )
     assert response.status_code == 201
     body = response.json()
@@ -218,7 +249,12 @@ async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.post(
-            "/auth/admin/invites", json={"email": "hashme@dojo.test"}
+            "/auth/admin/invites",
+            json={
+                "email": "hashme@dojo.test",
+                "first_name": "New",
+                "surname": "Invitee",
+            },
         )
     assert response.status_code == 201
     plaintext = response.json()["token"]
@@ -249,7 +285,10 @@ async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post("/auth/admin/invites", json={"email": "nope@dojo.test"})
+        response = await c.post(
+            "/auth/admin/invites",
+            json={"email": "nope@dojo.test", "first_name": "New", "surname": "Invitee"},
+        )
     assert response.status_code == 401
 
 
@@ -264,7 +303,7 @@ async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
-            json={"email": "nope@dojo.test"},
+            json={"email": "nope@dojo.test", "first_name": "New", "surname": "Invitee"},
             cookies={"access_token": token},
         )
     assert response.status_code == 403
@@ -326,6 +365,8 @@ async def test_list_invites_returns_pending_status(invite_repo) -> None:
     await invite_repo.add(
         {
             "email": "pending@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-pending"),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -348,6 +389,8 @@ async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
     await invite_repo.add(
         {
             "email": "redeemed@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-redeemed"),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -368,6 +411,8 @@ async def test_list_invites_returns_expired_status(invite_repo) -> None:
     await invite_repo.add(
         {
             "email": "expired@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-expired"),
             "expires_at": datetime.now(UTC) - timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -387,6 +432,8 @@ async def test_list_invites_returns_revoked_status(invite_repo) -> None:
     await invite_repo.add(
         {
             "email": "revoked@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-revoked"),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -407,6 +454,8 @@ async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
     await invite_repo.add(
         {
             "email": "secretive@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-secretive"),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -433,6 +482,8 @@ async def test_admin_can_revoke_invite(invite_repo) -> None:
     record = await invite_repo.add(
         {
             "email": "torevoke@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
             "token_hash": _hash_token("plain-torevoke"),
             "expires_at": datetime.now(UTC) + timedelta(hours=1),
             "issued_by": _ADMIN.sub,
@@ -518,6 +569,8 @@ async def _seed_invite(
     email: str,
     plaintext: str,
     *,
+    first_name: str = "Test",
+    surname: str = "Invitee",
     issued_by: str | None = None,
     expires_at: datetime | None = None,
     redeemed_at: datetime | None = None,
@@ -533,6 +586,8 @@ async def _seed_invite(
             insert(Invite).values(
                 id=invite_id,
                 email=email,
+                first_name=first_name,
+                surname=surname,
                 token_hash=_hash_token(plaintext),
                 expires_at=expires_at,
                 issued_by=issued_by,
@@ -1105,6 +1160,8 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
         insert(Invite).values(
             id=invite_id,
             email="orphaned@dojo.test",
+            first_name="Test",
+            surname="Invitee",
             token_hash=_hash_token(f"orphan-token-{invite_id}"),
             expires_at=datetime.now(UTC) + timedelta(hours=24),
             issued_by=admin_id,
@@ -1121,3 +1178,140 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
     ).scalar_one()
     assert row.issued_by is None
     assert row.email == "orphaned@dojo.test"
+
+
+# ---------------------------------------------------------------------------
+# The invitee's name comes from the admin at mint time
+#
+# Redemption used to invent placeholders (email local-part, empty surname),
+# which put junk in the member register that nobody was ever prompted to fix.
+# The admin issuing the invite knows who they are inviting, so they supply it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_mint_invite_requires_invitee_name(invite_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/auth/admin/invites", json={"email": "nameless@dojo.test"}
+        )
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_redeem_creates_member_with_the_name_the_admin_supplied(
+    db_client,
+) -> None:
+    from app.members.db_models import Member
+
+    engine = db_client
+    admin_id = await _seed_admin_user(engine)
+    await _seed_invite(
+        engine,
+        "named@dojo.test",
+        "named-token",
+        issued_by=admin_id,
+        first_name="Keiko",
+        surname="Tanaka",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "named-token"}
+        )
+    assert response.status_code == 200
+
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            select(Member).where(Member.email == "named@dojo.test")
+        )
+        member = result.mappings().one()
+
+    assert member["first_name"] == "Keiko"
+    assert member["surname"] == "Tanaka"
+
+
+# ---------------------------------------------------------------------------
+# An invite cannot hand out a passkey on an account that already exists
+#
+# Otherwise whoever holds the link silently gains a credential on a live
+# account and its owner is never told. Admin recovery tokens already exist for
+# the legitimate "help an existing user get back in" case.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_mint_invite_for_an_existing_user_is_refused(db_client) -> None:
+    engine = db_client
+    await _seed_admin_user(engine, "already@dojo.test")
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/auth/admin/invites",
+            json={
+                "email": "already@dojo.test",
+                "first_name": "Al",
+                "surname": "Ready",
+            },
+        )
+
+    assert response.status_code == 409
+    assert "recovery" in response.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
+    """The account may be created between minting and redemption, so the check
+    at mint time is not enough on its own."""
+    from app.auth.db_models import PasskeyCredential, User
+
+    engine = db_client
+    admin_id = await _seed_admin_user(engine)
+    await _seed_invite(engine, "racing@dojo.test", "racing-token", issued_by=admin_id)
+    # The invitee registers by some other route before redeeming.
+    await _seed_admin_user(engine, "racing@dojo.test")
+
+    async with engine.begin() as conn:
+        before = len(
+            (
+                await conn.execute(
+                    select(PasskeyCredential).join(
+                        User, User.id == PasskeyCredential.user_id
+                    )
+                )
+            ).all()
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        begin = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "racing-token"}
+        )
+        complete = await c.post(
+            "/auth/invites/redeem/complete",
+            json={"token": "racing-token", "credential": _FAKE_REGISTER_CREDENTIAL},
+        )
+
+    assert begin.status_code == 200  # decoy, indistinguishable as ever
+    assert complete.status_code == 401
+
+    async with engine.begin() as conn:
+        after = len(
+            (
+                await conn.execute(
+                    select(PasskeyCredential).join(
+                        User, User.id == PasskeyCredential.user_id
+                    )
+                )
+            ).all()
+        )
+    assert after == before, "no credential may be added to the existing account"

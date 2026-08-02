@@ -50,6 +50,8 @@ export const InviteManagementSection = () => {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [email, setEmail] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [surname, setSurname] = useState("")
   const [issuing, setIssuing] = useState(false)
   const [issueError, setIssueError] = useState<string | null>(null)
   // The plaintext link is only ever held in local component state — never
@@ -76,14 +78,18 @@ export const InviteManagementSection = () => {
   const handleIssue = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = email.trim()
-    if (!trimmed) return
+    const trimmedFirstName = firstName.trim()
+    const trimmedSurname = surname.trim()
+    if (!trimmed || !trimmedFirstName || !trimmedSurname) return
     setIssuing(true)
     setIssueError(null)
     setCopied(false)
     try {
-      const result = await issueInvite(trimmed)
+      const result = await issueInvite(trimmed, trimmedFirstName, trimmedSurname)
       setMinted(result)
       setEmail("")
+      setFirstName("")
+      setSurname("")
       loadInvites()
     } catch (err) {
       setIssueError(isApiError(err) ? err.message : "Failed to issue invite")
@@ -133,6 +139,28 @@ export const InviteManagementSection = () => {
             className="flex flex-col gap-3 sm:flex-row sm:items-end"
           >
             <div className="flex-1 space-y-1.5">
+              <Label htmlFor="invite-first-name-input">First name</Label>
+              <Input
+                id="invite-first-name-input"
+                data-testid="invite-first-name-input"
+                placeholder="Keiko"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="invite-surname-input">Surname</Label>
+              <Input
+                id="invite-surname-input"
+                data-testid="invite-surname-input"
+                placeholder="Tanaka"
+                value={surname}
+                onChange={(e) => setSurname(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex-1 space-y-1.5">
               <Label htmlFor="invite-email-input">Email</Label>
               <Input
                 id="invite-email-input"
@@ -147,7 +175,12 @@ export const InviteManagementSection = () => {
             <Button
               type="submit"
               data-testid="invite-submit"
-              disabled={issuing || email.trim() === ""}
+              disabled={
+                issuing ||
+                email.trim() === "" ||
+                firstName.trim() === "" ||
+                surname.trim() === ""
+              }
               className="min-h-[44px] shrink-0"
             >
               {issuing ? "Issuing…" : "Issue invite"}
@@ -220,6 +253,7 @@ export const InviteManagementSection = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Expires</TableHead>
@@ -229,7 +263,10 @@ export const InviteManagementSection = () => {
                 <TableBody>
                   {invites.map((inv) => (
                     <TableRow key={inv.id} data-testid="invite-row">
-                      <TableCell className="font-medium">{inv.email}</TableCell>
+                      <TableCell className="font-medium">
+                        {inv.first_name} {inv.surname}
+                      </TableCell>
+                      <TableCell>{inv.email}</TableCell>
                       <TableCell>
                         <Badge
                           variant={STATUS_VARIANT[inv.status]}

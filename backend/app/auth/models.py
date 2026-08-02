@@ -63,6 +63,8 @@ class PasskeyRegisterCompleteResponse(UserClaims):
 
 class InviteCreateRequest(BaseModel):
     email: LenientEmail
+    first_name: str = Field(..., min_length=1, max_length=100)
+    surname: str = Field(..., min_length=1, max_length=100)
 
 
 class InviteMintResponse(BaseModel):
@@ -79,6 +81,8 @@ class InviteMintResponse(BaseModel):
 class InviteListItem(BaseModel):
     id: str
     email: str
+    first_name: str
+    surname: str
     status: Literal["pending", "redeemed", "expired", "revoked"]
     issued_by: str | None
     expires_at: datetime

@@ -398,7 +398,7 @@ async def mint_invite_route(
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> InviteMintResponse:
-    result = await mint_invite(payload.email, claims.sub, repo)
+    result = await mint_invite(payload, claims.sub, repo, uow)
     await uow.commit()
     log_security_event("invite_minted", "success", user_id=claims.sub)
     return InviteMintResponse(**result)

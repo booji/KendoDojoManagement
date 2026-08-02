@@ -20,6 +20,8 @@ def _to_dict(obj: Invite) -> dict[str, Any]:
     return {
         "id": obj.id,
         "email": obj.email,
+        "first_name": obj.first_name,
+        "surname": obj.surname,
         "token_hash": obj.token_hash,
         "expires_at": obj.expires_at,
         "issued_by": obj.issued_by,

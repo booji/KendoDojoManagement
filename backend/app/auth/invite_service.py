@@ -34,6 +34,7 @@ from app.auth.db_models import PasskeyCredential, User
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
 from app.auth.models import (
+    InviteCreateRequest,
     InviteRedeemCompleteRequest,
     PasskeyRegisterCompleteResponse,
 )
@@ -93,13 +94,37 @@ def _is_usable(record: dict[str, Any]) -> bool:
     return invite_status(record) == "pending"
 
 
+async def _email_has_user(email: str, uow: AbstractUnitOfWork) -> bool:
+    result = await uow.session.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none() is not None
+
+
 async def mint_invite(
-    email: str, issued_by: str, repo: AbstractInviteRepository
+    payload: InviteCreateRequest,
+    issued_by: str,
+    repo: AbstractInviteRepository,
+    uow: AbstractUnitOfWork,
 ) -> dict[str, Any]:
+    if await _email_has_user(payload.email, uow):
+        # An invite must never be a way to attach a credential to a live
+        # account: the link-holder would gain access and the account's owner
+        # would never be told. Admin recovery tokens cover the legitimate
+        # "this person needs to get back in" case, with the audit trail and
+        # the deliberate admin action that implies.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "An account already exists for that email. Issue an admin "
+                "recovery token instead of an invite."
+            ),
+        )
+
     plaintext = generate_invite_token()
     record = await repo.add(
         {
-            "email": email,
+            "email": payload.email,
+            "first_name": payload.first_name,
+            "surname": payload.surname,
             "token_hash": hash_invite_token(plaintext),
             "expires_at": invite_expiry(),
             "issued_by": issued_by,
@@ -122,13 +147,18 @@ def _decoy_response() -> dict:
     return {"publicKey": json.loads(options_to_json(options))}
 
 
-async def _get_or_create_invited_user(email: str, uow: AbstractUnitOfWork) -> User:
-    result = await uow.session.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(email=email, role="member", is_active=True)
-        uow.session.add(user)
-        await uow.session.flush()
+async def _create_invited_user(email: str, uow: AbstractUnitOfWork) -> User | None:
+    """Create the invited account, or None if the email already has one.
+
+    An account can appear between minting and redemption, so refusing at mint
+    time is not enough on its own. Returning None here makes the redemption
+    path treat it like any other unusable invite.
+    """
+    if await _email_has_user(email, uow):
+        return None
+    user = User(email=email, role="member", is_active=True)
+    uow.session.add(user)
+    await uow.session.flush()
     return user
 
 
@@ -138,9 +168,14 @@ async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
     if record is None or not _is_usable(record):
         return _decoy_response()
 
+    user = await _create_invited_user(record["email"], uow)
+    if user is None:
+        return _decoy_response()
+
     directory = member_directory_for(uow)
-    user = await _get_or_create_invited_user(record["email"], uow)
-    await directory.ensure_member_for_email(record["email"], user.id)
+    await directory.ensure_member_for_email(
+        record["email"], user.id, record["first_name"], record["surname"]
+    )
 
     options = webauthn.generate_registration_options(
         rp_id=config.WEBAUTHN_RP_ID,
@@ -170,6 +205,17 @@ async def invite_redeem_complete(
     user = result.scalar_one_or_none()
     if user is None:
         log_security_event("invite_redeemed", "failure")
+        raise _AUTH_FAILED
+
+    # An invite may only ever establish the FIRST credential on the account it
+    # created. If the account already has a passkey it is somebody's live
+    # account, and adding another silently would hand the link-holder access
+    # its owner never agreed to.
+    existing = await uow.session.execute(
+        select(PasskeyCredential).where(PasskeyCredential.user_id == user.id)
+    )
+    if existing.scalars().first() is not None:
+        log_security_event("invite_redeemed", "failure", user_id=user.id)
         raise _AUTH_FAILED
 
     if not user.pending_challenge or not user.challenge_issued_at:
