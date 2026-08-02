@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ── AC1: Invite model persists a token hash, never plaintext ────────────────
 #
 # Not browser-observable at all -- it's a DB-storage guarantee, already
@@ -86,9 +85,7 @@ def test_invite_list_shows_status_and_no_token(page) -> None:
     page.goto("http://localhost:5173/settings/invites")
     page.wait_for_selector('[data-testid="invite-row"]', timeout=5000)
     row_text = page.text_content('[data-testid="invite-row"]')
-    assert any(
-        s in row_text for s in ("Pending", "Redeemed", "Expired", "Revoked")
-    )
+    assert any(s in row_text for s in ("Pending", "Redeemed", "Expired", "Revoked"))
     assert "/invite/" not in row_text
 
 
@@ -111,9 +108,7 @@ def test_admin_can_revoke_invite_from_list(page) -> None:
 # registration UI is offered for a valid token.
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC6: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC6: invite landing page not yet implemented")
 def test_invite_landing_page_offers_passkey_registration_for_valid_token(
     page,
 ) -> None:
@@ -124,9 +119,7 @@ def test_invite_landing_page_offers_passkey_registration_for_valid_token(
 # ── AC7: single use -- a second redemption with the same token fails ────────
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC7: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC7: invite landing page not yet implemented")
 def test_invite_landing_page_shows_already_used_state(page) -> None:
     page.goto("http://localhost:5173/invite/an-already-redeemed-token")
     page.wait_for_selector('[data-testid="invite-invalid"]', timeout=5000)
@@ -135,9 +128,7 @@ def test_invite_landing_page_shows_already_used_state(page) -> None:
 # ── AC8: expiry -- a token past expires_at fails ─────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC8: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC8: invite landing page not yet implemented")
 def test_invite_landing_page_shows_expired_state(page) -> None:
     page.goto("http://localhost:5173/invite/an-expired-token")
     page.wait_for_selector('[data-testid="invite-invalid"]', timeout=5000)
@@ -154,9 +145,7 @@ def test_invite_landing_page_shows_expired_state(page) -> None:
 # cannot assert on status codes or exact response bodies.
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC9: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC9: invite landing page not yet implemented")
 def test_invite_landing_page_shows_same_generic_failure_for_any_bad_token(
     page,
 ) -> None:
@@ -187,9 +176,7 @@ def test_invite_landing_page_shows_same_generic_failure_for_any_bad_token(
 # landing page doesn't visibly stall on one path vs another.
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC10: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC10: invite landing page not yet implemented")
 def test_invite_landing_page_does_not_visibly_stall_for_bad_token(page) -> None:
     page.goto("http://localhost:5173/invite/unknown-token-xyz")
     page.wait_for_selector('[data-testid="invite-invalid"]', timeout=1000)
@@ -224,9 +211,7 @@ def test_admin_can_issue_list_and_revoke_invite_end_to_end(page) -> None:
 # ── AC12: frontend invite landing page drives passkey registration ──────────
 
 
-@pytest.mark.xfail(
-    strict=True, reason="AC12: invite landing page not yet implemented"
-)
+@pytest.mark.xfail(strict=True, reason="AC12: invite landing page not yet implemented")
 def test_invite_landing_page_route_exists_and_drives_registration(page) -> None:
     page.goto("http://localhost:5173/invite/some-valid-token")
     expect_heading = page.get_by_role("heading", name="Complete your registration")

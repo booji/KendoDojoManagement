@@ -60,7 +60,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
+from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
 from app.main import app
 
@@ -249,9 +249,7 @@ async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.post(
-            "/auth/admin/invites", json={"email": "nope@dojo.test"}
-        )
+        response = await c.post("/auth/admin/invites", json={"email": "nope@dojo.test"})
     assert response.status_code == 401
 
 
@@ -289,9 +287,7 @@ async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.get(
-            "/auth/admin/invites", cookies={"access_token": token}
-        )
+        response = await c.get("/auth/admin/invites", cookies={"access_token": token})
     assert response.status_code == 403
 
 
@@ -1026,3 +1022,57 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 
     diff = abs(statistics.median(valid_samples) - statistics.median(invalid_samples))
     assert diff < 0.001  # under 1ms, far below any human-observable signal
+
+
+# ---------------------------------------------------------------------------
+# Hardening from the #257 security review
+#
+# Two gaps the review found in the first implementation. Both defend the same
+# invariants the issue exists to uphold, so they belong in this file rather
+# than a follow-up.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_mark_redeemed_is_atomic_and_rejects_second_claim(db_client) -> None:
+    """Single use must be enforced by the write, not by a prior read.
+
+    An unconditional `UPDATE ... SET redeemed_at = now()` lets two concurrent
+    redemptions of the same token both pass the usability check before either
+    commits, so both register a passkey. The repository must therefore claim
+    the row conditionally and report failure when it did not win.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.auth.invite_repository import SqlInviteRepository
+
+    engine = db_client
+    invite_id = await _seed_invite(engine, "raced@dojo.test", "raced-token")
+
+    async with AsyncSession(engine) as session:
+        repo = SqlInviteRepository(session)
+        first = await repo.mark_redeemed(invite_id)
+        await session.commit()
+
+    assert first is not None, "the first claim must succeed"
+    assert first["redeemed_at"] is not None
+
+    async with AsyncSession(engine) as session:
+        repo = SqlInviteRepository(session)
+        second = await repo.mark_redeemed(invite_id)
+        await session.commit()
+
+    assert second is None, "a second claim on an already-redeemed invite must fail"
+
+
+def test_invite_redemption_routes_are_rate_limited() -> None:
+    """Every other public auth endpoint carries the per-IP limit; these are the
+    same class of endpoint and must not be the exception."""
+    from app.main import app
+
+    registered = set(app.state.limiter._route_limits)
+    for endpoint in (
+        "app.auth.router.invite_redeem_begin_route",
+        "app.auth.router.invite_redeem_complete_route",
+    ):
+        assert endpoint in registered, f"{endpoint} is not rate limited"

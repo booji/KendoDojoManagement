@@ -433,7 +433,9 @@ async def revoke_invite_route(
 
 
 @router.post("/invites/redeem/begin")
+@limiter.limit(PER_IP_LIMIT)
 async def invite_redeem_begin_route(
+    request: Request,
     payload: InviteRedeemBeginRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
@@ -441,7 +443,9 @@ async def invite_redeem_begin_route(
 
 
 @router.post("/invites/redeem/complete", status_code=201)
+@limiter.limit(PER_IP_LIMIT)
 async def invite_redeem_complete_route(
+    request: Request,
     payload: InviteRedeemCompleteRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> PasskeyRegisterCompleteResponse:

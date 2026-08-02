@@ -204,7 +204,12 @@ async def invite_redeem_complete(
     )
     uow.session.add(passkey)
     user.pending_challenge = None
-    await repo.mark_redeemed(record["id"])
+    if await repo.mark_redeemed(record["id"]) is None:
+        # A concurrent redemption claimed the invite first. The conditional
+        # update is the only point at which that is knowable, so refuse here
+        # and let the uncommitted passkey roll back with the transaction.
+        log_security_event("invite_redeemed", "failure", user_id=user.id)
+        raise _AUTH_FAILED
     await uow.commit()
 
     log_security_event("invite_redeemed", "success", user_id=user.id)

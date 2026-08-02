@@ -82,10 +82,19 @@ class SqlInviteRepository:
         return await self.get(invite_id)
 
     async def mark_redeemed(self, invite_id: str) -> dict[str, Any] | None:
-        await self._session.execute(
+        """Claim an invite for redemption, or report that someone else already did.
+
+        The `redeemed_at IS NULL` guard is what actually enforces single use: a
+        caller that checked usability by reading the row first is racing anyone
+        else who read it in the same window, and only the write can settle that.
+        Returning None means this caller lost and must be refused.
+        """
+        result = await self._session.execute(
             update(Invite)
-            .where(Invite.id == invite_id)
+            .where(Invite.id == invite_id, Invite.redeemed_at.is_(None))
             .values(redeemed_at=datetime.now(UTC))
         )
         await self._session.flush()
+        if result.rowcount == 0:
+            return None
         return await self.get(invite_id)
