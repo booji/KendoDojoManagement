@@ -25,7 +25,7 @@ import app.settings.models  # noqa: F401
 from app.attendance.router import router as attendance_router
 from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
-from app.config import CORS_ORIGINS
+from app.config import CORS_ORIGINS, validate_startup_config
 from app.core.middleware import ConstantTimeAuthMiddleware, SecurityHeadersMiddleware
 from app.db.base import Base
 from app.db.engine import engine
@@ -79,6 +79,7 @@ async def _init_db() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    validate_startup_config()
     await _init_db()
     yield
 

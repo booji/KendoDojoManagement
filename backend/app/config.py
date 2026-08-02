@@ -7,7 +7,7 @@ load_dotenv(override=False)
 
 DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")
 
-JWT_SECRET: str = os.getenv("JWT_SECRET", "")
+JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
@@ -65,3 +65,30 @@ CORS_ORIGINS: list[str] = (
     if _cors_origins_env
     else [WEBAUTHN_ORIGIN]
 )
+
+# Names of module-level globals in this file that MUST hold a non-blank
+# string at startup. A misconfigured deployment (unset/empty/whitespace-only)
+# must fail fast here rather than boot cleanly and fail later at first use
+# (e.g. JWT_SECRET only used to raise on first encode_token() call). Add
+# future required secrets to this tuple — validate_startup_config() reads
+# each by name from this module's globals at call time, so no other wiring
+# is needed.
+_REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET",)
+
+
+def validate_startup_config() -> None:
+    """Raise RuntimeError naming the offending variable if any required
+    startup config is unset, empty, or whitespace-only.
+
+    Reads each required variable from this module's globals at call time
+    (not at import time), so tests can monkeypatch e.g. `config.JWT_SECRET`
+    and callers (app.main.lifespan) can invoke this with no arguments before
+    any DB or network I/O.
+    """
+    for name in _REQUIRED_STARTUP_VARS:
+        value = globals().get(name)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError(
+                f"{name} environment variable must be set to a non-empty "
+                "value. Refusing to start with a missing/blank secret."
+            )
