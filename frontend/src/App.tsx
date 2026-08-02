@@ -19,6 +19,8 @@ import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
+import AdminInvitesPage from "@/pages/AdminInvitesPage"
+import InviteLandingPage from "@/pages/InviteLandingPage"
 import CheckinPage from "@/pages/CheckinPage"
 import SessionCheckinPage from "@/pages/SessionCheckinPage"
 import SetupPage from "@/pages/SetupPage"
@@ -110,11 +112,16 @@ const App = () => (
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/recovery/redeem" element={<RecoveryRedeemPage />} />
           <Route path="/passkey/register" element={<PasskeyRegisterPage />} />
+          <Route path="/invite/:token" element={<InviteLandingPage />} />
 
           {/* Authenticated routes — wrapped in AppShell */}
           <Route element={<AuthenticatedLayout />}>
             {/* Onboarding: authenticated but NOT profile-gated */}
             <Route path="/onboarding" element={<OnboardingPage />} />
+
+            {/* Invite management: authenticated but not profile-gated — checks
+                admin role itself and renders a forbidden state for members */}
+            <Route path="/settings/invites" element={<AdminInvitesPage />} />
 
             {/* Profile-required routes */}
             <Route element={<RequireProfile />}>

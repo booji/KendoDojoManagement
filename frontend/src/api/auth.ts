@@ -73,7 +73,7 @@ const bufferToBase64url = (buffer: ArrayBuffer): string => {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
 }
 
-type PasskeyCreationOptions = {
+export type PasskeyCreationOptions = {
   challenge: string
   user: { id: string; name: string; displayName: string }
   rp: { name: string; id?: string }
@@ -149,9 +149,14 @@ export const loginPasskeyComplete = async (
   return res.json() as Promise<LoginResponse>
 }
 
-export const performPasskeyRegistration = async (email: string): Promise<RegisterResponse> => {
-  const options = await registerPasskeyBegin(email)
-
+// Drives the browser-side WebAuthn registration ceremony (navigator.credentials.create)
+// against a set of creation options already fetched from a "begin" endpoint, and shapes
+// the resulting credential into the JSON body a "complete" endpoint expects. Shared by
+// every registration flow (self-service passkey add, recovery re-registration, invite
+// redemption) so the ceremony plumbing lives in exactly one place.
+export const runPasskeyCreationCeremony = async (
+  options: PasskeyCreationOptions
+): Promise<object> => {
   const publicKey: PublicKeyCredentialCreationOptions = {
     challenge: base64urlToBuffer(options.challenge),
     rp: options.rp,
@@ -182,7 +187,7 @@ export const performPasskeyRegistration = async (email: string): Promise<Registe
 
   const cred = credential as PublicKeyCredential
   const response = cred.response as AuthenticatorAttestationResponse
-  const credentialData = {
+  return {
     id: cred.id,
     rawId: bufferToBase64url(cred.rawId),
     response: {
@@ -191,7 +196,11 @@ export const performPasskeyRegistration = async (email: string): Promise<Registe
     },
     type: cred.type,
   }
+}
 
+export const performPasskeyRegistration = async (email: string): Promise<RegisterResponse> => {
+  const options = await registerPasskeyBegin(email)
+  const credentialData = await runPasskeyCreationCeremony(options)
   return registerPasskeyComplete(email, credentialData)
 }
 

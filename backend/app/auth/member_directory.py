@@ -9,6 +9,7 @@ that repository behind the two questions auth actually asks, per the
 deep-modules convention in CLAUDE.md.
 """
 
+from datetime import date
 from typing import Protocol, runtime_checkable
 
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -21,6 +22,10 @@ class MemberDirectory(Protocol):
 
     async def link_user(self, email: str, user_id: str) -> None: ...
 
+    async def ensure_member_for_email(
+        self, email: str, user_id: str, first_name: str, surname: str
+    ) -> None: ...
+
 
 class RepositoryMemberDirectory:
     def __init__(self, repo: AbstractMemberRepository) -> None:
@@ -32,6 +37,35 @@ class RepositoryMemberDirectory:
     async def link_user(self, email: str, user_id: str) -> None:
         member = await self._repo.get_by_email(email)
         if member is not None:
+            await self._repo.update(member["id"], {"user_id": user_id})
+
+    async def ensure_member_for_email(
+        self, email: str, user_id: str, first_name: str, surname: str
+    ) -> None:
+        """Create-or-link the Member row for an invited email (#257).
+
+        The invite-redemption counterpart to `link_user`: the #239 Member
+        gate assumes the Member row already exists (an admin created it
+        first, making it the implicit invite), but an explicit invite may be
+        issued for an email with no Member row yet. Both paths converge on
+        the same Member.user_id linkage either way.
+
+        The name comes from the invite the admin issued. An existing Member
+        keeps whatever name it already has -- the register is the authority
+        on someone already in it, not an invite raised later.
+        """
+        member = await self._repo.get_by_email(email)
+        if member is None:
+            await self._repo.add(
+                {
+                    "email": email,
+                    "first_name": first_name,
+                    "surname": surname,
+                    "join_date": date.today().isoformat(),
+                    "user_id": user_id,
+                }
+            )
+        else:
             await self._repo.update(member["id"], {"user_id": user_id})
 
 

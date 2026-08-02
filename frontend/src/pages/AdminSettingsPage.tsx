@@ -56,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Pencil, Pin, Trash2 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 // ── Dojo Branding section ─────────────────────────────────────────────────────
 
@@ -1380,6 +1381,23 @@ const AdminSettingsPage = () => (
 
     <Section heading="Federations">
       <AdminFederationCatalogue />
+    </Section>
+
+    <Section heading="Invites">
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Issue admin invite links so new members can register a passkey without a
+            self-service sign-up.
+          </p>
+          <Button
+            className="min-h-[44px] shrink-0 sm:w-auto"
+            render={<Link to="/settings/invites" />}
+          >
+            Manage invites
+          </Button>
+        </CardContent>
+      </Card>
     </Section>
   </div>
 )

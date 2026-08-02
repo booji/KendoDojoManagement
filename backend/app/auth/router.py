@@ -13,11 +13,24 @@ from app.auth.db_models import User
 from app.auth.dependencies import (
     get_admin_token_repo,
     get_attempt_repo,
+    get_invite_repo,
     get_passkey_repo,
     get_recovery_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
+from app.auth.invite_repository import AbstractInviteRepository
+from app.auth.invite_service import (
+    invite_redeem_begin,
+    invite_redeem_complete,
+    invite_status,
+    mint_invite,
+)
 from app.auth.models import (
+    InviteCreateRequest,
+    InviteListItem,
+    InviteMintResponse,
+    InviteRedeemBeginRequest,
+    InviteRedeemCompleteRequest,
     LenientEmail,
     PasskeyBeginRequest,
     PasskeyLoginCompleteRequest,
@@ -371,6 +384,72 @@ async def generate_admin_token(
         detail={"target_user_id": payload.user_id},
     )
     return {"token": plaintext}
+
+
+# ---------------------------------------------------------------------------
+# Admin-issued invite tokens (#257)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/invites", status_code=201, response_model=InviteMintResponse)
+async def mint_invite_route(
+    payload: InviteCreateRequest,
+    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> InviteMintResponse:
+    result = await mint_invite(payload, claims.sub, repo, uow)
+    await uow.commit()
+    log_security_event("invite_minted", "success", user_id=claims.sub)
+    return InviteMintResponse(**result)
+
+
+@router.get("/admin/invites", response_model=list[InviteListItem])
+async def list_invites_route(
+    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
+) -> list[InviteListItem]:
+    records = await repo.list()
+    return [
+        InviteListItem(**{**record, "status": invite_status(record)})
+        for record in records
+    ]
+
+
+@router.post("/admin/invites/{invite_id}/revoke")
+async def revoke_invite_route(
+    invite_id: str,
+    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict[str, Any]:
+    existing = await repo.get(invite_id)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    updated = await repo.mark_revoked(invite_id)
+    await uow.commit()
+    log_security_event("invite_revoked", "success", user_id=claims.sub)
+    return {"id": updated["id"], "status": invite_status(updated)}  # type: ignore[index]
+
+
+@router.post("/invites/redeem/begin")
+@limiter.limit(PER_IP_LIMIT)
+async def invite_redeem_begin_route(
+    request: Request,
+    payload: InviteRedeemBeginRequest,
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict:
+    return await invite_redeem_begin(payload.token, uow)
+
+
+@router.post("/invites/redeem/complete", status_code=201)
+@limiter.limit(PER_IP_LIMIT)
+async def invite_redeem_complete_route(
+    request: Request,
+    payload: InviteRedeemCompleteRequest,
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> PasskeyRegisterCompleteResponse:
+    return await invite_redeem_complete(payload, uow)
 
 
 # ---------------------------------------------------------------------------
