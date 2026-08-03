@@ -6,9 +6,16 @@
 # directory name and all three collide — see #274.
 name: kendodojo
 
+# Two networks, mirroring the Quadlet deployment in deploy/quadlet
+# (kendo-edge + kendo-backend) — see #278. `app` straddles both; `db` is on the
+# internal one only, so it has no outbound route and a compromised postgres
+# cannot call home.
 services:
   app:
     build: .
+    networks:
+      - edge
+      - backend
     ports:
       - "8000:8000"
     environment:
@@ -50,6 +57,9 @@ services:
 
   db:
     image: postgres:16-alpine
+    # Backend network only: no published ports and no outbound route.
+    networks:
+      - backend
     environment:
       TZ: ${TZ:-UTC}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -62,6 +72,30 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+# isolate=true is what enforces the split: Podman's bridge networks are
+# otherwise mutually routable by IP, so a container on one network reaches the
+# db's address directly even though it cannot resolve the name. Verified on
+# podman 5.6.0. Docker isolates user-defined bridges natively and does not need
+# this; whether it rejects the unknown option is untested here — drop these
+# lines if `docker compose up` errors at network-create time.
+networks:
+  # Reaches the outside world: `app` publishes 8000 here, and needs outbound for
+  # anything it fetches. A reverse proxy in front of the stack joins this one.
+  edge:
+    driver_opts:
+      isolate: "true"
+  # app <-> db only. Deliberately NOT `internal: true`, even though the
+  # equivalent kendo-backend.network in deploy/quadlet sets Internal=true:
+  # Podman disables DNS on internal networks ("dnsname and internal networks are
+  # incompatible", dns_enabled=false), so the service name `db` would stop
+  # resolving and the app could not connect. Verified on podman 5.6.0.
+  #
+  # `db` publishes no ports and is reachable only from `app`, so the loss is
+  # limited to the db's outbound route.
+  backend:
+    driver_opts:
+      isolate: "true"
 
 volumes:
   postgres_data:

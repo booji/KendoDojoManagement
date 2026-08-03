@@ -2,6 +2,19 @@
 # See docker-compose.yml for why this is set explicitly (#274).
 name: kendodojo-dev
 
+# Two networks, mirroring the Quadlet production deployment in deploy/quadlet
+# (kendo-edge + kendo-backend) — see #278:
+#
+#   edge     frontend <-> backend, and the published host ports
+#   backend  backend  <-> db, internal
+#
+# The frontend container runs arbitrary npm dependencies with node_modules
+# mounted; it is the least trusted thing in the stack. It is not on the backend
+# network, so it cannot reach PostgreSQL at all.
+#
+# Nothing here uses network_mode: host any more. Host-networked containers join
+# no Compose network, so there was nothing to segment — and the db binding host
+# port 5432 directly was #275.
 services:
   backend:
     build:
@@ -9,16 +22,20 @@ services:
       target: backend-dev-deps
     volumes:
       - ./backend:/app
-    network_mode: host
+    networks:
+      - edge
+      - backend
+    # 1:1 with the container port. The browser runs on the host and never joins
+    # a Compose network, so host reachability is governed purely by this.
+    ports:
+      - "8000:8000"
     environment:
       TZ: Europe/London
       WATCHFILES_FORCE_POLLING: "1"
-      # Override env_file value: the backend is host-networked, so it reaches the
-      # bridge-networked db through its published host port, not the compose DNS
-      # name. Defaults mirror .env.dev so a bare `docker compose -f
-      # docker-compose.dev.yml up` (without --env-file) still resolves to
-      # something that works.
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kendo_dev}:${POSTGRES_PASSWORD:-kendo_dev_password}@127.0.0.1:${POSTGRES_PORT:-5433}/${POSTGRES_DB:-kendo_dev}"
+      # Override env_file value: .env.dev points at the published host port so
+      # host-side alembic and psql work, but from in here the db is a service
+      # name on the internal network.
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kendo_dev}:${POSTGRES_PASSWORD:-kendo_dev_password}@db:5432/${POSTGRES_DB:-kendo_dev}"
     env_file:
       - .env.dev
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -33,27 +50,32 @@ services:
     volumes:
       - ./frontend:/frontend
       - /frontend/node_modules
-    network_mode: host
+    networks:
+      - edge
+    # Must stay 1:1. Vite's HMR client infers the websocket port from the
+    # browser's location, so a mismatched mapping (5174:5173) would need
+    # server.hmr.clientPort set in vite.config.ts.
+    ports:
+      - "5173:5173"
     environment:
       TZ: Europe/London
       CHOKIDAR_USEPOLLING: "true"
-      BACKEND_URL: "http://localhost:8000"
+      # Not localhost: inside this container that is this container, where
+      # nothing listens on 8000. vite.config.ts already reads BACKEND_URL.
+      BACKEND_URL: "http://backend:8000"
     command: npm run dev -- --host 0.0.0.0
 
   db:
     image: postgres:16-alpine
-    # Deliberately NOT network_mode: host (#275). Host networking made the dev
-    # database bind host port 5432 directly, so any other PostgreSQL on the
-    # machine claimed the port first and this container exited 1 while
-    # `docker compose up -d db` still reported success. A published port on the
-    # default bridge network fails loudly on a collision, and 5433 keeps the dev
-    # database off the conventional PostgreSQL port entirely. Override with
-    # POSTGRES_PORT in .env.dev to run two checkouts side by side.
-    #
-    # Bound to 127.0.0.1, not every interface: the dev credentials are weak and
-    # committed to the repo, so the database must not be reachable from the LAN.
-    # Everything that connects to it addresses 127.0.0.1 explicitly rather than
-    # "localhost" — that name can resolve to ::1 first, which is not bound here.
+    networks:
+      - backend
+    # Published for host-side tooling only (alembic, psql). Bound to 127.0.0.1
+    # because the dev credentials are weak and committed to the repo, so the
+    # database must not be reachable from the LAN. Deliberately not 5432 — that
+    # port is owned by any system PostgreSQL or other project's stack on the
+    # machine, and host networking used to make this container silently lose the
+    # race for it (#275). Override POSTGRES_PORT in .env.dev to run two
+    # checkouts side by side.
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     environment:
@@ -71,6 +93,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+# isolate=true is what actually enforces the split. Without it, Podman's bridge
+# networks are mutually routable by IP: the frontend cannot *resolve* `db`, but
+# it connects happily to the db's 10.89.x.x address, so the segmentation is
+# cosmetic. Verified both ways on podman 5.6.0 — default networks reach each
+# other by IP, isolate=true blocks them.
+#
+# This is a netavark option. Docker isolates user-defined bridge networks by
+# default and does not need it; whether Docker *rejects* the unknown bridge
+# driver option is untested — no Docker daemon was available. A Docker user
+# should confirm `docker compose -f docker-compose.dev.yml up` before relying on
+# it, and drop these four lines if it errors at network-create time.
+networks:
+  edge:
+    driver_opts:
+      isolate: "true"
+  # Deliberately NOT `internal: true`, despite Internal=true on the equivalent
+  # kendo-backend.network in deploy/quadlet. Podman disables DNS on internal
+  # networks — `podman network create --internal` warns "dnsname and internal
+  # networks are incompatible" and sets dns_enabled=false — so the service name
+  # `db` stops resolving and the backend cannot connect at all. Verified on
+  # podman 5.6.0 / podman-compose 1.5.0, which the Makefile auto-detects.
+  #
+  # Segmentation still holds: `frontend` is not on this network and cannot reach
+  # PostgreSQL. Only the "db has no outbound route" property is given up, and on
+  # Podman that property is unobtainable alongside service-name DNS.
+  backend:
+    driver_opts:
+      isolate: "true"
 
 volumes:
   postgres_dev_data:
