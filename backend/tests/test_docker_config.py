@@ -21,6 +21,7 @@ ROOT = (
     else Path(__file__).parent.parent.parent
 )
 COMPOSE_FILE = ROOT / "docker-compose.yml"
+DEV_COMPOSE_FILE = ROOT / "docker-compose.dev.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
 REQUIREMENTS = ROOT / "backend" / "requirements.txt"
 
@@ -33,6 +34,22 @@ REQUIREMENTS = ROOT / "backend" / "requirements.txt"
 def load_compose() -> dict:
     with COMPOSE_FILE.open() as f:
         return yaml.safe_load(f)
+
+
+def load_dev_compose() -> dict:
+    with DEV_COMPOSE_FILE.open() as f:
+        return yaml.safe_load(f)
+
+
+def _networks_of(service: dict) -> list[str]:
+    """Service networks as a list, tolerating the mapping form.
+
+    Compose accepts both `networks: [edge]` and `networks: {edge: {...}}`.
+    """
+    networks = service.get("networks", [])
+    if isinstance(networks, dict):
+        return list(networks.keys())
+    return list(networks)
 
 
 # ---------------------------------------------------------------------------
@@ -250,3 +267,121 @@ def test_compose_app_depends_on_db_with_health_condition():
     assert (
         db_condition == "service_healthy"
     ), f"app depends_on db condition must be 'service_healthy', got '{db_condition}'"
+
+
+# ---------------------------------------------------------------------------
+# Network segmentation (Issue #278)
+#
+# Both stacks mirror the Quadlet deployment in deploy/quadlet: an `edge` network
+# carrying the published ports, and a `backend` network that is the only path to
+# PostgreSQL. These assertions exist because the isolation was otherwise
+# verified only by hand — nothing stopped a later edit from silently putting the
+# database back on the edge, or restoring host networking.
+# ---------------------------------------------------------------------------
+
+
+def test_compose_defines_edge_and_backend_networks():
+    networks = load_compose().get("networks") or {}
+    assert "edge" in networks, "docker-compose.yml must define an 'edge' network"
+    assert "backend" in networks, "docker-compose.yml must define a 'backend' network"
+
+
+def test_compose_db_is_only_on_the_backend_network():
+    db_networks = _networks_of(load_compose()["services"]["db"])
+    assert db_networks == ["backend"], (
+        "db must be on the backend network only, so nothing on the edge can "
+        f"reach PostgreSQL. Got: {db_networks}"
+    )
+
+
+def test_compose_app_straddles_both_networks():
+    app_networks = sorted(_networks_of(load_compose()["services"]["app"]))
+    assert app_networks == ["backend", "edge"], (
+        "app must be on both networks: edge to serve traffic, backend to reach "
+        f"the db. Got: {app_networks}"
+    )
+
+
+def test_dev_compose_defines_edge_and_backend_networks():
+    networks = load_dev_compose().get("networks") or {}
+    assert "edge" in networks, "docker-compose.dev.yml must define an 'edge' network"
+    assert (
+        "backend" in networks
+    ), "docker-compose.dev.yml must define a 'backend' network"
+
+
+def test_dev_compose_frontend_cannot_reach_the_database():
+    """The frontend runs arbitrary npm dependencies — keep it off the db network."""
+    frontend_networks = _networks_of(load_dev_compose()["services"]["frontend"])
+    assert "backend" not in frontend_networks, (
+        "frontend must NOT be on the backend network: it runs arbitrary npm "
+        "dependencies with node_modules mounted and must not be able to reach "
+        f"PostgreSQL. Got: {frontend_networks}"
+    )
+    assert frontend_networks == [
+        "edge"
+    ], f"frontend must be on the edge network only. Got: {frontend_networks}"
+
+
+def test_dev_compose_db_is_only_on_the_backend_network():
+    db_networks = _networks_of(load_dev_compose()["services"]["db"])
+    assert db_networks == [
+        "backend"
+    ], f"dev db must be on the backend network only. Got: {db_networks}"
+
+
+@pytest.mark.parametrize(
+    "compose_name", ["docker-compose.yml", "docker-compose.dev.yml"]
+)
+def test_networks_are_isolated_from_each_other(compose_name: str):
+    """Podman bridge networks are mutually routable by IP without this option.
+
+    Without `isolate`, a container on the edge network cannot *resolve* `db` but
+    can still open a socket to its address, which makes the segmentation
+    cosmetic. Verified on podman 5.6.0.
+    """
+    compose = (
+        load_compose() if compose_name == "docker-compose.yml" else load_dev_compose()
+    )
+    networks = compose.get("networks") or {}
+    # Without this the loop below iterates nothing and the test passes vacuously.
+    assert networks, f"{compose_name} must define networks"
+    for name, network in networks.items():
+        opts = (network or {}).get("driver_opts") or {}
+        assert str(opts.get("isolate", "")).lower() == "true", (
+            f"{compose_name}: network '{name}' must set driver_opts.isolate=true, "
+            "otherwise containers on different networks reach each other by IP"
+        )
+
+
+@pytest.mark.parametrize(
+    "compose_name", ["docker-compose.yml", "docker-compose.dev.yml"]
+)
+def test_no_service_uses_host_networking(compose_name: str):
+    """Host-networked containers join no Compose network, so nothing is segmented.
+
+    It also made the dev database bind host port 5432 directly (#275).
+    """
+    compose = (
+        load_compose() if compose_name == "docker-compose.yml" else load_dev_compose()
+    )
+    offenders = [
+        name
+        for name, svc in compose.get("services", {}).items()
+        if (svc or {}).get("network_mode") == "host"
+    ]
+    assert not offenders, (
+        f"{compose_name}: services must not use network_mode: host "
+        f"(found: {offenders}) — it bypasses network segmentation entirely"
+    )
+
+
+def test_dev_compose_db_port_is_bound_to_loopback():
+    """Dev credentials are weak and committed, so the port must not reach the LAN."""
+    ports = load_dev_compose()["services"]["db"].get("ports", [])
+    assert ports, "dev db must publish a port for host-side alembic/psql"
+    for mapping in ports:
+        assert str(mapping).startswith("127.0.0.1:"), (
+            "dev db port must be bound to 127.0.0.1, not every interface. "
+            f"Got: {mapping}"
+        )
