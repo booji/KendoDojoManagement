@@ -1359,11 +1359,6 @@ const MemberDetailPage = () => {
       />
       <div className="flex flex-wrap gap-2 -mt-4">
         <StatusBadge status={member.membership_status} />
-        {member.is_minor && (
-          <Badge variant="warning" aria-label="Minor — parental consent required">
-            Minor
-          </Badge>
-        )}
         {member.is_coach && <Badge variant="secondary">Coach</Badge>}
         {member.is_first_aider && <Badge variant="outline">First Aider</Badge>}
       </div>

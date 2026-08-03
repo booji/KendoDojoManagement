@@ -15,7 +15,6 @@ export type MemberResponse = {
   is_first_aider: boolean
   emergency_contact_name: string | null
   emergency_contact_phone: string | null
-  is_minor: boolean
   anonymised_at: string | null
   anonymised_by: string | null
 }

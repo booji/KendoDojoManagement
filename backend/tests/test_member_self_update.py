@@ -228,7 +228,6 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "is_minor",
     }
     for field in expected_fields:
         assert field in body, f"Missing field in response: {field}"
@@ -237,6 +236,7 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     assert (
         "parental_consent_obtained" not in body
     ), "parental_consent_obtained must not appear in MemberResponse"
+    assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 
 @pytest.mark.anyio
@@ -330,9 +330,10 @@ async def test_put_my_member_updates_dob(member_repo) -> None:
         )
 
     assert response.status_code == 200
-    # is_minor should be recalculated; record should reflect the new dob
+    # Record should reflect the new dob; is_minor must not appear
     body = response.json()
-    assert "is_minor" in body
+    assert body["dob"] == new_dob
+    assert "is_minor" not in body
 
 
 @pytest.mark.anyio

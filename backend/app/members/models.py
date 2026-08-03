@@ -60,6 +60,5 @@ class MemberResponse(BaseModel):
     is_first_aider: bool
     emergency_contact_name: str | None
     emergency_contact_phone: str | None
-    is_minor: bool
     anonymised_at: str | None = None
     anonymised_by: str | None = None

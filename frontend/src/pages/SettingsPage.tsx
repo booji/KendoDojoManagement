@@ -126,11 +126,10 @@ const ProfileSummary = ({
           <Field label="Emergency contact" value={member.emergency_contact_name} />
           <Field label="Emergency contact phone" value={member.emergency_contact_phone} />
         </dl>
-        {(member.is_coach || member.is_first_aider || member.is_minor) && (
+        {(member.is_coach || member.is_first_aider) && (
           <div className="flex gap-2 flex-wrap mt-4">
             {member.is_coach && <Badge>Coach</Badge>}
             {member.is_first_aider && <Badge>First aider</Badge>}
-            {member.is_minor && <Badge variant="secondary">Minor</Badge>}
           </div>
         )}
       </CardContent>

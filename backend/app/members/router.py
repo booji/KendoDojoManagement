@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -45,18 +45,6 @@ _CLEARABLE_FIELDS = (
 )
 
 
-def _compute_is_minor(dob: str | None) -> bool:
-    """Return True if person is under 18 today. Returns False when dob is None."""
-    if not dob:
-        return False
-    birth = date.fromisoformat(dob) if isinstance(dob, str) else dob
-    today = date.today()
-    age = (
-        today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-    )
-    return age < 18
-
-
 def _stringify(value: Any) -> str | None:
     if value is None:
         return None
@@ -78,7 +66,6 @@ def _to_response(record: dict[str, Any]) -> MemberResponse:
         is_first_aider=record["is_first_aider"],
         emergency_contact_name=record.get("emergency_contact_name"),
         emergency_contact_phone=record.get("emergency_contact_phone"),
-        is_minor=_compute_is_minor(dob),
         anonymised_at=_stringify(record.get("anonymised_at")),
         anonymised_by=record.get("anonymised_by"),
     )
