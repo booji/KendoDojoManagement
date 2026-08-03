@@ -43,15 +43,10 @@ const StatusBadge = ({ status }: { status: MembershipStatus }) => (
   </Badge>
 )
 
-// ── Role / Minor badges ───────────────────────────────────────────────────────
+// ── Role badges ───────────────────────────────────────────────────────────────
 
 const RoleBadges = ({ member }: { member: MemberResponse }) => (
   <div className="flex flex-wrap gap-1">
-    {member.is_minor && (
-      <Badge variant="warning" aria-label="Minor — parental consent required">
-        Minor
-      </Badge>
-    )}
     {member.is_coach && (
       <Badge variant="secondary" aria-label="Coach">
         Coach

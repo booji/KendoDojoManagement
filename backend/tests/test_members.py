@@ -8,12 +8,11 @@ Acceptance criteria exercised here:
   1. Member schema: UUID, email, first_name, surname, display_name, DOB (nullable),
      join date, membership status, is_coach, is_first_aider, emergency contact
      name/phone, federation number. NO full_name, NO parental_consent_obtained.
-  2. is_minor derived at read time from DOB (not stored); returns False when dob is null
-  3. POST /members creates a member (admin only)
-  4. GET /members/{id} returns profile (admin sees all; member sees own only)
-  5. PUT /members/{id} updates any field (admin only)
-  6. Member status (incl. 'archived') is changed via PUT /members/{id}
-  7. GET /members supports filtering by status and search by name/email
+  2. POST /members creates a member (admin only)
+  3. GET /members/{id} returns profile (admin sees all; member sees own only)
+  4. PUT /members/{id} updates any field (admin only)
+  5. Member status (incl. 'archived') is changed via PUT /members/{id}
+  6. GET /members supports filtering by status and search by name/email
 
 Issue #158 changes:
   - Drop full_name → add first_name (required), surname (required), display_name (nullable)
@@ -24,7 +23,6 @@ Issue #158 changes:
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -199,7 +197,6 @@ async def test_create_member_response_schema_has_all_required_fields(
         "is_first_aider",
         "emergency_contact_name",
         "emergency_contact_phone",
-        "is_minor",
     }
     for field in expected_fields:
         assert field in body, f"Missing field: {field}"
@@ -208,6 +205,7 @@ async def test_create_member_response_schema_has_all_required_fields(
     assert (
         "parental_consent_obtained" not in body
     ), "parental_consent_obtained must be absent from response"
+    assert "is_minor" not in body, "is_minor must be absent from response"
 
 
 @pytest.mark.anyio
@@ -322,84 +320,6 @@ async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
         await c.post("/members", json=_valid_member_payload())
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 409
-
-
-# ---------------------------------------------------------------------------
-# AC1 / AC2 — Schema fields and is_minor derived from DOB
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_is_minor_false_for_adult(member_repo) -> None:
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    adult_dob = (date.today() - timedelta(days=365 * 20)).isoformat()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post("/members", json=_valid_member_payload(dob=adult_dob))
-    assert resp.status_code == 201
-    assert resp.json()["is_minor"] is False
-
-
-@pytest.mark.anyio
-async def test_is_minor_true_for_minor(member_repo) -> None:
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    minor_dob = (date.today() - timedelta(days=365 * 10)).isoformat()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post("/members", json=_valid_member_payload(dob=minor_dob))
-    assert resp.status_code == 201
-    assert resp.json()["is_minor"] is True
-
-
-@pytest.mark.anyio
-async def test_is_minor_false_on_exact_18th_birthday(member_repo) -> None:
-    """Edge case: exactly 18 today → not a minor."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    today = date.today()
-    dob_exactly_18 = date(today.year - 18, today.month, today.day)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post(
-            "/members", json=_valid_member_payload(dob=dob_exactly_18.isoformat())
-        )
-    assert resp.status_code == 201
-    assert resp.json()["is_minor"] is False
-
-
-@pytest.mark.anyio
-async def test_is_minor_true_one_day_before_18th_birthday(member_repo) -> None:
-    """Edge case: one day before 18th birthday → still a minor."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    today = date.today()
-    dob_one_day_before = date(today.year - 18, today.month, today.day) + timedelta(
-        days=1
-    )
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post(
-            "/members", json=_valid_member_payload(dob=dob_one_day_before.isoformat())
-        )
-    assert resp.status_code == 201
-    assert resp.json()["is_minor"] is True
-
-
-@pytest.mark.anyio
-async def test_is_minor_false_when_dob_is_null(member_repo) -> None:
-    """AC3: is_minor returns False (not an error) when dob is absent/null."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    payload = _valid_member_payload()
-    del payload["dob"]
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        resp = await c.post("/members", json=payload)
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["is_minor"] is False
 
 
 # ---------------------------------------------------------------------------
