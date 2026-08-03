@@ -1,10 +1,17 @@
 # Edge network: Traefik <-> app. Traefik is the only container publishing host
-# ports. NOT internal — Traefik needs outbound to Let's Encrypt / Cloudflare.
+# ports.
+#
+# Options=isolate=true blocks traffic to containers on other Podman networks,
+# so nothing here can bypass kendo-app and address the database directly. It
+# does NOT block internet egress — verified on podman 5.6.0 that a container on
+# an isolate=true network still reaches the outside world by IP and by DNS — so
+# Traefik's Let's Encrypt / Cloudflare calls are unaffected.
 [Unit]
-Description=Kendo edge network (Traefik <-> app)
+Description=Kendo edge network (Traefik <-> app, isolated)
 
 [Network]
 NetworkName=kendo-edge
+Options=isolate=true
 
 [Install]
 WantedBy=default.target

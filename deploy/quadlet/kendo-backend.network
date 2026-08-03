@@ -1,12 +1,30 @@
-# Backend network: app <-> db. Internal — no outbound, no host ports. The DB
-# lives only here, so nothing outside this network (including the edge) can
-# reach it.
+# Backend network: app <-> db. No host ports. The DB lives only here, so
+# nothing outside this network (including the edge) can reach it.
+#
+# Options=isolate=true rather than Internal=true (#281). Internal=true reads
+# like the stronger choice, but Podman disables DNS on internal networks:
+#
+#   $ podman network create --internal probe
+#   WARN  dnsname and internal networks are incompatible.
+#         dnsname plugin not configured for network probe
+#   $ podman network inspect probe --format '{{.DNSEnabled}}'
+#   false
+#
+# kendo-app connects with DATABASE_URL pointing at the container name kendo-db
+# (docs/deployment.md), which then does not resolve at all. isolate=true keeps
+# DNS and still blocks cross-network traffic by IP — without it, Podman's bridge
+# networks are mutually routable by address even when the name does not resolve.
+# Verified on podman 5.6.0.
+#
+# What is given up is the database's outbound route. On Podman that cannot be
+# kept alongside service-name DNS. The same trade is made in docker-compose.yml
+# and docker-compose.dev.yml (#278), so both definitions now agree.
 [Unit]
-Description=Kendo backend network (app <-> db, internal)
+Description=Kendo backend network (app <-> db, isolated)
 
 [Network]
 NetworkName=kendo-backend
-Internal=true
+Options=isolate=true
 
 [Install]
 WantedBy=default.target

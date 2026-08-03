@@ -10,7 +10,7 @@ Production-grade, self-hosted deployment on **rootless Podman + Quadlet**, front
 >          ┌─────▼─────┐        kendo-edge (external)
 >          │  traefik  │◄───────────────┐
 >          └───────────┘                │
->                                  ┌─────▼─────┐   kendo-backend (internal)
+>                                  ┌─────▼─────┐   kendo-backend (isolated)
 >                                  │    app    │◄──────────────┐
 >                                  └───────────┘               │
 >                                                        ┌──────▼─────┐
@@ -19,8 +19,9 @@ Production-grade, self-hosted deployment on **rootless Podman + Quadlet**, front
 > ```
 >
 > - **`kendo-edge`** — Traefik ↔ app. Traefik is the only container publishing host ports.
-> - **`kendo-backend`** — app ↔ db, **internal** (no outbound, no host ports). The db lives only here, so nothing outside can reach it.
-> - The app straddles both networks; the db is fully isolated.
+> - **`kendo-backend`** — app ↔ db, no host ports. The db lives only here, so nothing outside this network can reach it.
+> - Both networks set `Options=isolate=true`, which blocks traffic to containers on other Podman networks while leaving internet egress intact (Traefik still reaches Let's Encrypt).
+> - The app straddles both networks; the db is reachable only from the app.
 
 All artifacts referenced below live in [`deploy/`](../deploy).
 
@@ -134,7 +135,14 @@ printf '%s' 'postgresql+asyncpg://kendo:REPLACE-with-strong-db-password@kendo-db
 printf '%s' 'REPLACE-with-cloudflare-token' | podman secret create kendo_cf_dns_token -
 ```
 
-> The DB host in `DATABASE_URL` is `kendo-db` — the container name, resolvable on the `kendo-backend` network.
+> The DB host in `DATABASE_URL` is `kendo-db` — the container name, resolved by Podman's DNS on the `kendo-backend` network.
+>
+> This is why that network uses `Options=isolate=true` rather than `Internal=true`
+> (#281): Podman disables DNS on internal networks, so `kendo-db` would not
+> resolve and `kendo-app` could never connect. `isolate=true` keeps DNS while
+> still blocking cross-network traffic by IP. The trade is that the database
+> keeps an outbound route; on Podman that cannot be removed without also losing
+> name resolution.
 
 To rotate a secret later: `podman secret rm <name>` then recreate, and `systemctl --user restart` the affected unit.
 
