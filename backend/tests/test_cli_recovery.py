@@ -1,7 +1,7 @@
 """Failing tests for issue #43 — CLI break-glass recovery token command.
 
-Uses DB-backed integration tests (sqlite in-memory) matching the pattern
-from test_admin_recovery.py.
+Uses DB-backed integration tests against the shared PostgreSQL test database
+matching the pattern from test_admin_recovery.py.
 
 Acceptance criteria exercised:
   AC1. `create-recovery-token <email>` prints a non-empty token to stdout
@@ -12,31 +12,25 @@ Acceptance criteria exercised:
 
 from __future__ import annotations
 
-import os
-import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, insert, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from typer.testing import CliRunner
 
-from app.auth.db_models import AdminRecoveryToken, User
+from app.auth.db_models import AdminRecoveryToken, RecoveryAttempt, User
 
 # CLI app import — will fail (ImportError) since app/cli.py does not exist yet.
 from app.cli import app as cli_app  # noqa: E402  # red — cli.py doesn't exist
-from app.db.base import Base
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
-_TARGET_EMAIL = "target@dojo.test"
 
 runner = CliRunner()
 
@@ -50,64 +44,65 @@ def clear_overrides():
 
 
 @pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
+async def db_client(database_url: str):
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def _override():
         async with SQLAlchemyUnitOfWork(factory) as uow:
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield _engine
+    yield engine
+    await engine.dispose()
 
 
 @pytest.fixture
-def tmp_db():
-    """A temporary file-based SQLite DB usable by both the CLI and async sessions."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
+def tmp_db(database_url: str) -> str:
+    """The shared PostgreSQL test database URL, usable by both the CLI
+    (as a subprocess-style env var) and async sessions in the test body.
 
-    sync_url = f"sqlite:///{db_path}"
-    async_url = f"sqlite+aiosqlite:///{db_path}"
-    yield {"sync_url": sync_url, "async_url": async_url, "path": db_path}
+    Named `tmp_db` (rather than renaming every call site) because it plays
+    the same role the old per-test embedded-file DB played: a DATABASE_URL the
+    CLI and an async session both point at.
+    """
+    return database_url
 
-    os.unlink(db_path)
+
+def _unique_email(label: str) -> str:
+    return f"{label}-{uuid.uuid4()}@dojo.test"
 
 
-@pytest.fixture
-def seeded_db():
-    """Sync temp DB with admin@dojo.test pre-seeded, for AC1 synchronous test."""
-    from sqlalchemy import create_engine as _ce
-
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
-    sync_url = f"sqlite:///{db_path}"
-    async_url = f"sqlite+aiosqlite:///{db_path}"
-    engine = _ce(sync_url)
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        session.add(
-            User(
-                id=str(uuid.uuid4()),
-                email="admin@dojo.test",
-                role="admin",
-                is_active=True,
+@pytest_asyncio.fixture
+async def seeded_db(database_url: str):
+    """PostgreSQL test DB with a uniquely-emailed admin user pre-seeded, for
+    AC1. Yields {"url": ..., "email": ...} and cleans up the seeded user
+    (and anything the CLI created for them) on teardown."""
+    email = _unique_email("cli-seeded")
+    user_id = str(uuid.uuid4())
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    try:
+        async with AsyncSession(engine) as session:
+            await session.execute(
+                insert(User).values(
+                    id=user_id, email=email, role="admin", is_active=True
+                )
             )
-        )
-        session.commit()
-    engine.dispose()
-    yield async_url
-    os.unlink(db_path)
+            await session.commit()
+
+        yield {"url": database_url, "email": email}
+
+        async with AsyncSession(engine) as session:
+            await session.execute(
+                delete(RecoveryAttempt).where(RecoveryAttempt.user_id == user_id)
+            )
+            await session.execute(
+                delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
+            )
+            await session.execute(delete(User).where(User.id == user_id))
+            await session.commit()
+    finally:
+        await engine.dispose()
 
 
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
@@ -153,6 +148,21 @@ async def _seed_admin_token(
     return token_id
 
 
+async def _delete_target(engine, user_id: str) -> None:
+    """Clean up a seeded target user and any recovery attempts/tokens it
+    accumulated (the /auth/recovery/redeem endpoint logs a RecoveryAttempt
+    row on every call, including failed ones)."""
+    async with AsyncSession(engine) as session:
+        await session.execute(
+            delete(RecoveryAttempt).where(RecoveryAttempt.user_id == user_id)
+        )
+        await session.execute(
+            delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
+        )
+        await session.execute(delete(User).where(User.id == user_id))
+        await session.commit()
+
+
 # ── AC1 — CLI prints token to stdout ──────────────────────────────────────────
 
 
@@ -160,8 +170,8 @@ def test_cli_create_recovery_token_prints_to_stdout(seeded_db) -> None:
     """create-recovery-token with a known email prints a non-empty token to stdout."""
     result = runner.invoke(
         cli_app,
-        ["create-recovery-token", "admin@dojo.test"],
-        env={"DATABASE_URL": seeded_db},
+        ["create-recovery-token", seeded_db["email"]],
+        env={"DATABASE_URL": seeded_db["url"]},
     )
     assert result.exit_code == 0
     assert len(result.stdout.strip()) > 0
@@ -170,161 +180,177 @@ def test_cli_create_recovery_token_prints_to_stdout(seeded_db) -> None:
 # ── AC2 — Token stored with created_by_id = NULL ──────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_cli_token_stored_with_null_created_by_id(tmp_db) -> None:
     """After CLI invocation, one row exists in admin_recovery_tokens with created_by_id IS NULL."""
     target_id = str(uuid.uuid4())
+    target_email = _unique_email("cli-null-created-by")
 
-    eng = create_async_engine(
-        tmp_db["async_url"], connect_args={"check_same_thread": False}
-    )
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await _seed_user(eng, _TARGET_EMAIL, target_id)
-    await eng.dispose()
+    eng = create_async_engine(tmp_db, poolclass=NullPool)
+    try:
+        await _seed_user(eng, target_email, target_id)
 
-    result = runner.invoke(
-        cli_app,
-        ["create-recovery-token", _TARGET_EMAIL],
-        env={"DATABASE_URL": tmp_db["async_url"]},
-    )
+        result = runner.invoke(
+            cli_app,
+            ["create-recovery-token", target_email],
+            env={"DATABASE_URL": tmp_db},
+        )
 
-    assert result.exit_code == 0
+        assert result.exit_code == 0
 
-    eng2 = create_async_engine(
-        tmp_db["async_url"], connect_args={"check_same_thread": False}
-    )
-    factory = async_sessionmaker(eng2, expire_on_commit=False)
-    async with factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(AdminRecoveryToken).where(
-                        AdminRecoveryToken.user_id == target_id
+        async with AsyncSession(eng) as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(AdminRecoveryToken).where(
+                            AdminRecoveryToken.user_id == target_id
+                        )
                     )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-    await eng2.dispose()
 
-    assert len(rows) == 1
-    assert rows[0].created_by_id is None
+        assert len(rows) == 1
+        assert rows[0].created_by_id is None
+    finally:
+        async with AsyncSession(eng) as session:
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id == target_id
+                )
+            )
+            await session.execute(delete(User).where(User.id == target_id))
+            await session.commit()
+        await eng.dispose()
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_cli_token_only_one_row_created(tmp_db) -> None:
     """CLI command creates exactly one token row for the given user."""
     target_id = str(uuid.uuid4())
+    target_email = _unique_email("cli-one-row")
 
-    eng = create_async_engine(
-        tmp_db["async_url"], connect_args={"check_same_thread": False}
-    )
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await _seed_user(eng, _TARGET_EMAIL, target_id)
-    await eng.dispose()
+    eng = create_async_engine(tmp_db, poolclass=NullPool)
+    try:
+        await _seed_user(eng, target_email, target_id)
 
-    runner.invoke(
-        cli_app,
-        ["create-recovery-token", _TARGET_EMAIL],
-        env={"DATABASE_URL": tmp_db["async_url"]},
-    )
+        runner.invoke(
+            cli_app,
+            ["create-recovery-token", target_email],
+            env={"DATABASE_URL": tmp_db},
+        )
 
-    eng2 = create_async_engine(
-        tmp_db["async_url"], connect_args={"check_same_thread": False}
-    )
-    factory = async_sessionmaker(eng2, expire_on_commit=False)
-    async with factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(AdminRecoveryToken).where(
-                        AdminRecoveryToken.user_id == target_id
+        async with AsyncSession(eng) as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(AdminRecoveryToken).where(
+                            AdminRecoveryToken.user_id == target_id
+                        )
                     )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-    await eng2.dispose()
 
-    assert len(rows) == 1
+        assert len(rows) == 1
+    finally:
+        async with AsyncSession(eng) as session:
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id == target_id
+                )
+            )
+            await session.execute(delete(User).where(User.id == target_id))
+            await session.commit()
+        await eng.dispose()
 
 
 # ── AC3/AC6 — CLI-generated token (created_by_id=NULL) redeems via redeem endpoint ──
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_cli_generated_token_redeems_returns_200(db_client) -> None:
     """Seed a CLI-style token (created_by_id=NULL) and redeem via POST /auth/recovery/redeem → 200."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = _unique_email("cli-redeem-200")
+    await _seed_user(db_client, target_email, target_id)
     plaintext = "cli-break-glass-token-abcd"
     # Seed with created_by_id=None to simulate CLI-generated token
     await _seed_admin_token(db_client, target_id, plaintext, created_by_id=None)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
-        )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": plaintext},
+            )
 
-    assert response.status_code == 200
+        assert response.status_code == 200
+    finally:
+        await _delete_target(db_client, target_id)
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_cli_generated_token_redeems_returns_access_token(db_client) -> None:
     """Redeeming a CLI-generated token (created_by_id=NULL) returns a JWT access_token."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = _unique_email("cli-redeem-token")
+    await _seed_user(db_client, target_email, target_id)
     plaintext = "cli-break-glass-token-abcd"
     await _seed_admin_token(db_client, target_id, plaintext, created_by_id=None)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
-        )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": plaintext},
+            )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert "access_token" in body
-    assert isinstance(body["access_token"], str)
-    assert len(body["access_token"]) > 0
+        assert response.status_code == 200
+        body = response.json()
+        assert "access_token" in body
+        assert isinstance(body["access_token"], str)
+        assert len(body["access_token"]) > 0
+    finally:
+        await _delete_target(db_client, target_id)
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_cli_generated_token_marked_used_after_redeem(db_client) -> None:
     """After redeeming a CLI-generated token, used_at is set on the row."""
     target_id = str(uuid.uuid4())
-    await _seed_user(db_client, _TARGET_EMAIL, target_id)
+    target_email = _unique_email("cli-redeem-used")
+    await _seed_user(db_client, target_email, target_id)
     plaintext = "cli-break-glass-token-abcd"
     token_id = await _seed_admin_token(
         db_client, target_id, plaintext, created_by_id=None
     )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": _TARGET_EMAIL, "code": plaintext},
-        )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": plaintext},
+            )
 
-    assert response.status_code == 200
+        assert response.status_code == 200
 
-    factory = async_sessionmaker(db_client, expire_on_commit=False)
-    async with factory() as session:
-        row = await session.get(AdminRecoveryToken, token_id)
+        factory = async_sessionmaker(db_client, expire_on_commit=False)
+        async with factory() as session:
+            row = await session.get(AdminRecoveryToken, token_id)
 
-    assert row is not None
-    assert row.used_at is not None
+        assert row is not None
+        assert row.used_at is not None
+    finally:
+        await _delete_target(db_client, target_id)
 
 
 # ── AC4 — Unknown email exits non-zero with error on stderr ───────────────────
@@ -335,7 +361,7 @@ def test_cli_unknown_email_exits_nonzero(seeded_db) -> None:
     result = runner.invoke(
         cli_app,
         ["create-recovery-token", "nobody@notadojo.example"],
-        env={"DATABASE_URL": seeded_db},
+        env={"DATABASE_URL": seeded_db["url"]},
     )
     assert result.exit_code != 0
 
@@ -345,7 +371,7 @@ def test_cli_unknown_email_prints_error_message(seeded_db) -> None:
     result = runner.invoke(
         cli_app,
         ["create-recovery-token", "nobody@notadojo.example"],
-        env={"DATABASE_URL": seeded_db},
+        env={"DATABASE_URL": seeded_db["url"]},
     )
     # The error may go to stdout or stderr depending on Typer's runner behaviour.
     # We check both: at least one must contain a non-empty error message.

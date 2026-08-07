@@ -11,9 +11,7 @@ class UUIDType(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(PG_UUID(as_uuid=False))
-        return dialect.type_descriptor(String(36))
+        return dialect.type_descriptor(PG_UUID(as_uuid=False))
 
 
 class Base(DeclarativeBase):

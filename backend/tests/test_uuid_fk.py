@@ -14,8 +14,9 @@ import pytest
 
 
 class TestUUIDTypeDialectDispatch:
-    """UUIDType.load_dialect_impl returns native UUID for PostgreSQL,
-    String(36) for everything else."""
+    """UUIDType.load_dialect_impl always returns native PostgreSQL UUID —
+    PostgreSQL is the only supported dialect, so there is no per-dialect
+    branching left to exercise."""
 
     def test_postgresql_dialect_returns_uuid_impl(self) -> None:
         from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -37,27 +38,26 @@ class TestUUIDTypeDialectDispatch:
             call_arg, PG_UUID
         ), f"Expected PG_UUID instance for postgresql dialect, got {type(call_arg)}"
 
-    def test_sqlite_dialect_returns_string36_impl(self) -> None:
-        from sqlalchemy import String
+    def test_load_dialect_impl_does_not_branch_on_dialect_name(self) -> None:
+        """No other dialect is supported, so load_dialect_impl must not
+        special-case dialect.name at all — it always returns PG UUID."""
+        from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
         from app.db.base import UUIDType
 
         uuid_type = UUIDType()
 
-        sqlite_dialect = MagicMock()
-        sqlite_dialect.name = "sqlite"
-        sqlite_dialect.type_descriptor.side_effect = lambda t: t
+        other_dialect = MagicMock()
+        other_dialect.name = "some-other-dialect"
+        other_dialect.type_descriptor.side_effect = lambda t: t
 
-        impl = uuid_type.load_dialect_impl(sqlite_dialect)
+        impl = uuid_type.load_dialect_impl(other_dialect)
 
-        sqlite_dialect.type_descriptor.assert_called_once()
-        call_arg = sqlite_dialect.type_descriptor.call_args[0][0]
+        other_dialect.type_descriptor.assert_called_once()
+        call_arg = other_dialect.type_descriptor.call_args[0][0]
         assert isinstance(
-            call_arg, String
-        ), f"Expected String instance for sqlite dialect, got {type(call_arg)}"
-        assert (
-            call_arg.length == 36
-        ), f"Expected String(36) for sqlite dialect, got String({call_arg.length})"
+            call_arg, PG_UUID
+        ), f"Expected PG_UUID instance regardless of dialect, got {type(call_arg)}"
 
 
 # ---------------------------------------------------------------------------

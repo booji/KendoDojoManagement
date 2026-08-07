@@ -5,7 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv(override=False)
 
-DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")
+DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
+
+# development | production. Explicit and never inferred from other settings
+# (e.g. COOKIE_SECURE) — production-only checks below key off this alone.
+APP_ENV: str = os.getenv("APP_ENV", "development")
 
 JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 JWT_ALGORITHM: str = "HS256"
@@ -73,17 +77,26 @@ CORS_ORIGINS: list[str] = (
 # future required secrets to this tuple — validate_startup_config() reads
 # each by name from this module's globals at call time, so no other wiring
 # is needed.
-_REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET",)
+_REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET", "DATABASE_URL")
+
+# WEBAUTHN_RP_ID / WEBAUTHN_ORIGIN defaults that are only safe for local dev.
+# Left at these values in production, passkeys silently bind to "localhost"
+# instead of the real domain — checked below only when APP_ENV=="production"
+# so developers running with the stock .env are never nagged.
+_WEBAUTHN_RP_ID_DEV_DEFAULT = "localhost"
+_WEBAUTHN_ORIGIN_DEV_DEFAULT = "http://localhost:5173"
 
 
 def validate_startup_config() -> None:
     """Raise RuntimeError naming the offending variable if any required
-    startup config is unset, empty, or whitespace-only.
+    startup config is unset, empty, or whitespace-only, or if a
+    production-shaped deployment (APP_ENV=="production") is still carrying
+    dev-only WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN defaults.
 
-    Reads each required variable from this module's globals at call time
-    (not at import time), so tests can monkeypatch e.g. `config.JWT_SECRET`
-    and callers (app.main.lifespan) can invoke this with no arguments before
-    any DB or network I/O.
+    Reads each variable from this module's globals at call time (not at
+    import time), so tests can monkeypatch e.g. `config.JWT_SECRET` and
+    callers (app.main.lifespan) can invoke this with no arguments before any
+    DB or network I/O.
     """
     for name in _REQUIRED_STARTUP_VARS:
         value = globals().get(name)
@@ -91,4 +104,16 @@ def validate_startup_config() -> None:
             raise RuntimeError(
                 f"{name} environment variable must be set to a non-empty "
                 "value. Refusing to start with a missing/blank secret."
+            )
+
+    if globals().get("APP_ENV") == "production":
+        if globals().get("WEBAUTHN_RP_ID") == _WEBAUTHN_RP_ID_DEV_DEFAULT:
+            raise RuntimeError(
+                "WEBAUTHN_RP_ID is still set to the localhost dev default "
+                "while APP_ENV=production. Set it to the dojo's real domain."
+            )
+        if globals().get("WEBAUTHN_ORIGIN") == _WEBAUTHN_ORIGIN_DEV_DEFAULT:
+            raise RuntimeError(
+                "WEBAUTHN_ORIGIN is still set to the localhost dev default "
+                "while APP_ENV=production. Set it to the dojo's real origin."
             )

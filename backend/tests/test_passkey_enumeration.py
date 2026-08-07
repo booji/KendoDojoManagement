@@ -19,8 +19,9 @@ The new design:
 - The complete endpoints fail with a generic, indistinguishable error when
   following a decoy begin.
 
-Written against sqlite in-memory, following the fixture conventions in
-test_passkey.py.
+Written against the shared PostgreSQL test database via the `db_client`
+fixture (conftest.py; savepoint-scoped, rolled back per test), following the
+fixture conventions in test_passkey.py.
 """
 
 import uuid
@@ -28,18 +29,18 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import delete, insert, select
 
-from app.auth.db_models import PasskeyCredential, User
-from app.db.base import Base
-from app.db.unit_of_work import SQLAlchemyUnitOfWork
-from app.dependencies import get_uow
+from app.auth.db_models import (
+    AdminRecoveryToken,
+    Invite,
+    PasskeyCredential,
+    RecoveryAttempt,
+    RecoveryCode,
+    User,
+)
 from app.main import app
 from app.members.db_models import Member
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -50,28 +51,7 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _engine
-
-
-async def _seed_user(engine, email: str, role: str = "member") -> str:
+async def _seed_user(session, email: str, role: str = "member") -> str:
     """Seed a fully-registered user: a User row plus a PasskeyCredential.
 
     The credential is what makes the instance count as "already set up" --
@@ -80,76 +60,100 @@ async def _seed_user(engine, email: str, role: str = "member") -> str:
     first-run ceremony cannot permanently brick setup.
     """
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role=role,
-                is_active=True,
-            )
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email=email,
+            role=role,
+            is_active=True,
         )
-        await conn.execute(
-            insert(PasskeyCredential).values(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                credential_id=uuid.uuid4().bytes,
-                public_key=b"seeded-public-key",
-                sign_count=0,
-            )
+    )
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            credential_id=uuid.uuid4().bytes,
+            public_key=b"seeded-public-key",
+            sign_count=0,
         )
+    )
+    await session.flush()
     return user_id
 
 
-async def _seed_phantom_user(engine, email: str, role: str = "member") -> str:
+async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
     """Seed a User with NO credential -- an abandoned registration ceremony."""
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role=role,
-                is_active=True,
-            )
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email=email,
+            role=role,
+            is_active=True,
         )
+    )
+    await session.flush()
     return user_id
 
 
-async def _seed_member(engine, email: str) -> str:
+async def _seed_member(session, email: str) -> str:
     member_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(Member).values(
-                id=member_id,
-                email=email,
-                first_name="Test",
-                surname="Member",
-                join_date="2024-01-01",
-                membership_status="active",
-                is_coach=False,
-                is_first_aider=False,
-            )
+    await session.execute(
+        insert(Member).values(
+            id=member_id,
+            email=email,
+            first_name="Test",
+            surname="Member",
+            join_date="2024-01-01",
+            membership_status="active",
+            is_coach=False,
+            is_first_aider=False,
         )
+    )
+    await session.flush()
     return member_id
 
 
-async def _user_count(engine) -> int:
-    async with engine.connect() as conn:
-        result = await conn.execute(select(User))
-        return len(result.fetchall())
+async def _reset_to_fresh_instance(session) -> None:
+    """Clear every auth row so the test sees a genuinely fresh instance.
+
+    The bootstrap tests below assert on the zero-User / zero-credential state
+    a brand-new deployment starts in. On the shared PostgreSQL test database
+    that state has to be established rather than assumed: rows committed
+    outside a savepoint by other tests (e.g. the e2e seed) are still visible
+    here. Everything deleted here is inside `db_session`'s savepoint, so it
+    is rolled back on teardown and no other test observes the wipe.
+
+    Ordered children-first: all of these carry a FK to users.id.
+    """
+    for table in (
+        PasskeyCredential.__table__,
+        RecoveryCode.__table__,
+        RecoveryAttempt.__table__,
+        AdminRecoveryToken.__table__,
+        Invite.__table__,
+        Member.__table__,
+        User.__table__,
+    ):
+        await session.execute(delete(table))
+    await session.flush()
+
+
+async def _user_count(session) -> int:
+    result = await session.execute(select(User))
+    return len(result.fetchall())
 
 
 # ── AC1/AC2: registration gated on admin-created Member ─────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_unauthorized_email_creates_no_user(db_client) -> None:
     """Register-begin for an email with no matching Member creates no User row,
     when the instance already has at least one User (bootstrap not in play)."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    before = await _user_count(engine)
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    before = await _user_count(session)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -160,23 +164,22 @@ async def test_register_begin_unauthorized_email_creates_no_user(db_client) -> N
         )
 
     assert response.status_code == 200
-    after = await _user_count(engine)
+    after = await _user_count(session)
     assert after == before
 
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "unauthorized@dojo.test")
-        )
-        assert result.fetchone() is None
+    result = await session.execute(
+        select(User).where(User.email == "unauthorized@dojo.test")
+    )
+    assert result.fetchone() is None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_authorized_email_creates_user(db_client) -> None:
     """Register-begin for an email matching an admin-created Member creates
     the User row and returns a real (non-decoy) challenge."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    member_id = await _seed_member(engine, "authorized@dojo.test")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    member_id = await _seed_member(session, "authorized@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -187,13 +190,12 @@ async def test_register_begin_authorized_email_creates_user(db_client) -> None:
         )
 
     assert response.status_code == 200
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "authorized@dojo.test")
-        )
-        user_row = result.fetchone()
-        member_result = await conn.execute(select(Member).where(Member.id == member_id))
-        member_row = member_result.fetchone()
+    result = await session.execute(
+        select(User).where(User.email == "authorized@dojo.test")
+    )
+    user_row = result.scalar_one_or_none()
+    member_result = await session.execute(select(Member).where(Member.id == member_id))
+    member_row = member_result.scalar_one_or_none()
     assert user_row is not None
     # A "real" (non-decoy) begin must also perform the Member->User link --
     # today's implementation never sets Member.user_id at all.
@@ -201,13 +203,13 @@ async def test_register_begin_authorized_email_creates_user(db_client) -> None:
     assert member_row.user_id == user_row.id
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_links_member_user_id(db_client) -> None:
     """After a successful register-begin, the matching Member's user_id
     equals the newly-created User's id."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    member_id = await _seed_member(engine, "linkme@dojo.test")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    member_id = await _seed_member(session, "linkme@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -218,27 +220,27 @@ async def test_register_begin_links_member_user_id(db_client) -> None:
         )
     assert response.status_code == 200
 
-    async with engine.connect() as conn:
-        user_result = await conn.execute(
-            select(User).where(User.email == "linkme@dojo.test")
-        )
-        user_row = user_result.fetchone()
-        member_result = await conn.execute(select(Member).where(Member.id == member_id))
-        member_row = member_result.fetchone()
+    user_result = await session.execute(
+        select(User).where(User.email == "linkme@dojo.test")
+    )
+    user_row = user_result.scalar_one_or_none()
+    member_result = await session.execute(select(Member).where(Member.id == member_id))
+    member_row = member_result.scalar_one_or_none()
 
     assert user_row is not None
     assert member_row is not None
     assert member_row.user_id == user_row.id
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> None:
     """On a fresh instance with zero Users, register-begin succeeds for any
     email (no Member required) and the created User gets role 'admin'. If a
     Member row happens to match, it is still linked."""
-    engine = db_client
-    assert await _user_count(engine) == 0
-    member_id = await _seed_member(engine, "first-ever@dojo.test")
+    session = db_client
+    await _reset_to_fresh_instance(session)
+    assert await _user_count(session) == 0
+    member_id = await _seed_member(session, "first-ever@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -249,13 +251,12 @@ async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> N
         )
 
     assert response.status_code == 200
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "first-ever@dojo.test")
-        )
-        user_row = result.fetchone()
-        member_result = await conn.execute(select(Member).where(Member.id == member_id))
-        member_row = member_result.fetchone()
+    result = await session.execute(
+        select(User).where(User.email == "first-ever@dojo.test")
+    )
+    user_row = result.scalar_one_or_none()
+    member_result = await session.execute(select(Member).where(Member.id == member_id))
+    member_row = member_result.scalar_one_or_none()
     assert user_row is not None
     assert user_row.role == "admin"
     # Even during bootstrap, a matching Member must be linked -- today's
@@ -264,7 +265,7 @@ async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> N
     assert member_row.user_id == user_row.id
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> None:
     """A phantom User from an abandoned first-run ceremony must not end
     bootstrap.
@@ -277,8 +278,9 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
     retry, including one with the same email, would get a decoy and the
     instance could never be set up without direct DB surgery.
     """
-    engine = db_client
-    await _seed_phantom_user(engine, "first-ever@dojo.test", role="admin")
+    session = db_client
+    await _reset_to_fresh_instance(session)
+    await _seed_phantom_user(session, "first-ever@dojo.test", role="admin")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -289,11 +291,10 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
         )
 
     assert retry.status_code == 200
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "first-ever@dojo.test")
-        )
-        user_row = result.fetchone()
+    result = await session.execute(
+        select(User).where(User.email == "first-ever@dojo.test")
+    )
+    user_row = result.scalar_one_or_none()
     # Still reachable as a real registration, not a decoy: the retry must
     # arm a pending challenge on the existing phantom row.
     assert user_row is not None
@@ -303,7 +304,7 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
 # ── AC5/AC6: decoy challenge shape, no 404 leak ──────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_unknown_email_returns_200_not_404(db_client) -> None:
     """login_passkey_begin for an unknown email returns 200 with a
     well-formed publicKey challenge -- not a 404."""
@@ -324,12 +325,12 @@ async def test_login_begin_unknown_email_returns_200_not_404(db_client) -> None:
     assert body["publicKey"].get("allowCredentials") == []
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_known_and_unknown_email_shapes_match(db_client) -> None:
     """The response shape for a known email (real challenge) and an unknown
     email (decoy challenge) must be indistinguishable -- same keys."""
-    engine = db_client
-    await _seed_user(engine, "known@dojo.test")
+    session = db_client
+    await _seed_user(session, "known@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -350,7 +351,7 @@ async def test_login_begin_known_and_unknown_email_shapes_match(db_client) -> No
     assert len(known["challenge"]) == len(unknown["challenge"])
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_authorized_and_unauthorized_shapes_match(
     db_client,
 ) -> None:
@@ -369,9 +370,9 @@ async def test_register_begin_authorized_and_unauthorized_shapes_match(
     32-byte sha256 digest while the real path uses a 36-char UUID string,
     which made the encoded user id itself an enumeration tell.
     """
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    await _seed_member(engine, "authorized@dojo.test")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "authorized@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -392,12 +393,12 @@ async def test_register_begin_authorized_and_unauthorized_shapes_match(
     assert set(auth_key["user"].keys()) == set(unauth_key["user"].keys())
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) -> None:
     """register_passkey_begin for an unauthorized email returns 200 with a
     well-formed decoy challenge, not an error."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -415,11 +416,10 @@ async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) ->
     assert len(body["publicKey"]["challenge"]) > 0
     # A well-formed decoy must not be a *real* challenge -- no User row for
     # the unauthorized email may exist afterwards.
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "unauthorized2@dojo.test")
-        )
-        assert result.fetchone() is None
+    result = await session.execute(
+        select(User).where(User.email == "unauthorized2@dojo.test")
+    )
+    assert result.fetchone() is None
 
 
 # ── AC7: decoy challenges are random per call, like the real path ────────────
@@ -432,7 +432,7 @@ async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) ->
 # requests and no timing analysis. Decoys must be random per call.
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_decoy_challenge_differs_per_call(db_client) -> None:
     """Two login-begin calls for the same unknown email return DIFFERENT
     challenges, matching the real path's per-call randomness."""
@@ -453,12 +453,12 @@ async def test_login_begin_decoy_challenge_differs_per_call(db_client) -> None:
     )
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_decoy_challenge_differs_per_call(db_client) -> None:
     """Two register-begin calls for the same unauthorized email return
     DIFFERENT decoy challenges."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -482,12 +482,12 @@ async def test_register_begin_decoy_challenge_differs_per_call(db_client) -> Non
 # ── AC8: decoy paths write nothing to the DB ─────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_decoy_path_writes_no_db_rows(db_client) -> None:
     """login_passkey_begin for an unknown email must not create a User row
     nor mutate any pending_challenge."""
-    engine = db_client
-    before = await _user_count(engine)
+    session = db_client
+    before = await _user_count(session)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -497,17 +497,17 @@ async def test_login_begin_decoy_path_writes_no_db_rows(db_client) -> None:
         )
 
     assert response.status_code == 200
-    after = await _user_count(engine)
+    after = await _user_count(session)
     assert after == before
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_decoy_path_writes_no_db_rows(db_client) -> None:
     """register_passkey_begin for an unauthorized email must not create a
     User row."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    before = await _user_count(engine)
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    before = await _user_count(session)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -518,14 +518,14 @@ async def test_register_begin_decoy_path_writes_no_db_rows(db_client) -> None:
         )
 
     assert response.status_code == 200
-    after = await _user_count(engine)
+    after = await _user_count(session)
     assert after == before
 
 
 # ── AC9: complete endpoints fail generically after a decoy begin ────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_complete_after_decoy_begin_fails_generic(db_client) -> None:
     """login_passkey_complete for an email that never had a real begin (i.e.
     followed a decoy begin) must fail with a generic error -- not the
@@ -555,13 +555,13 @@ async def test_login_complete_after_decoy_begin_fails_generic(db_client) -> None
     assert response.json().get("detail") != "User not found"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_complete_after_decoy_begin_fails_generic(db_client) -> None:
     """register_passkey_complete for an unauthorized email (which only ever
     got a decoy begin) must fail with a generic error -- not the
     user-enumerating 404 'User not found'."""
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -590,24 +590,24 @@ async def test_register_complete_after_decoy_begin_fails_generic(db_client) -> N
     assert response.json().get("detail") != "User not found"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_complete_errors_indistinguishable_unknown_vs_bad_credential(
     db_client,
 ) -> None:
     """The error returned for 'no such user' and 'wrong credential' must be
     identical in status code and detail -- the whole point of AC9."""
-    engine = db_client
-    known_user_id = await _seed_user(engine, "known-nocred@dojo.test")
+    session = db_client
+    known_user_id = await _seed_user(session, "known-nocred@dojo.test")
     # Give the known user a pending challenge as if login-begin had run for real.
-    async with engine.begin() as conn:
-        await conn.execute(
-            User.__table__.update()
-            .where(User.id == known_user_id)
-            .values(
-                pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-                challenge_issued_at=datetime.now(UTC),
-            )
+    await session.execute(
+        User.__table__.update()
+        .where(User.id == known_user_id)
+        .values(
+            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+            challenge_issued_at=datetime.now(UTC),
         )
+    )
+    await session.flush()
 
     fake_credential = {
         "id": "ZmFrZQ",

@@ -26,10 +26,7 @@ def _main(ctx: typer.Context) -> None:
 
 
 def _make_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
-    connect_args = {}
-    if url.startswith("sqlite"):
-        connect_args["check_same_thread"] = False
-    engine = create_async_engine(url, connect_args=connect_args)
+    engine = create_async_engine(url)
     return async_sessionmaker(engine, expire_on_commit=False)
 
 

@@ -12,8 +12,9 @@ remains), configured via `app.config.AUTH_BEGIN_MIN_DURATION_MS` (env var
 `AUTH_BEGIN_MIN_DURATION_MS`, default 50ms). None of that exists yet -- these
 tests are the red phase.
 
-Written against sqlite in-memory, following the fixture conventions in
-test_passkey.py / test_passkey_enumeration.py. Timing assertions monkeypatch
+Written against the shared PostgreSQL test database via the `db_client`
+fixture (conftest.py), following the fixture conventions in test_passkey.py /
+test_passkey_enumeration.py. Timing assertions monkeypatch
 the config value down to a small floor (20ms) instead of using the 50ms
 default, so the suite stays fast; per the repo's TDD skill, monkeypatching a
 config attribute that does not exist yet raises AttributeError -- that is the
@@ -31,18 +32,11 @@ import uuid
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import config
 from app.auth.db_models import PasskeyCredential, User
-from app.db.base import Base
-from app.db.unit_of_work import SQLAlchemyUnitOfWork
-from app.dependencies import get_uow
 from app.main import app
 from app.members.db_models import Member
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -53,70 +47,49 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _engine
-
-
-async def _seed_user(engine, email: str, role: str = "member") -> str:
+async def _seed_user(session, email: str, role: str = "member") -> str:
     """Seed a fully-registered user: a User row plus a PasskeyCredential.
 
     The credential is what makes register-begin count as "not bootstrap" --
     see the note in test_passkey_enumeration.py.
     """
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role=role,
-                is_active=True,
-            )
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email=email,
+            role=role,
+            is_active=True,
         )
-        await conn.execute(
-            insert(PasskeyCredential).values(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                credential_id=uuid.uuid4().bytes,
-                public_key=b"seeded-public-key",
-                sign_count=0,
-            )
+    )
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            credential_id=uuid.uuid4().bytes,
+            public_key=b"seeded-public-key",
+            sign_count=0,
         )
+    )
+    await session.flush()
     return user_id
 
 
-async def _seed_member(engine, email: str) -> str:
+async def _seed_member(session, email: str) -> str:
     member_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(Member).values(
-                id=member_id,
-                email=email,
-                first_name="Test",
-                surname="Member",
-                join_date="2024-01-01",
-                membership_status="active",
-                is_coach=False,
-                is_first_aider=False,
-            )
+    await session.execute(
+        insert(Member).values(
+            id=member_id,
+            email=email,
+            first_name="Test",
+            surname="Member",
+            join_date="2024-01-01",
+            membership_status="active",
+            is_coach=False,
+            is_first_aider=False,
         )
+    )
+    await session.flush()
     return member_id
 
 
@@ -132,13 +105,13 @@ async def _timed_post(client: AsyncClient, path: str, email: str) -> float:
 # ── AC1-AC4: each begin endpoint enforces the configured floor ──────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_known_email_meets_floor(db_client, monkeypatch) -> None:
     """login_passkey_begin for a KNOWN email takes at least the configured
     minimum duration."""
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    await _seed_user(engine, "known-floor@dojo.test")
+    session = db_client
+    await _seed_user(session, "known-floor@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -150,7 +123,7 @@ async def test_login_begin_known_email_meets_floor(db_client, monkeypatch) -> No
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_unknown_email_meets_floor(db_client, monkeypatch) -> None:
     """login_passkey_begin for an UNKNOWN email takes at least the configured
     minimum duration (the decoy path must not be faster than the floor)."""
@@ -166,16 +139,16 @@ async def test_login_begin_unknown_email_meets_floor(db_client, monkeypatch) -> 
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_authorized_email_meets_floor(
     db_client, monkeypatch
 ) -> None:
     """register_passkey_begin for an AUTHORIZED email (matching Member) takes
     at least the configured minimum duration."""
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    await _seed_member(engine, "authorized-floor@dojo.test")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "authorized-floor@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -187,7 +160,7 @@ async def test_register_begin_authorized_email_meets_floor(
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_bootstrap_email_meets_floor(
     db_client, monkeypatch
 ) -> None:
@@ -205,15 +178,15 @@ async def test_register_begin_bootstrap_email_meets_floor(
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_unauthorized_email_meets_floor(
     db_client, monkeypatch
 ) -> None:
     """register_passkey_begin for an UNAUTHORIZED email (decoy path) takes at
     least the configured minimum duration."""
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -228,7 +201,7 @@ async def test_register_begin_unauthorized_email_meets_floor(
 # ── AC5: median latency difference between real and decoy paths is tiny ─────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_known_vs_unknown_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
@@ -241,8 +214,8 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     scheduling noise.
     """
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    await _seed_user(engine, "known-median@dojo.test")
+    session = db_client
+    await _seed_user(session, "known-median@dojo.test")
 
     known_samples: list[float] = []
     unknown_samples: list[float] = []
@@ -266,7 +239,7 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     assert diff < 0.001  # under 1ms, far below the ~2ms reported signal
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_begin_authorized_vs_unauthorized_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
@@ -274,9 +247,9 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     and an UNAUTHORIZED email must differ by far less than the ~2ms signal in
     the issue."""
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    await _seed_user(engine, "existing-admin@dojo.test", role="admin")
-    await _seed_member(engine, "authorized-median@dojo.test")
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "authorized-median@dojo.test")
 
     authorized_samples: list[float] = []
     unauthorized_samples: list[float] = []
@@ -305,12 +278,12 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
 # ── AC6: the floor is configurable ───────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_login_begin_floor_is_configurable(db_client, monkeypatch) -> None:
     """Changing AUTH_BEGIN_MIN_DURATION_MS changes the observed minimum
     duration of login_passkey_begin."""
-    engine = db_client
-    await _seed_user(engine, "configurable-floor@dojo.test")
+    session = db_client
+    await _seed_user(session, "configurable-floor@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

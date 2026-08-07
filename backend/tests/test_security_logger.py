@@ -453,39 +453,10 @@ def test_log_output_is_single_line(caplog: pytest.LogCaptureFixture) -> None:
 # ===========================================================================
 # AC4 — auth/router.py emits login events
 # ===========================================================================
-# These integration tests use the full SQLAlchemy in-memory DB because the
-# auth router has deep UoW coupling. We verify that after each auth action
-# a security_events log record is emitted.
-
-
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from app.db.base import Base
-from app.db.unit_of_work import SQLAlchemyUnitOfWork
-from app.dependencies import get_uow
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _engine
+# These integration tests use the shared PostgreSQL `db_client` fixture
+# (conftest.py; savepoint-scoped, rolled back per test) because the auth
+# router has deep UoW coupling. We verify that after each auth action a
+# security_events log record is emitted.
 
 
 async def _register_user(email: str, password: str = "Str0ng!Pass") -> None:
@@ -502,7 +473,7 @@ async def _register_user(email: str, password: str = "Str0ng!Pass") -> None:
     strict=False,
     reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_password_login_success_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -529,7 +500,7 @@ async def test_password_login_success_emits_log(
     strict=False,
     reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_password_login_failure_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -556,7 +527,7 @@ async def test_password_login_failure_emits_log(
     strict=False,
     reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_password_login_unknown_user_emits_failure_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -577,7 +548,7 @@ async def test_password_login_unknown_user_emits_failure_log(
     ), f"Expected login_password/failure event, got: {logs}"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_passkey_login_failure_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -615,7 +586,7 @@ async def test_passkey_login_failure_emits_log(
     strict=False,
     reason="POST /auth/login/password removed in issue #155 (passkey-only auth)",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_account_lockout_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -673,7 +644,7 @@ async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> N
     ), f"Expected passkey_deleted/success event, got: {logs}"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_passkey_registration_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -719,7 +690,7 @@ async def test_passkey_registration_emits_log(
 # ===========================================================================
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_recovery_redeem_failure_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -730,15 +701,15 @@ async def test_recovery_redeem_failure_emits_log(
     from app.auth.db_models import User as DbUser
 
     user_id = str(uuid.uuid4())
-    async with db_client.begin() as conn:
-        await conn.execute(
-            insert(DbUser).values(
-                id=user_id,
-                email="redeem_fail@dojo.test",
-                role="member",
-                is_active=True,
-            )
+    await db_client.execute(
+        insert(DbUser).values(
+            id=user_id,
+            email="redeem_fail@dojo.test",
+            role="member",
+            is_active=True,
         )
+    )
+    await db_client.flush()
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
@@ -756,44 +727,32 @@ async def test_recovery_redeem_failure_emits_log(
     ), f"Expected recovery_redeem/failure event, got: {logs}"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_generation_emits_log(
+    db_client,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """POST /auth/recovery/admin-token must emit an admin_token_generated/success event."""
     from sqlalchemy import insert
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.auth.db_models import User as DbUser
 
-    # Spin up a fresh in-memory DB for this test
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     target_user_id = str(uuid.uuid4())
-    async with eng.begin() as conn:
-        await conn.execute(
-            insert(DbUser).values(
-                id=target_user_id,
-                email="target@dojo.test",
-                role="member",
-                is_active=True,
-            )
+    await db_client.execute(
+        insert(DbUser).values(
+            id=target_user_id,
+            email="target@dojo.test",
+            role="member",
+            is_active=True,
         )
-
-    factory = async_sessionmaker(eng, expire_on_commit=False)
-
-    async def _uow_override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
+    )
+    await db_client.flush()
 
     admin_claims = UserClaims(
         sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
     )
     admin_token_repo = StubAdminTokenRepo()
 
-    app.dependency_overrides[get_uow] = _uow_override
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: admin_claims
     app.dependency_overrides[get_admin_token_repo] = lambda: admin_token_repo
 
@@ -805,8 +764,6 @@ async def test_admin_token_generation_emits_log(
                 "/auth/recovery/admin-token",
                 json={"user_id": target_user_id},
             )
-
-    await eng.dispose()
 
     logs = _capture_security_logs(caplog)
     assert any(

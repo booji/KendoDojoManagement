@@ -10,7 +10,7 @@ KendoDojoManagement — manages sessions and members of a kendo dojo. Open sourc
 
 - **Backend:** Python + FastAPI
 - **Frontend:** React + Vite + shadcn/ui
-- **Database:** PostgreSQL (prod), SQLite (dev/test) via SQLAlchemy
+- **Database:** PostgreSQL (dev, test, prod) via SQLAlchemy
 - **Auth:** Passkeys/WebAuthn (`py_webauthn`) primary; email/password fallback
 - **API:** REST
 - **Deployment:** Docker Compose (app + PostgreSQL containers)
