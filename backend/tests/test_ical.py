@@ -241,7 +241,6 @@ async def _seed_instance(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
     """GET /sessions/ical must return 200 with content-type text/calendar
     without requiring any authentication."""
@@ -253,7 +252,6 @@ async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
     assert "text/calendar" in response.headers.get("content-type", "")
 
 
-@pytest.mark.anyio
 async def test_ical_endpoint_returns_valid_ical_structure(
     instance_repo, type_repo
 ) -> None:
@@ -274,7 +272,6 @@ async def test_ical_endpoint_returns_valid_ical_structure(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) -> None:
     """Each session instance must appear as a VEVENT with SUMMARY set to its title."""
     t = type_repo.seed(str(uuid.uuid4()), "Men Waza Practice")
@@ -290,7 +287,6 @@ async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) 
     assert "SUMMARY:Men Waza Practice" in body
 
 
-@pytest.mark.anyio
 async def test_ical_feed_includes_dtstart_and_dtend(instance_repo, type_repo) -> None:
     """VEVENT must include DTSTART and DTEND derived from date, start_time,
     and duration_minutes."""
@@ -312,7 +308,6 @@ async def test_ical_feed_includes_dtstart_and_dtend(instance_repo, type_repo) ->
     assert "DTEND" in body
 
 
-@pytest.mark.anyio
 async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
     """VEVENT must include LOCATION when set on the instance."""
     await _seed_instance(instance_repo, location="Dojo East Wing")
@@ -324,7 +319,6 @@ async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
     assert "LOCATION:Dojo East Wing" in body
 
 
-@pytest.mark.anyio
 async def test_ical_feed_includes_description_from_info(
     instance_repo, type_repo
 ) -> None:
@@ -341,7 +335,6 @@ async def test_ical_feed_includes_description_from_info(
     assert "Practice focus: kote strikes" in description_line
 
 
-@pytest.mark.anyio
 async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> None:
     """VEVENT must not include a LOCATION line when location is None."""
     await _seed_instance(instance_repo, location=None)
@@ -355,7 +348,6 @@ async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> N
     assert "LOCATION" not in body
 
 
-@pytest.mark.anyio
 async def test_ical_feed_description_omits_info_when_info_null(
     instance_repo, type_repo
 ) -> None:
@@ -381,7 +373,6 @@ async def test_ical_feed_description_omits_info_when_info_null(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_feed_never_includes_coach_notes(instance_repo, type_repo) -> None:
     """iCal feed must never expose coach_notes regardless of the stored value."""
     await _seed_instance(
@@ -406,7 +397,6 @@ async def test_ical_feed_never_includes_coach_notes(instance_repo, type_repo) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_vevent_uid_equals_instance_uuid(instance_repo, type_repo) -> None:
     """Each VEVENT UID must equal the session instance UUID."""
     inst = await _seed_instance(instance_repo)
@@ -418,7 +408,6 @@ async def test_ical_vevent_uid_equals_instance_uuid(instance_repo, type_repo) ->
     assert f"UID:{inst['id']}" in body
 
 
-@pytest.mark.anyio
 async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) -> None:
     """VEVENT UIDs must remain identical across two consecutive requests."""
     inst = await _seed_instance(instance_repo)
@@ -436,7 +425,6 @@ async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_generate_checkin_token_persists_checkin_url(
     instance_repo, checkin_token_repo, monkeypatch
 ) -> None:
@@ -468,7 +456,6 @@ async def test_generate_checkin_token_persists_checkin_url(
     assert updated_inst["checkin_url"] == expected_url
 
 
-@pytest.mark.anyio
 async def test_generate_checkin_token_uses_webauthn_origin_fallback(
     instance_repo, checkin_token_repo, monkeypatch
 ) -> None:
@@ -504,7 +491,6 @@ async def test_generate_checkin_token_uses_webauthn_origin_fallback(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_feed_includes_all_upcoming_sessions(
     instance_repo, type_repo
 ) -> None:
@@ -550,7 +536,6 @@ async def test_ical_feed_includes_all_upcoming_sessions(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     instance_repo, type_repo
 ) -> None:

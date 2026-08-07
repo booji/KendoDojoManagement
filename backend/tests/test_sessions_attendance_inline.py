@@ -272,7 +272,6 @@ def test_session_instance_read_has_is_checked_in_field() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_sessions_includes_attendance_count(
     type_repo, template_repo, instance_repo, attendance_repo
 ) -> None:
@@ -314,7 +313,6 @@ async def test_list_sessions_includes_attendance_count(
     assert target["attendance_count"] == 2
 
 
-@pytest.mark.anyio
 async def test_list_sessions_includes_is_checked_in_for_member(
     type_repo, template_repo, instance_repo, attendance_repo
 ) -> None:

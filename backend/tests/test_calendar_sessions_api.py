@@ -202,7 +202,6 @@ async def _seed_session(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_range_query_returns_sessions_within_date_range(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -230,7 +229,6 @@ async def test_range_query_returns_sessions_within_date_range(
     ), f"Some sessions outside range: {[s['date'] for s in sessions]}"
 
 
-@pytest.mark.anyio
 async def test_range_query_response_has_required_fields(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -259,7 +257,6 @@ async def test_range_query_response_has_required_fields(
         assert "segments" in s, f"Missing 'segments' in {s}"
 
 
-@pytest.mark.anyio
 async def test_range_query_unauthenticated_returns_401(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -274,7 +271,6 @@ async def test_range_query_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_admin_range_query_includes_cancelled_sessions(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -302,7 +298,6 @@ async def test_admin_range_query_includes_cancelled_sessions(
     assert cancelled_in_response["cancelled"] is True
 
 
-@pytest.mark.anyio
 async def test_member_range_query_excludes_cancelled_sessions(
     type_repo, template_repo, instance_repo
 ) -> None:

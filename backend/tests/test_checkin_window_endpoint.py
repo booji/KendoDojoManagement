@@ -293,7 +293,6 @@ async def _post_checkin(session_id: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_checkin_inside_window_returns_200(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -317,7 +316,6 @@ async def test_checkin_inside_window_returns_200(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_checkin_before_window_returns_403_too_early(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -341,7 +339,6 @@ async def test_checkin_before_window_returns_403_too_early(
     assert "opens_at" in detail
 
 
-@pytest.mark.anyio
 async def test_checkin_too_early_detail_reports_correct_open_boundary(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -372,7 +369,6 @@ async def test_checkin_too_early_detail_reports_correct_open_boundary(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_checkin_after_window_returns_403_closed(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -395,7 +391,6 @@ async def test_checkin_after_window_returns_403_closed(
     assert "closes_at" in detail
 
 
-@pytest.mark.anyio
 async def test_checkin_closed_detail_reports_correct_close_boundary(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -425,7 +420,6 @@ async def test_checkin_closed_detail_reports_correct_close_boundary(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_mark_attended_bypasses_window_when_too_early(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -451,7 +445,6 @@ async def test_admin_mark_attended_bypasses_window_when_too_early(
     assert response.status_code == 201
 
 
-@pytest.mark.anyio
 async def test_admin_mark_attended_bypasses_window_when_closed(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -481,7 +474,6 @@ async def test_admin_mark_attended_bypasses_window_when_closed(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_token_checkin_bypasses_window_when_too_early(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -507,7 +499,6 @@ async def test_token_checkin_bypasses_window_when_too_early(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_token_checkin_bypasses_window_when_closed(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -537,7 +528,6 @@ async def test_token_checkin_bypasses_window_when_closed(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_checkin_nonexistent_session_still_returns_404(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -551,7 +541,6 @@ async def test_checkin_nonexistent_session_still_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_checkin_cancelled_session_still_returns_409_even_inside_window(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -568,7 +557,6 @@ async def test_checkin_cancelled_session_still_returns_409_even_inside_window(
     assert response.status_code == 409
 
 
-@pytest.mark.anyio
 async def test_checkin_already_checked_in_still_returns_409_inside_window(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,

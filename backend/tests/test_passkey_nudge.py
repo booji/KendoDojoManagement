@@ -273,7 +273,6 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=0 for a user with no passkeys.
 
@@ -296,7 +295,6 @@ async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     assert body["passkey_count"] == 0
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=1 after the first passkey.
 
@@ -321,7 +319,6 @@ async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
     ), f"passkey_count should be 1 after one passkey is registered, got {body['passkey_count']!r}"
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=2 when user has two passkeys.
 
@@ -346,7 +343,6 @@ async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
     ), f"passkey_count should be 2 after two passkeys are registered, got {body['passkey_count']!r}"
 
 
-@pytest.mark.anyio
 async def test_security_status_requires_authentication() -> None:
     """GET /auth/security-status returns 401 when no token is provided."""
     async with AsyncClient(

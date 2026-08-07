@@ -14,8 +14,6 @@ would be written, so the assertions are deterministic and DB-free.
 import re
 from typing import Any
 
-import pytest
-
 from app.sessions.seed import DEFAULT_SESSION_TYPES, seed_session_types
 
 _HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -88,7 +86,6 @@ class _FakeConn:
         return _Result(None)
 
 
-@pytest.mark.anyio
 async def test_seed_inserts_all_defaults_on_empty_table() -> None:
     conn = _FakeConn(existing_row=None)
     inserted = await seed_session_types(conn)
@@ -100,7 +97,6 @@ async def test_seed_inserts_all_defaults_on_empty_table() -> None:
         assert row["id"]
 
 
-@pytest.mark.anyio
 async def test_seed_is_skipped_when_a_type_already_exists() -> None:
     conn = _FakeConn(existing_row=("some-existing-id",))
     inserted = await seed_session_types(conn)

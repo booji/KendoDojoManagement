@@ -36,8 +36,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import _DATABASE_URL
 
-pytestmark = pytest.mark.anyio
-
 
 def _admin_url() -> str:
     """The shared test server URL, used only to CREATE/DROP throwaway databases."""

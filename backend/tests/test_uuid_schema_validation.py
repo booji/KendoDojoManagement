@@ -251,7 +251,6 @@ def test_mark_attended_request_rejects_non_uuid_member_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_member_bad_uuid_returns_422() -> None:
     """GET /members/not-a-uuid should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
@@ -264,7 +263,6 @@ async def test_get_member_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_member_bad_uuid_returns_422() -> None:
     """PUT /members/not-a-uuid should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -277,7 +275,6 @@ async def test_put_member_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_get_member_grades_bad_uuid_returns_422() -> None:
     """GET /members/not-a-uuid/grades should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
@@ -290,7 +287,6 @@ async def test_get_member_grades_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_member_grades_bad_uuid_returns_422() -> None:
     """POST /members/not-a-uuid/grades should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -305,7 +301,6 @@ async def test_post_member_grades_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_get_session_bad_uuid_returns_422() -> None:
     """GET /sessions/not-a-uuid should return 422 when instance_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
@@ -318,7 +313,6 @@ async def test_get_session_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_session_cancel_bad_uuid_returns_422() -> None:
     """POST /sessions/not-a-uuid/cancel should return 422 when instance_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -331,7 +325,6 @@ async def test_post_session_cancel_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_session_bad_uuid_returns_422() -> None:
     """PUT /sessions/not-a-uuid should return 422 when instance_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -344,7 +337,6 @@ async def test_put_session_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_get_session_attendance_bad_uuid_returns_422() -> None:
     """GET /sessions/not-a-uuid/attendance should return 422 when session_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -357,7 +349,6 @@ async def test_get_session_attendance_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_session_attendance_bad_uuid_returns_422() -> None:
     """POST /sessions/not-a-uuid/attendance should return 422 when session_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -373,7 +364,6 @@ async def test_post_session_attendance_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_delete_session_attendance_bad_session_uuid_returns_422() -> None:
     """DELETE /sessions/not-a-uuid/attendance/not-a-uuid should return 422."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -386,7 +376,6 @@ async def test_delete_session_attendance_bad_session_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_session_checkin_bad_uuid_returns_422() -> None:
     """POST /sessions/not-a-uuid/checkin should return 422 when session_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
@@ -399,7 +388,6 @@ async def test_post_session_checkin_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_get_session_checkin_token_bad_uuid_returns_422() -> None:
     """GET /sessions/not-a-uuid/checkin-token should return 422 when session_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -412,7 +400,6 @@ async def test_get_session_checkin_token_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_session_visitors_bad_uuid_returns_422() -> None:
     """POST /sessions/not-a-uuid/visitors should return 422 when session_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
@@ -428,7 +415,6 @@ async def test_post_session_visitors_bad_uuid_returns_422() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_get_member_attendance_bad_uuid_returns_422() -> None:
     """GET /members/not-a-uuid/attendance should return 422 when member_id is uuid.UUID."""
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER

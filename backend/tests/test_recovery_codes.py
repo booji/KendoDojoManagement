@@ -344,7 +344,6 @@ def test_count_unused_reflects_actual_unused_codes() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_generate_endpoint_returns_8_codes(passkey_repo, recovery_repo) -> None:
     """POST /auth/recovery/codes/generate returns a list of 8 plaintext codes."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -363,7 +362,6 @@ async def test_generate_endpoint_returns_8_codes(passkey_repo, recovery_repo) ->
     assert len(codes) == 8, f"Expected 8 codes, got {len(codes)}"
 
 
-@pytest.mark.anyio
 async def test_generate_endpoint_codes_match_format(
     passkey_repo, recovery_repo
 ) -> None:
@@ -384,7 +382,6 @@ async def test_generate_endpoint_codes_match_format(
         ), f"Code '{code}' does not match xxxx-xxxx-xxxx format"
 
 
-@pytest.mark.anyio
 async def test_generate_endpoint_returns_409_if_set_exists(
     passkey_repo, recovery_repo
 ) -> None:
@@ -403,7 +400,6 @@ async def test_generate_endpoint_returns_409_if_set_exists(
     assert response.status_code == 409
 
 
-@pytest.mark.anyio
 async def test_generate_endpoint_requires_authentication(
     recovery_repo,
 ) -> None:
@@ -420,7 +416,6 @@ async def test_generate_endpoint_requires_authentication(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_regenerate_endpoint_returns_8_new_codes(
     passkey_repo, recovery_repo
 ) -> None:
@@ -443,7 +438,6 @@ async def test_regenerate_endpoint_returns_8_new_codes(
     assert len(codes) == 8, f"Expected 8 codes, got {len(codes)}"
 
 
-@pytest.mark.anyio
 async def test_regenerate_endpoint_invalidates_old_set(
     passkey_repo, recovery_repo
 ) -> None:
@@ -467,7 +461,6 @@ async def test_regenerate_endpoint_invalidates_old_set(
         ), f"Old code {code['id']} was not invalidated after regenerate"
 
 
-@pytest.mark.anyio
 async def test_regenerate_endpoint_requires_authentication(
     recovery_repo,
 ) -> None:
@@ -484,7 +477,6 @@ async def test_regenerate_endpoint_requires_authentication(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_status_endpoint_returns_unused_count_and_has_set(
     passkey_repo, recovery_repo
 ) -> None:
@@ -509,7 +501,6 @@ async def test_status_endpoint_returns_unused_count_and_has_set(
     assert body["has_set"] is True
 
 
-@pytest.mark.anyio
 async def test_status_endpoint_has_set_false_when_no_codes(
     passkey_repo, recovery_repo
 ) -> None:
@@ -528,7 +519,6 @@ async def test_status_endpoint_has_set_false_when_no_codes(
     assert body["has_set"] is False
 
 
-@pytest.mark.anyio
 async def test_status_endpoint_never_returns_plaintext_codes(
     passkey_repo, recovery_repo
 ) -> None:
@@ -549,7 +539,6 @@ async def test_status_endpoint_never_returns_plaintext_codes(
     assert "code_hash" not in body
 
 
-@pytest.mark.anyio
 async def test_status_endpoint_requires_authentication(
     recovery_repo,
 ) -> None:
@@ -566,7 +555,6 @@ async def test_status_endpoint_requires_authentication(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_last_passkey_blocked_when_no_recovery_codes(
     passkey_repo, recovery_repo
 ) -> None:
@@ -585,7 +573,6 @@ async def test_delete_last_passkey_blocked_when_no_recovery_codes(
     assert response.status_code == 400
 
 
-@pytest.mark.anyio
 async def test_delete_last_passkey_blocked_even_with_all_codes_used(
     passkey_repo, recovery_repo
 ) -> None:
@@ -605,7 +592,6 @@ async def test_delete_last_passkey_blocked_even_with_all_codes_used(
     assert response.status_code == 400
 
 
-@pytest.mark.anyio
 async def test_delete_last_passkey_allowed_when_recovery_codes_exist(
     passkey_repo, recovery_repo
 ) -> None:
@@ -629,7 +615,6 @@ async def test_delete_last_passkey_allowed_when_recovery_codes_exist(
     assert response.status_code == 204
 
 
-@pytest.mark.anyio
 async def test_delete_non_last_passkey_not_affected_by_recovery_codes(
     passkey_repo, recovery_repo
 ) -> None:

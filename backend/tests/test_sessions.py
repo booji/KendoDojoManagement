@@ -185,7 +185,6 @@ def instance_repo() -> StubSessionInstanceRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_session_types_returns_general_training_by_default(type_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -201,7 +200,6 @@ async def test_get_session_types_returns_general_training_by_default(type_repo) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_create_session_type(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -214,7 +212,6 @@ async def test_admin_can_create_session_type(type_repo) -> None:
     assert "id" in body
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_session_type(type_repo) -> None:
     """Members must receive 403 when attempting to create a session type."""
     from app.auth.token import encode_token
@@ -234,7 +231,6 @@ async def test_member_cannot_create_session_type(type_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_create_session_type_missing_name_returns_422(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -244,7 +240,6 @@ async def test_create_session_type_missing_name_returns_422(type_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_duplicate_session_type_returns_409(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -255,7 +250,6 @@ async def test_create_duplicate_session_type_returns_409(type_repo) -> None:
     assert response.status_code == 409
 
 
-@pytest.mark.anyio
 async def test_create_session_type_unauthenticated_returns_401(type_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -269,7 +263,6 @@ async def test_create_session_type_unauthenticated_returns_401(type_repo) -> Non
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_create_session_template(type_repo, template_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
@@ -290,7 +283,6 @@ async def test_admin_can_create_session_template(type_repo, template_repo) -> No
     assert body["title"] == "Tuesday Evening Keiko"
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_session_template(template_repo) -> None:
     from app.auth.token import encode_token
 
@@ -314,7 +306,6 @@ async def test_member_cannot_create_session_template(template_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_create_session_template_missing_fields_returns_422(
     template_repo,
 ) -> None:
@@ -331,7 +322,6 @@ async def test_create_session_template_missing_fields_returns_422(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_generate_creates_instances_up_to_horizon(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -370,7 +360,6 @@ async def test_generate_creates_instances_up_to_horizon(
         assert inst["date"] <= "2026-05-28"
 
 
-@pytest.mark.anyio
 async def test_generate_nonexistent_template_returns_404(
     template_repo, instance_repo
 ) -> None:
@@ -391,7 +380,6 @@ async def test_generate_nonexistent_template_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
@@ -411,7 +399,6 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     assert body["date"] == "2026-06-15"
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> None:
     from app.auth.token import encode_token
 
@@ -435,7 +422,6 @@ async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> N
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_create_adhoc_session_missing_date_returns_422(instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -456,7 +442,6 @@ async def test_create_adhoc_session_missing_date_returns_422(instance_repo) -> N
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_cancel_session_instance(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -487,7 +472,6 @@ async def test_admin_can_cancel_session_instance(
     assert body["id"] == instance_id
 
 
-@pytest.mark.anyio
 async def test_cancelling_instance_does_not_affect_template(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -538,7 +522,6 @@ async def test_cancelling_instance_does_not_affect_template(
     assert tmpl_get_resp.json()["id"] == template_id
 
 
-@pytest.mark.anyio
 async def test_cancel_nonexistent_instance_returns_404(instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -549,7 +532,6 @@ async def test_cancel_nonexistent_instance_returns_404(instance_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -> None:
     from app.auth.token import encode_token
 
@@ -591,7 +573,6 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_sessions_returns_upcoming_for_member(
     type_repo, instance_repo
 ) -> None:
@@ -615,7 +596,6 @@ async def test_get_sessions_returns_upcoming_for_member(
     assert any(s["date"] == future_date for s in sessions)
 
 
-@pytest.mark.anyio
 async def test_get_sessions_unauthenticated_returns_401(instance_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -624,7 +604,6 @@ async def test_get_sessions_unauthenticated_returns_401(instance_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_get_sessions_excludes_cancelled(type_repo, instance_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     type_id = list(type_repo._store.keys())[0]

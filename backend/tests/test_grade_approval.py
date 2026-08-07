@@ -242,7 +242,6 @@ def grade_repo() -> StubGradeRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_approve_pending_entry_returns_200_and_confirmed_status(
     member_repo, grade_repo
 ) -> None:
@@ -265,7 +264,6 @@ async def test_approve_pending_entry_returns_200_and_confirmed_status(
     ), f"Entry status must be 'confirmed' after approval; got {body.get('status')!r}"
 
 
-@pytest.mark.anyio
 async def test_approve_sets_assigned_by_from_auth_token(
     member_repo, grade_repo
 ) -> None:
@@ -293,7 +291,6 @@ async def test_approve_sets_assigned_by_from_auth_token(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_approve_nonexistent_entry_returns_404(member_repo, grade_repo) -> None:
     """AC2: Approving an entry that doesn't exist → 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -310,7 +307,6 @@ async def test_approve_nonexistent_entry_returns_404(member_repo, grade_repo) ->
     ), f"Expected 404 Not Found, got {response.status_code}: {response.text}"
 
 
-@pytest.mark.anyio
 async def test_approve_already_confirmed_entry_returns_409(
     member_repo, grade_repo
 ) -> None:
@@ -334,7 +330,6 @@ async def test_approve_already_confirmed_entry_returns_409(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_pending_entry_returns_204(member_repo, grade_repo) -> None:
     """AC3: DELETE on a pending entry → 204 No Content."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -351,7 +346,6 @@ async def test_delete_pending_entry_returns_204(member_repo, grade_repo) -> None
     ), f"Expected 204 No Content, got {response.status_code}: {response.text}"
 
 
-@pytest.mark.anyio
 async def test_delete_pending_entry_removes_it_from_history(
     member_repo, grade_repo
 ) -> None:
@@ -379,7 +373,6 @@ async def test_delete_pending_entry_removes_it_from_history(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> None:
     """AC4: Attempting to delete a confirmed entry → 409 Conflict."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -401,7 +394,6 @@ async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> No
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_approve_non_admin_returns_403(member_repo, grade_repo) -> None:
     """AC5: Non-admin caller on POST approve → 403 Forbidden."""
     app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
@@ -418,7 +410,6 @@ async def test_approve_non_admin_returns_403(member_repo, grade_repo) -> None:
     ), f"Non-admin must be rejected with 403; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_delete_non_admin_returns_403(member_repo, grade_repo) -> None:
     """AC5: Non-admin caller on DELETE → 403 Forbidden."""
     app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override

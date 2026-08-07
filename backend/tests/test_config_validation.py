@@ -92,7 +92,6 @@ def test_validate_startup_config_entry_point_exists() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_lifespan_raises_before_db_init_when_jwt_secret_blank(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -119,7 +118,6 @@ async def test_lifespan_raises_before_db_init_when_jwt_secret_blank(
     )
 
 
-@pytest.mark.anyio
 async def test_lifespan_proceeds_to_db_init_when_jwt_secret_valid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

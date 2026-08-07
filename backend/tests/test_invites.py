@@ -217,7 +217,6 @@ def invite_repo() -> StubInviteRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_mint_invite(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -241,7 +240,6 @@ async def test_admin_can_mint_invite(invite_repo) -> None:
     assert body["token"] in body["link"]
 
 
-@pytest.mark.anyio
 async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -264,7 +262,6 @@ async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
     assert "token" not in stored[0]
 
 
-@pytest.mark.anyio
 async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -279,7 +276,6 @@ async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -291,7 +287,6 @@ async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = REQUIRE_ADMIN  # not overridden
     from app.auth.token import encode_token
@@ -308,7 +303,6 @@ async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -317,7 +311,6 @@ async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
     from app.auth.token import encode_token
 
@@ -329,7 +322,6 @@ async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -338,7 +330,6 @@ async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
     from app.auth.token import encode_token
 
@@ -358,7 +349,6 @@ async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_pending_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -382,7 +372,6 @@ async def test_list_invites_returns_pending_status(invite_repo) -> None:
     assert body[0]["email"] == "pending@dojo.test"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -404,7 +393,6 @@ async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "redeemed"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_expired_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -425,7 +413,6 @@ async def test_list_invites_returns_expired_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "expired"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_revoked_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -447,7 +434,6 @@ async def test_list_invites_returns_revoked_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "revoked"
 
 
-@pytest.mark.anyio
 async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -475,7 +461,6 @@ async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_revoke_invite(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await invite_repo.add(
@@ -497,7 +482,6 @@ async def test_admin_can_revoke_invite(invite_repo) -> None:
     assert stored["revoked_at"] is not None
 
 
-@pytest.mark.anyio
 async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -1190,7 +1174,6 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_mint_invite_requires_invitee_name(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(

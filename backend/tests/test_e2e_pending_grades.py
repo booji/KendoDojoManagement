@@ -13,8 +13,6 @@ Acceptance criteria exercised here:
 
 import pytest
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.mark.xfail(strict=True, reason="not implemented")
 def test_admin_sees_pending_queue_on_grades_page() -> None:

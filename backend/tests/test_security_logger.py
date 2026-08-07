@@ -614,7 +614,6 @@ async def test_account_lockout_emits_log(
 # ===========================================================================
 
 
-@pytest.mark.anyio
 async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> None:
     """DELETE /auth/passkeys/{id} must emit a passkey_deleted/success event."""
     user = UserClaims(
@@ -777,7 +776,6 @@ async def test_admin_token_generation_emits_log(
 # ===========================================================================
 
 
-@pytest.mark.anyio
 async def test_checkin_token_generation_emits_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
