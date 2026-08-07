@@ -137,7 +137,6 @@ async def _seed_type(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_session_types_includes_colour_field_when_none(type_repo) -> None:
     """GET /session-types must include colour: null for a type with no colour set."""
     await _seed_type(type_repo, name="Keiko")
@@ -152,7 +151,6 @@ async def test_list_session_types_includes_colour_field_when_none(type_repo) -> 
     assert data[0]["colour"] is None
 
 
-@pytest.mark.anyio
 async def test_list_session_types_returns_colour_when_set(type_repo) -> None:
     """GET /session-types must return the stored hex colour string after it has been set.
 
@@ -181,7 +179,6 @@ async def test_list_session_types_returns_colour_when_set(type_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_session_type_colour_succeeds_for_admin(type_repo) -> None:
     """PUT /session-types/{id} with a valid hex colour must return 200 and the updated record."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -197,7 +194,6 @@ async def test_put_session_type_colour_succeeds_for_admin(type_repo) -> None:
     assert body["colour"] == "#3498db"
 
 
-@pytest.mark.anyio
 async def test_put_session_type_colour_persisted_on_get(type_repo) -> None:
     """After PUT /session-types/{id}, GET /session-types must reflect the new colour."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -214,7 +210,6 @@ async def test_put_session_type_colour_persisted_on_get(type_repo) -> None:
     assert matching[0]["colour"] == "#e74c3c"
 
 
-@pytest.mark.anyio
 async def test_put_session_type_colour_not_found(type_repo) -> None:
     """PUT /session-types/{id} with an unknown id must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -226,7 +221,6 @@ async def test_put_session_type_colour_not_found(type_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     """PUT /session-types/{id} must return 403 for a non-admin user."""
     from app.auth.token import encode_token
@@ -247,7 +241,6 @@ async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_put_session_type_colour_null_clears_colour(type_repo) -> None:
     """PUT /session-types/{id} with colour: null must clear any existing colour."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override

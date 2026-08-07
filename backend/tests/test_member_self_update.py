@@ -159,7 +159,6 @@ def member_repo() -> StubMemberRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_my_member_returns_own_record(member_repo) -> None:
     """Happy path: authenticated member with a linked record gets 200."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -178,7 +177,6 @@ async def test_get_my_member_returns_own_record(member_repo) -> None:
     assert "id" in body
 
 
-@pytest.mark.anyio
 async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> None:
     """Member exists in auth but has no Member record yet."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -191,7 +189,6 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
     async with AsyncClient(
@@ -202,7 +199,6 @@ async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_get_my_member_response_schema(member_repo) -> None:
     """Response includes all expected MemberResponse fields for issue #158."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -239,7 +235,6 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 
-@pytest.mark.anyio
 async def test_get_my_member_only_returns_own_record(member_repo) -> None:
     """Endpoint resolves by claims.sub, not a URL parameter."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -260,7 +255,6 @@ async def test_get_my_member_only_returns_own_record(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_my_member_updates_first_name(member_repo) -> None:
     """PUT updates first_name and returns updated record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -278,7 +272,6 @@ async def test_put_my_member_updates_first_name(member_repo) -> None:
     assert response.json()["first_name"] == "UpdatedFirst"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_updates_surname(member_repo) -> None:
     """PUT updates surname and returns updated record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -296,7 +289,6 @@ async def test_put_my_member_updates_surname(member_repo) -> None:
     assert response.json()["surname"] == "UpdatedSurname"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_updates_display_name(member_repo) -> None:
     """PUT updates display_name and returns updated record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -314,7 +306,6 @@ async def test_put_my_member_updates_display_name(member_repo) -> None:
     assert response.json()["display_name"] == "Taro-san"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_updates_dob(member_repo) -> None:
     """PUT updates dob."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -336,7 +327,6 @@ async def test_put_my_member_updates_dob(member_repo) -> None:
     assert "is_minor" not in body
 
 
-@pytest.mark.anyio
 async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
     """PUT updates emergency contact fields."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -359,7 +349,6 @@ async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
     assert body["emergency_contact_phone"] == "+447700900999"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_update_persists(member_repo) -> None:
     """Change made via PUT is visible in subsequent GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -379,7 +368,6 @@ async def test_put_my_member_update_persists(member_repo) -> None:
     assert get_response.json()["first_name"] == "Persisted"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
     async with AsyncClient(
@@ -398,7 +386,6 @@ async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
     member_repo,
 ) -> None:
@@ -423,7 +410,6 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
         assert response.json()["is_coach"] is False
 
 
-@pytest.mark.anyio
 async def test_put_my_member_membership_status_is_rejected_or_ignored(
     member_repo,
 ) -> None:
@@ -446,7 +432,6 @@ async def test_put_my_member_membership_status_is_rejected_or_ignored(
         assert response.json()["membership_status"] == "active"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) -> None:
     """is_first_aider is an admin-only field."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -470,7 +455,6 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_my_member_creates_record_when_none_exists(member_repo) -> None:
     """First-save onboarding: PUT creates a new Member linked to claims.sub."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -496,7 +480,6 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
     assert body["surname"] == "New"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
     """A record created via PUT is immediately retrievable via GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -528,7 +511,6 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_my_member_display_name_only_preserves_first_and_surname(
     member_repo,
 ) -> None:
@@ -551,7 +533,6 @@ async def test_put_my_member_display_name_only_preserves_first_and_surname(
     assert body["surname"] == "Yamada"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_omitting_dob_preserves_existing_dob(
     member_repo,
 ) -> None:
@@ -577,7 +558,6 @@ async def test_put_my_member_omitting_dob_preserves_existing_dob(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_clears_emergency_contact_phone(
     member_repo,
 ) -> None:
@@ -597,7 +577,6 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_phone(
     assert response.json()["emergency_contact_phone"] is None
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) -> None:
     """A cleared field via explicit null stays cleared on a subsequent GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -620,7 +599,6 @@ async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) ->
     assert get_response.json()["emergency_contact_phone"] is None
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_clears_display_name(member_repo) -> None:
     """An explicit JSON null for display_name must clear the stored value."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -638,7 +616,6 @@ async def test_put_my_member_explicit_null_clears_display_name(member_repo) -> N
     assert response.json()["display_name"] is None
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_clears_emergency_contact_name(
     member_repo,
 ) -> None:
@@ -658,7 +635,6 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_name(
     assert response.json()["emergency_contact_name"] is None
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
     """An explicit JSON null for dob must clear the stored date of birth.
 
@@ -681,7 +657,6 @@ async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
     assert response.json()["dob"] is None
 
 
-@pytest.mark.anyio
 async def test_put_my_member_omitted_emergency_contact_name_untouched(
     member_repo,
 ) -> None:
@@ -701,7 +676,6 @@ async def test_put_my_member_omitted_emergency_contact_name_untouched(
     assert response.json()["emergency_contact_name"] == "Emergency Contact"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
     member_repo,
 ) -> None:
@@ -727,7 +701,6 @@ async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
     assert body["display_name"] == "Taro-san"
 
 
-@pytest.mark.anyio
 async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
     member_repo,
 ) -> None:

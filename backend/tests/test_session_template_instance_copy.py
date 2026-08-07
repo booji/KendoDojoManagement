@@ -231,7 +231,6 @@ def test_generate_instances_deep_copies_segments() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_multi_segment_template_generates_faithful_copy(
     _wire_overrides: dict[str, Any],
 ) -> None:
@@ -287,7 +286,6 @@ async def test_multi_segment_template_generates_faithful_copy(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_editing_instance_leaves_template_and_siblings_unchanged(
     _wire_overrides: dict[str, Any],
 ) -> None:
@@ -356,7 +354,6 @@ async def test_editing_instance_leaves_template_and_siblings_unchanged(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_recurrence_stays_at_template_level(
     _wire_overrides: dict[str, Any],
 ) -> None:

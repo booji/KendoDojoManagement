@@ -220,7 +220,6 @@ def grade_repo() -> StubGradeRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_gets_pending_entries_across_members(
     member_repo, grade_repo
 ) -> None:
@@ -286,7 +285,6 @@ async def test_admin_gets_pending_entries_across_members(
         assert not missing, f"Missing fields in response: {missing}"
 
 
-@pytest.mark.anyio
 async def test_pending_response_includes_promoted_at(member_repo, grade_repo) -> None:
     """AC1: Each pending entry includes promoted_at (or null when not provided)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -316,7 +314,6 @@ async def test_pending_response_includes_promoted_at(member_repo, grade_repo) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_non_admin_member_gets_403(member_repo, grade_repo) -> None:
     """AC2: A non-admin member calling GET /grades/pending receives 403."""
     app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
@@ -337,7 +334,6 @@ async def test_non_admin_member_gets_403(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_unauthenticated_gets_401_or_403(member_repo, grade_repo) -> None:
     """AC3: Unauthenticated request to GET /grades/pending returns 401 or 403.
 
@@ -359,7 +355,6 @@ async def test_unauthenticated_gets_401_or_403(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_empty_list_when_no_pending_entries(member_repo, grade_repo) -> None:
     """AC4: GET /grades/pending returns [] (not an error) when no pending entries exist."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -386,7 +381,6 @@ async def test_empty_list_when_no_pending_entries(member_repo, grade_repo) -> No
     assert items == [], f"Expected empty list, got {items}"
 
 
-@pytest.mark.anyio
 async def test_empty_list_when_no_entries_at_all(member_repo, grade_repo) -> None:
     """AC4: GET /grades/pending returns [] when there are no grade entries at all."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -405,7 +399,6 @@ async def test_empty_list_when_no_entries_at_all(member_repo, grade_repo) -> Non
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_only_pending_entries_returned(member_repo, grade_repo) -> None:
     """AC5: GET /grades/pending filters to only status==pending; confirmed excluded."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override

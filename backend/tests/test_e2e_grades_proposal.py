@@ -1,7 +1,5 @@
 import pytest
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.mark.xfail(strict=True, reason="e2e not yet implemented")
 async def test_submit_grade_button_visible_on_own_page():

@@ -2,6 +2,19 @@
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# anyio ships a pytest plugin (it arrives transitively via httpx/starlette) that
+# claims any test carrying @pytest.mark.anyio and runs it in an event loop of
+# its own making. That loop is not the function-scoped loop pytest-asyncio
+# builds for async fixtures, so a test combining the two gets a connection
+# created on one loop and awaited on another:
+#
+#   RuntimeError: Task ... got Future ... attached to a different loop
+#
+# which is exactly how the two db_session-backed tests in test_erasure.py
+# failed deterministically (#282). asyncio_mode = "auto" already drives every
+# async test through pytest-asyncio, so the anyio plugin is redundant as well
+# as harmful — disable it and let one plugin own the loop.
+addopts = "-p no:anyio"
 
 [tool.ruff]
 line-length = 88

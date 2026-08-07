@@ -204,7 +204,6 @@ def report_repo() -> StubReportRepository:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_attendance_report_returns_sessions_in_range(
     report_repo: StubReportRepository,
 ) -> None:
@@ -235,7 +234,6 @@ async def test_attendance_report_returns_sessions_in_range(
     assert s2["id"] in session_ids
 
 
-@pytest.mark.anyio
 async def test_attendance_report_excludes_sessions_outside_range(
     report_repo: StubReportRepository,
 ) -> None:
@@ -260,7 +258,6 @@ async def test_attendance_report_excludes_sessions_outside_range(
     assert sessions[0]["session_id"] == in_range["id"]
 
 
-@pytest.mark.anyio
 async def test_attendance_report_includes_headcount(
     report_repo: StubReportRepository,
 ) -> None:
@@ -287,7 +284,6 @@ async def test_attendance_report_includes_headcount(
     assert session_entry["headcount"] == 3
 
 
-@pytest.mark.anyio
 async def test_attendance_report_includes_member_rates(
     report_repo: StubReportRepository,
 ) -> None:
@@ -324,7 +320,6 @@ async def test_attendance_report_includes_member_rates(
     assert rates_by_member["member-2"]["attendance_rate"] == 0.5
 
 
-@pytest.mark.anyio
 async def test_attendance_report_missing_date_params_returns_422(
     report_repo: StubReportRepository,
 ) -> None:
@@ -344,7 +339,6 @@ async def test_attendance_report_missing_date_params_returns_422(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_members_report_returns_all_members(
     report_repo: StubReportRepository,
 ) -> None:
@@ -371,7 +365,6 @@ async def test_members_report_returns_all_members(
         assert "current_grade" in entry
 
 
-@pytest.mark.anyio
 async def test_members_report_current_grade_none_when_no_history(
     report_repo: StubReportRepository,
 ) -> None:
@@ -390,7 +383,6 @@ async def test_members_report_current_grade_none_when_no_history(
     assert entry["current_grade"] is None
 
 
-@pytest.mark.anyio
 async def test_members_report_shows_current_grade(
     report_repo: StubReportRepository,
 ) -> None:
@@ -416,7 +408,6 @@ async def test_members_report_shows_current_grade(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_attendance_csv_content_type(
     report_repo: StubReportRepository,
 ) -> None:
@@ -436,7 +427,6 @@ async def test_attendance_csv_content_type(
     assert "text/csv" in response.headers["content-type"]
 
 
-@pytest.mark.anyio
 async def test_attendance_csv_has_correct_columns(
     report_repo: StubReportRepository,
 ) -> None:
@@ -462,7 +452,6 @@ async def test_attendance_csv_has_correct_columns(
     assert "headcount" in header
 
 
-@pytest.mark.anyio
 async def test_members_csv_content_type(
     report_repo: StubReportRepository,
 ) -> None:
@@ -479,7 +468,6 @@ async def test_members_csv_content_type(
     assert "text/csv" in response.headers["content-type"]
 
 
-@pytest.mark.anyio
 async def test_members_csv_has_correct_columns(
     report_repo: StubReportRepository,
 ) -> None:
@@ -508,7 +496,6 @@ async def test_members_csv_has_correct_columns(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_attendance_report_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
@@ -523,7 +510,6 @@ async def test_attendance_report_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_attendance_report_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
@@ -539,7 +525,6 @@ async def test_attendance_report_member_returns_403(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_members_report_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
@@ -551,7 +536,6 @@ async def test_members_report_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_members_report_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
@@ -566,7 +550,6 @@ async def test_members_report_member_returns_403(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_attendance_csv_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
@@ -581,7 +564,6 @@ async def test_attendance_csv_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_members_csv_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:

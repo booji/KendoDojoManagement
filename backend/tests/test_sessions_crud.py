@@ -252,7 +252,6 @@ async def _seed_instance(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_session_instance_not_found(instance_repo) -> None:
     """GET /sessions/{id} must return 404 when the ID is unknown."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -269,7 +268,6 @@ async def test_get_session_instance_not_found(instance_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_session_instance_admin_sees_coach_notes(instance_repo) -> None:
     """Admin GET /sessions/{id} must include the real coach_notes value."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -284,7 +282,6 @@ async def test_get_session_instance_admin_sees_coach_notes(instance_repo) -> Non
     assert body["coach_notes"] == "Focus on men-uchi today"
 
 
-@pytest.mark.anyio
 async def test_get_session_instance_member_sees_null_coach_notes(
     instance_repo,
 ) -> None:
@@ -307,7 +304,6 @@ async def test_get_session_instance_member_sees_null_coach_notes(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_session_instance_updates_target_only(
     template_repo, instance_repo
 ) -> None:
@@ -354,7 +350,6 @@ async def test_put_session_instance_updates_target_only(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_patch_template_regenerates_future_instances(
     template_repo, instance_repo
 ) -> None:
@@ -397,7 +392,6 @@ async def test_patch_template_regenerates_future_instances(
     assert len(future_for_tmpl) >= 1, "Regenerated instances must exist after PATCH"
 
 
-@pytest.mark.anyio
 async def test_patch_template_leaves_past_instances_untouched(
     template_repo, instance_repo
 ) -> None:
@@ -438,7 +432,6 @@ async def test_patch_template_leaves_past_instances_untouched(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_template_cancels_future_instances(
     template_repo, instance_repo
 ) -> None:
@@ -464,7 +457,6 @@ async def test_delete_template_cancels_future_instances(
     assert updated["cancelled"] is True, "Future instance must be cancelled"
 
 
-@pytest.mark.anyio
 async def test_delete_template_deactivates_template(
     template_repo, instance_repo
 ) -> None:

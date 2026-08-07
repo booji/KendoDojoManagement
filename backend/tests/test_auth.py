@@ -15,7 +15,6 @@ def clear_overrides():
 # ── Password routes removed — must return 404 ────────────────────────────────
 
 
-@pytest.mark.anyio
 async def test_register_password_route_returns_404() -> None:
     """POST /auth/register/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
@@ -28,7 +27,6 @@ async def test_register_password_route_returns_404() -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_login_password_route_returns_404() -> None:
     """POST /auth/login/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
@@ -44,7 +42,6 @@ async def test_login_password_route_returns_404() -> None:
 # ── Route protection ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.anyio
 async def test_protected_route_no_token_returns_401() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -53,7 +50,6 @@ async def test_protected_route_no_token_returns_401() -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_protected_route_member_token_succeeds() -> None:
     claims = UserClaims(
         sub="uuid-1", email="m@dojo.test", role="member", is_active=True
@@ -67,7 +63,6 @@ async def test_protected_route_member_token_succeeds() -> None:
     assert response.json()["email"] == "m@dojo.test"
 
 
-@pytest.mark.anyio
 async def test_admin_route_rejects_member_token() -> None:
     from app.auth.token import encode_token
 
@@ -82,7 +77,6 @@ async def test_admin_route_rejects_member_token() -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_admin_route_accepts_admin_token() -> None:
     claims = UserClaims(sub="uuid-3", email="a@dojo.test", role="admin", is_active=True)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims

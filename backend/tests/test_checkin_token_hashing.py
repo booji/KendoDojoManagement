@@ -455,7 +455,6 @@ def http_token_repo() -> _HashingStubCheckinTokenRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_checkin_via_valid_token_returns_200(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,
@@ -484,7 +483,6 @@ async def test_http_checkin_via_valid_token_returns_200(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_checkin_via_wrong_token_returns_401(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,
@@ -511,7 +509,6 @@ async def test_http_checkin_via_wrong_token_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_second_checkin_via_same_token_returns_409(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,

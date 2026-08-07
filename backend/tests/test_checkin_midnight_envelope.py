@@ -173,7 +173,6 @@ def test_envelope_datetimes_same_day_unchanged() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_checkin_past_midnight_envelope_does_not_500(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,

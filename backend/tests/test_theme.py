@@ -153,7 +153,6 @@ async def test_patch_theme_invalid_value_returns_422(db_client) -> None:
 # ── PATCH /auth/me/theme — unauthenticated ────────────────────────────────────
 
 
-@pytest.mark.anyio
 async def test_patch_theme_without_auth_returns_401() -> None:
     """Calling PATCH /auth/me/theme without a token must return 401."""
     async with AsyncClient(
@@ -167,7 +166,6 @@ async def test_patch_theme_without_auth_returns_401() -> None:
 # ── GET /auth/me — theme field present in UserClaims ─────────────────────────
 
 
-@pytest.mark.anyio
 async def test_get_me_includes_theme_field() -> None:
     """GET /auth/me must return a 'theme' field in the UserClaims payload."""
     claims = UserClaims(
@@ -190,7 +188,6 @@ async def test_get_me_includes_theme_field() -> None:
     assert body["theme"] == "system"
 
 
-@pytest.mark.anyio
 async def test_get_me_theme_defaults_to_system() -> None:
     """When no theme is stored, GET /auth/me must default to 'system'."""
     # UserClaims without explicit theme — default must be 'system'

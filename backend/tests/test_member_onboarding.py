@@ -137,7 +137,6 @@ def empty_member_repo() -> StubMemberRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_first_save_missing_first_name_returns_422(empty_member_repo) -> None:
     """PUT with surname + dob but no first_name must return 422 on first-save."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -160,7 +159,6 @@ async def test_first_save_missing_first_name_returns_422(empty_member_repo) -> N
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_first_save_missing_surname_returns_422(empty_member_repo) -> None:
     """PUT with first_name + dob but no surname must return 422 on first-save."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -183,7 +181,6 @@ async def test_first_save_missing_surname_returns_422(empty_member_repo) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_first_save_missing_dob_returns_422(empty_member_repo) -> None:
     """PUT with first_name + surname but no dob must return 422 on first-save."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -206,7 +203,6 @@ async def test_first_save_missing_dob_returns_422(empty_member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_first_save_with_required_fields_only_succeeds(empty_member_repo) -> None:
     """PUT with first_name + surname + dob (no emergency contact, no display_name)
     must succeed on first-save."""
@@ -240,7 +236,6 @@ async def test_first_save_with_required_fields_only_succeeds(empty_member_repo) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_first_save_explicit_null_first_name_returns_422(
     empty_member_repo,
 ) -> None:
@@ -261,7 +256,6 @@ async def test_first_save_explicit_null_first_name_returns_422(
     )
 
 
-@pytest.mark.anyio
 async def test_first_save_explicit_null_surname_returns_422(
     empty_member_repo,
 ) -> None:
@@ -282,7 +276,6 @@ async def test_first_save_explicit_null_surname_returns_422(
     )
 
 
-@pytest.mark.anyio
 async def test_first_save_explicit_null_dob_returns_422(empty_member_repo) -> None:
     """PUT with dob explicitly null (first_name + surname present) is still 422.
 

@@ -81,7 +81,6 @@ def prefs_repo() -> StubUserPrefsRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_preferences_returns_system_when_no_preference(prefs_repo) -> None:
     """A user with no saved theme preference gets {"theme": "system"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -95,7 +94,6 @@ async def test_get_preferences_returns_system_when_no_preference(prefs_repo) -> 
     assert response.json() == {"theme": "system"}
 
 
-@pytest.mark.anyio
 async def test_get_preferences_response_has_theme_key(prefs_repo) -> None:
     """Response body always contains the 'theme' key."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -113,7 +111,6 @@ async def test_get_preferences_response_has_theme_key(prefs_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_preferences_dark_persists_and_returns_dark(prefs_repo) -> None:
     """PUT {"theme": "dark"} returns 200 with {"theme": "dark"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -127,7 +124,6 @@ async def test_put_preferences_dark_persists_and_returns_dark(prefs_repo) -> Non
     assert response.json() == {"theme": "dark"}
 
 
-@pytest.mark.anyio
 async def test_put_preferences_light_persists_and_returns_light(prefs_repo) -> None:
     """PUT {"theme": "light"} returns 200 with {"theme": "light"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -141,7 +137,6 @@ async def test_put_preferences_light_persists_and_returns_light(prefs_repo) -> N
     assert response.json() == {"theme": "light"}
 
 
-@pytest.mark.anyio
 async def test_put_preferences_persisted_value_visible_in_subsequent_get(
     prefs_repo,
 ) -> None:
@@ -162,7 +157,6 @@ async def test_put_preferences_persisted_value_visible_in_subsequent_get(
     assert response.json() == {"theme": "dark"}
 
 
-@pytest.mark.anyio
 async def test_put_preferences_overwrites_previous_value(prefs_repo) -> None:
     """A second PUT overwrites the first preference."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -181,7 +175,6 @@ async def test_put_preferences_overwrites_previous_value(prefs_repo) -> None:
     assert response.json() == {"theme": "dark"}
 
 
-@pytest.mark.anyio
 async def test_put_preferences_system_round_trips(prefs_repo) -> None:
     """PUT {"theme": "system"} returns {"theme": "system"}."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -200,7 +193,6 @@ async def test_put_preferences_system_round_trips(prefs_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_preferences_invalid_theme_returns_422(prefs_repo) -> None:
     """An unrecognised theme value must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -213,7 +205,6 @@ async def test_put_preferences_invalid_theme_returns_422(prefs_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_preferences_empty_theme_returns_422(prefs_repo) -> None:
     """An empty string theme must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -226,7 +217,6 @@ async def test_put_preferences_empty_theme_returns_422(prefs_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_preferences_missing_theme_key_returns_422(prefs_repo) -> None:
     """A payload missing the 'theme' key must be rejected with 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -244,7 +234,6 @@ async def test_put_preferences_missing_theme_key_returns_422(prefs_repo) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     """No credentials → 401 on GET."""
     async with AsyncClient(
@@ -260,7 +249,6 @@ async def test_get_preferences_unauthenticated_returns_401(prefs_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     """No credentials → 401 on PUT."""
     async with AsyncClient(

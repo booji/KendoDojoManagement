@@ -321,7 +321,6 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
     assert delta_after > timedelta(minutes=0)
 
 
-@pytest.mark.anyio
 async def test_non_admin_cannot_generate_admin_token() -> None:
     """POST /auth/recovery/admin-token returns 403 for a member-role token."""
     from app.auth.token import encode_token
@@ -344,7 +343,6 @@ async def test_non_admin_cannot_generate_admin_token() -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_unauthenticated_cannot_generate_admin_token() -> None:
     """POST /auth/recovery/admin-token returns 401 with no token."""
     async with AsyncClient(
@@ -640,7 +638,6 @@ async def test_used_admin_token_is_rejected(db_client) -> None:
     assert r.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_non_admin_cannot_call_generate_endpoint() -> None:
     """Unit: member-role token → 403 on POST /auth/recovery/admin-token."""
     from app.auth.token import encode_token

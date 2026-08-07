@@ -78,7 +78,6 @@ def settings_repo() -> StubDojoSettingsRepository:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_branding_reachable_without_authentication(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -91,7 +90,6 @@ async def test_get_branding_reachable_without_authentication(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_get_branding_always_includes_primary_colour(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -107,7 +105,6 @@ async def test_get_branding_always_includes_primary_colour(
     assert body["primary_colour"]
 
 
-@pytest.mark.anyio
 async def test_get_branding_hides_dojo_name_when_login_show_name_off(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -125,7 +122,6 @@ async def test_get_branding_hides_dojo_name_when_login_show_name_off(
     assert "Secret Dojo" not in response.text
 
 
-@pytest.mark.anyio
 async def test_get_branding_hides_logo_when_login_show_logo_off(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -145,7 +141,6 @@ async def test_get_branding_hides_logo_when_login_show_logo_off(
     assert "secret.png" not in response.text
 
 
-@pytest.mark.anyio
 async def test_get_branding_hides_background_when_login_show_background_off(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -168,7 +163,6 @@ async def test_get_branding_hides_background_when_login_show_background_off(
     assert "secret.jpg" not in response.text
 
 
-@pytest.mark.anyio
 async def test_get_branding_shows_assets_when_toggles_on(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -215,7 +209,6 @@ _GIF_BYTES = b"GIF89a" + b"\x00" * 32
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_post_background_member_returns_403(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -232,7 +225,6 @@ async def test_post_background_member_returns_403(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_post_background_unauthenticated_returns_401(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -248,7 +240,6 @@ async def test_post_background_unauthenticated_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_post_background_rejects_non_image_mime_type(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -266,7 +257,6 @@ async def test_post_background_rejects_non_image_mime_type(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_background_accepts_png(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -286,7 +276,6 @@ async def test_post_background_accepts_png(
     assert body["background_image_url"].startswith("/static/backgrounds/")
 
 
-@pytest.mark.anyio
 async def test_post_background_accepts_jpeg(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -304,7 +293,6 @@ async def test_post_background_accepts_jpeg(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_post_background_accepts_webp(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -322,7 +310,6 @@ async def test_post_background_accepts_webp(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_post_background_accepts_gif(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -340,7 +327,6 @@ async def test_post_background_accepts_gif(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_post_background_rejects_files_over_5mb_cap(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -359,7 +345,6 @@ async def test_post_background_rejects_files_over_5mb_cap(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_post_background_accepts_file_at_exactly_5mb(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -378,7 +363,6 @@ async def test_post_background_accepts_file_at_exactly_5mb(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_post_background_success_persists_background_image_url(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -409,7 +393,6 @@ async def test_post_background_success_persists_background_image_url(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_login_show_name_toggle(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -428,7 +411,6 @@ async def test_put_dojo_settings_persists_login_show_name_toggle(
     assert response.json()["login_show_name"] is False
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_login_show_logo_toggle(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -447,7 +429,6 @@ async def test_put_dojo_settings_persists_login_show_logo_toggle(
     assert response.json()["login_show_logo"] is False
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_login_show_background_toggle(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -466,7 +447,6 @@ async def test_put_dojo_settings_persists_login_show_background_toggle(
     assert response.json()["login_show_background"] is True
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_background_image_url(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -485,7 +465,6 @@ async def test_put_dojo_settings_persists_background_image_url(
     assert response.json()["background_image_url"] == "/static/backgrounds/manual.png"
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_null_background_image_url_clears_it(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -510,7 +489,6 @@ async def test_put_dojo_settings_null_background_image_url_clears_it(
     assert get_resp.json()["background_image_url"] is None
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_toggles_member_returns_403(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -532,7 +510,6 @@ async def test_put_dojo_settings_toggles_member_returns_403(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_member_only(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -545,7 +522,6 @@ async def test_get_dojo_settings_member_only(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_returns_raw_background_and_toggles(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -573,7 +549,6 @@ async def test_get_dojo_settings_returns_raw_background_and_toggles(
     assert body["login_show_background"] is True
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_raw_fields_present_regardless_of_toggle_state(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:
@@ -600,7 +575,6 @@ async def test_get_dojo_settings_raw_fields_present_regardless_of_toggle_state(
     assert body["logo_url"] == "/static/logos/admin-visible.png"
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_default_toggles(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:

@@ -224,7 +224,6 @@ def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
     )
 
 
-@pytest.mark.anyio
 async def test_erase_as_non_admin_returns_403() -> None:
     from app.auth.token import encode_token
 
@@ -239,7 +238,6 @@ async def test_erase_as_non_admin_returns_403() -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_erase_unauthenticated_returns_401() -> None:
     _override_member_repo({"member-1": _member()})
     async with AsyncClient(
@@ -249,7 +247,6 @@ async def test_erase_unauthenticated_returns_401() -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_erase_member_not_archived_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
@@ -263,7 +260,6 @@ async def test_erase_member_not_archived_returns_409() -> None:
     assert "archived" in response.json()["detail"].lower()
 
 
-@pytest.mark.anyio
 async def test_erase_self_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
@@ -278,7 +274,6 @@ async def test_erase_self_returns_409() -> None:
     assert "self" in detail or "yourself" in detail
 
 
-@pytest.mark.anyio
 async def test_erase_missing_member_returns_404() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo({})
@@ -325,7 +320,6 @@ class _DbSessionUnitOfWork:
         return None
 
 
-@pytest.mark.anyio
 async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     db_session: AsyncSession,
 ) -> None:
@@ -546,7 +540,6 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     assert actor_count == 1
 
 
-@pytest.mark.anyio
 async def test_list_search_tolerates_erased_member_with_null_email(
     db_session: AsyncSession,
 ) -> None:
