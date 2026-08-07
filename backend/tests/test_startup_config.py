@@ -1,5 +1,6 @@
 """
-Red-phase tests for Issue #269 — remove SQLite, fail closed on production-shaped
+Red-phase tests for Issue #269 — remove the legacy embedded-file DB driver,
+fail closed on production-shaped
 config defaults.
 
 `app.config.validate_startup_config()` already exists (added for Issue #256,
@@ -8,13 +9,9 @@ validation entry point invoked from `app.main.lifespan` before any DB or
 network I/O. This file extends that same entry point with two more checks it
 does not yet perform:
 
-1. DATABASE_URL must be set to a non-blank value. Today `app/config.py`
-   supplies a SQLite fallback default
-   (`os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./kendo.db")`), so an
-   unset DATABASE_URL currently boots the app against a throwaway local
-   SQLite file instead of failing fast. Once the fallback is removed (green
-   phase, backend agent), a blank DATABASE_URL must be caught here exactly
-   like JWT_SECRET is today.
+1. DATABASE_URL must be set to a non-blank value. `app/config.py` has no
+   fallback default, so an unset DATABASE_URL must be caught here exactly
+   like JWT_SECRET is today, rather than booting against nothing.
 
 2. In a production deployment (signalled by the explicit `APP_ENV=production`
    environment variable — never inferred from `COOKIE_SECURE` or any other
@@ -35,7 +32,6 @@ existing "app still boots against Postgres" coverage that runs on every full
 import pytest
 
 import app.config as config
-
 
 # ---------------------------------------------------------------------------
 # DATABASE_URL — must be set, non-blank

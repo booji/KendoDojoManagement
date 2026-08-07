@@ -41,7 +41,7 @@ class SqlAdminDirectory:
         # erasures serialise: two admins erasing each other's linked member at
         # once must not both observe the pre-delete count and drop the dojo to
         # zero admins. FOR UPDATE cannot combine with an aggregate, so we lock
-        # the rows and count them in Python. No-op lock on SQLite (dev).
+        # the rows and count them in Python.
         result = await self._session.execute(
             select(User.id)
             .where(User.role == "admin", User.is_active.is_(True))

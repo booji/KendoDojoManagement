@@ -2,7 +2,11 @@
 
 Uses a mix of:
 - Direct model-field checks (will fail with ImportError until model exists)
-- DB-backed integration tests via db_client fixture (will fail with 404 until route exists)
+- DB-backed integration tests via db_client fixture (own NullPool engine
+  against the shared PostgreSQL test database, real commits -- needed since
+  several tests exercise rate-limit counters across multiple independent
+  HTTP requests, each opening its own session via get_uow) (will fail with
+  404 until route exists)
 - Stub-based tests for route guard behaviour
 
 Acceptance criteria exercised:
@@ -23,20 +27,20 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import delete, insert, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import RecoveryCode, User
+from app.auth.db_models import RecoveryAttempt, RecoveryCode, User
 from app.auth.models import UserClaims
-from app.db.base import Base
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
 
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+_TEST_EMAIL = "musashi@dojo.test"
 
 _USER = UserClaims(
-    sub=str(uuid.uuid4()), email="musashi@dojo.test", role="member", is_active=True
+    sub=str(uuid.uuid4()), email=_TEST_EMAIL, role="member", is_active=True
 )
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -48,25 +52,44 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-async def _engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
+async def _wipe_test_email(engine) -> None:
+    """Delete any leftover row for _TEST_EMAIL and its dependents.
+
+    Every test in this file seeds the same literal email (several assertions
+    depend on that literal appearing in request/response bodies), and this
+    fixture commits for real against the shared PostgreSQL test database (no
+    savepoint rollback -- several tests need real cross-request commits to
+    exercise rate-limit counters). Without this, the second test to seed
+    that email hits a unique-constraint violation.
+    """
+    async with AsyncSession(engine) as session:
+        result = await session.execute(select(User.id).where(User.email == _TEST_EMAIL))
+        user_ids = [row[0] for row in result.all()]
+        if user_ids:
+            await session.execute(
+                delete(RecoveryAttempt).where(RecoveryAttempt.user_id.in_(user_ids))
+            )
+            await session.execute(
+                delete(RecoveryCode).where(RecoveryCode.user_id.in_(user_ids))
+            )
+            await session.execute(delete(User).where(User.id.in_(user_ids)))
+            await session.commit()
 
 
 @pytest.fixture
-async def db_client(_engine):
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
+async def db_client(database_url: str):
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def _override():
         async with SQLAlchemyUnitOfWork(factory) as uow:
             yield uow
 
+    await _wipe_test_email(engine)
     app.dependency_overrides[get_uow] = _override
-    yield _engine
+    yield engine
+    await _wipe_test_email(engine)
+    await engine.dispose()
 
 
 async def _seed_user(engine, email: str, user_id: str) -> None:
@@ -160,7 +183,7 @@ def test_recovery_attempt_model_has_success_field() -> None:
 # ── AC2 — POST /auth/recovery/redeem returns restricted JWT ────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_valid_code_returns_200(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -178,7 +201,7 @@ async def test_redeem_valid_code_returns_200(db_client) -> None:
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -197,7 +220,7 @@ async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     assert "access_token" in body
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_token_has_recovery_session_claim(db_client) -> None:
     """Returned JWT must carry recovery_session: true."""
     from joserfc import jwt
@@ -225,7 +248,7 @@ async def test_redeem_token_has_recovery_session_claim(db_client) -> None:
     assert decoded.claims.get("recovery_session") is True
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_token_expires_in_15_minutes(db_client) -> None:
     """Returned JWT must expire in approximately 15 minutes."""
     from joserfc import jwt
@@ -259,7 +282,7 @@ async def test_redeem_token_expires_in_15_minutes(db_client) -> None:
 # ── AC3 — Route guard blocks recovery JWT on regular endpoints ─────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> None:
     """GET /auth/me with a recovery JWT should return 403."""
     from app.auth.token import encode_recovery_token  # red — doesn't exist yet
@@ -278,7 +301,7 @@ async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> Non
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_recovery_token_blocked_on_members_list(db_client) -> None:
     """GET /members with a recovery JWT should return 403."""
     from app.auth.token import encode_recovery_token  # red
@@ -300,7 +323,7 @@ async def test_recovery_token_blocked_on_members_list(db_client) -> None:
 # ── AC5 — Used code rejected with 401 ─────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_used_code_returns_401(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -318,7 +341,7 @@ async def test_redeem_used_code_returns_401(db_client) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_wrong_code_returns_401(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -338,7 +361,7 @@ async def test_redeem_wrong_code_returns_401(db_client) -> None:
 # ── AC6 — 5 failures → 429 ────────────────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_fifth_failed_attempt_returns_429(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -356,7 +379,7 @@ async def test_fifth_failed_attempt_returns_429(db_client) -> None:
     assert response.status_code == 429
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_four_failures_still_allows_attempt(db_client) -> None:
     """3 prior failures: 4th attempt with valid code should succeed."""
     user_id = str(uuid.uuid4())
@@ -379,7 +402,7 @@ async def test_four_failures_still_allows_attempt(db_client) -> None:
 # ── AC7 — Attempts logged ──────────────────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_successful_redemption_logs_attempt(db_client) -> None:
     from app.auth.db_models import RecoveryAttempt  # red
 
@@ -406,7 +429,7 @@ async def test_successful_redemption_logs_attempt(db_client) -> None:
     assert attempts[0].success is True
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_failed_redemption_logs_attempt(db_client) -> None:
     from app.auth.db_models import RecoveryAttempt  # red
 
@@ -435,7 +458,7 @@ async def test_failed_redemption_logs_attempt(db_client) -> None:
 # ── AC9 — Unit behaviour ───────────────────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_valid_code_is_marked_used_after_redemption(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -458,7 +481,7 @@ async def test_valid_code_is_marked_used_after_redemption(db_client) -> None:
     assert row.used_at is not None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_wrong_code_increments_attempt_counter(db_client) -> None:
     from app.auth.db_models import RecoveryAttempt  # red
 
@@ -487,7 +510,7 @@ async def test_wrong_code_increments_attempt_counter(db_client) -> None:
     assert len(rows) == 2
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_successful_attempt_after_prior_failures_resets_counter(
     db_client,
 ) -> None:
@@ -526,7 +549,7 @@ async def test_successful_attempt_after_prior_failures_resets_counter(
         assert r.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_used_code_double_redemption_returns_401(db_client) -> None:
     """Redeeming the same valid code twice: second attempt returns 401."""
     user_id = str(uuid.uuid4())

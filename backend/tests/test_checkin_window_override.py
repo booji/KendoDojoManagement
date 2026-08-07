@@ -439,23 +439,7 @@ def test_session_instance_update_rejects_over_max_override_minutes(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-async def db_session():
-    """Clean in-memory SQLite AsyncSession with the full schema."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from app.db.base import Base
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
-
-
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_sql_session_instance_repo_get_returns_override_minutes(
     db_session,
 ) -> None:

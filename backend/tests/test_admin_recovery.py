@@ -1,7 +1,11 @@
 """Failing tests for issue #42 — Admin-issued recovery tokens.
 
-Uses DB-backed integration tests (sqlite in-memory) matching the pattern
-from test_recovery_redemption.py.
+Uses DB-backed integration tests against the shared PostgreSQL test database
+(via the `database_url` fixture, real commits, own NullPool engine) matching
+the pattern from test_recovery_redemption.py. This file's `db_client`
+fixture is local, not the savepoint-scoped one in conftest.py, because these
+tests need real cross-request commits (multiple HTTP requests each opening
+their own session via get_uow).
 
 Acceptance criteria exercised:
   AC1. admin_recovery_tokens table exists with correct fields
@@ -184,7 +188,7 @@ def test_admin_recovery_token_has_created_at_field() -> None:
 # ── AC2 — POST /auth/recovery/admin-token ─────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_can_generate_token_for_user(db_client) -> None:
     """POST /auth/recovery/admin-token (admin) returns plaintext token."""
     admin_id = str(uuid.uuid4())
@@ -208,7 +212,7 @@ async def test_admin_can_generate_token_for_user(db_client) -> None:
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     """Response body includes the plaintext token field."""
     admin_id = str(uuid.uuid4())
@@ -236,7 +240,7 @@ async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     assert len(body["token"]) > 8
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
     """Plaintext token must NOT be stored; only bcrypt hash is persisted."""
     from app.auth.db_models import AdminRecoveryToken  # red
@@ -273,7 +277,7 @@ async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
     assert row.token_hash.startswith("$2")  # bcrypt prefix
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_expires_in_60_minutes(db_client) -> None:
     """Generated admin token has an expiry approximately 60 minutes in the future."""
     from app.auth.db_models import AdminRecoveryToken  # red
@@ -354,7 +358,7 @@ async def test_unauthenticated_cannot_generate_admin_token() -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     """POST /auth/recovery/admin-token returns 404 when user_id doesn't exist."""
     admin_id = str(uuid.uuid4())
@@ -376,7 +380,7 @@ async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
     """POST /auth/recovery/admin-token returns 422 when user_id is absent."""
     admin_id = str(uuid.uuid4())
@@ -398,7 +402,7 @@ async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
 # ── AC3 — POST /auth/recovery/redeem accepts admin tokens ─────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
     """POST /auth/recovery/redeem succeeds with a valid admin-issued token."""
     target_id = str(uuid.uuid4())
@@ -417,7 +421,7 @@ async def test_redeem_valid_admin_token_returns_200(db_client) -> None:
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_valid_admin_token_returns_access_token(db_client) -> None:
     """Redeeming a valid admin token returns a JWT access token."""
     target_id = str(uuid.uuid4())
@@ -437,7 +441,7 @@ async def test_redeem_valid_admin_token_returns_access_token(db_client) -> None:
     assert "access_token" in body
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
     """After redemption, used_at is set on the admin token row."""
     from app.auth.db_models import AdminRecoveryToken  # red
@@ -463,7 +467,7 @@ async def test_redeem_valid_admin_token_marks_it_used(db_client) -> None:
     assert row.used_at is not None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
     """POST /auth/recovery/redeem rejects an expired admin token with 401."""
     target_id = str(uuid.uuid4())
@@ -483,7 +487,7 @@ async def test_redeem_expired_admin_token_returns_401(db_client) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_used_admin_token_returns_401(db_client) -> None:
     """POST /auth/recovery/redeem rejects an already-used admin token with 401."""
     target_id = str(uuid.uuid4())
@@ -502,7 +506,7 @@ async def test_redeem_used_admin_token_returns_401(db_client) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     """Redeeming the same admin token twice: second attempt returns 401."""
     target_id = str(uuid.uuid4())
@@ -529,7 +533,7 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
 # ── AC6 — 5-attempt lockout applies to admin token redemption ─────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     """After 4 prior failures, a 5th bad attempt at admin token redeem returns 429."""
     target_id = str(uuid.uuid4())
@@ -549,7 +553,7 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     assert response.status_code == 429
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None:
     """3 prior failures: 4th attempt with valid admin token should succeed."""
     target_id = str(uuid.uuid4())
@@ -572,7 +576,7 @@ async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None
 # ── AC7 — Unit coverage ────────────────────────────────────────────────────────
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
     """Unit: valid admin token → 200 + token row has used_at set."""
     from app.auth.db_models import AdminRecoveryToken  # red
@@ -597,7 +601,7 @@ async def test_valid_admin_token_redeems_and_is_marked_used(db_client) -> None:
     assert row.used_at is not None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_expired_admin_token_is_rejected(db_client) -> None:
     """Unit: expired admin token → 401."""
     target_id = str(uuid.uuid4())
@@ -617,7 +621,7 @@ async def test_expired_admin_token_is_rejected(db_client) -> None:
     assert r.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_used_admin_token_is_rejected(db_client) -> None:
     """Unit: already-used admin token → 401."""
     target_id = str(uuid.uuid4())

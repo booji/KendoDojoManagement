@@ -30,13 +30,13 @@ This is the default tier. Write unit tests here for all new routes and domain lo
 
 ### Tier 2 — PostgreSQL integration tests (container-backed)
 
-Use these when the test **must verify real SQL behaviour** — constraint enforcement, savepoint rollback, migration correctness, query semantics that SQLite doesn't emulate.
+Use these when the test **must verify real SQL behaviour** — constraint enforcement, savepoint rollback, migration correctness, query semantics.
 
 **Fixtures (defined in `conftest.py`):**
 
 | Fixture | Scope | What it provides |
 |---------|-------|-----------------|
-| `pg_engine` | session | `AsyncEngine` pointing at `DATABASE_URL` (PostgreSQL only — no SQLite fallback) |
+| `pg_engine` | session | `AsyncEngine` pointing at `DATABASE_URL` (PostgreSQL, required — no fallback) |
 | `db_session` | function | `AsyncSession` wrapped in a savepoint; rolled back after each test for isolation |
 
 `DATABASE_URL` is injected by the test container via `.env.test`:
@@ -77,7 +77,7 @@ async def test_member_persists(db_session: AsyncSession) -> None:
 - Testing a repository implementation against real SQL
 - Verifying DB constraints (unique, FK, not-null)
 - Testing migration correctness
-- Anything where SQLite's looser semantics would mask a bug
+- Anything where a stub's looser semantics would mask a real-SQL bug
 
 Do **not** use `db_session` for route-level tests — those belong in Tier 1 with stubs.
 

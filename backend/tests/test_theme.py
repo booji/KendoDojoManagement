@@ -7,38 +7,13 @@ The endpoint does not exist yet — all tests are expected to fail red
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
-from app.db.base import Base
-from app.db.unit_of_work import SQLAlchemyUnitOfWork
-from app.dependencies import get_uow
 from app.main import app
 
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.fixture
-async def _theme_engine():
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_theme_engine):
-    factory = async_sessionmaker(_theme_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _theme_engine
-    app.dependency_overrides.clear()
+# db_client (get_uow overridden onto the shared, savepoint-scoped db_session)
+# comes from conftest.py.
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +29,7 @@ def clear_overrides():
     strict=False,
     reason="POST /auth/register/password and /auth/login/password removed in issue #155",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_patch_theme_light_returns_200(db_client) -> None:
     """Setting theme to 'light' returns 200 with updated UserClaims."""
     async with AsyncClient(
@@ -87,7 +62,7 @@ async def test_patch_theme_light_returns_200(db_client) -> None:
     strict=False,
     reason="POST /auth/register/password and /auth/login/password removed in issue #155",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_patch_theme_dark_returns_200(db_client) -> None:
     """Setting theme to 'dark' returns 200 with updated UserClaims."""
     async with AsyncClient(
@@ -117,7 +92,7 @@ async def test_patch_theme_dark_returns_200(db_client) -> None:
     strict=False,
     reason="POST /auth/register/password and /auth/login/password removed in issue #155",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_patch_theme_system_returns_200(db_client) -> None:
     """Setting theme to 'system' returns 200 with updated UserClaims."""
     async with AsyncClient(
@@ -150,7 +125,7 @@ async def test_patch_theme_system_returns_200(db_client) -> None:
     strict=False,
     reason="POST /auth/register/password and /auth/login/password removed in issue #155",
 )
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_patch_theme_invalid_value_returns_422(db_client) -> None:
     """An unrecognised theme value ('purple') must be rejected with 422."""
     async with AsyncClient(
