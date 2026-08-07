@@ -8,12 +8,9 @@ anywhere in the repository, EXCEPT inside historical Alembic migrations
 changes and are excluded by design — rewriting them would falsify history
 for no benefit.
 
-This test is intentionally red right now: SQLite in-memory engines are still
-built directly in ~12 test files, `app/config.py` still defaults
-`DATABASE_URL` to a `sqlite+aiosqlite:///...` URL, CLAUDE.md still documents
-SQLite as the dev/test database, etc. Making it pass is the green-phase
-backend agent's job — migrating those test files to PostgreSQL fixtures is
-explicitly out of scope for this red-phase commit.
+It guards against the removal silently regressing: a reintroduced
+`sqlite+aiosqlite://` URL, a resurrected connect_args branch, or a doc that
+starts claiming SQLite is the dev database again all fail here.
 """
 
 import os
@@ -89,6 +86,10 @@ def _matching_files(repo_root: Path) -> list[str]:
             for noisy in (
                 "node_modules",
                 ".git",
+                # Agent worktrees are throwaway checkouts of other branches
+                # living inside the repo; their contents are not this
+                # codebase and must not be scanned.
+                "worktrees",
                 ".venv",
                 "venv",
                 "__pycache__",
