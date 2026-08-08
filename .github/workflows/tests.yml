@@ -1,9 +1,14 @@
 name: Tests
 
+# Single-developer repo: day-to-day changes are verified on-device, so the
+# suite is reserved for release candidates rather than every push or PR.
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags:
+      - 'v*-rc*'
+  release:
+    types: [prereleased, published]
+  workflow_dispatch:
 
 # Least privilege: the suite only ever needs to read the checked-out tree.
 permissions:
