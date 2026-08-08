@@ -32,6 +32,7 @@ from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
 from app.members.dependencies import get_member_repo
+from app.sessions.envelope import envelope_bounds
 from app.settings.dependencies import get_dojo_settings_repo
 
 # ---------------------------------------------------------------------------
@@ -99,14 +100,26 @@ class StubSessionInstanceRepo:
         record.update(data)
         return record
 
-    def seed(self, cancelled: bool = False) -> dict[str, Any]:
+    def seed(
+        self, cancelled: bool = False, now: datetime | None = None
+    ) -> dict[str, Any]:
+        """Seed a 30-minute session starting at ``now`` (defaults to real now).
+
+        The end time is emitted as raw hours-since-midnight relative to the
+        session's own date, with no 24-hour wrap — the same shape
+        ``session_time_envelope`` produces. A session seeded at 23:52 therefore
+        ends at "24:22", not "00:22", which would place the end 23.5 hours
+        before the start once ``envelope_bounds`` resolved it.
+        """
         new_id = str(uuid.uuid4())
-        now = datetime.now()
+        now = now or datetime.now()
+        start_minutes = now.hour * 60 + now.minute
+        end_minutes = start_minutes + 30
         record = {
             "id": new_id,
             "date": now.strftime("%Y-%m-%d"),
-            "start_time": now.strftime("%H:%M"),
-            "end_time": (now + timedelta(minutes=30)).strftime("%H:%M"),
+            "start_time": f"{start_minutes // 60:02d}:{start_minutes % 60:02d}",
+            "end_time": f"{end_minutes // 60:02d}:{end_minutes % 60:02d}",
             "cancelled": cancelled,
         }
         self._store[new_id] = record
@@ -335,6 +348,42 @@ async def test_member_can_checkin_to_session(
     assert body["member_id"] == _MEMBER.sub
     assert "checked_in_at" in body
     assert body["recorded_by"] == _MEMBER.sub
+
+
+@pytest.mark.parametrize(
+    ("hour", "minute", "expected_start", "expected_end"),
+    [
+        (19, 0, "19:00", "19:30"),
+        (23, 30, "23:30", "24:00"),
+        (23, 52, "23:52", "24:22"),
+        (23, 59, "23:59", "24:29"),
+    ],
+)
+def test_seeded_session_envelope_never_ends_before_it_starts(
+    session_repo: StubSessionInstanceRepo,
+    hour: int,
+    minute: int,
+    expected_start: str,
+    expected_end: str,
+) -> None:
+    """The stub must emit the non-wrapping end time production emits.
+
+    Regression for #277: seed() formatted the end with strftime, so a 23:52
+    start produced an end of "00:22" — a shape session_time_envelope never
+    emits. envelope_bounds resolved it to 23.5 hours *before* the start, the
+    window classified as CLOSED, and every check-in test failed with 403 for
+    any run started in the last half hour before midnight.
+    """
+    at = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+    session = session_repo.seed(cancelled=False, now=at)
+
+    assert session["start_time"] == expected_start
+    assert session["end_time"] == expected_end
+
+    start, end = envelope_bounds(
+        session["date"], session["start_time"], session["end_time"]
+    )
+    assert end - start == timedelta(minutes=30)
 
 
 async def test_unauthenticated_checkin_returns_401(
