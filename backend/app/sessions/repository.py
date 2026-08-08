@@ -68,13 +68,13 @@ class AbstractSessionInstanceRepository(Protocol):
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]: ...
 
-    async def latest_date_for_template(self, template_id: str) -> date | None: ...
-
     async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
 
     async def update(
         self, instance_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None: ...
+
+    async def delete(self, instance_id: str) -> dict[str, Any] | None: ...
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
@@ -126,6 +126,7 @@ def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
         "id": obj.id,
         "title": obj.title,
         "start_date": obj.start_date,
+        "end_date": obj.end_date,
         "start_time": start_time,
         "duration_minutes": duration_minutes,
         "recurrence": obj.recurrence,
@@ -441,16 +442,6 @@ class SqlSessionInstanceRepository:
         )
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
-    async def latest_date_for_template(self, template_id: str) -> date | None:
-        result = await self._session.execute(
-            select(SessionInstance.date).where(
-                SessionInstance.template_id == template_id,
-                SessionInstance.cancelled.is_(False),
-            )
-        )
-        dates = [date.fromisoformat(row) for row in result.scalars().all()]
-        return max(dates) if dates else None
-
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
         result = await self._session.execute(
             select(SessionInstance)
@@ -497,6 +488,24 @@ class SqlSessionInstanceRepository:
         refreshed = await self.get(obj.id)
         assert refreshed is not None
         return refreshed
+
+    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+        result = await self._session.execute(
+            select(SessionInstance)
+            .where(SessionInstance.id == instance_id)
+            .options(
+                selectinload(SessionInstance.segments).selectinload(
+                    SessionInstanceSegment.type_links
+                )
+            )
+        )
+        obj = result.scalar_one_or_none()
+        if obj is None:
+            return None
+        record = _instance_to_dict(obj)
+        await self._session.delete(obj)
+        await self._session.flush()
+        return record
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date

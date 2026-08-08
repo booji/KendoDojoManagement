@@ -16,6 +16,7 @@ class SessionTemplate(UUIDBase):
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     start_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    end_date: Mapped[str] = mapped_column(String(10), nullable=False)
     recurrence: Mapped[str] = mapped_column(
         String(20), nullable=False, default="weekly"
     )

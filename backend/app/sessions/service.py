@@ -66,10 +66,27 @@ def generate_instances(
     return instances
 
 
-def needs_rolling_extension(
-    latest_date: date | None, today: date, threshold_days: int = 14
-) -> bool:
-    """Returns True if latest_date is None or within threshold_days of today."""
-    if latest_date is None:
-        return True
-    return (latest_date - today).days <= threshold_days
+# A recurring template must be bounded — six months is the cap applied both
+# to the initial start_date..end_date range and to any later extension.
+TEMPLATE_MAX_HORIZON_MONTHS = 6
+
+_DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
+def add_months(d: date, months: int) -> date:
+    """Add calendar months to a date, clamping the day if the target month is
+    shorter (e.g. 31 Jan + 1 month -> 28/29 Feb)."""
+    month_index = d.month - 1 + months
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    is_leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+    max_day = 29 if month == 2 and is_leap else _DAYS_IN_MONTH[month - 1]
+    return date(year, month, min(d.day, max_day))
+
+
+def covered_dates(template: dict[str, Any]) -> set[str]:
+    """The full set of ISO date strings a template's recurrence covers across
+    its start_date..end_date range — the source of truth for delta
+    regeneration (add newly-covered dates, remove no-longer-covered ones)."""
+    horizon = date.fromisoformat(template["end_date"])
+    return {inst["date"] for inst in generate_instances(template, horizon)}

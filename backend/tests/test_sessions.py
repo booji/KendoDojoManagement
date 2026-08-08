@@ -123,6 +123,9 @@ class StubSessionInstanceRepo:
     def __init__(self) -> None:
         self._store: dict[str, dict[str, Any]] = {}
 
+    async def list(self) -> list[dict[str, Any]]:
+        return list(self._store.values())
+
     async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
         now = as_of or date.today()
         return [
@@ -139,6 +142,9 @@ class StubSessionInstanceRepo:
         record = {"id": new_id, "cancelled": False, **data}
         self._store[new_id] = record
         return record
+
+    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+        return self._store.pop(instance_id, None)
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
         record = self._store.get(instance_id)
@@ -263,12 +269,15 @@ async def test_create_session_type_unauthenticated_returns_401(type_repo) -> Non
 # ---------------------------------------------------------------------------
 
 
-async def test_admin_can_create_session_template(type_repo, template_repo) -> None:
+async def test_admin_can_create_session_template(
+    type_repo, template_repo, instance_repo
+) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
     payload = {
         "title": "Tuesday Evening Keiko",
         "start_date": "2026-05-06",
+        "end_date": "2026-06-06",
         "recurrence": "weekly",
         "day_of_week": 1,  # Tuesday
         "segments": [_one_segment(type_id)],
@@ -293,6 +302,7 @@ async def test_member_cannot_create_session_template(template_repo) -> None:
     payload = {
         "title": "Attempt",
         "start_date": "2026-05-06",
+        "end_date": "2026-06-06",
         "recurrence": "weekly",
         "day_of_week": 1,
         "segments": [_one_segment(str(uuid.uuid4()))],
@@ -328,10 +338,16 @@ async def test_generate_creates_instances_up_to_horizon(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
 
-    # Create a template first
+    # Create a template first. end_date is set just past start_date so
+    # creation only auto-generates the first occurrence, leaving the
+    # /generate call below something new to produce up to its own horizon
+    # (issue #258: POST /sessions/templates now generates its own
+    # start_date..end_date range on write; /generate covers any additional
+    # horizon requested on top of that).
     template_payload = {
         "title": "Weekly Thursday",
         "start_date": "2026-05-07",
+        "end_date": "2026-05-08",
         "recurrence": "weekly",
         "day_of_week": 3,
         "segments": [_one_segment(type_id)],
@@ -479,10 +495,13 @@ async def test_cancelling_instance_does_not_affect_template(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     type_id = list(type_repo._store.keys())[0]
 
-    # Create template
+    # Create template. end_date is just past start_date so creation only
+    # auto-generates the first occurrence, leaving the /generate call below
+    # something new to produce.
     tmpl_payload = {
         "title": "Persistent Template",
         "start_date": "2026-08-06",
+        "end_date": "2026-08-07",
         "recurrence": "weekly",
         "day_of_week": 3,
         "segments": [_one_segment(type_id)],

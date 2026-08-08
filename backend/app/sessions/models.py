@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SessionTypeCreate(BaseModel):
@@ -117,9 +118,25 @@ def _validate_segments_nonempty(segments: list[SegmentCreate]) -> list[SegmentCr
 # ---------------------------------------------------------------------------
 
 
+def _validate_end_date_bounds(start_date: str, end_date: str) -> None:
+    from app.sessions.service import TEMPLATE_MAX_HORIZON_MONTHS, add_months
+
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    if end <= start:
+        raise ValueError("end_date must be after start_date")
+    cap = add_months(start, TEMPLATE_MAX_HORIZON_MONTHS)
+    if end > cap:
+        raise ValueError(
+            f"end_date must not be more than {TEMPLATE_MAX_HORIZON_MONTHS} "
+            "months after start_date"
+        )
+
+
 class SessionTemplateCreate(BaseModel):
     title: str
     start_date: str  # "YYYY-MM-DD"
+    end_date: str  # "YYYY-MM-DD" — required; start_date < end_date <= start_date+6mo
     recurrence: str = "weekly"
     day_of_week: int | None = None  # kept for backwards compat; nullable
     location: str | None = None
@@ -134,11 +151,17 @@ class SessionTemplateCreate(BaseModel):
     def validate_segments_nonempty(cls, v: list[SegmentCreate]) -> list[SegmentCreate]:
         return _validate_segments_nonempty(v)
 
+    @model_validator(mode="after")
+    def validate_end_date_bounds(self) -> SessionTemplateCreate:
+        _validate_end_date_bounds(self.start_date, self.end_date)
+        return self
+
 
 class SessionTemplateRead(BaseModel):
     id: str
     title: str
     start_date: str
+    end_date: str
     start_time: str  # derived envelope value
     duration_minutes: int  # derived envelope value
     recurrence: str
@@ -168,6 +191,10 @@ class SessionTemplateUpdate(BaseModel):
         if v is not None:
             return _validate_segments_nonempty(v)
         return v
+
+
+class SessionTemplateExtend(BaseModel):
+    end_date: str  # "YYYY-MM-DD" — new end_date, capped at 6 months from today
 
 
 # ---------------------------------------------------------------------------

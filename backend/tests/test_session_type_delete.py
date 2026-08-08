@@ -156,9 +156,6 @@ class StubSessionInstanceRepo:
     async def list_in_range(self, from_date, to_date) -> list[dict[str, Any]]:
         return []
 
-    async def latest_date_for_template(self, template_id: str):
-        return None
-
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
         record = self._store.get(instance_id)
         if record is None:
@@ -296,9 +293,9 @@ async def test_delete_unreferenced_session_type_succeeds(
     ), f"Expected 200 or 204 for unreferenced type, got {response.status_code}"
     # Type must be gone from the store
     remaining = await type_repo.list()
-    assert all(
-        r["id"] != st["id"] for r in remaining
-    ), "Deleted type must not appear in subsequent list"
+    assert all(r["id"] != st["id"] for r in remaining), (
+        "Deleted type must not appear in subsequent list"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -319,17 +316,17 @@ async def test_delete_session_type_referenced_by_template_segment_returns_409(
     ) as c:
         response = await c.delete(f"/session-types/{st['id']}")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 when type is referenced by a template segment, got {response.status_code}"
+    assert response.status_code == 409, (
+        f"Expected 409 when type is referenced by a template segment, got {response.status_code}"
+    )
     body = response.json()
     assert "detail" in body, "409 response must include a 'detail' field"
     assert body["detail"], "409 detail message must not be empty"
     # Type must NOT have been deleted
     remaining = await type_repo.list()
-    assert any(
-        r["id"] == st["id"] for r in remaining
-    ), "Type referenced by a template segment must not be deleted"
+    assert any(r["id"] == st["id"] for r in remaining), (
+        "Type referenced by a template segment must not be deleted"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -350,17 +347,17 @@ async def test_delete_session_type_referenced_by_instance_segment_returns_409(
     ) as c:
         response = await c.delete(f"/session-types/{st['id']}")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 when type is referenced by an instance segment, got {response.status_code}"
+    assert response.status_code == 409, (
+        f"Expected 409 when type is referenced by an instance segment, got {response.status_code}"
+    )
     body = response.json()
     assert "detail" in body, "409 response must include a 'detail' field"
     assert body["detail"], "409 detail message must not be empty"
     # Type must NOT have been deleted
     remaining = await type_repo.list()
-    assert any(
-        r["id"] == st["id"] for r in remaining
-    ), "Type referenced by an instance segment must not be deleted"
+    assert any(r["id"] == st["id"] for r in remaining), (
+        "Type referenced by an instance segment must not be deleted"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -380,9 +377,9 @@ async def test_delete_nonexistent_session_type_returns_404(
     ) as c:
         response = await c.delete(f"/session-types/{fake_id}")
 
-    assert (
-        response.status_code == 404
-    ), f"Expected 404 for non-existent type, got {response.status_code}"
+    assert response.status_code == 404, (
+        f"Expected 404 for non-existent type, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +405,6 @@ async def test_delete_session_type_forbidden_for_member(
             cookies={"access_token": member_token},
         )
 
-    assert (
-        response.status_code == 403
-    ), f"Expected 403 for non-admin DELETE, got {response.status_code}"
+    assert response.status_code == 403, (
+        f"Expected 403 for non-admin DELETE, got {response.status_code}"
+    )

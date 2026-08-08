@@ -587,6 +587,7 @@ def test_session_template_create_coach_notes_still_round_trips() -> None:
     template = SessionTemplateCreate(
         title="Tuesday Keiko",
         start_date="2026-06-30",
+        end_date="2026-07-07",
         coach_notes="Bring extra shinai",
         segments=[
             SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=["type-1"])
@@ -602,6 +603,7 @@ def test_session_template_read_coach_notes_still_round_trips() -> None:
         id="tmpl-1",
         title="Tuesday Keiko",
         start_date="2026-06-30",
+        end_date="2026-07-07",
         start_time="19:00",
         duration_minutes=60,
         recurrence="weekly",

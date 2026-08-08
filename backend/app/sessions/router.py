@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -27,6 +27,7 @@ from app.sessions.models import (
     SessionInstanceRead,
     SessionInstanceUpdate,
     SessionTemplateCreate,
+    SessionTemplateExtend,
     SessionTemplateRead,
     SessionTemplateUpdate,
     SessionTypeCreate,
@@ -38,7 +39,7 @@ from app.sessions.repository import (
     AbstractSessionTemplateRepository,
     AbstractSessionTypeRepository,
 )
-from app.sessions.service import generate_instances, needs_rolling_extension
+from app.sessions.service import add_months, covered_dates, generate_instances
 
 router = APIRouter(tags=["sessions"])
 
@@ -218,11 +219,15 @@ async def create_session_template(
     payload: SessionTemplateCreate,
     _claims: _Admin,
     repo: _TmplRepo,
+    instance_repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    result = await repo.add(payload.model_dump())
+    template = await repo.add(payload.model_dump())
+    horizon = date.fromisoformat(template["end_date"])
+    for data in generate_instances(template, horizon):
+        await instance_repo.add(data)
     await uow.commit()
-    return _normalize_template(result)
+    return _normalize_template(template)
 
 
 @router.get("/sessions/templates/{template_id}")
@@ -254,16 +259,13 @@ async def generate_session_instances(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
     horizon = date.fromisoformat(payload.horizon)
-    # Fetch existing dates for idempotency
-    existing_dates: set[str] = set()
-    if hasattr(instance_repo, "latest_date_for_template"):
-        # Collect already-persisted dates for this template
-        existing_list = [
-            r
-            for r in (await instance_repo.list())
-            if r.get("template_id") == str(template_id)
-        ]
-        existing_dates = {r["date"] for r in existing_list}
+    # Collect already-persisted dates for this template so repeated calls are
+    # idempotent — never add a second instance on a date already generated.
+    existing_dates = {
+        r["date"]
+        for r in (await instance_repo.list())
+        if r.get("template_id") == str(template_id)
+    }
     instance_data_list = generate_instances(template, horizon, existing_dates)
     results = []
     for data in instance_data_list:
@@ -350,9 +352,7 @@ async def _enrich_with_attendance(
 async def list_upcoming_sessions(
     claims: _Member,
     repo: _InstRepo,
-    template_repo: _TmplRepo,
     attendance_repo: _AttendanceRepo,
-    uow: _UoW,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
 ) -> list[dict[str, Any]]:
@@ -370,29 +370,6 @@ async def list_upcoming_sessions(
             rows = await repo.list_in_range(from_date, to_date)
             return await _finalize(rows)
         return await _finalize(await repo.list_upcoming())
-
-    # Rolling extension: check each template and extend if needed
-    if hasattr(repo, "latest_date_for_template"):
-        today = date.today()
-        horizon = today + timedelta(days=90)
-        templates = await template_repo.list()
-        new_instances = []
-        for tmpl in templates:
-            latest = await repo.latest_date_for_template(tmpl["id"])
-            if needs_rolling_extension(latest, today):
-                # Collect existing dates for idempotency
-                all_instances = await repo.list()
-                existing_dates = {
-                    r["date"]
-                    for r in all_instances
-                    if r.get("template_id") == tmpl["id"]
-                }
-                new_data = generate_instances(tmpl, horizon, existing_dates)
-                for data in new_data:
-                    record = await repo.add(data)
-                    new_instances.append(record)
-        if new_instances:
-            await uow.commit()
 
     return await _finalize(await repo.list_upcoming())
 
@@ -442,6 +419,31 @@ async def update_session_instance(
     return _normalize_instance(record)
 
 
+async def _apply_recurrence_delta(
+    template: dict[str, Any],
+    template_id: str,
+    instance_repo: AbstractSessionInstanceRepository,
+) -> None:
+    """Reconcile persisted instances with a template's recurrence: add
+    instances for newly-covered dates, remove instances for dates no longer
+    covered. Dates that remain covered are left completely untouched — an
+    individually edited or cancelled instance on a still-covered date is
+    never overwritten or deleted (issue #258 AC3)."""
+    existing = [
+        r for r in (await instance_repo.list()) if r.get("template_id") == template_id
+    ]
+    existing_by_date = {r["date"]: r for r in existing}
+    wanted_dates = covered_dates(template)
+
+    horizon = date.fromisoformat(template["end_date"])
+    for data in generate_instances(template, horizon, set(existing_by_date)):
+        await instance_repo.add(data)
+
+    for iso_date, record in existing_by_date.items():
+        if iso_date not in wanted_dates:
+            await instance_repo.delete(record["id"])
+
+
 @router.patch("/sessions/templates/{template_id}")
 async def update_session_template(
     template_id: uuid.UUID,
@@ -457,12 +459,43 @@ async def update_session_template(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    today = date.today()
-    horizon = today + timedelta(days=90)
-    await instance_repo.delete_future_for_template(str(template_id), today)
-    instance_data_list = generate_instances(template, horizon, set())
-    for inst_data in instance_data_list:
-        await instance_repo.add(inst_data)
+    await _apply_recurrence_delta(template, str(template_id), instance_repo)
+    await uow.commit()
+    return _normalize_template(template)
+
+
+@router.post("/sessions/templates/{template_id}/extend")
+async def extend_session_template(
+    template_id: uuid.UUID,
+    payload: SessionTemplateExtend,
+    _claims: _Admin,
+    template_repo: _TmplRepo,
+    instance_repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    template = await template_repo.get(str(template_id))
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+    current_end = date.fromisoformat(template["end_date"])
+    new_end = date.fromisoformat(payload.end_date)
+    cap = add_months(date.today(), 6)
+    if new_end < current_end:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="end_date must not be earlier than the template's current end_date",
+        )
+    if new_end > cap:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="end_date must not be more than 6 months from today",
+        )
+    template = await template_repo.update(
+        str(template_id), {"end_date": new_end.isoformat()}
+    )
+    assert template is not None
+    await _apply_recurrence_delta(template, str(template_id), instance_repo)
     await uow.commit()
     return _normalize_template(template)
 

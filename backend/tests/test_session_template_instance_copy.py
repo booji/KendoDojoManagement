@@ -105,14 +105,6 @@ class StubSessionInstanceRepo:
     async def get(self, instance_id: str) -> dict[str, Any] | None:
         return self._store.get(instance_id)
 
-    async def latest_date_for_template(self, template_id: str) -> date | None:
-        dates = [
-            date.fromisoformat(r["date"])
-            for r in self._store.values()
-            if r.get("template_id") == template_id
-        ]
-        return max(dates) if dates else None
-
     async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
         now = as_of or date.today()
         return [
@@ -235,9 +227,13 @@ async def test_multi_segment_template_generates_faithful_copy(
     _wire_overrides: dict[str, Any],
 ) -> None:
     type_a, type_b = await _type_ids(_wire_overrides["type"])
+    # end_date is just past start_date so creation only auto-generates the
+    # first occurrence (issue #258); /generate below produces the rest up to
+    # its own horizon, giving this test fresh instances to inspect.
     template_payload = {
         "title": "Tuesday Keiko",
         "start_date": "2025-03-04",  # Tuesday
+        "end_date": "2025-03-05",
         "recurrence_days": [1],
         "interval_weeks": 1,
         "segments": [
@@ -290,9 +286,12 @@ async def test_editing_instance_leaves_template_and_siblings_unchanged(
     _wire_overrides: dict[str, Any],
 ) -> None:
     type_a, type_b = await _type_ids(_wire_overrides["type"])
+    # end_date is just past start_date so creation only auto-generates the
+    # first occurrence (issue #258); /generate below produces the rest.
     template_payload = {
         "title": "Tuesday Keiko",
         "start_date": "2025-03-04",  # Tuesday
+        "end_date": "2025-03-05",
         "recurrence_days": [1],
         "interval_weeks": 1,
         "segments": [
@@ -358,9 +357,12 @@ async def test_recurrence_stays_at_template_level(
     _wire_overrides: dict[str, Any],
 ) -> None:
     (type_a, _type_b) = await _type_ids(_wire_overrides["type"])
+    # end_date is just past start_date so creation only auto-generates the
+    # first occurrence (issue #258); /generate below produces the rest.
     template_payload = {
         "title": "Tuesday Keiko",
         "start_date": "2025-03-04",
+        "end_date": "2025-03-05",
         "recurrence_days": [1],
         "interval_weeks": 2,
         "segments": [
@@ -388,6 +390,6 @@ async def test_recurrence_stays_at_template_level(
         assert field not in inst, f"instance must not carry recurrence field {field!r}"
     for seg in inst["segments"]:
         for field in ("recurrence", "recurrence_days", "interval_weeks"):
-            assert (
-                field not in seg
-            ), f"segment must not carry recurrence field {field!r}"
+            assert field not in seg, (
+                f"segment must not carry recurrence field {field!r}"
+            )
