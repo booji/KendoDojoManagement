@@ -226,7 +226,6 @@ def test_jwt_expire_minutes_default_is_480(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_passkeys_returns_caller_passkeys_only(passkey_repo) -> None:
     """GET /auth/passkeys returns only passkeys belonging to the authenticated user."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -247,7 +246,6 @@ async def test_list_passkeys_returns_caller_passkeys_only(passkey_repo) -> None:
     assert labels == {"Laptop Touch ID", "Phone Face ID"}
 
 
-@pytest.mark.anyio
 async def test_list_passkeys_response_fields(passkey_repo) -> None:
     """GET /auth/passkeys items include id, label, aaguid, created_at, last_used_at."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -273,7 +271,6 @@ async def test_list_passkeys_response_fields(passkey_repo) -> None:
     assert "last_used_at" in item
 
 
-@pytest.mark.anyio
 async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
     """GET /auth/passkeys must never include public_key in the response."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -289,7 +286,6 @@ async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
         assert "public_key" not in item
 
 
-@pytest.mark.anyio
 async def test_list_passkeys_requires_authentication() -> None:
     """GET /auth/passkeys returns 401 when no token is provided."""
     async with AsyncClient(
@@ -299,7 +295,6 @@ async def test_list_passkeys_requires_authentication() -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_list_passkeys_empty_for_new_user(passkey_repo) -> None:
     """GET /auth/passkeys returns an empty list when user has no passkeys."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -318,7 +313,6 @@ async def test_list_passkeys_empty_for_new_user(passkey_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_patch_passkey_label_succeeds(passkey_repo) -> None:
     """PATCH /auth/passkeys/{id} updates the label and returns the updated record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -334,7 +328,6 @@ async def test_patch_passkey_label_succeeds(passkey_repo) -> None:
     assert response.json()["label"] == "New Label"
 
 
-@pytest.mark.anyio
 async def test_patch_passkey_label_is_persisted(passkey_repo) -> None:
     """After PATCH, a subsequent GET /auth/passkeys reflects the new label."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -353,7 +346,6 @@ async def test_patch_passkey_label_is_persisted(passkey_repo) -> None:
     assert "Original" not in labels
 
 
-@pytest.mark.anyio
 async def test_patch_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     """PATCH /auth/passkeys/{id} returns 404 when the passkey belongs to a different user."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -370,7 +362,6 @@ async def test_patch_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     """PATCH /auth/passkeys/{id} returns 404 when the passkey id does not exist."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -384,7 +375,6 @@ async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_patch_passkey_requires_authentication() -> None:
     """PATCH /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())
@@ -400,7 +390,6 @@ async def test_patch_passkey_requires_authentication() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_passkey_succeeds(passkey_repo) -> None:
     """DELETE /auth/passkeys/{id} removes the passkey when caller has more than one."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -420,7 +409,6 @@ async def test_delete_passkey_succeeds(passkey_repo) -> None:
     assert remaining[0]["id"] == record1["id"]
 
 
-@pytest.mark.anyio
 async def test_delete_last_passkey_returns_400(passkey_repo) -> None:
     """DELETE /auth/passkeys/{id} returns 400 when it is the caller's only passkey."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -435,7 +423,6 @@ async def test_delete_last_passkey_returns_400(passkey_repo) -> None:
     assert response.status_code == 400
 
 
-@pytest.mark.anyio
 async def test_delete_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     """DELETE /auth/passkeys/{id} returns 404 when passkey belongs to another user."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -450,7 +437,6 @@ async def test_delete_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_delete_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     """DELETE /auth/passkeys/{id} returns 404 when the passkey id does not exist."""
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
@@ -464,7 +450,6 @@ async def test_delete_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_delete_passkey_requires_authentication() -> None:
     """DELETE /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())

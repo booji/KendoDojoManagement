@@ -1,0 +1,39 @@
+name: Tests
+
+# Single-developer repo: day-to-day changes are verified on-device, so the
+# suite is reserved for release candidates rather than every push or PR.
+on:
+  push:
+    tags:
+      - 'v*-rc*'
+  release:
+    types: [prereleased, published]
+  workflow_dispatch:
+
+# Least privilege: the suite only ever needs to read the checked-out tree.
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    name: Full suite (pytest + Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the test suite
+        # docker-compose.test.yml builds the backend-e2e-deps image, starts an
+        # ephemeral PostgreSQL, and runs backend/run_tests.sh, which brings up
+        # uvicorn (:8000) and Vite (:5173) before invoking pytest. The whole
+        # suite — unit, integration and Playwright e2e — runs in one command.
+        run: docker compose -f docker-compose.test.yml run --rm test
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v

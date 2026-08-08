@@ -153,7 +153,6 @@ def member_repo() -> StubMemberRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_create_member(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -173,7 +172,6 @@ async def test_admin_can_create_member(member_repo) -> None:
     assert "full_name" not in body
 
 
-@pytest.mark.anyio
 async def test_create_member_response_schema_has_all_required_fields(
     member_repo,
 ) -> None:
@@ -208,7 +206,6 @@ async def test_create_member_response_schema_has_all_required_fields(
     assert "is_minor" not in body, "is_minor must be absent from response"
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_member(member_repo) -> None:
     from app.auth.token import encode_token
 
@@ -224,7 +221,6 @@ async def test_member_cannot_create_member(member_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_create_member_unauthenticated_returns_401(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -233,7 +229,6 @@ async def test_create_member_unauthenticated_returns_401(member_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_create_member_missing_required_fields_returns_422(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     # Missing email, first_name, surname, join_date
@@ -244,7 +239,6 @@ async def test_create_member_missing_required_fields_returns_422(member_repo) ->
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_member_missing_email_returns_422(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = _valid_member_payload()
@@ -256,7 +250,6 @@ async def test_create_member_missing_email_returns_422(member_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_member_missing_first_name_returns_422(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = _valid_member_payload()
@@ -268,7 +261,6 @@ async def test_create_member_missing_first_name_returns_422(member_repo) -> None
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_member_missing_surname_returns_422(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = _valid_member_payload()
@@ -280,7 +272,6 @@ async def test_create_member_missing_surname_returns_422(member_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_member_dob_is_optional(member_repo) -> None:
     """AC2b: dob is now optional — omitting it must succeed (201)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -293,7 +284,6 @@ async def test_create_member_dob_is_optional(member_repo) -> None:
     assert response.status_code == 201
 
 
-@pytest.mark.anyio
 async def test_create_member_with_full_name_returns_422(member_repo) -> None:
     """AC2a: payload with full_name but no first_name/surname must be rejected (422)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -311,7 +301,6 @@ async def test_create_member_with_full_name_returns_422(member_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -327,7 +316,6 @@ async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_get_any_member_profile(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -345,7 +333,6 @@ async def test_admin_can_get_any_member_profile(member_repo) -> None:
     assert response.json()["id"] == member_id
 
 
-@pytest.mark.anyio
 async def test_member_can_get_own_profile(member_repo) -> None:
     # Seed member with sub matching _MEMBER_CLAIMS.sub
     record = await member_repo.add(
@@ -365,7 +352,6 @@ async def test_member_can_get_own_profile(member_repo) -> None:
     assert response.json()["id"] == member_id
 
 
-@pytest.mark.anyio
 async def test_member_cannot_get_other_member_profile(member_repo) -> None:
     # Seed another member with a different user_id
     other_record = await member_repo.add(
@@ -384,7 +370,6 @@ async def test_member_cannot_get_other_member_profile(member_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_get_member_not_found_returns_404(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -396,7 +381,6 @@ async def test_get_member_not_found_returns_404(member_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_get_member_unauthenticated_returns_401(member_repo) -> None:
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
@@ -411,7 +395,6 @@ async def test_get_member_unauthenticated_returns_401(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_update_member_first_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -428,7 +411,6 @@ async def test_admin_can_update_member_first_name(member_repo) -> None:
     assert response.json()["first_name"] == "Jiro"
 
 
-@pytest.mark.anyio
 async def test_admin_can_update_member_surname(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -445,7 +427,6 @@ async def test_admin_can_update_member_surname(member_repo) -> None:
     assert response.json()["surname"] == "Tanaka"
 
 
-@pytest.mark.anyio
 async def test_update_persists_change(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -468,7 +449,6 @@ async def test_update_persists_change(member_repo) -> None:
     assert get_resp.json()["is_coach"] is True
 
 
-@pytest.mark.anyio
 async def test_update_member_not_found_returns_404(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -479,7 +459,6 @@ async def test_update_member_not_found_returns_404(member_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_member_cannot_update_member(member_repo) -> None:
     from app.auth.token import encode_token
 
@@ -527,7 +506,6 @@ def _spy_on_update(repo: StubMemberRepo) -> list[dict[str, Any]]:
     return calls
 
 
-@pytest.mark.anyio
 async def test_put_null_emergency_contact_phone_clears_stored_value(
     member_repo,
 ) -> None:
@@ -556,7 +534,6 @@ async def test_put_null_emergency_contact_phone_clears_stored_value(
     assert stored["emergency_contact_phone"] is None
 
 
-@pytest.mark.anyio
 async def test_put_null_emergency_contact_name_clears_stored_value(
     member_repo,
 ) -> None:
@@ -585,7 +562,6 @@ async def test_put_null_emergency_contact_name_clears_stored_value(
     assert stored["emergency_contact_name"] is None
 
 
-@pytest.mark.anyio
 async def test_put_null_display_name_clears_stored_value(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
@@ -608,7 +584,6 @@ async def test_put_null_display_name_clears_stored_value(member_repo) -> None:
     assert stored["display_name"] is None
 
 
-@pytest.mark.anyio
 async def test_put_null_dob_clears_stored_value(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
@@ -631,7 +606,6 @@ async def test_put_null_dob_clears_stored_value(member_repo) -> None:
     assert stored["dob"] is None
 
 
-@pytest.mark.anyio
 async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
     """A field omitted entirely from the payload must not be touched, even
     though another clearable field is present in the same request."""
@@ -655,7 +629,6 @@ async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
     assert "emergency_contact_phone" not in calls[-1]
 
 
-@pytest.mark.anyio
 async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> None:
     """first_name is required-by-domain: an explicit null must be ignored,
     preserving the existing behaviour for required fields."""
@@ -676,7 +649,6 @@ async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> No
     assert "first_name" not in calls[-1]
 
 
-@pytest.mark.anyio
 async def test_put_null_membership_status_does_not_wipe_stored_value(
     member_repo,
 ) -> None:
@@ -700,7 +672,6 @@ async def test_put_null_membership_status_does_not_wipe_stored_value(
     assert "membership_status" not in calls[-1]
 
 
-@pytest.mark.anyio
 async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None:
     """Regression guard: setting a clearable field to a real (non-null) value
     must continue to work once the fix lands."""
@@ -727,7 +698,6 @@ async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_member_route_removed(member_repo) -> None:
     """DELETE /members/{id} no longer exists — status changes go through PUT."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -745,7 +715,6 @@ async def test_delete_member_route_removed(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_members_returns_all_for_admin(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(_valid_member_payload(email="a@dojo.test"))
@@ -759,7 +728,6 @@ async def test_get_members_returns_all_for_admin(member_repo) -> None:
     assert len(response.json()) == 2
 
 
-@pytest.mark.anyio
 async def test_get_members_filter_by_active_status(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
@@ -781,7 +749,6 @@ async def test_get_members_filter_by_active_status(member_repo) -> None:
     assert "inactive@dojo.test" not in emails
 
 
-@pytest.mark.anyio
 async def test_get_members_filter_by_inactive_status(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
@@ -805,7 +772,6 @@ async def test_get_members_filter_by_inactive_status(member_repo) -> None:
     assert all(r["membership_status"] == "inactive" for r in results)
 
 
-@pytest.mark.anyio
 async def test_get_members_search_by_first_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
@@ -830,7 +796,6 @@ async def test_get_members_search_by_first_name(member_repo) -> None:
     assert results[0]["surname"] == "Miyamoto"
 
 
-@pytest.mark.anyio
 async def test_get_members_search_by_surname(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
@@ -854,7 +819,6 @@ async def test_get_members_search_by_surname(member_repo) -> None:
     assert results[0]["surname"] == "Kojiro"
 
 
-@pytest.mark.anyio
 async def test_get_members_search_by_email(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await member_repo.add(
@@ -876,7 +840,6 @@ async def test_get_members_search_by_email(member_repo) -> None:
     assert results[0]["email"] == "findme@dojo.test"
 
 
-@pytest.mark.anyio
 async def test_get_members_unauthenticated_returns_401(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -890,7 +853,6 @@ async def test_get_members_unauthenticated_returns_401(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_response_has_no_legacy_fields(member_repo) -> None:
     """AC1: MemberResponse must NOT contain full_name or parental_consent_obtained."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -906,7 +868,6 @@ async def test_member_response_has_no_legacy_fields(member_repo) -> None:
     ), "parental_consent_obtained must not appear in MemberResponse"
 
 
-@pytest.mark.anyio
 async def test_member_response_includes_display_name(member_repo) -> None:
     """AC1: MemberResponse includes display_name (nullable)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -933,7 +894,6 @@ async def test_member_response_includes_display_name(member_repo) -> None:
     assert response2.json()["display_name"] == "Taro-san"
 
 
-@pytest.mark.anyio
 async def test_member_response_includes_dob(member_repo) -> None:
     """AC1: MemberResponse includes dob (nullable)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -954,7 +914,6 @@ async def test_member_response_includes_dob(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_update_member_to_archived(member_repo) -> None:
     """PUT accepts the 'archived' status and persists it."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -971,7 +930,6 @@ async def test_update_member_to_archived(member_repo) -> None:
     assert response.json()["membership_status"] == "archived"
 
 
-@pytest.mark.anyio
 async def test_list_excludes_archived_by_default(member_repo) -> None:
     """GET /members with no status filter returns active/inactive/suspended
     but not archived."""
@@ -993,7 +951,6 @@ async def test_list_excludes_archived_by_default(member_repo) -> None:
     assert statuses == {"active", "inactive", "suspended"}
 
 
-@pytest.mark.anyio
 async def test_list_includes_archived_when_filtered(member_repo) -> None:
     """GET /members?status=archived returns archived members."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override

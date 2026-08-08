@@ -66,7 +66,6 @@ class TestRouteIsCompiledOut:
 
 
 class TestRoleIsValidated:
-    @pytest.mark.anyio
     @pytest.mark.parametrize("role", ["superuser", "", "admin; DROP TABLE users"])
     async def test_unknown_role_is_rejected(self, role: str) -> None:
         """`role` lands directly on User.role — it must not be a free string."""

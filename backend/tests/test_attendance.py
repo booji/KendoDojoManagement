@@ -315,7 +315,6 @@ def settings_repo() -> StubDojoSettingsRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_can_checkin_to_session(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -338,7 +337,6 @@ async def test_member_can_checkin_to_session(
     assert body["recorded_by"] == _MEMBER.sub
 
 
-@pytest.mark.anyio
 async def test_unauthenticated_checkin_returns_401(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -353,7 +351,6 @@ async def test_unauthenticated_checkin_returns_401(
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_checkin_nonexistent_session_returns_404(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -374,7 +371,6 @@ async def test_checkin_nonexistent_session_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_cannot_checkin_to_cancelled_session(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -395,7 +391,6 @@ async def test_member_cannot_checkin_to_cancelled_session(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_generate_checkin_token(
     session_repo: StubSessionInstanceRepo,
     token_repo: StubCheckinTokenRepo,
@@ -415,7 +410,6 @@ async def test_admin_can_generate_checkin_token(
     assert "expires_at" in body
 
 
-@pytest.mark.anyio
 async def test_member_cannot_generate_checkin_token(
     session_repo: StubSessionInstanceRepo,
     token_repo: StubCheckinTokenRepo,
@@ -433,7 +427,6 @@ async def test_member_cannot_generate_checkin_token(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_generate_token_for_nonexistent_session(
     session_repo: StubSessionInstanceRepo,
     token_repo: StubCheckinTokenRepo,
@@ -454,7 +447,6 @@ async def test_generate_token_for_nonexistent_session(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_can_checkin_via_token(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -478,7 +470,6 @@ async def test_member_can_checkin_via_token(
     assert "checked_in_at" in body
 
 
-@pytest.mark.anyio
 async def test_unauthenticated_token_checkin_returns_401(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -501,7 +492,6 @@ async def test_unauthenticated_token_checkin_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_expired_token_returns_410(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -519,7 +509,6 @@ async def test_expired_token_returns_410(
     assert response.status_code == 410
 
 
-@pytest.mark.anyio
 async def test_invalid_token_returns_401(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -540,7 +529,6 @@ async def test_invalid_token_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_list_session_attendance(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -566,7 +554,6 @@ async def test_admin_can_list_session_attendance(
     assert "member-2" in member_ids
 
 
-@pytest.mark.anyio
 async def test_member_cannot_list_attendance(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -589,7 +576,6 @@ async def test_member_cannot_list_attendance(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_mark_attended_returns_201(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -612,7 +598,6 @@ async def test_admin_mark_attended_returns_201(
     assert body["recorded_by"] == _ADMIN.sub
 
 
-@pytest.mark.anyio
 async def test_admin_mark_attended_nonexistent_session_returns_404(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -631,7 +616,6 @@ async def test_admin_mark_attended_nonexistent_session_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_admin_mark_attended_missing_member_id_returns_422(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -650,7 +634,6 @@ async def test_admin_mark_attended_missing_member_id_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_member_cannot_admin_mark_attended(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -674,7 +657,6 @@ async def test_member_cannot_admin_mark_attended(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_remove_attendance_returns_204(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -695,7 +677,6 @@ async def test_admin_remove_attendance_returns_204(
     assert response.status_code == 204
 
 
-@pytest.mark.anyio
 async def test_admin_remove_attendance_not_found_returns_404(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -713,7 +694,6 @@ async def test_admin_remove_attendance_not_found_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_member_cannot_remove_attendance(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -736,7 +716,6 @@ async def test_member_cannot_remove_attendance(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_add_visitor_returns_201(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -759,7 +738,6 @@ async def test_admin_add_visitor_returns_201(
     assert body["member_id"] is None
 
 
-@pytest.mark.anyio
 async def test_admin_add_visitor_nonexistent_session_returns_404(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -778,7 +756,6 @@ async def test_admin_add_visitor_nonexistent_session_returns_404(
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_admin_add_visitor_missing_name_returns_422(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -797,7 +774,6 @@ async def test_admin_add_visitor_missing_name_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_member_cannot_add_visitor(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -821,7 +797,6 @@ async def test_member_cannot_add_visitor(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_session_attendance_includes_visitors(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -849,7 +824,6 @@ async def test_session_attendance_includes_visitors(
     assert visitor_records[0]["visitor_name"] == "Visitor One"
 
 
-@pytest.mark.anyio
 async def test_attendance_record_has_visitor_name_field(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -878,7 +852,6 @@ async def test_attendance_record_has_visitor_name_field(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_get_any_member_attendance_history(
     attendance_repo: StubAttendanceRepo,
 ) -> None:
@@ -906,7 +879,6 @@ async def test_admin_can_get_any_member_attendance_history(
     assert all(r["member_id"] == _MEMBER.sub for r in body)
 
 
-@pytest.mark.anyio
 async def test_member_can_get_own_attendance_history(
     attendance_repo: StubAttendanceRepo,
 ) -> None:
@@ -936,7 +908,6 @@ async def test_member_can_get_own_attendance_history(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_member_cannot_get_other_member_attendance_history(
     attendance_repo: StubAttendanceRepo,
 ) -> None:
@@ -954,7 +925,6 @@ async def test_member_cannot_get_other_member_attendance_history(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -969,7 +939,6 @@ async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_attendance_list_includes_display_name_for_member(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -997,7 +966,6 @@ async def test_attendance_list_includes_display_name_for_member(
     assert body[0]["display_name"] == "Alice Kendo"
 
 
-@pytest.mark.anyio
 async def test_attendance_list_display_name_null_for_visitor(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,

@@ -8,7 +8,7 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
 ## Stack
 - Python 3.13, FastAPI, SQLAlchemy 2.0 async, Alembic
 - Auth: `passlib[bcrypt]`, `python-jose`, `webauthn`
-- DB drivers: `aiosqlite` (dev), `asyncpg` (prod), switched via `DATABASE_URL`
+- DB driver: `asyncpg` (PostgreSQL everywhere — dev, test, prod), via `DATABASE_URL`
 
 ## Core pattern
 - Every model extends `UUIDBase` — UUID primary keys, never integers

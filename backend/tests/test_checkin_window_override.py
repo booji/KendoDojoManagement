@@ -206,7 +206,6 @@ async def _post_checkin(session_id: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_before_override_opens_checkin_when_dojo_default_would_be_too_early(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -235,7 +234,6 @@ async def test_before_override_opens_checkin_when_dojo_default_would_be_too_earl
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_after_override_opens_checkin_when_dojo_default_would_be_closed(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -265,7 +263,6 @@ async def test_after_override_opens_checkin_when_dojo_default_would_be_closed(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_null_override_falls_back_to_dojo_default_too_early(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -292,7 +289,6 @@ async def test_null_override_falls_back_to_dojo_default_too_early(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_before_overridden_after_null_resolves_independently(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -320,7 +316,6 @@ async def test_before_overridden_after_null_resolves_independently(
     assert response.status_code == 200
 
 
-@pytest.mark.anyio
 async def test_after_overridden_before_null_resolves_independently(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -355,7 +350,6 @@ async def test_after_overridden_before_null_resolves_independently(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_changing_dojo_default_affects_session_without_override(
     session_repo: StubSessionInstanceRepo,
     attendance_repo: StubAttendanceRepo,
@@ -439,23 +433,7 @@ def test_session_instance_update_rejects_over_max_override_minutes(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-async def db_session():
-    """Clean in-memory SQLite AsyncSession with the full schema."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from app.db.base import Base
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
-
-
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_sql_session_instance_repo_get_returns_override_minutes(
     db_session,
 ) -> None:

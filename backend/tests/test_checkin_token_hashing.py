@@ -14,8 +14,10 @@ Acceptance criteria under test:
 
 Strategy
 --------
-AC1-AC6: Call SqlCheckinTokenRepository directly via an in-memory SQLite session
-         so that failures are grounded in the *real* implementation, not the stub.
+AC1-AC6: Call SqlCheckinTokenRepository directly via the shared PostgreSQL
+         `db_session` fixture (conftest.py; savepoint-scoped, rolled back per
+         test) so that failures are grounded in the *real* implementation,
+         not the stub.
 AC7-AC9: Use the FastAPI test client with a HashingStubCheckinTokenRepo that
          faithfully models the new contract; failures reveal router logic gaps.
 """
@@ -28,7 +30,7 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.attendance.dependencies import (
     get_attendance_repo,
@@ -52,31 +54,34 @@ def _member_override() -> UserClaims:
     return _MEMBER
 
 
+async def _seed_session_instance(db_session: AsyncSession) -> str:
+    """Insert a minimal real SessionInstance row and return its id.
+
+    checkin_tokens.session_id carries a real FK to session_instances.id and
+    PostgreSQL enforces it, so repo-level tests need a real row to point at
+    rather than a bare random uuid.
+    """
+    from app.sessions.db_models import SessionInstance
+
+    instance = SessionInstance(
+        id=str(uuid.uuid4()),
+        title="Test Session",
+        date="2099-06-01",
+    )
+    db_session.add(instance)
+    await db_session.flush()
+    return instance.id
+
+
 # ---------------------------------------------------------------------------
-# In-memory SQLite engine for repository-level tests (AC1–AC6)
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-async def db_session():
-    """Provide a clean in-memory SQLite AsyncSession with the attendance schema."""
-    from app.db.base import Base
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
-
-
+# Repository-level tests (AC1-AC6) use the shared PostgreSQL `db_session`
+# fixture from conftest.py.
 # ---------------------------------------------------------------------------
 # AC1 — token_urlsafe(32): plaintext ≥ 43 chars
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_created_token_plaintext_length_is_at_least_43(
     db_session: AsyncSession,
 ) -> None:
@@ -84,8 +89,9 @@ async def test_created_token_plaintext_length_is_at_least_43(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    result = await repo.create(str(uuid.uuid4()), expires_at)
+    result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
     assert (
         len(plaintext) >= 43
@@ -97,7 +103,7 @@ async def test_created_token_plaintext_length_is_at_least_43(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_stored_value_is_not_plaintext(
     db_session: AsyncSession,
 ) -> None:
@@ -108,8 +114,9 @@ async def test_stored_value_is_not_plaintext(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    result = await repo.create(str(uuid.uuid4()), expires_at)
+    result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
 
     await db_session.flush()
@@ -119,7 +126,7 @@ async def test_stored_value_is_not_plaintext(
     ), "checkin_tokens.token equals the plaintext — token is NOT hashed"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_stored_value_is_bcrypt_hash(
     db_session: AsyncSession,
 ) -> None:
@@ -131,8 +138,9 @@ async def test_stored_value_is_bcrypt_hash(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    result = await repo.create(str(uuid.uuid4()), expires_at)
+    result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
 
     await db_session.flush()
@@ -152,7 +160,7 @@ async def test_stored_value_is_bcrypt_hash(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_correct_plaintext_get_returns_record(
     db_session: AsyncSession,
 ) -> None:
@@ -160,7 +168,7 @@ async def test_correct_plaintext_get_returns_record(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
-    session_id = str(uuid.uuid4())
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
     result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
@@ -176,7 +184,7 @@ async def test_correct_plaintext_get_returns_record(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_incorrect_plaintext_get_returns_none(
     db_session: AsyncSession,
 ) -> None:
@@ -184,8 +192,9 @@ async def test_incorrect_plaintext_get_returns_none(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    await repo.create(str(uuid.uuid4()), expires_at)
+    await repo.create(session_id, expires_at)
     await db_session.flush()
 
     found = await repo.get("this-is-definitely-not-the-right-token")
@@ -197,7 +206,7 @@ async def test_incorrect_plaintext_get_returns_none(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_used_at_is_none_before_redemption(
     db_session: AsyncSession,
 ) -> None:
@@ -205,9 +214,8 @@ async def test_used_at_is_none_before_redemption(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
-    result = await repo.create(
-        str(uuid.uuid4()), datetime.now(UTC) + timedelta(hours=1)
-    )
+    session_id = await _seed_session_instance(db_session)
+    result = await repo.create(session_id, datetime.now(UTC) + timedelta(hours=1))
 
     assert "used_at" in result, "create() must return a 'used_at' field"
     assert (
@@ -215,7 +223,7 @@ async def test_used_at_is_none_before_redemption(
     ), f"used_at should be None before any redemption, got {result['used_at']!r}"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_used_at_is_set_after_first_redemption(
     db_session: AsyncSession,
 ) -> None:
@@ -223,8 +231,9 @@ async def test_used_at_is_set_after_first_redemption(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    result = await repo.create(str(uuid.uuid4()), expires_at)
+    result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
     await db_session.flush()
 
@@ -239,7 +248,7 @@ async def test_used_at_is_set_after_first_redemption(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_second_redemption_raises_conflict(
     db_session: AsyncSession,
 ) -> None:
@@ -247,8 +256,9 @@ async def test_second_redemption_raises_conflict(
     from app.attendance.repository import SqlCheckinTokenRepository
 
     repo = SqlCheckinTokenRepository(db_session)
+    session_id = await _seed_session_instance(db_session)
     expires_at = datetime.now(UTC) + timedelta(hours=1)
-    result = await repo.create(str(uuid.uuid4()), expires_at)
+    result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
     await db_session.flush()
 
@@ -445,7 +455,6 @@ def http_token_repo() -> _HashingStubCheckinTokenRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_checkin_via_valid_token_returns_200(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,
@@ -474,7 +483,6 @@ async def test_http_checkin_via_valid_token_returns_200(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_checkin_via_wrong_token_returns_401(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,
@@ -501,7 +509,6 @@ async def test_http_checkin_via_wrong_token_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_http_second_checkin_via_same_token_returns_409(
     http_session_repo: _StubSessionInstanceRepo,
     http_attendance_repo: _StubAttendanceRepo,

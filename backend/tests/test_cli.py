@@ -7,30 +7,33 @@ Fix direction: rewrite CLI to be async, drop _get_engine(), use an async
 SQLAlchemy session created from DATABASE_URL directly.
 
 Acceptance criteria:
-  AC1. create-recovery-token succeeds with sqlite+aiosqlite:// URL — no psycopg2
+  AC1. create-recovery-token succeeds against the real DATABASE_URL — no psycopg2
   AC2. _get_engine() sync helper is gone from cli.py
   AC3. CLI uses asyncio.run wrapping async commands
-  AC4. No new packages added (aiosqlite already in dev deps)
-  AC5. Works with aiosqlite URLs (dev/test compat)
+  AC4. No new packages added
+  AC5. Works against the shared PostgreSQL test database (dev/test compat)
   AC6. Exits code 1 + error when user not found
   AC7. Exits code 1 + error when DATABASE_URL not set
   AC8. create_engine / psycopg2 are never imported or called in the CLI path
+
+Each test seeds its own User row with a unique, uuid-suffixed email against
+the shared PostgreSQL test database (via the `database_url` fixture) rather
+than a private per-test embedded-file DB, then cleans up the rows it created —
+there is no per-test throwaway database to rely on for isolation here.
 """
 
 from __future__ import annotations
 
-import os
-import tempfile
 import uuid
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, insert, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 from typer.testing import CliRunner
 
 from app.auth.db_models import AdminRecoveryToken, User
 from app.cli import app as cli_app
-from app.db.base import Base
 
 runner = CliRunner()
 
@@ -39,77 +42,88 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 
 
-def _make_sqlite_async_url(path: str) -> str:
-    return f"sqlite+aiosqlite:///{path}"
-
-
-def _seed_user_sync(db_path: str, email: str) -> str:
-    """Seed a user row synchronously so the CLI can find it."""
-    from sqlalchemy import create_engine as _ce
-
+async def _seed_user(database_url: str, email: str) -> str:
+    """Seed a user row against the real test database so the CLI can find it."""
     user_id = str(uuid.uuid4())
-    engine = _ce(f"sqlite:///{db_path}")
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        session.add(
-            User(
-                id=user_id,
-                email=email,
-                role="admin",
-                is_active=True,
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    try:
+        async with AsyncSession(engine) as session:
+            await session.execute(
+                insert(User).values(
+                    id=user_id,
+                    email=email,
+                    role="admin",
+                    is_active=True,
+                )
             )
-        )
-        session.commit()
-    engine.dispose()
+            await session.commit()
+    finally:
+        await engine.dispose()
     return user_id
 
 
-# ---------------------------------------------------------------------------
-# AC1 + AC5 — CLI succeeds with sqlite+aiosqlite:// URL, no psycopg2
-# ---------------------------------------------------------------------------
-
-
-def test_create_recovery_token_succeeds_with_aiosqlite_url() -> None:
-    """create-recovery-token exits 0 and prints a token when user exists (aiosqlite URL)."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
+async def _cleanup_user(database_url: str, user_id: str) -> None:
+    """Delete a seeded user and any recovery tokens it accumulated."""
+    engine = create_async_engine(database_url, poolclass=NullPool)
     try:
-        async_url = _make_sqlite_async_url(db_path)
-        _seed_user_sync(db_path, "admin@dojo.test")
+        async with AsyncSession(engine) as session:
+            await session.execute(
+                delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
+            )
+            await session.execute(delete(User).where(User.id == user_id))
+            await session.commit()
+    finally:
+        await engine.dispose()
 
+
+def _unique_email(label: str) -> str:
+    return f"{label}-{uuid.uuid4()}@dojo.test"
+
+
+# ---------------------------------------------------------------------------
+# AC1 + AC5 — CLI succeeds against the real DATABASE_URL, no psycopg2
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_recovery_token_succeeds_with_real_database_url(
+    database_url: str,
+) -> None:
+    """create-recovery-token exits 0 and prints a token when the user exists."""
+    email = _unique_email("cli-succeeds")
+    user_id = await _seed_user(database_url, email)
+    try:
         result = runner.invoke(
             cli_app,
-            ["create-recovery-token", "admin@dojo.test"],
-            env={"DATABASE_URL": async_url},
+            ["create-recovery-token", email],
+            env={"DATABASE_URL": database_url},
         )
 
         assert result.exit_code == 0, f"stdout={result.stdout!r} exc={result.exception}"
         assert len(result.stdout.strip()) > 0
     finally:
-        os.unlink(db_path)
+        await _cleanup_user(database_url, user_id)
 
 
-def test_create_recovery_token_token_is_nonempty_string() -> None:
+@pytest.mark.asyncio
+async def test_create_recovery_token_token_is_nonempty_string(
+    database_url: str,
+) -> None:
     """Token printed to stdout is a non-empty, non-whitespace string."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
+    email = _unique_email("cli-nonempty")
+    user_id = await _seed_user(database_url, email)
     try:
-        async_url = _make_sqlite_async_url(db_path)
-        _seed_user_sync(db_path, "admin@dojo.test")
-
         result = runner.invoke(
             cli_app,
-            ["create-recovery-token", "admin@dojo.test"],
-            env={"DATABASE_URL": async_url},
+            ["create-recovery-token", email],
+            env={"DATABASE_URL": database_url},
         )
 
         token = result.stdout.strip()
         assert isinstance(token, str)
         assert len(token) > 8
     finally:
-        os.unlink(db_path)
+        await _cleanup_user(database_url, user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -184,72 +198,45 @@ def test_psycopg2_not_imported_in_cli() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_create_recovery_token_unknown_email_exits_nonzero() -> None:
+def test_create_recovery_token_unknown_email_exits_nonzero(database_url: str) -> None:
     """create-recovery-token with unknown email exits with non-zero code."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
+    result = runner.invoke(
+        cli_app,
+        ["create-recovery-token", "nobody@notadojo.example"],
+        env={"DATABASE_URL": database_url},
+    )
 
-    try:
-        async_url = _make_sqlite_async_url(db_path)
-        _seed_user_sync(db_path, "admin@dojo.test")
-
-        result = runner.invoke(
-            cli_app,
-            ["create-recovery-token", "nobody@notadojo.example"],
-            env={"DATABASE_URL": async_url},
-        )
-
-        assert result.exit_code != 0
-    finally:
-        os.unlink(db_path)
+    assert result.exit_code != 0
 
 
-def test_create_recovery_token_unknown_email_prints_error() -> None:
+def test_create_recovery_token_unknown_email_prints_error(database_url: str) -> None:
     """create-recovery-token with unknown email prints an error message to stderr."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
+    result = runner.invoke(
+        cli_app,
+        ["create-recovery-token", "nobody@notadojo.example"],
+        env={"DATABASE_URL": database_url},
+    )
 
-    try:
-        async_url = _make_sqlite_async_url(db_path)
-        _seed_user_sync(db_path, "admin@dojo.test")
-
-        result = runner.invoke(
-            cli_app,
-            ["create-recovery-token", "nobody@notadojo.example"],
-            env={"DATABASE_URL": async_url},
-        )
-
-        # Typer's CliRunner: stderr goes to result.output, not result.stdout
-        output = result.output or ""
-        assert len(output.strip()) > 0
-        # Should mention the email or "error"
-        assert (
-            "nobody@notadojo.example" in output.lower()
-            or "error" in output.lower()
-            or "not found" in output.lower()
-        )
-    finally:
-        os.unlink(db_path)
+    # Typer's CliRunner: stderr goes to result.output, not result.stdout
+    output = result.output or ""
+    assert len(output.strip()) > 0
+    # Should mention the email or "error"
+    assert (
+        "nobody@notadojo.example" in output.lower()
+        or "error" in output.lower()
+        or "not found" in output.lower()
+    )
 
 
-def test_create_recovery_token_unknown_email_exits_code_1() -> None:
+def test_create_recovery_token_unknown_email_exits_code_1(database_url: str) -> None:
     """Exit code must be exactly 1 when user is not found."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
+    result = runner.invoke(
+        cli_app,
+        ["create-recovery-token", "nobody@notadojo.example"],
+        env={"DATABASE_URL": database_url},
+    )
 
-    try:
-        async_url = _make_sqlite_async_url(db_path)
-        _seed_user_sync(db_path, "admin@dojo.test")
-
-        result = runner.invoke(
-            cli_app,
-            ["create-recovery-token", "nobody@notadojo.example"],
-            env={"DATABASE_URL": async_url},
-        )
-
-        assert result.exit_code == 1
-    finally:
-        os.unlink(db_path)
+    assert result.exit_code == 1
 
 
 # ---------------------------------------------------------------------------
@@ -295,89 +282,77 @@ def test_create_recovery_token_no_database_url_prints_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
-async def test_create_recovery_token_saves_token_row() -> None:
+@pytest.mark.asyncio
+async def test_create_recovery_token_saves_token_row(database_url: str) -> None:
     """After a successful CLI invocation, one AdminRecoveryToken row is saved."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
+    email = _unique_email("cli-saves-row")
+    user_id = await _seed_user(database_url, email)
     try:
-        async_url = _make_sqlite_async_url(db_path)
-        user_id = _seed_user_sync(db_path, "admin@dojo.test")
-
         result = runner.invoke(
             cli_app,
-            ["create-recovery-token", "admin@dojo.test"],
-            env={"DATABASE_URL": async_url},
+            ["create-recovery-token", email],
+            env={"DATABASE_URL": database_url},
         )
 
         assert result.exit_code == 0, f"stdout={result.stdout!r} exc={result.exception}"
 
         # Verify token was persisted
-        from sqlalchemy import select
-
-        engine = create_async_engine(
-            async_url, connect_args={"check_same_thread": False}
-        )
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-        async with factory() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(AdminRecoveryToken).where(
-                            AdminRecoveryToken.user_id == user_id
+        engine = create_async_engine(database_url, poolclass=NullPool)
+        try:
+            async with AsyncSession(engine) as session:
+                rows = (
+                    (
+                        await session.execute(
+                            select(AdminRecoveryToken).where(
+                                AdminRecoveryToken.user_id == user_id
+                            )
                         )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-        await engine.dispose()
+        finally:
+            await engine.dispose()
 
         assert len(rows) == 1
     finally:
-        os.unlink(db_path)
+        await _cleanup_user(database_url, user_id)
 
 
-@pytest.mark.anyio
-async def test_create_recovery_token_saves_null_created_by_id() -> None:
+@pytest.mark.asyncio
+async def test_create_recovery_token_saves_null_created_by_id(
+    database_url: str,
+) -> None:
     """CLI-generated token has created_by_id = NULL (break-glass, no issuing admin)."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
+    email = _unique_email("cli-null-created-by")
+    user_id = await _seed_user(database_url, email)
     try:
-        async_url = _make_sqlite_async_url(db_path)
-        user_id = _seed_user_sync(db_path, "admin@dojo.test")
-
         result = runner.invoke(
             cli_app,
-            ["create-recovery-token", "admin@dojo.test"],
-            env={"DATABASE_URL": async_url},
+            ["create-recovery-token", email],
+            env={"DATABASE_URL": database_url},
         )
 
         assert result.exit_code == 0
 
-        from sqlalchemy import select
-
-        engine = create_async_engine(
-            async_url, connect_args={"check_same_thread": False}
-        )
-        factory = async_sessionmaker(engine, expire_on_commit=False)
-        async with factory() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(AdminRecoveryToken).where(
-                            AdminRecoveryToken.user_id == user_id
+        engine = create_async_engine(database_url, poolclass=NullPool)
+        try:
+            async with AsyncSession(engine) as session:
+                rows = (
+                    (
+                        await session.execute(
+                            select(AdminRecoveryToken).where(
+                                AdminRecoveryToken.user_id == user_id
+                            )
                         )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-        await engine.dispose()
+        finally:
+            await engine.dispose()
 
         assert len(rows) == 1
         assert rows[0].created_by_id is None
     finally:
-        os.unlink(db_path)
+        await _cleanup_user(database_url, user_id)

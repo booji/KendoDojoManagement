@@ -123,50 +123,34 @@ def passkey_repo() -> StubPasskeyRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_passkey_complete_returns_show_nudge_true_for_first_passkey(
-    passkey_repo,
+    passkey_repo, db_client
 ) -> None:
     """POST /auth/register/passkey/complete includes show_nudge=True when
     the user had zero passkeys before this registration.
 
     The frontend uses this flag to trigger the lockout-risk modal.
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy import insert
 
     from app.auth.db_models import User
-    from app.db.base import Base
-    from app.db.unit_of_work import SQLAlchemyUnitOfWork
-    from app.dependencies import get_uow
 
-    TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-    engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
+    session = db_client
 
     # Seed a user with pending challenge and NO existing passkeys
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        from sqlalchemy import insert
-
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email="firstpasskey@dojo.test",
-                role="member",
-                is_active=True,
-                pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-                challenge_issued_at=datetime.now(UTC),
-            )
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email="firstpasskey@dojo.test",
+            role="member",
+            is_active=True,
+            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+            challenge_issued_at=datetime.now(UTC),
         )
+    )
+    await session.flush()
 
     mock_verified = MagicMock()
     mock_verified.credential_id = b"test-cred-id-nudge-true"
@@ -204,17 +188,15 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
         body["show_nudge"] is True
     ), f"show_nudge should be True when registering first passkey, got {body['show_nudge']!r}"
 
-    await engine.dispose()
-
 
 # ---------------------------------------------------------------------------
 # AC2 (backend) — show_nudge=False when registering a subsequent passkey (≥1→n)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent_passkey(
-    passkey_repo,
+    passkey_repo, db_client
 ) -> None:
     """POST /auth/register/passkey/complete includes show_nudge=False when
     the user already had one or more passkeys before this registration.
@@ -222,48 +204,33 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     The modal must only fire on the 0→1 transition.
     """
     from sqlalchemy import insert
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.auth.db_models import PasskeyCredential, User
-    from app.db.base import Base
-    from app.db.unit_of_work import SQLAlchemyUnitOfWork
-    from app.dependencies import get_uow
 
-    TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-    engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
+    session = db_client
 
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        # Seed a user with an existing passkey (count=1 before this registration)
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email="secondpasskey@dojo.test",
-                role="member",
-                is_active=True,
-                pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-                challenge_issued_at=datetime.now(UTC),
-            )
+    # Seed a user with an existing passkey (count=1 before this registration)
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email="secondpasskey@dojo.test",
+            role="member",
+            is_active=True,
+            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+            challenge_issued_at=datetime.now(UTC),
         )
-        await conn.execute(
-            insert(PasskeyCredential).values(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                credential_id=b"already-existing-cred",
-                public_key=b"existing-public-key",
-                sign_count=0,
-            )
+    )
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            credential_id=b"already-existing-cred",
+            public_key=b"existing-public-key",
+            sign_count=0,
         )
+    )
+    await session.flush()
 
     mock_verified = MagicMock()
     mock_verified.credential_id = b"second-cred-id-nudge-false"
@@ -300,15 +267,12 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
         body["show_nudge"] is False
     ), f"show_nudge should be False when registering a subsequent passkey, got {body['show_nudge']!r}"
 
-    await engine.dispose()
-
 
 # ---------------------------------------------------------------------------
 # AC3/AC4 (backend) — GET /auth/security-status returns passkey_count
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=0 for a user with no passkeys.
 
@@ -331,7 +295,6 @@ async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     assert body["passkey_count"] == 0
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=1 after the first passkey.
 
@@ -356,7 +319,6 @@ async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
     ), f"passkey_count should be 1 after one passkey is registered, got {body['passkey_count']!r}"
 
 
-@pytest.mark.anyio
 async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
     """GET /auth/security-status returns passkey_count=2 when user has two passkeys.
 
@@ -381,7 +343,6 @@ async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
     ), f"passkey_count should be 2 after two passkeys are registered, got {body['passkey_count']!r}"
 
 
-@pytest.mark.anyio
 async def test_security_status_requires_authentication() -> None:
     """GET /auth/security-status returns 401 when no token is provided."""
     async with AsyncClient(

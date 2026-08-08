@@ -54,7 +54,6 @@ def settings_repo() -> StubDojoSettingsRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_returns_checkin_window_defaults(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -77,7 +76,6 @@ async def test_get_dojo_settings_returns_checkin_window_defaults(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_updates_checkin_window_minutes(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -100,7 +98,6 @@ async def test_put_dojo_settings_updates_checkin_window_minutes(
     assert body["checkin_window_after_minutes"] == 90
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_checkin_window_visible_on_get(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -129,7 +126,6 @@ async def test_put_dojo_settings_checkin_window_visible_on_get(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_rejects_negative_before_minutes(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -146,7 +142,6 @@ async def test_put_dojo_settings_rejects_negative_before_minutes(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_rejects_negative_after_minutes(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -163,7 +158,6 @@ async def test_put_dojo_settings_rejects_negative_after_minutes(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_rejects_before_minutes_over_1440(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -180,7 +174,6 @@ async def test_put_dojo_settings_rejects_before_minutes_over_1440(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_rejects_after_minutes_over_1440(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -197,7 +190,6 @@ async def test_put_dojo_settings_rejects_after_minutes_over_1440(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_accepts_boundary_value_1440(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:

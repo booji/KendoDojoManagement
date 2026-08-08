@@ -237,7 +237,6 @@ def type_repo() -> _StubSessionTypeRepository:
     return repo
 
 
-@pytest.mark.anyio
 async def test_get_sessions_ical_enriches_upcoming_session_with_checkin_link(
     instance_repo, type_repo, monkeypatch
 ) -> None:
@@ -280,7 +279,6 @@ async def test_get_sessions_ical_enriches_upcoming_session_with_checkin_link(
     assert content.startswith(f"Check in: {expected_url}")
 
 
-@pytest.mark.anyio
 async def test_get_sessions_ical_falls_back_to_webauthn_origin(
     instance_repo, type_repo, monkeypatch
 ) -> None:
@@ -315,7 +313,6 @@ async def test_get_sessions_ical_falls_back_to_webauthn_origin(
     assert expected_url in body
 
 
-@pytest.mark.anyio
 async def test_get_sessions_ical_cancelled_session_has_no_checkin_link_leak(
     instance_repo, type_repo, monkeypatch
 ) -> None:

@@ -1,10 +1,8 @@
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
 
-@pytest.mark.anyio
 async def test_x_frame_options_deny() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -14,7 +12,6 @@ async def test_x_frame_options_deny() -> None:
     assert response.headers["x-frame-options"] == "DENY"
 
 
-@pytest.mark.anyio
 async def test_x_content_type_options_nosniff() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -24,7 +21,6 @@ async def test_x_content_type_options_nosniff() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
-@pytest.mark.anyio
 async def test_referrer_policy() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -34,7 +30,6 @@ async def test_referrer_policy() -> None:
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
-@pytest.mark.anyio
 async def test_content_security_policy() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -44,7 +39,6 @@ async def test_content_security_policy() -> None:
     assert response.headers["content-security-policy"] == "default-src 'self'"
 
 
-@pytest.mark.anyio
 async def test_security_headers_on_non_health_route() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -57,7 +51,6 @@ async def test_security_headers_on_non_health_route() -> None:
     assert "content-security-policy" in response.headers
 
 
-@pytest.mark.anyio
 async def test_cors_allows_webauthn_origin_by_default() -> None:
     from app.config import WEBAUTHN_ORIGIN
 

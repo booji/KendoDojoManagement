@@ -317,7 +317,6 @@ def test_generate_idempotent() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_rolling_extension_triggered(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -392,7 +391,6 @@ async def test_rolling_extension_triggered(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
     """GET /sessions?from=2025-01-01&to=2025-01-31 must return only instances
     whose date falls within [2025-01-01, 2025-01-31]."""
@@ -434,7 +432,6 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
     """GET /sessions without params must return only future (today or later) sessions
     AND each returned instance must include the new info/coach_notes/checkin_url fields
@@ -542,7 +539,6 @@ class _MinimalInstanceRepo:
         return record
 
 
-@pytest.mark.anyio
 async def test_new_instance_fields(type_repo) -> None:
     """A created SessionInstance response must include location, info,
     coach_notes, and checkin_url fields (may be None).
@@ -585,7 +581,6 @@ async def test_new_instance_fields(type_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_new_template_fields(type_repo, template_repo) -> None:
     """A created SessionTemplate response must include recurrence_days,
     interval_weeks, info, and coach_notes fields."""

@@ -153,7 +153,6 @@ def member_repo() -> StubMemberRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_get_my_member_returns_200_with_linked_record(member_repo) -> None:
     """An admin with a linked Member record gets 200 from GET /users/me/member."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -172,7 +171,6 @@ async def test_admin_get_my_member_returns_200_with_linked_record(member_repo) -
     assert "id" in body
 
 
-@pytest.mark.anyio
 async def test_admin_get_my_member_returns_404_when_no_linked_record(
     member_repo,
 ) -> None:
@@ -192,7 +190,6 @@ async def test_admin_get_my_member_returns_404_when_no_linked_record(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) -> None:
     """PUT /users/me/member creates a Member record for an admin with no existing record."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -218,7 +215,6 @@ async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) 
     assert body["surname"] == "Member"
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_created_record_is_retrievable(member_repo) -> None:
     """A Member record created by an admin via PUT is immediately retrievable via GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -252,7 +248,6 @@ async def test_admin_put_my_member_created_record_is_retrievable(member_repo) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_updates_existing_record(member_repo) -> None:
     """PUT /users/me/member updates an existing Member record for an admin."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -270,7 +265,6 @@ async def test_admin_put_my_member_updates_existing_record(member_repo) -> None:
     assert response.json()["first_name"] == "Updated Admin"
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
     """Admin update via PUT is visible in a subsequent GET."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -295,7 +289,6 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_created_member_record_appears_in_members_list(member_repo) -> None:
     """A Member record created via PUT /users/me/member appears in GET /members."""
     # Set up both guards: admin can create their own member record AND list members
@@ -327,7 +320,6 @@ async def test_admin_created_member_record_appears_in_members_list(member_repo) 
     assert created_id in member_ids
 
 
-@pytest.mark.anyio
 async def test_admin_member_record_email_matches_admin_email_in_list(
     member_repo,
 ) -> None:
@@ -362,7 +354,6 @@ async def test_admin_member_record_email_matches_admin_email_in_list(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_cannot_set_is_coach(member_repo) -> None:
     """is_coach sent via PUT /users/me/member must not be applied, even for admins."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -381,7 +372,6 @@ async def test_admin_put_my_member_cannot_set_is_coach(member_repo) -> None:
         assert response.json()["is_coach"] is False
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_cannot_set_membership_status(member_repo) -> None:
     """membership_status sent via PUT /users/me/member must not be applied, even for admins."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -400,7 +390,6 @@ async def test_admin_put_my_member_cannot_set_membership_status(member_repo) -> 
         assert response.json()["membership_status"] == "active"
 
 
-@pytest.mark.anyio
 async def test_admin_put_my_member_cannot_set_is_first_aider(member_repo) -> None:
     """is_first_aider sent via PUT /users/me/member must not be applied, even for admins."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override

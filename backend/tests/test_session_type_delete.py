@@ -278,7 +278,6 @@ async def _seed_instance_with_type(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_unreferenced_session_type_succeeds(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -307,7 +306,6 @@ async def test_delete_unreferenced_session_type_succeeds(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_session_type_referenced_by_template_segment_returns_409(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -339,7 +337,6 @@ async def test_delete_session_type_referenced_by_template_segment_returns_409(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_session_type_referenced_by_instance_segment_returns_409(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -371,7 +368,6 @@ async def test_delete_session_type_referenced_by_instance_segment_returns_409(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_nonexistent_session_type_returns_404(
     type_repo, template_repo, instance_repo
 ) -> None:
@@ -394,7 +390,6 @@ async def test_delete_nonexistent_session_type_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_delete_session_type_forbidden_for_member(
     type_repo, template_repo, instance_repo
 ) -> None:

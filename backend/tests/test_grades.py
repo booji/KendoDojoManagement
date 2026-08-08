@@ -274,7 +274,6 @@ def test_grade_display_names() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -288,7 +287,6 @@ async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_promote_increments_grade(member_repo, grade_repo) -> None:
     """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -302,7 +300,6 @@ async def test_promote_increments_grade(member_repo, grade_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
     """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -316,7 +313,6 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
     assert response.status_code == 404
 
 
-@pytest.mark.anyio
 async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
     """POST /promote is removed (issue #144) — must return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -335,7 +331,6 @@ async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_grade_history_chronological(member_repo, grade_repo) -> None:
     """GET /members/{id}/grades returns history with oldest entry first."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -395,7 +390,6 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_grade_history_own_member(member_repo, grade_repo) -> None:
     """A member can read their own grade history — 200."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
@@ -420,7 +414,6 @@ async def test_grade_history_own_member(member_repo, grade_repo) -> None:
     assert history[0]["grade"] == "ROKKYUU"
 
 
-@pytest.mark.anyio
 async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> None:
     """A non-admin member cannot read another member's grade history — 403."""
     # Member B tries to read Member A's history
@@ -443,7 +436,6 @@ async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> 
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None:
     """An admin can read any member's grade history — 200."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -478,7 +470,6 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_promote_endpoint_removed_returns_404(member_repo, grade_repo) -> None:
     """AC1: POST /members/{id}/promote must no longer exist — should return 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -499,7 +490,6 @@ async def test_promote_endpoint_removed_returns_404(member_repo, grade_repo) -> 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> None:
     """AC2: POST /members/{id}/grades (admin only) creates a confirmed grade entry."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -523,7 +513,6 @@ async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> N
     assert "id" in body
 
 
-@pytest.mark.anyio
 async def test_post_grades_non_admin_forbidden(member_repo, grade_repo) -> None:
     """AC2: POST /members/{id}/grades is admin-only — non-admin gets 401/403."""
     app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
@@ -543,7 +532,6 @@ async def test_post_grades_non_admin_forbidden(member_repo, grade_repo) -> None:
     ), f"Non-admin must be rejected; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_post_grades_member_not_found(member_repo, grade_repo) -> None:
     """AC2: POST /members/{id}/grades returns 404 when member does not exist."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -565,7 +553,6 @@ async def test_post_grades_member_not_found(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_post_grades_awarded_at_defaults_to_now(member_repo, grade_repo) -> None:
     """AC3: Omitting awarded_at results in a server-generated UTC timestamp."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -608,7 +595,6 @@ async def test_post_grades_awarded_at_defaults_to_now(member_repo, grade_repo) -
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_post_grades_invalid_grade_value_returns_422(
     member_repo, grade_repo
 ) -> None:
@@ -629,7 +615,6 @@ async def test_post_grades_invalid_grade_value_returns_422(
     ), f"Invalid grade must return 422, got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_post_grades_mukyuu_returns_422(member_repo, grade_repo) -> None:
     """AC4: MUKYUU is the default/ungraded state and cannot be explicitly assigned — 422."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -653,7 +638,6 @@ async def test_post_grades_mukyuu_returns_422(member_repo, grade_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_grades_omits_assigned_by_for_non_admin(
     member_repo, grade_repo
 ) -> None:
@@ -683,7 +667,6 @@ async def test_get_grades_omits_assigned_by_for_non_admin(
     ), "Non-admin callers must not see assigned_by in grade history"
 
 
-@pytest.mark.anyio
 async def test_get_grades_includes_assigned_by_for_admin(
     member_repo, grade_repo
 ) -> None:
@@ -718,7 +701,6 @@ async def test_get_grades_includes_assigned_by_for_admin(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_current_grade_is_latest_confirmed_by_awarded_at(
     member_repo, grade_repo
 ) -> None:
@@ -767,7 +749,6 @@ async def test_current_grade_is_latest_confirmed_by_awarded_at(
     ), f"Current grade must be the latest confirmed entry by awarded_at; got {body.get('grade')}"
 
 
-@pytest.mark.anyio
 async def test_current_grade_ignores_non_confirmed_entries(
     member_repo, grade_repo
 ) -> None:
@@ -810,7 +791,6 @@ async def test_current_grade_ignores_non_confirmed_entries(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
     member_repo, grade_repo
 ) -> None:
@@ -845,7 +825,6 @@ async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
     assert history[0]["grade"] == "ROKKYUU"
 
 
-@pytest.mark.anyio
 async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None:
     """AC11: The old /promote endpoint that caused the Rokkyu bug is gone."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -867,7 +846,6 @@ async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_propose_creates_pending_entry(member_repo, grade_repo) -> None:
     """MEMBER_A proposes SHODAN for their own record → 201, status==pending, assigned_by is None."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
@@ -893,7 +871,6 @@ async def test_propose_creates_pending_entry(member_repo, grade_repo) -> None:
     assert body["member_id"] == member_id
 
 
-@pytest.mark.anyio
 async def test_propose_own_record_member_cannot_propose_for_other(
     member_repo, grade_repo
 ) -> None:
@@ -914,7 +891,6 @@ async def test_propose_own_record_member_cannot_propose_for_other(
     ), f"Member must not be able to propose for another member; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_propose_admin_forbidden(member_repo, grade_repo) -> None:
     """Admin tries POST /propose → 403 (admin cannot use member-only endpoint)."""
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
@@ -933,7 +909,6 @@ async def test_propose_admin_forbidden(member_repo, grade_repo) -> None:
     ), f"Admin must not be able to use the member-only propose endpoint; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_propose_pending_entry_visible_to_own_member(
     member_repo, grade_repo
 ) -> None:
@@ -963,7 +938,6 @@ async def test_propose_pending_entry_visible_to_own_member(
     assert pending_entries[0]["grade"] == "SHODAN"
 
 
-@pytest.mark.anyio
 async def test_propose_pending_entry_not_visible_to_other_member(
     member_repo, grade_repo
 ) -> None:
@@ -997,7 +971,6 @@ async def test_propose_pending_entry_not_visible_to_other_member(
     ), f"Member B must not be able to read Member A's grades; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_propose_mukyuu_returns_422(member_repo, grade_repo) -> None:
     """Proposing MUKYUU → 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
@@ -1016,7 +989,6 @@ async def test_propose_mukyuu_returns_422(member_repo, grade_repo) -> None:
     ), f"MUKYUU must not be proposable; got {response.status_code}"
 
 
-@pytest.mark.anyio
 async def test_propose_invalid_grade_returns_422(member_repo, grade_repo) -> None:
     """Proposing 'NOTAGRADE' → 422."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override

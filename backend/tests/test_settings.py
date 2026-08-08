@@ -72,7 +72,6 @@ def settings_repo() -> StubDojoSettingsRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_returns_defaults_when_none_saved(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -95,7 +94,6 @@ async def test_get_dojo_settings_returns_defaults_when_none_saved(
     assert len(body["primary_colour"]) in (4, 7)  # #RGB or #RRGGBB
 
 
-@pytest.mark.anyio
 async def test_get_dojo_settings_unauthenticated_returns_401(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -113,7 +111,6 @@ async def test_get_dojo_settings_unauthenticated_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_dojo_name(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -132,7 +129,6 @@ async def test_put_dojo_settings_persists_dojo_name(
     assert response.json()["dojo_name"] == "Tokyo Kendo Club"
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_dojo_name_visible_on_get(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -150,7 +146,6 @@ async def test_put_dojo_settings_dojo_name_visible_on_get(
     assert get_resp.json()["dojo_name"] == "Osaka Dojo"
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_persists_primary_colour(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -177,7 +172,6 @@ async def test_put_dojo_settings_persists_primary_colour(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_accepts_light_brand_hue(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -196,7 +190,6 @@ async def test_put_dojo_settings_accepts_light_brand_hue(
     assert response.json()["primary_colour"] == "#FFD700"
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_accepts_near_white_brand_hue(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -220,7 +213,6 @@ async def test_put_dojo_settings_accepts_near_white_brand_hue(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_member_returns_403(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -237,7 +229,6 @@ async def test_put_dojo_settings_member_returns_403(
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_put_dojo_settings_unauthenticated_returns_401(
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -255,7 +246,6 @@ async def test_put_dojo_settings_unauthenticated_returns_401(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_post_settings_logo_member_returns_403() -> None:
     """A member token must receive 403 from POST /settings/logo."""
     async with AsyncClient(
@@ -270,7 +260,6 @@ async def test_post_settings_logo_member_returns_403() -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_post_settings_logo_unauthenticated_returns_401() -> None:
     """No token must receive 401 from POST /settings/logo."""
     async with AsyncClient(
@@ -291,7 +280,6 @@ async def test_post_settings_logo_unauthenticated_returns_401() -> None:
 _REAL_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
-@pytest.mark.anyio
 @pytest.mark.parametrize("endpoint", ["/settings/logo", "/settings/background"])
 async def test_upload_rejects_payload_that_is_not_really_an_image(
     settings_repo: StubDojoSettingsRepo,
@@ -322,7 +310,6 @@ async def test_upload_rejects_payload_that_is_not_really_an_image(
     assert "image" in response.json()["detail"].lower()
 
 
-@pytest.mark.anyio
 @pytest.mark.parametrize("endpoint", ["/settings/logo", "/settings/background"])
 async def test_upload_rejects_sniffed_type_outside_allowed_set(
     settings_repo: StubDojoSettingsRepo,
@@ -348,7 +335,6 @@ async def test_upload_rejects_sniffed_type_outside_allowed_set(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_upload_accepts_a_genuine_png(
     settings_repo: StubDojoSettingsRepo,
     tmp_path,

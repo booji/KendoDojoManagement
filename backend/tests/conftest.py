@@ -174,6 +174,58 @@ def _setup_schema():
     asyncio.run(_drop())
 
 
+class DbSessionUnitOfWork:
+    """Adapts a raw AsyncSession (already inside a test savepoint) to the
+    AbstractUnitOfWork protocol, without ending the surrounding transaction.
+
+    Used by DB-backed tests to override `get_uow` so the app's own commit()
+    calls just flush the shared, savepoint-scoped `db_session` instead of
+    opening a separate connection/transaction — keeping everything inside
+    the one savepoint that gets rolled back on teardown.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @property
+    def session(self) -> AsyncSession:
+        return self._session
+
+    async def commit(self) -> None:
+        await self._session.flush()
+
+    async def rollback(self) -> None:
+        await self._session.rollback()
+
+    async def __aenter__(self) -> "DbSessionUnitOfWork":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+@pytest_asyncio.fixture
+async def db_client(db_session: AsyncSession) -> AsyncSession:
+    """Override get_uow with a UoW bound to the savepoint-scoped db_session
+    and yield that same session for the test body to seed/read rows with.
+
+    Replaces the old per-test in-memory embedded-DB engine: this fixture gives
+    each test an isolated, empty-enough view of PostgreSQL (via db_session's
+    savepoint rollback) while letting HTTP requests through the app under
+    test and direct row seeding both see each other's writes, since they
+    share the same underlying connection/transaction.
+    """
+    from app.dependencies import get_uow
+    from app.main import app
+
+    async def _override():
+        async with DbSessionUnitOfWork(db_session) as uow:
+            yield uow
+
+    app.dependency_overrides[get_uow] = _override
+    yield db_session
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncSession:
     """Function-scoped async session with savepoint rollback for test isolation.

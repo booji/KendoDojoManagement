@@ -40,10 +40,10 @@ Two test tiers in this file:
   - Admin management endpoints (mint/list/revoke, AC1-5) use the
     StubRepository pattern (no DB), matching test_members.py /
     test_admin_recovery.py conventions.
-  - The redemption flow (AC6-10) is DB-backed against sqlite in-memory,
-    matching test_passkey_enumeration.py / test_passkey_timing.py, because it
-    must exercise real WebAuthn option generation, User/Member creation, and
-    the constant-time middleware floor.
+  - The redemption flow (AC6-10) is DB-backed against the shared PostgreSQL
+    test database via the `db_client` fixture (savepoint-scoped, rolled back
+    per test), because it must exercise real WebAuthn option generation,
+    User/Member creation, and the constant-time middleware floor.
 """
 
 from __future__ import annotations
@@ -58,7 +58,6 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, insert, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
@@ -218,7 +217,6 @@ def invite_repo() -> StubInviteRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_mint_invite(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -242,7 +240,6 @@ async def test_admin_can_mint_invite(invite_repo) -> None:
     assert body["token"] in body["link"]
 
 
-@pytest.mark.anyio
 async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -265,7 +262,6 @@ async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
     assert "token" not in stored[0]
 
 
-@pytest.mark.anyio
 async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -280,7 +276,6 @@ async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -292,7 +287,6 @@ async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = REQUIRE_ADMIN  # not overridden
     from app.auth.token import encode_token
@@ -309,7 +303,6 @@ async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -318,7 +311,6 @@ async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
     from app.auth.token import encode_token
 
@@ -330,7 +322,6 @@ async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.anyio
 async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -339,7 +330,6 @@ async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
 async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
     from app.auth.token import encode_token
 
@@ -359,7 +349,6 @@ async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_pending_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -383,7 +372,6 @@ async def test_list_invites_returns_pending_status(invite_repo) -> None:
     assert body[0]["email"] == "pending@dojo.test"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -405,7 +393,6 @@ async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "redeemed"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_expired_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -426,7 +413,6 @@ async def test_list_invites_returns_expired_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "expired"
 
 
-@pytest.mark.anyio
 async def test_list_invites_returns_revoked_status(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -448,7 +434,6 @@ async def test_list_invites_returns_revoked_status(invite_repo) -> None:
     assert response.json()[0]["status"] == "revoked"
 
 
-@pytest.mark.anyio
 async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await invite_repo.add(
@@ -476,7 +461,6 @@ async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_admin_can_revoke_invite(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     record = await invite_repo.add(
@@ -498,7 +482,6 @@ async def test_admin_can_revoke_invite(invite_repo) -> None:
     assert stored["revoked_at"] is not None
 
 
-@pytest.mark.anyio
 async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -509,63 +492,36 @@ async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
 
 
 # ===========================================================================
-# Redemption flow — DB-backed (sqlite in-memory), matching
+# Redemption flow — DB-backed against the shared PostgreSQL test database via
+# the `db_client` fixture (see conftest.py), matching
 # test_passkey_enumeration.py / test_passkey_timing.py conventions.
 # ===========================================================================
 
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
-
-@pytest.fixture
-async def _engine():
-    from app.db.base import Base
-
-    eng = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    await eng.dispose()
-
-
-@pytest.fixture
-async def db_client(_engine):
-    from app.db.unit_of_work import SQLAlchemyUnitOfWork
-    from app.dependencies import get_uow
-
-    factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    async def _override():
-        async with SQLAlchemyUnitOfWork(factory) as uow:
-            yield uow
-
-    app.dependency_overrides[get_uow] = _override
-    yield _engine
-
-
-async def _seed_admin_user(engine, email: str = "existing-admin@dojo.test") -> str:
+async def _seed_admin_user(session, email: str = "existing-admin@dojo.test") -> str:
     """Seed an existing User+PasskeyCredential so the instance is no longer
     in bootstrap mode, mirroring test_passkey_enumeration.py's `_seed_user`."""
     from app.auth.db_models import PasskeyCredential, User
 
     user_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(id=user_id, email=email, role="admin", is_active=True)
+    await session.execute(
+        insert(User).values(id=user_id, email=email, role="admin", is_active=True)
+    )
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            credential_id=uuid.uuid4().bytes,
+            public_key=b"seeded-public-key",
+            sign_count=0,
         )
-        await conn.execute(
-            insert(PasskeyCredential).values(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                credential_id=uuid.uuid4().bytes,
-                public_key=b"seeded-public-key",
-                sign_count=0,
-            )
-        )
+    )
+    await session.flush()
     return user_id
 
 
 async def _seed_invite(
-    engine,
+    session,
     email: str,
     plaintext: str,
     *,
@@ -581,41 +537,41 @@ async def _seed_invite(
     invite_id = str(uuid.uuid4())
     if expires_at is None:
         expires_at = datetime.now(UTC) + timedelta(hours=24)
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(Invite).values(
-                id=invite_id,
-                email=email,
-                first_name=first_name,
-                surname=surname,
-                token_hash=_hash_token(plaintext),
-                expires_at=expires_at,
-                issued_by=issued_by,
-                redeemed_at=redeemed_at,
-                revoked_at=revoked_at,
-                created_at=datetime.now(UTC),
-            )
+    await session.execute(
+        insert(Invite).values(
+            id=invite_id,
+            email=email,
+            first_name=first_name,
+            surname=surname,
+            token_hash=_hash_token(plaintext),
+            expires_at=expires_at,
+            issued_by=issued_by,
+            redeemed_at=redeemed_at,
+            revoked_at=revoked_at,
+            created_at=datetime.now(UTC),
         )
+    )
+    await session.flush()
     return invite_id
 
 
-async def _seed_member(engine, email: str) -> str:
+async def _seed_member(session, email: str) -> str:
     from app.members.db_models import Member
 
     member_id = str(uuid.uuid4())
-    async with engine.begin() as conn:
-        await conn.execute(
-            insert(Member).values(
-                id=member_id,
-                email=email,
-                first_name="Test",
-                surname="Member",
-                join_date="2024-01-01",
-                membership_status="active",
-                is_coach=False,
-                is_first_aider=False,
-            )
+    await session.execute(
+        insert(Member).values(
+            id=member_id,
+            email=email,
+            first_name="Test",
+            surname="Member",
+            join_date="2024-01-01",
+            membership_status="active",
+            is_coach=False,
+            is_first_aider=False,
         )
+    )
+    await session.flush()
     return member_id
 
 
@@ -635,12 +591,12 @@ _FAKE_REGISTER_CREDENTIAL = {
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_begin_valid_token_returns_real_challenge(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "newinvitee@dojo.test", "valid-token-1", issued_by=admin_id
+        session, "newinvitee@dojo.test", "valid-token-1", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -656,14 +612,14 @@ async def test_redeem_begin_valid_token_returns_real_challenge(db_client) -> Non
     assert "challenge" in body["publicKey"]
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_creates_user_for_invited_email(db_client) -> None:
     from app.auth.db_models import User
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "createuser@dojo.test", "valid-token-2", issued_by=admin_id
+        session, "createuser@dojo.test", "valid-token-2", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -671,21 +627,20 @@ async def test_redeem_creates_user_for_invited_email(db_client) -> None:
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-2"})
 
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "createuser@dojo.test")
-        )
-        assert result.fetchone() is not None
+    result = await session.execute(
+        select(User).where(User.email == "createuser@dojo.test")
+    )
+    assert result.fetchone() is not None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_creates_member_when_absent(db_client) -> None:
     from app.members.db_models import Member
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "brandnewmember@dojo.test", "valid-token-3", issued_by=admin_id
+        session, "brandnewmember@dojo.test", "valid-token-3", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -693,24 +648,23 @@ async def test_redeem_creates_member_when_absent(db_client) -> None:
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-3"})
 
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(Member).where(Member.email == "brandnewmember@dojo.test")
-        )
-        member = result.fetchone()
+    result = await session.execute(
+        select(Member).where(Member.email == "brandnewmember@dojo.test")
+    )
+    member = result.scalar_one_or_none()
     assert member is not None
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_links_existing_member_user_id(db_client) -> None:
     from app.auth.db_models import User
     from app.members.db_models import Member
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
-    member_id = await _seed_member(engine, "existingmember@dojo.test")
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    member_id = await _seed_member(session, "existingmember@dojo.test")
     await _seed_invite(
-        engine, "existingmember@dojo.test", "valid-token-4", issued_by=admin_id
+        session, "existingmember@dojo.test", "valid-token-4", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -718,13 +672,12 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-4"})
 
-    async with engine.connect() as conn:
-        user_result = await conn.execute(
-            select(User).where(User.email == "existingmember@dojo.test")
-        )
-        user_row = user_result.fetchone()
-        member_result = await conn.execute(select(Member).where(Member.id == member_id))
-        member_row = member_result.fetchone()
+    user_result = await session.execute(
+        select(User).where(User.email == "existingmember@dojo.test")
+    )
+    user_row = user_result.scalar_one_or_none()
+    member_result = await session.execute(select(Member).where(Member.id == member_id))
+    member_row = member_result.scalar_one_or_none()
 
     assert user_row is not None
     assert member_row is not None
@@ -736,12 +689,12 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_token_twice_second_attempt_fails(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "onceonly@dojo.test", "single-use-token", issued_by=admin_id
+        session, "onceonly@dojo.test", "single-use-token", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -766,12 +719,12 @@ async def test_redeem_token_twice_second_attempt_fails(db_client) -> None:
         assert second_begin.status_code == 200
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_already_redeemed_token_rejected(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "alreadydone@dojo.test",
         "used-token",
         issued_by=admin_id,
@@ -794,12 +747,12 @@ async def test_redeem_already_redeemed_token_rejected(db_client) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_expired_token_rejected(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "expiredinvitee@dojo.test",
         "expired-token",
         issued_by=admin_id,
@@ -817,14 +770,14 @@ async def test_redeem_expired_token_rejected(db_client) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
     from app.auth.db_models import User
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "expiredbegin@dojo.test",
         "expired-begin-token",
         issued_by=admin_id,
@@ -839,11 +792,10 @@ async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
         )
 
     assert response.status_code == 200  # decoy shape, not an error
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            select(User).where(User.email == "expiredbegin@dojo.test")
-        )
-        assert result.fetchone() is None
+    result = await session.execute(
+        select(User).where(User.email == "expiredbegin@dojo.test")
+    )
+    assert result.fetchone() is None
 
 
 # ---------------------------------------------------------------------------
@@ -851,12 +803,12 @@ async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_revoked_token_rejected(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "revokedinvitee@dojo.test",
         "revoked-token",
         issued_by=admin_id,
@@ -880,7 +832,7 @@ async def test_redeem_revoked_token_rejected(db_client) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_begin_unknown_token_returns_200_decoy(db_client) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -895,12 +847,12 @@ async def test_redeem_begin_unknown_token_returns_200_decoy(db_client) -> None:
     assert "challenge" in body["publicKey"]
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_begin_valid_and_invalid_shapes_match(db_client) -> None:
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "shapecheck@dojo.test", "shape-valid-token", issued_by=admin_id
+        session, "shapecheck@dojo.test", "shape-valid-token", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -920,31 +872,31 @@ async def test_redeem_begin_valid_and_invalid_shapes_match(db_client) -> None:
     assert len(valid_key["challenge"]) == len(invalid_key["challenge"])
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_complete_status_and_body_identical_across_bad_token_reasons(
     db_client,
 ) -> None:
     """Unknown, expired, already-redeemed, and revoked tokens must all fail
     with the same status code and same response body shape on completion --
     the whole point of AC9, mirroring #239's generic-failure convention."""
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "expiredcomplete@dojo.test",
         "cmp-expired",
         issued_by=admin_id,
         expires_at=datetime.now(UTC) - timedelta(minutes=1),
     )
     await _seed_invite(
-        engine,
+        session,
         "redeemedcomplete@dojo.test",
         "cmp-redeemed",
         issued_by=admin_id,
         redeemed_at=datetime.now(UTC),
     )
     await _seed_invite(
-        engine,
+        session,
         "revokedcomplete@dojo.test",
         "cmp-revoked",
         issued_by=admin_id,
@@ -992,17 +944,17 @@ def test_invite_redeem_begin_is_registered_as_constant_time_path() -> None:
     assert "/auth/invites/redeem/begin" in _CONSTANT_TIME_PATHS
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_invite_redeem_begin_valid_token_meets_configured_floor(
     db_client, monkeypatch
 ) -> None:
     from app import config
 
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "floorvalid@dojo.test", "floor-valid-token", issued_by=admin_id
+        session, "floorvalid@dojo.test", "floor-valid-token", issued_by=admin_id
     )
 
     async with AsyncClient(
@@ -1018,7 +970,7 @@ async def test_invite_redeem_begin_valid_token_meets_configured_floor(
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_invite_redeem_begin_invalid_token_meets_configured_floor(
     db_client, monkeypatch
 ) -> None:
@@ -1039,7 +991,7 @@ async def test_invite_redeem_begin_invalid_token_meets_configured_floor(
     assert elapsed >= 0.020
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
@@ -1048,10 +1000,10 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     from app import config
 
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine, "medianvalid@dojo.test", "median-valid-token", issued_by=admin_id
+        session, "medianvalid@dojo.test", "median-valid-token", issued_by=admin_id
     )
 
     valid_samples: list[float] = []
@@ -1088,36 +1040,69 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
-async def test_mark_redeemed_is_atomic_and_rejects_second_claim(db_client) -> None:
+@pytest.mark.asyncio
+async def test_mark_redeemed_is_atomic_and_rejects_second_claim(database_url) -> None:
     """Single use must be enforced by the write, not by a prior read.
 
     An unconditional `UPDATE ... SET redeemed_at = now()` lets two concurrent
     redemptions of the same token both pass the usability check before either
     commits, so both register a passkey. The repository must therefore claim
     the row conditionally and report failure when it did not win.
-    """
-    from sqlalchemy.ext.asyncio import AsyncSession
 
+    This test needs two independent, really-committed sessions to observe
+    that atomicity, so it can't use the savepoint-scoped `db_client` fixture
+    (a single shared, never-committed transaction) -- it builds its own
+    NullPool engine bound to the current test's event loop (same technique as
+    conftest.py's `db_session`) and cleans up the row it commits afterwards.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.auth.db_models import Invite
     from app.auth.invite_repository import SqlInviteRepository
 
-    engine = db_client
-    invite_id = await _seed_invite(engine, "raced@dojo.test", "raced-token")
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    invite_id = str(uuid.uuid4())
+    try:
+        async with AsyncSession(engine) as seed_session:
+            await seed_session.execute(
+                insert(Invite).values(
+                    id=invite_id,
+                    email="raced@dojo.test",
+                    first_name="Test",
+                    surname="Invitee",
+                    token_hash=_hash_token("raced-token"),
+                    expires_at=datetime.now(UTC) + timedelta(hours=24),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await seed_session.commit()
 
-    async with AsyncSession(engine) as session:
-        repo = SqlInviteRepository(session)
-        first = await repo.mark_redeemed(invite_id)
-        await session.commit()
+        try:
+            async with AsyncSession(engine) as session:
+                repo = SqlInviteRepository(session)
+                first = await repo.mark_redeemed(invite_id)
+                await session.commit()
 
-    assert first is not None, "the first claim must succeed"
-    assert first["redeemed_at"] is not None
+            assert first is not None, "the first claim must succeed"
+            assert first["redeemed_at"] is not None
 
-    async with AsyncSession(engine) as session:
-        repo = SqlInviteRepository(session)
-        second = await repo.mark_redeemed(invite_id)
-        await session.commit()
+            async with AsyncSession(engine) as session:
+                repo = SqlInviteRepository(session)
+                second = await repo.mark_redeemed(invite_id)
+                await session.commit()
 
-    assert second is None, "a second claim on an already-redeemed invite must fail"
+            assert (
+                second is None
+            ), "a second claim on an already-redeemed invite must fail"
+        finally:
+            async with AsyncSession(engine) as cleanup_session:
+                await cleanup_session.execute(
+                    delete(Invite).where(Invite.id == invite_id)
+                )
+                await cleanup_session.commit()
+    finally:
+        await engine.dispose()
 
 
 def test_invite_redemption_routes_are_rate_limited() -> None:
@@ -1133,15 +1118,15 @@ def test_invite_redemption_routes_are_rate_limited() -> None:
         assert endpoint in registered, f"{endpoint} is not rate limited"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) -> None:
     """Erasure deletes the User row (app/members/router.py), so an unqualified
     FK from invites.issued_by would make an admin who ever issued an invite
     un-erasable. The issuer reference must drop to NULL and the invite survive.
 
-    This one uses the PostgreSQL `db_session` rather than the SQLite engine the
-    rest of this file uses: SQLite does not enforce foreign keys by default, so
-    it cannot observe the constraint under test at all.
+    This one uses the raw `db_session` fixture directly rather than the
+    `db_client` (get_uow-overriding) fixture the rest of this file uses,
+    since it only needs to seed/inspect rows and never goes through the app.
     """
     from app.auth.db_models import Invite, User
 
@@ -1189,7 +1174,6 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_mint_invite_requires_invitee_name(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -1201,16 +1185,16 @@ async def test_mint_invite_requires_invitee_name(invite_repo) -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_creates_member_with_the_name_the_admin_supplied(
     db_client,
 ) -> None:
     from app.members.db_models import Member
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
     await _seed_invite(
-        engine,
+        session,
         "named@dojo.test",
         "named-token",
         issued_by=admin_id,
@@ -1226,14 +1210,13 @@ async def test_redeem_creates_member_with_the_name_the_admin_supplied(
         )
     assert response.status_code == 200
 
-    async with engine.begin() as conn:
-        result = await conn.execute(
-            select(Member).where(Member.email == "named@dojo.test")
-        )
-        member = result.mappings().one()
+    result = await session.execute(
+        select(Member).where(Member.email == "named@dojo.test")
+    )
+    member = result.scalar_one()
 
-    assert member["first_name"] == "Keiko"
-    assert member["surname"] == "Tanaka"
+    assert member.first_name == "Keiko"
+    assert member.surname == "Tanaka"
 
 
 # ---------------------------------------------------------------------------
@@ -1245,10 +1228,10 @@ async def test_redeem_creates_member_with_the_name_the_admin_supplied(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_mint_invite_for_an_existing_user_is_refused(db_client) -> None:
-    engine = db_client
-    await _seed_admin_user(engine, "already@dojo.test")
+    session = db_client
+    await _seed_admin_user(session, "already@dojo.test")
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
@@ -1267,28 +1250,27 @@ async def test_mint_invite_for_an_existing_user_is_refused(db_client) -> None:
     assert "recovery" in response.json()["detail"].lower()
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
     """The account may be created between minting and redemption, so the check
     at mint time is not enough on its own."""
     from app.auth.db_models import PasskeyCredential, User
 
-    engine = db_client
-    admin_id = await _seed_admin_user(engine)
-    await _seed_invite(engine, "racing@dojo.test", "racing-token", issued_by=admin_id)
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(session, "racing@dojo.test", "racing-token", issued_by=admin_id)
     # The invitee registers by some other route before redeeming.
-    await _seed_admin_user(engine, "racing@dojo.test")
+    await _seed_admin_user(session, "racing@dojo.test")
 
-    async with engine.begin() as conn:
-        before = len(
-            (
-                await conn.execute(
-                    select(PasskeyCredential).join(
-                        User, User.id == PasskeyCredential.user_id
-                    )
+    before = len(
+        (
+            await session.execute(
+                select(PasskeyCredential).join(
+                    User, User.id == PasskeyCredential.user_id
                 )
-            ).all()
-        )
+            )
+        ).all()
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1304,14 +1286,13 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
     assert begin.status_code == 200  # decoy, indistinguishable as ever
     assert complete.status_code == 401
 
-    async with engine.begin() as conn:
-        after = len(
-            (
-                await conn.execute(
-                    select(PasskeyCredential).join(
-                        User, User.id == PasskeyCredential.user_id
-                    )
+    after = len(
+        (
+            await session.execute(
+                select(PasskeyCredential).join(
+                    User, User.id == PasskeyCredential.user_id
                 )
-            ).all()
-        )
+            )
+        ).all()
+    )
     assert after == before, "no credential may be added to the existing account"

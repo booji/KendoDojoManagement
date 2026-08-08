@@ -17,13 +17,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 # ---------------------------------------------------------------------------
-# 1. Verify the engine fixture uses PostgreSQL, not SQLite
+# 1. Verify the engine fixture uses PostgreSQL
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_pg_fixture_uses_postgresql(pg_engine: AsyncEngine) -> None:
-    """The `pg_engine` fixture must connect to PostgreSQL, not SQLite.
+    """The `pg_engine` fixture must connect to PostgreSQL.
 
     Fails right now because conftest.py does not define a `pg_engine` fixture.
     """

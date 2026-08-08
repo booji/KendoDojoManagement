@@ -155,7 +155,6 @@ def instance_repo() -> StubSessionInstanceRepo:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_create_session_with_one_segment_then_read_back(
     type_repo, instance_repo
 ) -> None:
@@ -214,7 +213,6 @@ async def test_create_session_with_one_segment_then_read_back(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_create_session_missing_title_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -238,7 +236,6 @@ async def test_create_session_missing_title_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_session_read_response_has_no_legacy_type_column(
     type_repo, instance_repo
 ) -> None:
@@ -271,7 +268,6 @@ async def test_session_read_response_has_no_legacy_type_column(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_create_session_with_zero_segments_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -289,7 +285,6 @@ async def test_create_session_with_zero_segments_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_session_with_segment_missing_types_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -313,7 +308,6 @@ async def test_create_session_with_segment_missing_types_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_session_with_nonpositive_duration_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -338,7 +332,6 @@ async def test_create_session_with_nonpositive_duration_returns_422(
     assert response.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_create_session_with_negative_duration_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -368,7 +361,6 @@ async def test_create_session_with_negative_duration_returns_422(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
 async def test_create_session_with_overlapping_segments_is_accepted(
     type_repo, instance_repo
 ) -> None:
@@ -404,7 +396,6 @@ async def test_create_session_with_overlapping_segments_is_accepted(
     assert body["duration_minutes"] == 60
 
 
-@pytest.mark.anyio
 async def test_create_session_with_same_type_in_multiple_segments_is_accepted(
     type_repo, instance_repo
 ) -> None:
@@ -440,7 +431,6 @@ async def test_create_session_with_same_type_in_multiple_segments_is_accepted(
     assert body["segments"][1]["type_ids"] == [repeated_type]
 
 
-@pytest.mark.anyio
 async def test_member_cannot_create_session_with_segments(
     type_repo, instance_repo
 ) -> None:
