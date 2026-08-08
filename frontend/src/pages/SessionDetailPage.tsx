@@ -9,8 +9,10 @@ import {
   cancelSession,
   deleteTemplate,
   getSessionTypes,
+  getSessionTemplate,
+  extendSessionTemplate,
 } from "@/api/sessions"
-import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput } from "@/api/sessions"
+import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput, SessionTemplate } from "@/api/sessions"
 import { getDojoSettings } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
 import SegmentEditor from "@/components/SegmentEditor"
@@ -23,8 +25,74 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
+
+// ── Extend series control ───────────────────────────────────────────────────────
+
+type ExtendSeriesControlProps = {
+  templateId: string
+  currentEndDate: string
+  onExtended: (updated: SessionTemplate) => void
+}
+
+const ExtendSeriesControl = ({ templateId, currentEndDate, onExtended }: ExtendSeriesControlProps) => {
+  const [open, setOpen] = useState(false)
+  const [newEndDate, setNewEndDate] = useState(currentEndDate)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleExtend = async () => {
+    setError(null)
+    setSubmitting(true)
+    try {
+      const updated = await extendSessionTemplate(templateId, newEndDate)
+      onExtended(updated)
+      setOpen(false)
+    } catch (err) {
+      setError(
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Failed to extend series",
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (v) { setNewEndDate(currentEndDate); setError(null) } }}>
+      <PopoverTrigger render={<Button variant="outline" className="min-h-[44px]" />}>
+        Extend Series
+      </PopoverTrigger>
+      <PopoverContent className="w-72" align="end">
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="extend-end-date">New end date</Label>
+            <Input
+              id="extend-end-date"
+              type="date"
+              value={newEndDate}
+              onChange={(e) => setNewEndDate(e.target.value)}
+              className="min-h-[44px]"
+            />
+          </div>
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">{error}</p>
+          )}
+          <Button
+            className="w-full min-h-[44px]"
+            onClick={() => void handleExtend()}
+            disabled={submitting}
+          >
+            {submitting ? "Extending…" : "Confirm Extend"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 // ── MarkdownField ─────────────────────────────────────────────────────────────
 
@@ -347,6 +415,7 @@ const SessionDetailPage = () => {
   const [state, setState] = useState<PageState>({ kind: "loading" })
   const [editing, setEditing] = useState(false)
   const [showSeriesCancel, setShowSeriesCancel] = useState(false)
+  const [template, setTemplate] = useState<SessionTemplate | null>(null)
   const [checkinState, setCheckinState] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [checkinError, setCheckinError] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -365,6 +434,16 @@ const SessionDetailPage = () => {
         setState({ kind: "loaded", session, role: me.role, attendance: attendanceList, sessionTypes })
         if (session.template_id !== null) {
           setTimeout(() => setShowSeriesCancel(true), 0)
+          // Template detail (incl. end_date) is admin-only on the backend —
+          // only fetch it for admins, and swallow failures silently so a
+          // 403/404 never blocks the rest of the page from rendering.
+          if (me.role === "admin") {
+            getSessionTemplate(session.template_id)
+              .then(setTemplate)
+              .catch(() => {
+                // expiry display / extend action simply stay hidden
+              })
+          }
         }
       })
       .catch(() => {
@@ -481,6 +560,12 @@ const SessionDetailPage = () => {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Location</p>
                 <p className="font-medium">{session.location}</p>
+              </div>
+            )}
+            {template !== null && (
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Series ends</p>
+                <p className="font-medium">{template.end_date}</p>
               </div>
             )}
           </div>
@@ -623,6 +708,13 @@ const SessionDetailPage = () => {
             >
               Cancel Session
             </Button>
+            {template !== null && (
+              <ExtendSeriesControl
+                templateId={template.id}
+                currentEndDate={template.end_date}
+                onExtended={(updated) => setTemplate(updated)}
+              />
+            )}
             <Button onClick={() => setEditing(true)} className="min-h-[44px]">
               Edit
             </Button>

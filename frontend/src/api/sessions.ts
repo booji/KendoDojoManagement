@@ -142,6 +142,7 @@ export const createSession = async (
 export type SessionTemplateCreate = {
   title: string
   start_date: string       // "YYYY-MM-DD"
+  end_date: string          // "YYYY-MM-DD" — required; start_date < end_date <= start_date+6mo
   recurrence_days: number[] // Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
   interval_weeks: 1 | 2
   location: string | null
@@ -154,6 +155,7 @@ export type SessionTemplate = {
   id: string
   title: string
   start_date: string
+  end_date: string
   start_time: string // derived envelope value
   duration_minutes: number // derived envelope value
   recurrence_days: number[]
@@ -162,6 +164,29 @@ export type SessionTemplate = {
   info: string | null
   coach_notes: string | null
   segments: Segment[]
+}
+
+// FastAPI returns validation failures (422) as `{ detail: [{ msg, loc, ... }] }`
+// rather than a plain string. Flatten either shape into one readable message
+// so callers never have to show a raw JSON blob to the user.
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: unknown }
+    if (typeof body.detail === "string") return body.detail
+    if (Array.isArray(body.detail)) {
+      const msgs = body.detail
+        .map((d) =>
+          d && typeof d === "object" && "msg" in d
+            ? String((d as { msg: unknown }).msg)
+            : null,
+        )
+        .filter((m): m is string => m !== null)
+      if (msgs.length > 0) return msgs.join("; ")
+    }
+  } catch {
+    // non-JSON body; fall through to the generic fallback
+  }
+  return fallback
 }
 
 export const createSessionTemplate = async (
@@ -174,8 +199,39 @@ export const createSessionTemplate = async (
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `Failed to create session template: ${res.status}`)
+    throw new Error(
+      await extractErrorMessage(res, `Failed to create session template: ${res.status}`),
+    )
+  }
+  return res.json() as Promise<SessionTemplate>
+}
+
+export const getSessionTemplate = async (templateId: string): Promise<SessionTemplate> => {
+  const res = await fetch(`/api/sessions/templates/${templateId}`, {
+    credentials: "include",
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to fetch session template: ${res.status}`)
+  }
+  return res.json() as Promise<SessionTemplate>
+}
+
+export const extendSessionTemplate = async (
+  templateId: string,
+  endDate: string,
+): Promise<SessionTemplate> => {
+  const res = await fetch(
+    new Request(`${location.origin}/api/sessions/templates/${templateId}/extend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ end_date: endDate }),
+    }),
+  )
+  if (!res.ok) {
+    throw new Error(
+      await extractErrorMessage(res, `Failed to extend session template: ${res.status}`),
+    )
   }
   return res.json() as Promise<SessionTemplate>
 }
