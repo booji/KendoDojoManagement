@@ -16,7 +16,7 @@ Uses StubRepository pattern — NO real DB.
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import pytest
@@ -143,14 +143,6 @@ class StubSessionInstanceRepo:
             and from_date <= date.fromisoformat(s["date"]) <= to_date
         ]
 
-    async def latest_date_for_template(self, template_id: str) -> date | None:
-        dates = [
-            date.fromisoformat(r["date"])
-            for r in self._store.values()
-            if r.get("template_id") == template_id and not r.get("cancelled", False)
-        ]
-        return max(dates) if dates else None
-
     async def get(self, instance_id: str) -> dict[str, Any] | None:
         return self._store.get(instance_id)
 
@@ -261,9 +253,9 @@ def test_generate_multi_day() -> None:
 
     for dow, dates in by_dow.items():
         for a, b in zip(dates, dates[1:]):
-            assert (
-                (b - a).days == 14
-            ), f"Day-of-week {dow}: gap between {a} and {b} is {(b - a).days} days, expected 14"
+            assert (b - a).days == 14, (
+                f"Day-of-week {dow}: gap between {a} and {b} is {(b - a).days} days, expected 14"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -307,83 +299,17 @@ def test_generate_idempotent() -> None:
 
     all_instances = list(repo._store.values())
     dates = [r["date"] for r in all_instances]
-    assert len(dates) == len(
-        set(dates)
-    ), f"Duplicate dates found after two generate calls: {sorted(dates)}"
-
-
-# ---------------------------------------------------------------------------
-# AC3 — rolling 3-month extension triggered when latest instance < 14 days away
-# ---------------------------------------------------------------------------
-
-
-async def test_rolling_extension_triggered(
-    type_repo, template_repo, instance_repo
-) -> None:
-    """When the latest instance for a template is within 14 days of today,
-    GET /sessions (or the generate endpoint) should auto-extend instances to
-    3 months out.  After the call, at least one instance must exist beyond
-    today + 14 days."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    type_id = list(type_repo._store.keys())[0]
-
-    # Create a template with the new fields
-    today = date.today()
-    # start_date in the past so existing instances land near today
-    start = today - timedelta(days=7)
-    tmpl_payload = {
-        "title": "Rolling Extension Test",
-        "start_date": start.isoformat(),
-        "segments": [
-            {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
-        ],
-        "recurrence_days": [start.weekday()],
-        "interval_weeks": 1,
-    }
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        tmpl_resp = await c.post("/sessions/templates", json=tmpl_payload)
-    assert tmpl_resp.status_code == 201
-    template_id = tmpl_resp.json()["id"]
-
-    # Manually seed exactly ONE instance that falls within 14 days of today
-    near_future = today + timedelta(days=7)
-    await instance_repo.add(
-        {
-            "template_id": template_id,
-            "title": "Rolling Extension Test",
-            "date": near_future.isoformat(),
-            "segments": [
-                {
-                    "start_time": "19:00",
-                    "duration_minutes": 90,
-                    "type_ids": [type_id],
-                }
-            ],
-        }
+    assert len(dates) == len(set(dates)), (
+        f"Duplicate dates found after two generate calls: {sorted(dates)}"
     )
 
-    # Hitting GET /sessions should trigger rolling extension
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get("/sessions")
-    assert response.status_code == 200
 
-    # After rolling extension, instances beyond today+14 must exist for this template
-    three_months_out = today + timedelta(days=90)
-    extended = [
-        r
-        for r in instance_repo._store.values()
-        if r.get("template_id") == template_id
-        and date.fromisoformat(r["date"]) > today + timedelta(days=14)
-    ]
-    assert (
-        len(extended) > 0
-    ), "Rolling extension did not generate instances beyond 14 days from today"
+# ---------------------------------------------------------------------------
+# AC3 — superseded by issue #258 (bounded recurrence): the rolling 3-month
+# extension behaviour this suite used to cover was removed. See
+# tests/test_session_template_end_date.py for the replacement contract
+# (required end_date, POST/PATCH generate-on-write, POST .../extend).
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -487,15 +413,15 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
 
     # New fields required by issue #50 must appear on every returned instance
     for session in sessions:
-        assert (
-            "info" in session
-        ), f"Field 'info' missing from session {session.get('id')}"
-        assert (
-            "coach_notes" in session
-        ), f"Field 'coach_notes' missing from session {session.get('id')}"
-        assert (
-            "checkin_url" in session
-        ), f"Field 'checkin_url' missing from session {session.get('id')}"
+        assert "info" in session, (
+            f"Field 'info' missing from session {session.get('id')}"
+        )
+        assert "coach_notes" in session, (
+            f"Field 'coach_notes' missing from session {session.get('id')}"
+        )
+        assert "checkin_url" in session, (
+            f"Field 'checkin_url' missing from session {session.get('id')}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -568,12 +494,12 @@ async def test_new_instance_fields(type_repo) -> None:
 
     assert "location" in body, "Field 'location' missing from SessionInstance response"
     assert "info" in body, "Field 'info' missing from SessionInstance response"
-    assert (
-        "coach_notes" in body
-    ), "Field 'coach_notes' missing from SessionInstance response"
-    assert (
-        "checkin_url" in body
-    ), "Field 'checkin_url' missing from SessionInstance response"
+    assert "coach_notes" in body, (
+        "Field 'coach_notes' missing from SessionInstance response"
+    )
+    assert "checkin_url" in body, (
+        "Field 'checkin_url' missing from SessionInstance response"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -581,7 +507,7 @@ async def test_new_instance_fields(type_repo) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_new_template_fields(type_repo, template_repo) -> None:
+async def test_new_template_fields(type_repo, template_repo, instance_repo) -> None:
     """A created SessionTemplate response must include recurrence_days,
     interval_weeks, info, and coach_notes fields."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -590,6 +516,7 @@ async def test_new_template_fields(type_repo, template_repo) -> None:
     payload = {
         "title": "Multi-day Template",
         "start_date": "2026-01-06",
+        "end_date": "2026-03-06",
         "segments": [
             {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
         ],
@@ -607,18 +534,18 @@ async def test_new_template_fields(type_repo, template_repo) -> None:
     assert response.status_code == 201
     body = response.json()
 
-    assert (
-        "recurrence_days" in body
-    ), "Field 'recurrence_days' missing from template response"
+    assert "recurrence_days" in body, (
+        "Field 'recurrence_days' missing from template response"
+    )
     assert body["recurrence_days"] == [
         1,
         3,
     ], f"Expected recurrence_days=[1,3], got {body.get('recurrence_days')}"
-    assert (
-        "interval_weeks" in body
-    ), "Field 'interval_weeks' missing from template response"
-    assert (
-        body["interval_weeks"] == 2
-    ), f"Expected interval_weeks=2, got {body.get('interval_weeks')}"
+    assert "interval_weeks" in body, (
+        "Field 'interval_weeks' missing from template response"
+    )
+    assert body["interval_weeks"] == 2, (
+        f"Expected interval_weeks=2, got {body.get('interval_weeks')}"
+    )
     assert "info" in body, "Field 'info' missing from template response"
     assert "coach_notes" in body, "Field 'coach_notes' missing from template response"

@@ -17,7 +17,7 @@ app.dependency_overrides to inject in-memory stubs.
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import pytest
@@ -110,6 +110,9 @@ class StubSessionInstanceRepo:
     def __init__(self) -> None:
         self._store: dict[str, dict[str, Any]] = {}
 
+    async def list(self) -> list[dict[str, Any]]:
+        return list(self._store.values())
+
     async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
         now = as_of or date.today()
         return [
@@ -142,6 +145,9 @@ class StubSessionInstanceRepo:
             return None
         record.update(data)
         return record
+
+    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+        return self._store.pop(instance_id, None)
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
@@ -218,6 +224,7 @@ async def _seed_template(template_repo: StubSessionTemplateRepo) -> dict[str, An
         {
             "title": "Weekly Keiko",
             "start_date": "2026-01-05",  # a Monday
+            "end_date": "2030-01-01",  # far enough out to cover any test date
             "segments": [_segment()],
             "recurrence": "weekly",
             "day_of_week": 0,  # Monday
@@ -346,23 +353,28 @@ async def test_put_session_instance_updates_target_only(
 
 
 # ---------------------------------------------------------------------------
-# AC4 — PATCH /sessions/templates/{id}: regenerates future instances; past untouched
+# AC4 — PATCH /sessions/templates/{id}: delta-regenerates instances (issue #258
+# supersedes the old delete-all-future-and-regenerate behaviour: existing
+# instances at still-covered dates — including past ones — are left
+# completely untouched; only no-longer-covered dates are removed.)
 # ---------------------------------------------------------------------------
 
 
-async def test_patch_template_regenerates_future_instances(
+async def test_patch_template_preserves_instances_at_covered_dates(
     template_repo, instance_repo
 ) -> None:
-    """PATCH /sessions/templates/{id} must delete future instances and regenerate
-    them from the updated template fields."""
+    """PATCH /sessions/templates/{id} must not delete+regenerate an existing
+    instance whose date remains covered by the template's recurrence — the
+    old delete-all-future-and-regenerate behaviour is gone (issue #258 AC3)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     tmpl = await _seed_template(template_repo)
 
-    # Seed a future instance belonging to this template
-    future_inst = await _seed_instance(
+    # A Monday within the seeded template's start_date..end_date range.
+    covered_monday = "2026-01-12"
+    existing_inst = await _seed_instance(
         instance_repo,
         template_id=tmpl["id"],
-        instance_date="2099-06-02",
+        instance_date=covered_monday,
     )
 
     update_payload = {
@@ -377,30 +389,25 @@ async def test_patch_template_regenerates_future_instances(
         )
     assert response.status_code == 200
 
-    # The old future instance id should no longer exist (was deleted then regenerated)
-    old_inst = await instance_repo.get(future_inst["id"])
-    assert old_inst is None, "Old future instance must be replaced after PATCH"
-
-    # New future instances should exist for this template
-    all_instances = list(instance_repo._store.values())
-    future_for_tmpl = [
-        i
-        for i in all_instances
-        if i.get("template_id") == tmpl["id"]
-        and date.fromisoformat(i["date"]) >= date.today()
-    ]
-    assert len(future_for_tmpl) >= 1, "Regenerated instances must exist after PATCH"
+    # The existing instance at a still-covered date is left untouched by id
+    # and by content — PATCH no longer deletes and regenerates it.
+    preserved = await instance_repo.get(existing_inst["id"])
+    assert preserved is not None, "Instance at a still-covered date must not be deleted"
+    assert preserved["segments"][0]["start_time"] == "19:00", (
+        "delta regen must not overwrite an existing instance's content"
+    )
 
 
 async def test_patch_template_leaves_past_instances_untouched(
     template_repo, instance_repo
 ) -> None:
-    """PATCH /sessions/templates/{id} must not modify or delete past instances."""
+    """PATCH /sessions/templates/{id} must not modify or delete past instances
+    whose date remains covered by the recurrence."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     tmpl = await _seed_template(template_repo)
 
-    # Seed a past instance (date in the past)
-    past_date = (date.today() - timedelta(days=7)).isoformat()
+    # A covered Monday before "today" (2026-08-08 in this test environment).
+    past_date = "2026-01-19"
     past_inst = await _seed_instance(
         instance_repo,
         template_id=tmpl["id"],
@@ -419,12 +426,12 @@ async def test_patch_template_leaves_past_instances_untouched(
     # Past instance must still exist and be unmodified
     past_after = await instance_repo.get(past_inst["id"])
     assert past_after is not None, "Past instance must not be deleted"
-    assert (
-        past_after["segments"][0]["start_time"] == "19:00"
-    ), "Past instance start_time must be unchanged"
-    assert (
-        past_after["segments"][0]["duration_minutes"] == 90
-    ), "Past instance duration must be unchanged"
+    assert past_after["segments"][0]["start_time"] == "19:00", (
+        "Past instance start_time must be unchanged"
+    )
+    assert past_after["segments"][0]["duration_minutes"] == 90, (
+        "Past instance duration must be unchanged"
+    )
 
 
 # ---------------------------------------------------------------------------

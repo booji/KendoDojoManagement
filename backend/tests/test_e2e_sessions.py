@@ -137,6 +137,7 @@ def test_admin_can_create_recurring_session_template_via_ui(page: Page) -> None:
     payload = {
         "title": "Thursday Evening Keiko",
         "start_date": "2099-07-03",
+        "end_date": "2099-08-03",
         "recurrence": "weekly",
         "day_of_week": 3,
         "segments": [
@@ -186,6 +187,7 @@ def test_generating_instances_from_template_shows_them_in_session_list(
             {
                 "title": "E2E Template",
                 "start_date": next_thursday.isoformat(),
+                "end_date": horizon_date.isoformat(),
                 "recurrence": "weekly",
                 "day_of_week": 3,
                 "segments": [
@@ -201,14 +203,16 @@ def test_generating_instances_from_template_shows_them_in_session_list(
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
 
-    # Generate instances up to a horizon two weeks out (within 90-day window)
-    gen_resp = page.request.post(
-        f"{API_URL}/sessions/templates/{template_id}/generate",
-        headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({"horizon": horizon_date.isoformat()}),
+    # Issue #258: instances are generated up front at template-creation time,
+    # across the full start_date..end_date range — no separate /generate call
+    # is needed (or expected to find anything new; it's idempotent).
+    sessions_resp = page.request.get(
+        f"{API_URL}/sessions", headers=_api_headers(admin_token)
     )
-    assert gen_resp.status == 200
-    instances = gen_resp.json()
+    assert sessions_resp.status == 200
+    instances = [
+        s for s in sessions_resp.json() if s["template_id"] == template_id
+    ]
     assert len(instances) >= 1
 
     # Navigate to sessions UI as a member and verify at least one card is visible
@@ -301,6 +305,7 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
             {
                 "title": "Cancel Test Template",
                 "start_date": "2099-10-02",
+                "end_date": "2099-11-02",
                 "recurrence": "weekly",
                 "day_of_week": 3,
                 "segments": [
@@ -316,14 +321,15 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
     assert tmpl_resp.status == 201
     template_id = tmpl_resp.json()["id"]
 
-    # Generate one instance
-    gen_resp = page.request.post(
-        f"{API_URL}/sessions/templates/{template_id}/generate",
-        headers={**_api_headers(admin_token), "Content-Type": "application/json"},
-        data=json.dumps({"horizon": "2099-10-09"}),
+    # Issue #258: instances are generated up front at template-creation time —
+    # no separate /generate call is needed.
+    sessions_resp = page.request.get(
+        f"{API_URL}/sessions", headers=_api_headers(admin_token)
     )
-    assert gen_resp.status == 200
-    instances = gen_resp.json()
+    assert sessions_resp.status == 200
+    instances = [
+        s for s in sessions_resp.json() if s["template_id"] == template_id
+    ]
     assert len(instances) >= 1
     instance_id = instances[0]["id"]
 

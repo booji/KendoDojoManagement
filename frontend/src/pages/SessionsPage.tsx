@@ -165,6 +165,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 
   // Recurring
   const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
   const [selectedDays, setSelectedDays] = useState<number[]>([])
   const [intervalWeeks, setIntervalWeeks] = useState<1 | 2>(1)
 
@@ -183,6 +184,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
     setCoachNotesPreview(false)
     setDate("")
     setStartDate("")
+    setEndDate("")
     setSelectedDays([])
     setIntervalWeeks(1)
     setSubmitting(false)
@@ -249,6 +251,10 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
         setFormError("Start date is required.")
         return
       }
+      if (!endDate) {
+        setFormError("End date is required.")
+        return
+      }
       if (selectedDays.length === 0) {
         setFormError("Select at least one day of the week.")
         return
@@ -258,6 +264,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
         await createSessionTemplate({
           title: trimmedTitle,
           start_date: startDate,
+          end_date: endDate,
           recurrence_days: selectedDays,
           interval_weeks: intervalWeeks,
           location: location.trim() || null,
@@ -327,17 +334,31 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
             </div>
           )}
 
-          {/* Recurring: start date */}
+          {/* Recurring: start date + end date */}
           {isRecurring && (
-            <div className="space-y-1.5">
-              <Label htmlFor="start-date">Start date</Label>
-              <Input
-                id="start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="min-h-[44px]"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="start-date">Start date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="min-h-[44px]"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="end-date">End date</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="min-h-[44px]"
+                  required
+                />
+              </div>
             </div>
           )}
 
