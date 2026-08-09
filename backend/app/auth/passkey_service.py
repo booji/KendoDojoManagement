@@ -1,7 +1,9 @@
 import base64
+import hmac
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 
 import webauthn
 from fastapi import HTTPException, status
@@ -101,6 +103,60 @@ def _authentication_options_response(options) -> dict:
     return {"publicKey": public_key}
 
 
+def _decoy_user_id(identifier: str) -> str:
+    """Derive a decoy publicKey.user.id that is stable for a given identifier
+    under a fixed server secret, and changes if the secret changes (issue
+    #300).
+
+    The real begin paths (register_passkey_begin, invite_service's
+    invite_redeem_begin) return a persisted primary key as user.id -- stable
+    forever for a given email/token, by construction. An earlier revision of
+    both decoy paths minted a fresh uuid4() per call instead, which was
+    itself the enumeration oracle: two POSTs plus one field comparison told a
+    caller "unstable id -> unknown identifier" with no timing analysis
+    needed, because a real account's id never moves and a decoy's always did.
+
+    Deriving the id from the identifier ALONE (e.g. sha256(email)) would trade
+    one oracle for another -- see _decoy_login_response's docstring for the
+    same lesson learned the hard way with the challenge field: anyone could
+    precompute the decoy id for an email/token they merely guessed, and a
+    match would confirm the guess without ever calling the API. HMAC-ing the
+    identifier with a value only this server holds (config.JWT_SECRET, read
+    at call time -- not imported at module load, so tests can monkeypatch it)
+    is what makes the id BOTH stable across repeat calls AND unpredictable to
+    anyone who doesn't hold that secret. The bug being fixed is the
+    asymmetry between the two paths, not the choice of "stable" or "random"
+    in isolation -- so this is the one place both callers route through, to
+    keep them from drifting apart again.
+
+    b"decoy-user-id-v1" domain-separates this derivation from any other use
+    of JWT_SECRET (token signing) so the two uses can never collide or be
+    swapped for one another.
+
+    Truncated to 16 bytes and formatted as a UUID string to match the byte
+    width py_webauthn encodes a real UUID id at -- a decoy id of a different
+    width would be a #239-style shape tell independent of the stability
+    question this function exists to fix.
+
+    version=4 is load-bearing, not cosmetic. Real ids come from uuid4()
+    (app/db/base.py), so their version and variant nibbles are fixed by RFC
+    4122; raw truncated HMAC bytes have effectively random ones. Formatting
+    the digest without forcing those bits would let a caller classify an
+    email from a SINGLE response -- parse the id and check version == 4,
+    which a real account always satisfies and a raw digest satisfies about
+    one time in sixteen -- trading the two-call stability oracle this
+    function closes for a strictly easier one-call format oracle. Fixing
+    six bits costs nothing: the remaining 122 stay HMAC-derived, which is
+    the same entropy budget a genuine uuid4 has.
+    """
+    digest = hmac.new(
+        key=config.JWT_SECRET.encode("utf-8"),
+        msg=b"decoy-user-id-v1:" + identifier.encode("utf-8"),
+        digestmod=sha256,
+    ).digest()
+    return str(uuid.UUID(bytes=digest[:16], version=4))
+
+
 def _decoy_login_response() -> dict:
     """Decoy for an unknown email, shaped exactly like a real begin response.
 
@@ -124,12 +180,25 @@ def _decoy_login_response() -> dict:
 
 
 def _decoy_register_response(email: str) -> dict:
+    # Normalised the same way a case/whitespace variant of a known email
+    # would be treated -- strip + casefold. `email` has already been through
+    # LenientEmail's validation (app.auth.models), which normalises the
+    # domain but deliberately leaves local-part case alone (RFC 5321 permits
+    # a case-sensitive local part). Re-normalising here is defense-in-depth
+    # so that "A@b.com" and "a@b.com" derive the SAME decoy id -- otherwise
+    # the two would silently diverge from how a human expects "the same
+    # email" to behave, without ever showing up as inconsistent between the
+    # real and decoy paths (both would just independently be case-sensitive).
+    decoy_id = _decoy_user_id(email.strip().casefold())
     options = webauthn.generate_registration_options(
         rp_id=config.WEBAUTHN_RP_ID,
         rp_name="Kendo Dojo",
         # Real path passes a UUID string; match that width so the encoded
         # user id is not itself a decoy tell. Challenge omitted, as above.
-        user_id=str(uuid.uuid4()).encode("utf-8"),
+        # Stable per-email via _decoy_user_id -- see its docstring for why
+        # (issue #300): a fresh uuid4() per call was itself an enumeration
+        # oracle, since the real path's id never moves for a given email.
+        user_id=decoy_id.encode("utf-8"),
         user_name=email,
         # user_display_name mirrors user_name on both paths: the caller
         # already knows the email they typed (attacker-controlled on both

@@ -1032,6 +1032,118 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 
 
 # ---------------------------------------------------------------------------
+# issue #300 -- invite_redeem_begin decoy user.id must not be a stability
+# oracle
+#
+# Same defect as register_passkey_begin (see test_passkey_enumeration.py),
+# keyed by invite token instead of email: invite_redeem_begin's real path
+# returns the persisted User.id (stable forever for a given token, until
+# redeemed), while _decoy_response mints a fresh uuid4() per call. Two POSTs
+# for the same bad token plus one field comparison classifies it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_decoy_user_id_stable_then_secret_dependent(
+    db_client, monkeypatch
+) -> None:
+    """Two redeem-begin calls for the SAME unusable token, under the SAME
+    server secret, must return the SAME publicKey.user.id (today they don't:
+    each call mints a fresh uuid4()). Then, changing the server secret and
+    repeating must change the id -- proving it is not derivable from the
+    token alone."""
+    from app import config
+
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-one-for-issue-300")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        first = await c.post(
+            "/auth/invites/redeem/begin",
+            json={"token": "issue-300-stability-probe"},
+        )
+        second = await c.post(
+            "/auth/invites/redeem/begin",
+            json={"token": "issue-300-stability-probe"},
+        )
+
+    assert first.status_code == second.status_code == 200
+    first_id = first.json()["publicKey"]["user"]["id"]
+    second_id = second.json()["publicKey"]["user"]["id"]
+    assert first_id == second_id, (
+        "decoy user.id must be stable across repeat calls for the same "
+        "token, matching the real path's stability -- a decoy that varies "
+        "per call while the real path is stable-until-redeemed is the "
+        "#300 enumeration oracle"
+    )
+
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-two-for-issue-300")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        third = await c.post(
+            "/auth/invites/redeem/begin",
+            json={"token": "issue-300-stability-probe"},
+        )
+
+    assert third.status_code == 200
+    third_id = third.json()["publicKey"]["user"]["id"]
+    assert third_id != first_id, (
+        "the decoy id must be secret-dependent -- changing the server "
+        "secret for the same token must change the derived id, or the "
+        "derivation is just the token in disguise"
+    )
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> None:
+    """Sanity check on the OTHER half of AC1: the real path's user.id is the
+    persisted User.id, not a per-call value -- inherently stable, since it is
+    the DB row's own primary key. (A genuine two-call replay of the same
+    invite token isn't available here: invite_redeem_begin's OWN
+    _create_invited_user check flips a second call for the same token onto
+    the decoy path once the first call has created the User row for that
+    email -- a separate, pre-existing behaviour unrelated to #300. This test
+    instead confirms the single real call returns exactly the row that got
+    persisted, which is what "stable" cashes out to for a value that is a
+    primary key.)"""
+    import base64
+
+    from app.auth.db_models import User
+
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(
+        session,
+        "real-redeem-stability@dojo.test",
+        "real-redeem-stability-token",
+        issued_by=admin_id,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(
+            "/auth/invites/redeem/begin",
+            json={"token": "real-redeem-stability-token"},
+        )
+
+    assert response.status_code == 200
+    result = await session.execute(
+        select(User).where(User.email == "real-redeem-stability@dojo.test")
+    )
+    user_row = result.scalar_one()
+
+    # publicKey.user.id is base64url(user.id.encode()), not the raw UUID
+    # string -- decode before comparing (same convention as the challenge
+    # field; see app.auth.passkey_service._decode_challenge).
+    returned_id_b64 = response.json()["publicKey"]["user"]["id"]
+    padded = returned_id_b64 + "=" * (4 - len(returned_id_b64) % 4)
+    returned_id = base64.urlsafe_b64decode(padded).decode()
+    assert returned_id == user_row.id
+
+
+# ---------------------------------------------------------------------------
 # Hardening from the #257 security review
 #
 # Two gaps the review found in the first implementation. Both defend the same

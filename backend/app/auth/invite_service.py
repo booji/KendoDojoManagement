@@ -19,7 +19,6 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -45,6 +44,7 @@ from app.auth.models import (
 )
 from app.auth.passkey_service import (
     _decode_challenge,
+    _decoy_user_id,
     _encode_challenge,
     _to_registration_credential,
 )
@@ -150,16 +150,36 @@ async def mint_invite(
     return {**record, "token": plaintext, "link": invite_link(plaintext)}
 
 
-def _decoy_response() -> dict:
+def _decoy_response(token: str) -> dict:
     """Decoy for any unusable token (unknown/expired/revoked/redeemed),
     shaped exactly like the real begin response -- see passkey_service's
     `_decoy_register_response` for why the challenge must come from
-    py_webauthn rather than being constructed here."""
+    py_webauthn rather than being constructed here.
+
+    user_id is derived via the shared `_decoy_user_id` helper (issue #300):
+    invite_redeem_begin's real path returns the persisted User.id, stable for
+    as long as the token stays unredeemed, while this decoy used to mint a
+    fresh uuid4() per call -- the identical real-stable/decoy-random
+    asymmetry that made register_passkey_begin's decoy an enumeration oracle
+    (see passkey_service._decoy_user_id's docstring for the full reasoning).
+    Keyed by the raw token, not a normalised form: unlike an email, a token
+    is an opaque secret.token_urlsafe() value with no case-insensitive
+    convention to respect, so normalising it would only create new
+    collisions between otherwise-distinct tokens.
+
+    user_name is derived from the same helper for the same reason. The real
+    path returns the invitee's persisted email, which never moves for a given
+    token; a fresh uuid4() local part here would leave the #300 oracle fully
+    intact on this field after closing it on user_id, since a caller can
+    compare either one across two calls. Both fields must be stable, or
+    neither is.
+    """
+    decoy_id = _decoy_user_id(token)
     options = webauthn.generate_registration_options(
         rp_id=config.WEBAUTHN_RP_ID,
         rp_name="Kendo Dojo",
-        user_id=str(uuid.uuid4()).encode("utf-8"),
-        user_name=f"{uuid.uuid4()}@invite.invalid",
+        user_id=decoy_id.encode("utf-8"),
+        user_name=f"{decoy_id}@invite.invalid",
         authenticator_selection=_DISCOVERABLE_CREDENTIAL,
     )
     return {"publicKey": json.loads(options_to_json(options))}
@@ -184,11 +204,11 @@ async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
     repo = SqlInviteRepository(uow.session)
     record = await repo.get_by_token_hash(hash_invite_token(token))
     if record is None or not _is_usable(record):
-        return _decoy_response()
+        return _decoy_response(token)
 
     user = await _create_invited_user(record["email"], uow)
     if user is None:
-        return _decoy_response()
+        return _decoy_response(token)
 
     directory = member_directory_for(uow)
     await directory.ensure_member_for_email(
