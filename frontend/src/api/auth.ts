@@ -149,11 +149,50 @@ export const loginPasskeyComplete = async (
   return res.json() as Promise<LoginResponse>
 }
 
+// Every registration "begin" endpoint now requires a discoverable (resident) credential
+// (authenticatorSelection: { residentKey: "required", userVerification: "required" }, see
+// issue #267), which introduces authenticator failure modes that were previously
+// impossible. Browsers report these as a DOMException on navigator.credentials.create;
+// this table maps the ones worth explaining to a message that tells the user what to do
+// about it. Anything not listed (including a bare cancel with no name we recognise) falls
+// back to a generic message.
+//
+// NotAllowedError deliberately stays neutral: it fires both when the user cancels and
+// when verification fails, and per #239/#255/#267 the passkey flows must never let an
+// error message reveal whether an account exists.
+const PASSKEY_CREATION_ERROR_MESSAGES: Partial<Record<string, string>> = {
+  ConstraintError:
+    "Your security key's passkey storage is full. Remove an unused passkey from the device (or use a different one) and try again.",
+  UnknownError:
+    "Your security key couldn't create a passkey — it may be full. Remove an unused passkey from the device (or use a different one) and try again.",
+  NotSupportedError:
+    "This device doesn't support the security features passkeys now require. Try a different security key, or use your phone or computer's built-in passkey manager.",
+  NotAllowedError:
+    "Passkey creation didn't complete. If your device has a PIN or biometric unlock, make sure to confirm it, then try again.",
+  // Neutral by necessity, like NotAllowedError above. The obvious wording
+  // ("this device already has a passkey for this account") states that the
+  // account exists, which is precisely the disclosure #239/#255/#267 exist to
+  // prevent — an attacker who can provoke this error would be reading an
+  // account-existence oracle straight out of the UI. Describe the device
+  // state, never the account.
+  InvalidStateError:
+    "This device can't add another passkey for this sign-in. Try a different security key or device.",
+}
+
+const describePasskeyCreationError = (err: unknown): string => {
+  if (err instanceof DOMException) {
+    const known = PASSKEY_CREATION_ERROR_MESSAGES[err.name]
+    if (known !== undefined) return known
+  }
+  return "Passkey registration failed"
+}
+
 // Drives the browser-side WebAuthn registration ceremony (navigator.credentials.create)
 // against a set of creation options already fetched from a "begin" endpoint, and shapes
 // the resulting credential into the JSON body a "complete" endpoint expects. Shared by
 // every registration flow (self-service passkey add, recovery re-registration, invite
-// redemption) so the ceremony plumbing lives in exactly one place.
+// redemption) so the ceremony plumbing — and the mapping from authenticator errors to
+// user-facing messages — lives in exactly one place.
 export const runPasskeyCreationCeremony = async (
   options: PasskeyCreationOptions
 ): Promise<object> => {
@@ -180,7 +219,12 @@ export const runPasskeyCreationCeremony = async (
     }),
   }
 
-  const credential = await navigator.credentials.create({ publicKey })
+  let credential: Credential | null
+  try {
+    credential = await navigator.credentials.create({ publicKey })
+  } catch (err) {
+    throw { status: 0, message: describePasskeyCreationError(err) } satisfies ApiError
+  }
   if (credential === null) {
     throw { status: 0, message: "No credential returned from authenticator" } satisfies ApiError
   }

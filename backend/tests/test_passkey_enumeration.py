@@ -26,6 +26,7 @@ fixture conventions in test_passkey.py.
 
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -94,6 +95,25 @@ async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
     )
     await session.flush()
     return user_id
+
+
+async def _seed_credentials(session, user_id: str, count: int) -> None:
+    """Add `count` extra PasskeyCredential rows for an already-seeded user.
+
+    Used to vary N independently of _seed_user/_seed_phantom_user, which fix
+    the credential count at 1 and 0 respectively.
+    """
+    for _ in range(count):
+        await session.execute(
+            insert(PasskeyCredential).values(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                credential_id=uuid.uuid4().bytes,
+                public_key=b"seeded-public-key",
+                sign_count=0,
+            )
+        )
+    await session.flush()
 
 
 async def _seed_member(session, email: str) -> str:
@@ -322,7 +342,11 @@ async def test_login_begin_unknown_email_returns_200_not_404(db_client) -> None:
     assert "challenge" in body["publicKey"]
     assert isinstance(body["publicKey"]["challenge"], str)
     assert len(body["publicKey"]["challenge"]) > 0
-    assert body["publicKey"].get("allowCredentials") == []
+    # issue #267: allowCredentials is removed entirely, not merely emptied --
+    # an empty list on the decoy path next to a populated one on the real
+    # path was itself the enumeration oracle, so the field is dropped rather
+    # than masked.
+    assert "allowCredentials" not in body["publicKey"]
 
 
 @pytest.mark.asyncio
@@ -636,3 +660,384 @@ async def test_login_complete_errors_indistinguishable_unknown_vs_bad_credential
     assert unknown_response.json().get("detail") == known_bad_cred_response.json().get(
         "detail"
     )
+
+
+# ── issue #267: allowCredentials removed as an enumeration channel ─────────
+#
+# #239/#255 masked login_passkey_begin's decoy shape and timing, but left
+# allowCredentials itself in place: it always grows to one descriptor per
+# registered passkey on the real path while the decoy path always returns an
+# empty list, so response *size* enumerates registered emails (and how many
+# passkeys they have) in a single request -- no statistics needed, unlike the
+# timing side channel. The chosen fix removes the field entirely and moves
+# login onto discoverable credentials, which also means registration must
+# start requesting a resident key so a credential capable of a
+# allowCredentials-free login actually gets created.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential_count", [0, 1, 3])
+async def test_login_begin_known_email_byte_length_matches_decoy(
+    db_client, credential_count
+) -> None:
+    """AC1: login-begin's response body for a known email with N registered
+    passkeys is byte-length-identical to the decoy response for an unknown
+    email, for N = 0, 1 and 3.
+
+    Today allowCredentials grows with N on the real path while the decoy
+    path's list is always empty, so this must fail for N=1 and N=3 (and would
+    only accidentally pass for N=0) until allowCredentials is removed.
+    """
+    session = db_client
+    known_email = f"known-{credential_count}@dojo.test"
+    user_id = await _seed_phantom_user(session, known_email)
+    await _seed_credentials(session, user_id, credential_count)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        known = await c.post("/auth/login/passkey/begin", json={"email": known_email})
+        decoy = await c.post(
+            "/auth/login/passkey/begin",
+            json={"email": f"unknown-{credential_count}@dojo.test"},
+        )
+
+    assert known.status_code == decoy.status_code == 200
+    assert len(known.content) == len(decoy.content)
+
+
+@pytest.mark.asyncio
+async def test_login_begin_response_has_no_allow_credentials_key(db_client) -> None:
+    """AC2: the login-begin response contains no allowCredentials key at all,
+    neither on the real path (known email, multiple passkeys) nor the decoy
+    path (unknown email)."""
+    session = db_client
+    user_id = await _seed_phantom_user(session, "haskeys@dojo.test")
+    await _seed_credentials(session, user_id, 2)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        known = await c.post(
+            "/auth/login/passkey/begin", json={"email": "haskeys@dojo.test"}
+        )
+        decoy = await c.post(
+            "/auth/login/passkey/begin", json={"email": "nokeys@dojo.test"}
+        )
+
+    assert known.status_code == decoy.status_code == 200
+    assert "allowCredentials" not in known.json()["publicKey"]
+    assert "allowCredentials" not in decoy.json()["publicKey"]
+
+
+@pytest.mark.asyncio
+async def test_register_begin_requests_discoverable_credential_real_and_decoy(
+    db_client,
+) -> None:
+    """AC3: register-begin requests a discoverable credential
+    (authenticatorSelection.residentKey == "required") on both the real path
+    (authorized email) and the decoy path (unknown email) -- the decoy must
+    keep matching the real path's shape, per #239."""
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "discoverable@dojo.test")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        real = await c.post(
+            "/auth/register/passkey/begin", json={"email": "discoverable@dojo.test"}
+        )
+        decoy = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "no-such-member@dojo.test"},
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    assert (
+        real.json()["publicKey"]["authenticatorSelection"]["residentKey"] == "required"
+    )
+    assert (
+        decoy.json()["publicKey"]["authenticatorSelection"]["residentKey"] == "required"
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_begin_real_and_decoy_bodies_same_byte_length(
+    db_client,
+) -> None:
+    """AC4: register-begin's response has no size-varying field -- the
+    real-path and decoy-path bodies are the same byte length.
+
+    Emails are deliberately equal-length so the comparison isolates
+    implementation-driven size differences (e.g. an authenticatorSelection
+    block present on one path but not the other) from the trivial fact that
+    the caller's own email varies the encoded user.name width -- that width
+    difference is not a secret, since the attacker chose both emails.
+    """
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    real_email = "aaaaaaaaaa@dojo.test"
+    decoy_email = "bbbbbbbbbb@dojo.test"
+    assert len(real_email) == len(decoy_email)
+    await _seed_member(session, real_email)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        real = await c.post("/auth/register/passkey/begin", json={"email": real_email})
+        decoy = await c.post(
+            "/auth/register/passkey/begin", json={"email": decoy_email}
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    assert len(real.content) == len(decoy.content)
+
+
+@pytest.mark.asyncio
+async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time(
+    db_client,
+) -> None:
+    """AC5: removing allowCredentials must not regress the #239/#255
+    guarantees -- both begin endpoints still accept an email, still return
+    200 for an unknown/unauthorized one, and remain listed in the
+    constant-time middleware's protected path set."""
+    from app.core.middleware import _CONSTANT_TIME_PATHS
+
+    assert "/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
+    assert "/auth/register/passkey/begin" in _CONSTANT_TIME_PATHS
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        login_resp = await c.post(
+            "/auth/login/passkey/begin", json={"email": "still-answers@dojo.test"}
+        )
+        register_resp = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "still-answers-reg@dojo.test"},
+        )
+
+    assert login_resp.status_code == register_resp.status_code == 200
+    # The specific #267 regression check: the old guarantee was shaped around
+    # an empty allowCredentials list, a concept this issue removes outright.
+    assert "allowCredentials" not in login_resp.json()["publicKey"]
+
+
+@pytest.mark.asyncio
+async def test_login_completes_end_to_end_without_allow_credentials(
+    db_client,
+) -> None:
+    """AC6: passkey login still completes end-to-end for a credential
+    registered under the new (discoverable-credential) registration options,
+    with login-begin returning no allowCredentials -- proving
+    login_passkey_complete resolves the user from (email, credential_id)
+    alone rather than depending on a channel this issue removes.
+
+    Runs a full register -> login round trip against a fresh instance
+    (bootstrap path), mocking only the two webauthn verification calls the
+    same way test_passkey.py does, since no real authenticator is available
+    here.
+    """
+    session = db_client
+    await _reset_to_fresh_instance(session)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        register_begin = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "e2e-flow@dojo.test"},
+        )
+        assert register_begin.status_code == 200
+        assert (
+            register_begin.json()["publicKey"]["authenticatorSelection"]["residentKey"]
+            == "required"
+        )
+
+        credential_id_bytes = b"e2e-flow-credential-id"
+        credential_id_b64 = "ZTJlLWZsb3ctY3JlZGVudGlhbC1pZA"
+
+        mock_verified_registration = MagicMock()
+        mock_verified_registration.credential_id = credential_id_bytes
+        mock_verified_registration.credential_public_key = b"e2e-flow-public-key"
+        mock_verified_registration.sign_count = 0
+        mock_verified_registration.aaguid = None
+
+        with patch(
+            "webauthn.verify_registration_response",
+            return_value=mock_verified_registration,
+        ):
+            register_complete = await c.post(
+                "/auth/register/passkey/complete",
+                json={
+                    "email": "e2e-flow@dojo.test",
+                    "credential": {
+                        "id": credential_id_b64,
+                        "rawId": credential_id_b64,
+                        "response": {
+                            "clientDataJSON": "dGVzdA",
+                            "attestationObject": "dGVzdA",
+                        },
+                        "type": "public-key",
+                    },
+                },
+            )
+        assert register_complete.status_code == 201
+
+        login_begin = await c.post(
+            "/auth/login/passkey/begin", json={"email": "e2e-flow@dojo.test"}
+        )
+        assert login_begin.status_code == 200
+        assert "allowCredentials" not in login_begin.json()["publicKey"]
+
+        mock_verified_login = MagicMock()
+        mock_verified_login.credential_id = credential_id_bytes
+        mock_verified_login.new_sign_count = 1
+
+        with patch(
+            "webauthn.verify_authentication_response",
+            return_value=mock_verified_login,
+        ):
+            login_complete = await c.post(
+                "/auth/login/passkey/complete",
+                json={
+                    "email": "e2e-flow@dojo.test",
+                    "credential": {
+                        "id": credential_id_b64,
+                        "rawId": credential_id_b64,
+                        "response": {
+                            "clientDataJSON": "dGVzdA",
+                            "authenticatorData": "dGVzdA",
+                            "signature": "dGVzdA",
+                        },
+                        "type": "public-key",
+                    },
+                },
+            )
+
+    assert login_complete.status_code == 200
+    assert "access_token" in login_complete.cookies
+
+
+# ── User verification enforcement (issue #267 follow-up) ──────────────────────
+#
+# Issue #267 made registration request `userVerification: "required"` as part
+# of moving login onto discoverable credentials. Requesting UV in the options
+# is not the same as enforcing it: py_webauthn's verify_* helpers default
+# `require_user_verification=False` and only check the authenticator-data `uv`
+# flag when it is True. Without these, the server advertises a guarantee it
+# never checks -- a caller driving the API directly (or a patched client) can
+# complete a ceremony with a credential that performed no user verification,
+# so a stolen unlocked security key is enough to register or log in.
+
+
+@pytest.mark.asyncio
+async def test_login_begin_requests_user_verification_both_paths(db_client) -> None:
+    """UV must be requested at login on the real AND decoy path.
+
+    Both matter: enforcing UV at verification while only requesting the
+    py_webauthn default ("preferred") would let a conforming authenticator
+    skip UV and then be rejected, breaking login. And a decoy that requests
+    a different level than the real path is a #239-style shape tell.
+    """
+    session = db_client
+    await _seed_user(session, "uv-known@dojo.test")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        known = await c.post(
+            "/auth/login/passkey/begin", json={"email": "uv-known@dojo.test"}
+        )
+        unknown = await c.post(
+            "/auth/login/passkey/begin", json={"email": "uv-nobody@dojo.test"}
+        )
+
+    assert known.json()["publicKey"]["userVerification"] == "required"
+    assert unknown.json()["publicKey"]["userVerification"] == "required"
+    assert len(known.content) == len(unknown.content)
+
+
+@pytest.mark.asyncio
+async def test_ceremony_verification_enforces_user_verification(db_client) -> None:
+    """Both complete endpoints must ask py_webauthn to CHECK the uv flag.
+
+    Asserted by spying on the verification calls: py_webauthn only inspects
+    authenticator-data's `uv` bit when `require_user_verification=True`, so
+    the kwarg at this boundary is the whole enforcement. Driven through a
+    real register -> login round trip (same mocking approach as the AC6 test
+    above) rather than by reading source, so it stays true if the calls move.
+    """
+    session = db_client
+    await _reset_to_fresh_instance(session)
+
+    credential_id_bytes = b"uv-flow-credential-id"
+    credential_id_b64 = "dXYtZmxvdy1jcmVkZW50aWFsLWlk"
+
+    mock_registration = MagicMock()
+    mock_registration.credential_id = credential_id_bytes
+    mock_registration.credential_public_key = b"uv-flow-public-key"
+    mock_registration.sign_count = 0
+    mock_registration.aaguid = None
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        await c.post(
+            "/auth/register/passkey/begin", json={"email": "uv-flow@dojo.test"}
+        )
+
+        with patch(
+            "webauthn.verify_registration_response", return_value=mock_registration
+        ) as reg_spy:
+            reg_complete = await c.post(
+                "/auth/register/passkey/complete",
+                json={
+                    "email": "uv-flow@dojo.test",
+                    "credential": {
+                        "id": credential_id_b64,
+                        "rawId": credential_id_b64,
+                        "response": {
+                            "clientDataJSON": "dGVzdA",
+                            "attestationObject": "dGVzdA",
+                        },
+                        "type": "public-key",
+                    },
+                },
+            )
+        assert reg_complete.status_code == 201
+        assert reg_spy.call_args.kwargs.get("require_user_verification") is True, (
+            "register_passkey_complete does not enforce user verification; the "
+            "userVerification='required' advertised at begin is unchecked"
+        )
+
+        await c.post("/auth/login/passkey/begin", json={"email": "uv-flow@dojo.test"})
+
+        mock_login = MagicMock()
+        mock_login.credential_id = credential_id_bytes
+        mock_login.new_sign_count = 1
+
+        with patch(
+            "webauthn.verify_authentication_response", return_value=mock_login
+        ) as auth_spy:
+            login_complete = await c.post(
+                "/auth/login/passkey/complete",
+                json={
+                    "email": "uv-flow@dojo.test",
+                    "credential": {
+                        "id": credential_id_b64,
+                        "rawId": credential_id_b64,
+                        "response": {
+                            "clientDataJSON": "dGVzdA",
+                            "authenticatorData": "dGVzdA",
+                            "signature": "dGVzdA",
+                        },
+                        "type": "public-key",
+                    },
+                },
+            )
+        assert login_complete.status_code == 200
+        assert (
+            auth_spy.call_args.kwargs.get("require_user_verification") is True
+        ), "login_passkey_complete does not enforce user verification"
