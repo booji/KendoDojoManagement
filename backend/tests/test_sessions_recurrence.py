@@ -253,9 +253,9 @@ def test_generate_multi_day() -> None:
 
     for dow, dates in by_dow.items():
         for a, b in zip(dates, dates[1:]):
-            assert (b - a).days == 14, (
-                f"Day-of-week {dow}: gap between {a} and {b} is {(b - a).days} days, expected 14"
-            )
+            assert (
+                (b - a).days == 14
+            ), f"Day-of-week {dow}: gap between {a} and {b} is {(b - a).days} days, expected 14"
 
 
 # ---------------------------------------------------------------------------
@@ -299,9 +299,9 @@ def test_generate_idempotent() -> None:
 
     all_instances = list(repo._store.values())
     dates = [r["date"] for r in all_instances]
-    assert len(dates) == len(set(dates)), (
-        f"Duplicate dates found after two generate calls: {sorted(dates)}"
-    )
+    assert len(dates) == len(
+        set(dates)
+    ), f"Duplicate dates found after two generate calls: {sorted(dates)}"
 
 
 # ---------------------------------------------------------------------------
@@ -413,15 +413,15 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
 
     # New fields required by issue #50 must appear on every returned instance
     for session in sessions:
-        assert "info" in session, (
-            f"Field 'info' missing from session {session.get('id')}"
-        )
-        assert "coach_notes" in session, (
-            f"Field 'coach_notes' missing from session {session.get('id')}"
-        )
-        assert "checkin_url" in session, (
-            f"Field 'checkin_url' missing from session {session.get('id')}"
-        )
+        assert (
+            "info" in session
+        ), f"Field 'info' missing from session {session.get('id')}"
+        assert (
+            "coach_notes" in session
+        ), f"Field 'coach_notes' missing from session {session.get('id')}"
+        assert (
+            "checkin_url" in session
+        ), f"Field 'checkin_url' missing from session {session.get('id')}"
 
 
 # ---------------------------------------------------------------------------
@@ -494,12 +494,12 @@ async def test_new_instance_fields(type_repo) -> None:
 
     assert "location" in body, "Field 'location' missing from SessionInstance response"
     assert "info" in body, "Field 'info' missing from SessionInstance response"
-    assert "coach_notes" in body, (
-        "Field 'coach_notes' missing from SessionInstance response"
-    )
-    assert "checkin_url" in body, (
-        "Field 'checkin_url' missing from SessionInstance response"
-    )
+    assert (
+        "coach_notes" in body
+    ), "Field 'coach_notes' missing from SessionInstance response"
+    assert (
+        "checkin_url" in body
+    ), "Field 'checkin_url' missing from SessionInstance response"
 
 
 # ---------------------------------------------------------------------------
@@ -534,18 +534,18 @@ async def test_new_template_fields(type_repo, template_repo, instance_repo) -> N
     assert response.status_code == 201
     body = response.json()
 
-    assert "recurrence_days" in body, (
-        "Field 'recurrence_days' missing from template response"
-    )
+    assert (
+        "recurrence_days" in body
+    ), "Field 'recurrence_days' missing from template response"
     assert body["recurrence_days"] == [
         1,
         3,
     ], f"Expected recurrence_days=[1,3], got {body.get('recurrence_days')}"
-    assert "interval_weeks" in body, (
-        "Field 'interval_weeks' missing from template response"
-    )
-    assert body["interval_weeks"] == 2, (
-        f"Expected interval_weeks=2, got {body.get('interval_weeks')}"
-    )
+    assert (
+        "interval_weeks" in body
+    ), "Field 'interval_weeks' missing from template response"
+    assert (
+        body["interval_weeks"] == 2
+    ), f"Expected interval_weeks=2, got {body.get('interval_weeks')}"
     assert "info" in body, "Field 'info' missing from template response"
     assert "coach_notes" in body, "Field 'coach_notes' missing from template response"

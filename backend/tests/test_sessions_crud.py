@@ -393,9 +393,9 @@ async def test_patch_template_preserves_instances_at_covered_dates(
     # and by content — PATCH no longer deletes and regenerates it.
     preserved = await instance_repo.get(existing_inst["id"])
     assert preserved is not None, "Instance at a still-covered date must not be deleted"
-    assert preserved["segments"][0]["start_time"] == "19:00", (
-        "delta regen must not overwrite an existing instance's content"
-    )
+    assert (
+        preserved["segments"][0]["start_time"] == "19:00"
+    ), "delta regen must not overwrite an existing instance's content"
 
 
 async def test_patch_template_leaves_past_instances_untouched(
@@ -426,12 +426,12 @@ async def test_patch_template_leaves_past_instances_untouched(
     # Past instance must still exist and be unmodified
     past_after = await instance_repo.get(past_inst["id"])
     assert past_after is not None, "Past instance must not be deleted"
-    assert past_after["segments"][0]["start_time"] == "19:00", (
-        "Past instance start_time must be unchanged"
-    )
-    assert past_after["segments"][0]["duration_minutes"] == 90, (
-        "Past instance duration must be unchanged"
-    )
+    assert (
+        past_after["segments"][0]["start_time"] == "19:00"
+    ), "Past instance start_time must be unchanged"
+    assert (
+        past_after["segments"][0]["duration_minutes"] == 90
+    ), "Past instance duration must be unchanged"
 
 
 # ---------------------------------------------------------------------------

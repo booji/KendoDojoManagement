@@ -421,9 +421,9 @@ async def test_create_template_generates_full_range_instances(
     ]
     generated_dates = sorted(r["date"] for r in generated)
     expected_dates = [(start + timedelta(weeks=w)).isoformat() for w in range(5)]
-    assert generated_dates == expected_dates, (
-        f"expected instances on {expected_dates}, got {generated_dates}"
-    )
+    assert (
+        generated_dates == expected_dates
+    ), f"expected instances on {expected_dates}, got {generated_dates}"
 
 
 # ---------------------------------------------------------------------------
@@ -494,9 +494,9 @@ async def test_update_template_delta_add_remove_preserve(
         for r in all_after_add
         if date.fromisoformat(r["date"]).weekday() == 0
     }
-    assert mondays_after_add[cancelled_target["date"]]["cancelled"] is True, (
-        "cancelled Monday instance must not be clobbered by the delta regen"
-    )
+    assert (
+        mondays_after_add[cancelled_target["date"]]["cancelled"] is True
+    ), "cancelled Monday instance must not be clobbered by the delta regen"
     assert (
         mondays_after_add[edited_target["date"]]["title"] == "Individually Edited Keiko"
     ), "individually edited Monday instance must not be clobbered by the delta regen"
@@ -516,9 +516,9 @@ async def test_update_template_delta_add_remove_preserve(
     thursdays_after_remove = [
         r for r in all_after_remove if date.fromisoformat(r["date"]).weekday() == 3
     ]
-    assert len(thursdays_after_remove) == 0, (
-        "Thursdays no longer covered by recurrence must be removed"
-    )
+    assert (
+        len(thursdays_after_remove) == 0
+    ), "Thursdays no longer covered by recurrence must be removed"
 
     mondays_after_remove = {
         r["date"]: r
@@ -565,9 +565,9 @@ async def test_get_sessions_performs_no_writes(type_repo) -> None:
     assert instance_repo.add_calls == 0, "GET /sessions must not add instances"
     assert instance_repo.update_calls == 0, "GET /sessions must not update instances"
     assert instance_repo.delete_calls == 0, "GET /sessions must not delete instances"
-    assert template_repo.list_calls == 0, (
-        "GET /sessions must not loop over templates (rolling extension is gone)"
-    )
+    assert (
+        template_repo.list_calls == 0
+    ), "GET /sessions must not loop over templates (rolling extension is gone)"
 
 
 def test_needs_rolling_extension_removed_from_service() -> None:
@@ -575,9 +575,9 @@ def test_needs_rolling_extension_removed_from_service() -> None:
     (AC4) — its presence signals the rolling-extension code path still exists."""
     import app.sessions.service as service_module
 
-    assert not hasattr(service_module, "needs_rolling_extension"), (
-        "needs_rolling_extension must be removed per AC4"
-    )
+    assert not hasattr(
+        service_module, "needs_rolling_extension"
+    ), "needs_rolling_extension must be removed per AC4"
 
 
 def test_latest_date_for_template_removed_from_protocol() -> None:
@@ -585,9 +585,9 @@ def test_latest_date_for_template_removed_from_protocol() -> None:
     AbstractSessionInstanceRepository (AC4)."""
     from app.sessions.repository import AbstractSessionInstanceRepository
 
-    assert not hasattr(AbstractSessionInstanceRepository, "latest_date_for_template"), (
-        "latest_date_for_template must be removed from the repository protocol per AC4"
-    )
+    assert not hasattr(
+        AbstractSessionInstanceRepository, "latest_date_for_template"
+    ), "latest_date_for_template must be removed from the repository protocol per AC4"
 
 
 # ---------------------------------------------------------------------------
@@ -642,9 +642,9 @@ async def test_extend_bumps_end_date_and_adds_only_new_dates(
         r for r in instance_repo._store.values() if r.get("template_id") == template_id
     ]
     assert len(after) > before_count, "extend must generate newly-covered dates"
-    assert any(date.fromisoformat(r["date"]) > initial_end for r in after), (
-        "extend must generate instances beyond the old end_date"
-    )
+    assert any(
+        date.fromisoformat(r["date"]) > initial_end for r in after
+    ), "extend must generate instances beyond the old end_date"
 
 
 async def test_extend_idempotent(type_repo, template_repo, instance_repo) -> None:
@@ -684,9 +684,9 @@ async def test_extend_idempotent(type_repo, template_repo, instance_repo) -> Non
             ]
         )
 
-    assert count_after_second == count_after_first, (
-        "calling extend twice with the same target end_date must add nothing new"
-    )
+    assert (
+        count_after_second == count_after_first
+    ), "calling extend twice with the same target end_date must add nothing new"
 
 
 async def test_extend_rejects_beyond_six_month_cap_from_today(
@@ -740,9 +740,9 @@ async def test_extend_unknown_template_404(
     # path also happens to be a 404). Require the endpoint's own
     # template-not-found message, matching the convention used everywhere
     # else in this router (e.g. "Template not found").
-    assert "template" in resp.json().get("detail", "").lower(), (
-        f"expected a template-not-found detail message, got {resp.json()!r}"
-    )
+    assert (
+        "template" in resp.json().get("detail", "").lower()
+    ), f"expected a template-not-found detail message, got {resp.json()!r}"
 
 
 async def test_extend_forbidden_for_non_admin(
@@ -828,7 +828,7 @@ def test_migration_backfills_existing_rows_to_today_plus_six_months() -> None:
     # (e.g. via op.execute with a date/interval expression), not a fixed
     # server_default literal — a static 6-month-out date differs per row's
     # migration run date, so a plain server_default cannot express it.
-    assert "op.execute" in text, (
-        "backfilling end_date to today + 6 months requires a data migration step (op.execute)"
-    )
+    assert (
+        "op.execute" in text
+    ), "backfilling end_date to today + 6 months requires a data migration step (op.execute)"
     assert "6" in text, "backfill expression must reference the 6-month offset"

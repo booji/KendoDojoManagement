@@ -117,7 +117,9 @@ def _create_template_via_api(
     return resp.json()
 
 
-def _first_instance_for_template(page: Page, admin_token: str, template_id: str) -> dict:
+def _first_instance_for_template(
+    page: Page, admin_token: str, template_id: str
+) -> dict:
     resp = page.request.get(f"{API_URL}/sessions", headers=_api_headers(admin_token))
     assert resp.status == 200
     matches = [s for s in resp.json() if s["template_id"] == template_id]
