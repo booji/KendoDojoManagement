@@ -210,9 +210,7 @@ def test_generating_instances_from_template_shows_them_in_session_list(
         f"{API_URL}/sessions", headers=_api_headers(admin_token)
     )
     assert sessions_resp.status == 200
-    instances = [
-        s for s in sessions_resp.json() if s["template_id"] == template_id
-    ]
+    instances = [s for s in sessions_resp.json() if s["template_id"] == template_id]
     assert len(instances) >= 1
 
     # Navigate to sessions UI as a member and verify at least one card is visible
@@ -327,9 +325,7 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
         f"{API_URL}/sessions", headers=_api_headers(admin_token)
     )
     assert sessions_resp.status == 200
-    instances = [
-        s for s in sessions_resp.json() if s["template_id"] == template_id
-    ]
+    instances = [s for s in sessions_resp.json() if s["template_id"] == template_id]
     assert len(instances) >= 1
     instance_id = instances[0]["id"]
 

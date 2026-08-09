@@ -25,7 +25,6 @@ criterion here is about wall-clock latency of a service/HTTP call, which a
 headless browser cannot measure meaningfully -- it would only add flake.
 """
 
-import statistics
 import time
 import uuid
 
@@ -37,6 +36,10 @@ from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
 from app.members.db_models import Member
+from tests.timing_support import (
+    assert_latency_medians_converge,
+    sample_counterbalanced,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -209,34 +212,28 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     UNKNOWN email must differ by far less than the ~2ms signal in the issue.
 
     Interleaved sampling (not two separate blocks) avoids attributing warm-up
-    or GC-pause skew to one branch; taking the median over enough samples
-    (rather than a single measurement) keeps the assertion robust to CI
-    scheduling noise.
+    or GC-pause skew to one branch. The tolerance is calibrated per run
+    against same-path noise -- see tests/timing_support.py and issue #298.
     """
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
     session = db_client
     await _seed_user(session, "known-median@dojo.test")
 
-    known_samples: list[float] = []
-    unknown_samples: list[float] = []
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        for _ in range(15):
-            known_samples.append(
-                await _timed_post(
-                    c, "/auth/login/passkey/begin", "known-median@dojo.test"
-                )
-            )
-            unknown_samples.append(
-                await _timed_post(
-                    c, "/auth/login/passkey/begin", "unknown-median@dojo.test"
-                )
-            )
+        known_samples, unknown_samples = await sample_counterbalanced(
+            lambda: _timed_post(
+                c, "/auth/login/passkey/begin", "known-median@dojo.test"
+            ),
+            lambda: _timed_post(
+                c, "/auth/login/passkey/begin", "unknown-median@dojo.test"
+            ),
+        )
 
-    diff = abs(statistics.median(known_samples) - statistics.median(unknown_samples))
-    assert diff < 0.001  # under 1ms, far below the ~2ms reported signal
+    assert_latency_medians_converge(
+        known_samples, unknown_samples, label_a="known email", label_b="unknown email"
+    )
 
 
 @pytest.mark.asyncio
@@ -251,28 +248,24 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
     await _seed_member(session, "authorized-median@dojo.test")
 
-    authorized_samples: list[float] = []
-    unauthorized_samples: list[float] = []
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        for _ in range(15):
-            authorized_samples.append(
-                await _timed_post(
-                    c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
-                )
-            )
-            unauthorized_samples.append(
-                await _timed_post(
-                    c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
-                )
-            )
+        authorized_samples, unauthorized_samples = await sample_counterbalanced(
+            lambda: _timed_post(
+                c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
+            ),
+            lambda: _timed_post(
+                c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
+            ),
+        )
 
-    diff = abs(
-        statistics.median(authorized_samples) - statistics.median(unauthorized_samples)
+    assert_latency_medians_converge(
+        authorized_samples,
+        unauthorized_samples,
+        label_a="authorized email",
+        label_b="unauthorized email",
     )
-    assert diff < 0.001  # under 1ms, far below the ~2ms reported signal
 
 
 # ── AC6: the floor is configurable ───────────────────────────────────────────

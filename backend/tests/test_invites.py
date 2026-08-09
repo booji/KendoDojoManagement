@@ -49,7 +49,6 @@ Two test tiers in this file:
 from __future__ import annotations
 
 import hashlib
-import statistics
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -996,8 +995,15 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
     """Over interleaved samples, valid-token and invalid-token latency medians
-    must be near-identical, matching the #255 convergence assertion style."""
+    must be near-identical, matching the #255 convergence assertion style.
+
+    Tolerance is calibrated per run against same-path noise -- see
+    tests/timing_support.py and issue #298."""
     from app import config
+    from tests.timing_support import (
+        assert_latency_medians_converge,
+        sample_counterbalanced,
+    )
 
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
     session = db_client
@@ -1006,29 +1012,25 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
         session, "medianvalid@dojo.test", "median-valid-token", issued_by=admin_id
     )
 
-    valid_samples: list[float] = []
-    invalid_samples: list[float] = []
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        for _ in range(15):
-            start = time.perf_counter()
-            r = await c.post(
-                "/auth/invites/redeem/begin", json={"token": "median-valid-token"}
-            )
-            valid_samples.append(time.perf_counter() - start)
-            assert r.status_code == 200
 
+        async def _timed_redeem(token: str) -> float:
             start = time.perf_counter()
-            r = await c.post(
-                "/auth/invites/redeem/begin", json={"token": "median-invalid-token"}
-            )
-            invalid_samples.append(time.perf_counter() - start)
+            r = await c.post("/auth/invites/redeem/begin", json={"token": token})
+            elapsed = time.perf_counter() - start
             assert r.status_code == 200
+            return elapsed
 
-    diff = abs(statistics.median(valid_samples) - statistics.median(invalid_samples))
-    assert diff < 0.001  # under 1ms, far below any human-observable signal
+        valid_samples, invalid_samples = await sample_counterbalanced(
+            lambda: _timed_redeem("median-valid-token"),
+            lambda: _timed_redeem("median-invalid-token"),
+        )
+
+    assert_latency_medians_converge(
+        valid_samples, invalid_samples, label_a="valid token", label_b="invalid token"
+    )
 
 
 # ---------------------------------------------------------------------------
