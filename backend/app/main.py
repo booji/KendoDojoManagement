@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator
@@ -27,7 +26,7 @@ from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import CORS_ORIGINS, validate_startup_config
 from app.core.middleware import ConstantTimeAuthMiddleware, SecurityHeadersMiddleware
-from app.db.base import Base
+from app.db.bootstrap import prepare_database
 from app.db.engine import engine
 from app.federations.router import router as federations_router
 from app.grades.router import router as grades_router
@@ -57,24 +56,17 @@ def _rate_limit_exceeded_handler(
 
 
 async def _init_db() -> None:
-    for attempt in range(10):
-        try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            async with engine.begin() as conn:
-                await seed_session_types(conn)
-            return
-        except Exception as exc:
-            if attempt == 9:
-                raise
-            delay = 2**attempt
-            _log.warning(
-                "DB not ready (attempt %d/10): %s — retrying in %ds",
-                attempt + 1,
-                exc,
-                delay,
-            )
-            await asyncio.sleep(delay)
+    """Bring the schema to head via Alembic, then seed default session types.
+
+    Schema creation flows exclusively through the Alembic migration chain
+    (see app.db.bootstrap) — this no longer calls Base.metadata.create_all.
+    prepare_database() already retries with backoff while the database is
+    unreachable, so no separate retry loop is needed here; seeding runs once
+    the schema is guaranteed to exist.
+    """
+    await prepare_database()
+    async with engine.begin() as conn:
+        await seed_session_types(conn)
 
 
 @asynccontextmanager
