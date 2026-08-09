@@ -16,8 +16,13 @@ Two bounds keep that honest:
 
 * a lower bound (`MIN_TOLERANCE_S`, 1ms) preserves the original strict budget
   on a quiet machine, so the check does not silently relax when it need not;
-* an upper bound (`MAX_TOLERANCE_S`, 2ms) means load can never buy enough
-  tolerance to hide the ~2ms signal issue #255 was filed about.
+* an upper bound (`MAX_TOLERANCE_S`, 1.5ms) sits clearly below the ~2.02ms
+  delta issue #255 actually measured, so load can never buy enough tolerance
+  to hide that signal -- or a milder regression of the same class.
+
+Calibration alone was not sufficient. Sampling order matters too: see
+`sample_counterbalanced`, which exists because a fixed A-then-B loop let
+run-scale drift masquerade as a cross-path difference.
 
 Note this is not the production defence -- that is the constant-time floor
 (`AUTH_BEGIN_MIN_DURATION_MS`), asserted separately by the floor tests. This
@@ -25,8 +30,13 @@ assertion guards against asymmetry *above* that floor.
 """
 
 import statistics
+from collections.abc import Awaitable, Callable
 
-__all__ = ["assert_latency_medians_converge", "SAMPLE_COUNT"]
+__all__ = [
+    "assert_latency_medians_converge",
+    "sample_counterbalanced",
+    "SAMPLE_COUNT",
+]
 
 #: Samples to take per branch. Above the previous 15 so the median is less
 #: sensitive to a single scheduling outlier, and enough that each split-half
@@ -39,21 +49,75 @@ NOISE_MULTIPLIER = 3.0
 #: Floor for the tolerance: the historical fixed budget from issue #255.
 MIN_TOLERANCE_S = 0.001
 
-#: Ceiling for the tolerance: below the ~2ms leak the constant-time floor was
-#: introduced to close, so no amount of noise can excuse that signal.
-MAX_TOLERANCE_S = 0.002
+#: Ceiling for the tolerance. Issue #255 measured the real leak at a median
+#: delta of ~2.02ms, so this must sit clearly *below* that rather than at it:
+#: a capped-out tolerance must still fail a regression of the same class that
+#: happens to land somewhat under the originally-measured figure.
+MAX_TOLERANCE_S = 0.0015
 
 #: Fewest samples per branch that can support a split-half control.
 _MIN_SAMPLES = 8
+
+
+async def sample_counterbalanced(
+    measure_a: Callable[[], Awaitable[float]],
+    measure_b: Callable[[], Awaitable[float]],
+    *,
+    count: int = SAMPLE_COUNT,
+) -> tuple[list[float], list[float]]:
+    """Sample two branches, alternating which one is measured first.
+
+    Naive interleaving (always A then B within each iteration) pins one branch
+    permanently in the "first" slot. Any drift over the run -- cache warming,
+    CPU frequency scaling, a slow oscillation in host load -- then lands on the
+    two branches at different phases and shows up as a delta that no amount of
+    sampling will average away, because it is systematic in the *ordering*, not
+    random.
+
+    That is not hypothetical: on an idle machine, runs of the naive loop
+    produced a ~1.1ms cross-path delta against a ~0.1ms same-path control, in
+    both the passkey and invite tests at once, roughly one run in three (issue
+    #298 QA). A delta ten times the noise floor that fails to reproduce on the
+    next run is an artefact of the harness, not of the code under test.
+
+    Swapping the order every iteration (ABBA) cancels that first-order drift:
+    each branch spends half its samples first and half second.
+
+    Args:
+        measure_a, measure_b: awaitables returning one wall-clock duration in
+            seconds for their respective branch.
+        count: samples to collect per branch.
+
+    Returns:
+        (samples_a, samples_b), each of length `count`.
+    """
+    samples_a: list[float] = []
+    samples_b: list[float] = []
+
+    for index in range(count):
+        if index % 2 == 0:
+            samples_a.append(await measure_a())
+            samples_b.append(await measure_b())
+        else:
+            samples_b.append(await measure_b())
+            samples_a.append(await measure_a())
+
+    return samples_a, samples_b
 
 
 def _split_half_control(samples: list[float]) -> float:
     """Median delta between two interleaved halves of one branch's samples.
 
     Both halves come from the same code path, so the true delta is zero and
-    the result is a direct read on this run's measurement noise. Interleaving
-    (odd/even index) rather than splitting front/back keeps warm-up and drift
-    spread evenly across both halves.
+    the result is a direct read on this run's measurement noise. Splitting by
+    odd/even index rather than front/back keeps warm-up and drift spread
+    evenly across both halves.
+
+    Under `sample_counterbalanced`, index parity within a branch also tracks
+    whether that sample was taken first or second in its iteration -- so this
+    additionally picks up any residual ordering bias. That biases the control
+    slightly high while the cross-path delta has the same bias cancelled out,
+    which errs toward tolerating noise rather than toward false confidence.
     """
     return abs(statistics.median(samples[0::2]) - statistics.median(samples[1::2]))
 

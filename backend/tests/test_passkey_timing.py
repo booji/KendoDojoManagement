@@ -36,7 +36,10 @@ from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
 from app.members.db_models import Member
-from tests.timing_support import SAMPLE_COUNT, assert_latency_medians_converge
+from tests.timing_support import (
+    assert_latency_medians_converge,
+    sample_counterbalanced,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -216,23 +219,17 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     session = db_client
     await _seed_user(session, "known-median@dojo.test")
 
-    known_samples: list[float] = []
-    unknown_samples: list[float] = []
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        for _ in range(SAMPLE_COUNT):
-            known_samples.append(
-                await _timed_post(
-                    c, "/auth/login/passkey/begin", "known-median@dojo.test"
-                )
-            )
-            unknown_samples.append(
-                await _timed_post(
-                    c, "/auth/login/passkey/begin", "unknown-median@dojo.test"
-                )
-            )
+        known_samples, unknown_samples = await sample_counterbalanced(
+            lambda: _timed_post(
+                c, "/auth/login/passkey/begin", "known-median@dojo.test"
+            ),
+            lambda: _timed_post(
+                c, "/auth/login/passkey/begin", "unknown-median@dojo.test"
+            ),
+        )
 
     assert_latency_medians_converge(
         known_samples, unknown_samples, label_a="known email", label_b="unknown email"
@@ -251,23 +248,17 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
     await _seed_member(session, "authorized-median@dojo.test")
 
-    authorized_samples: list[float] = []
-    unauthorized_samples: list[float] = []
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        for _ in range(SAMPLE_COUNT):
-            authorized_samples.append(
-                await _timed_post(
-                    c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
-                )
-            )
-            unauthorized_samples.append(
-                await _timed_post(
-                    c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
-                )
-            )
+        authorized_samples, unauthorized_samples = await sample_counterbalanced(
+            lambda: _timed_post(
+                c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
+            ),
+            lambda: _timed_post(
+                c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
+            ),
+        )
 
     assert_latency_medians_converge(
         authorized_samples,
