@@ -1,9 +1,29 @@
-"""Integration tests for app.db.bootstrap (issue #250).
+"""Integration tests for app.db.bootstrap (issue #250, updated for #264).
 
 These exercise real PostgreSQL behaviour (existence of the alembic_version
 table, real `alembic upgrade head` / `Base.metadata.create_all` execution)
 that a StubRepository cannot express, so they run against the real test
 Postgres server rather than using in-memory stubs.
+
+Issue #264 gave the Alembic chain a baseline migration and made
+`prepare_database` run `alembic upgrade head` unconditionally — it no longer
+branches on fresh-vs-existing, so the private `_create_schema` / `_stamp_head`
+helpers these tests used to monkeypatch and assert call-order against no
+longer exist (see test_migrations.py::test_bootstrap_no_longer_branches_on_fresh_vs_existing,
+which asserts exactly that). The tests below were updated to assert on
+outcomes instead of internal call sequencing, and two new tests document the
+real behaviour change: a legacy pre-Alembic database (tables built by
+`create_all`, no `alembic_version` table at all) is no longer auto-detected
+and silently upgraded.
+  - If its schema is current (matches today's ORM), the fix is a one-time
+    manual `alembic stamp head` — see
+    `test_legacy_database_at_current_schema_needs_stamp_head`.
+  - If its schema is stale (predates migrations that shipped after it was
+    last redeployed), there is no single correct stamp target at all —
+    `test_stale_legacy_database_stamped_at_head_stays_missing_later_tables`
+    documents that failure mode rather than papering over it.
+Both are documented in the baseline migration's docstring and
+docs/deployment.md.
 
 Test isolation strategy
 ------------------------
@@ -28,6 +48,7 @@ infrastructure concern (what entrypoint.sh does before uvicorn ever binds a
 port) with no UI surface for a browser to observe.
 """
 
+import asyncio
 import uuid
 
 import pytest
@@ -119,11 +140,11 @@ def _expected_head_revision() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Criterion 1: empty public schema -> create_all + stamp head
+# Criterion 1: empty database -> alembic upgrade head reaches head
 # ---------------------------------------------------------------------------
 
 
-async def test_fresh_database_creates_schema_and_stamps_head(
+async def test_fresh_database_reaches_head_via_migrations(
     _bootstrap_db: str,
 ) -> None:
     from app.db.bootstrap import prepare_database
@@ -142,14 +163,14 @@ async def test_fresh_database_creates_schema_and_stamps_head(
 
 
 # ---------------------------------------------------------------------------
-# Criterion 2: alembic_version already present -> upgrade path only
+# Criterion 2: already at head -> running prepare_database again is a no-op
 # ---------------------------------------------------------------------------
 
 
-async def test_existing_database_takes_upgrade_path_not_create_all(
-    _bootstrap_db: str, monkeypatch: pytest.MonkeyPatch
+async def test_database_already_at_head_stays_at_head(
+    _bootstrap_db: str,
 ) -> None:
-    import app.db.bootstrap as bootstrap
+    from app.db.bootstrap import prepare_database
 
     # Simulate an already-bootstrapped instance: full schema + alembic_version
     # at head, exactly what a second boot of an already-running deployment
@@ -178,41 +199,61 @@ async def test_existing_database_takes_upgrade_path_not_create_all(
     finally:
         await engine.dispose()
 
-    calls: list[str] = []
+    # prepare_database no longer branches on fresh-vs-existing (#264) — this
+    # just runs `alembic upgrade head` again, which alembic treats as a no-op
+    # once the recorded revision already is head.
+    await prepare_database(_bootstrap_db)
 
-    async def fake_create_schema(_engine) -> None:
-        calls.append("create_schema")
+    assert await _alembic_version(_bootstrap_db) == _expected_head_revision()
 
-    async def fake_stamp_head(_url) -> None:
-        calls.append("stamp_head")
 
-    async def fake_upgrade_head(_url) -> None:
-        calls.append("upgrade_head")
+def _run_alembic(database_url: str, action, *args) -> None:
+    """Run a blocking alembic `command.*` call against `database_url` off-thread.
 
-    monkeypatch.setattr(bootstrap, "_create_schema", fake_create_schema)
-    monkeypatch.setattr(bootstrap, "_stamp_head", fake_stamp_head)
-    monkeypatch.setattr(bootstrap, "_upgrade_head", fake_upgrade_head)
+    alembic's env.py drives its own `asyncio.run(...)`, which cannot nest
+    inside a test's already-running event loop — every direct `command.*`
+    call in this module goes through this helper for that reason (mirrors
+    app.db.bootstrap's own `_run_alembic_upgrade`).
+    """
+    import os
 
-    await bootstrap.prepare_database(_bootstrap_db)
+    from app.db.bootstrap import _alembic_config
 
-    assert calls == ["upgrade_head"]
+    cfg = _alembic_config(database_url)
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = database_url
+    try:
+        action(cfg, *args)
+    finally:
+        if previous is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous
 
 
 # ---------------------------------------------------------------------------
-# Criterion 3: tables exist but no alembic_version -> NOT treated as fresh
+# Criterion 3 (behaviour changed by #264): a legacy pre-Alembic database
+# (tables exist, no alembic_version at all) is no longer auto-detected and
+# silently upgraded. prepare_database now always runs `alembic upgrade head`
+# unconditionally, which for this state means replaying the baseline
+# migration's CREATE TABLE statements against tables that already exist —
+# it must fail loudly rather than silently doing the wrong thing. The
+# documented fix (docs/deployment.md, the baseline migration's docstring) is
+# `alembic stamp head` — correct precisely when the legacy schema already
+# matches the current ORM, which is what this test builds (a full
+# `Base.metadata.create_all` of today's models — proven identical to a fully
+# migrated database by test_migrated_schema_matches_orm_metadata_exactly).
 # ---------------------------------------------------------------------------
 
 
-async def test_legacy_database_without_alembic_version_takes_upgrade_path(
-    _bootstrap_db: str, monkeypatch: pytest.MonkeyPatch
+async def test_legacy_database_at_current_schema_needs_stamp_head(
+    _bootstrap_db: str,
 ) -> None:
-    import app.db.bootstrap as bootstrap
+    from alembic import command
+    from app.db.bootstrap import _upgrade_head, prepare_database
 
-    # Legacy pre-alembic deploy: application tables exist (created by the old
-    # create_all-in-lifespan path) but there has never been an alembic_version
-    # table. Silently taking the fresh-database shortcut here would stamp head
-    # without ever checking the real schema matches — exactly what criterion 3
-    # forbids.
+    # Legacy pre-alembic deploy whose schema has been kept current: tables
+    # built by today's Base.metadata.create_all, no alembic_version at all.
     engine = create_async_engine(_bootstrap_db)
     try:
         import app.attendance.db_models  # noqa: F401
@@ -232,24 +273,68 @@ async def test_legacy_database_without_alembic_version_takes_upgrade_path(
 
     assert "alembic_version" not in await _table_names(_bootstrap_db)
 
-    calls: list[str] = []
+    # Unconditional `alembic upgrade head` fails loudly (tries to replay the
+    # baseline's CREATE TABLE statements against tables that already exist)
+    # rather than silently doing the wrong thing.
+    with pytest.raises(Exception):
+        await prepare_database(_bootstrap_db)
 
-    async def fake_create_schema(_engine) -> None:
-        calls.append("create_schema")
+    # The fix: stamp head (not a1b2c3d4e5f6, not the new baseline — both
+    # would leave alembic_version naming a revision *before* tables this
+    # create_all already built, and the next upgrade would try to recreate
+    # them). Safe here because the schema already matches the ORM at head.
+    await asyncio.to_thread(_run_alembic, _bootstrap_db, command.stamp, "head")
+    await _upgrade_head(_bootstrap_db)  # no-op: already at head
 
-    async def fake_stamp_head(_url) -> None:
-        calls.append("stamp_head")
+    assert await _alembic_version(_bootstrap_db) == _expected_head_revision()
 
-    async def fake_upgrade_head(_url) -> None:
-        calls.append("upgrade_head")
 
-    monkeypatch.setattr(bootstrap, "_create_schema", fake_create_schema)
-    monkeypatch.setattr(bootstrap, "_stamp_head", fake_stamp_head)
-    monkeypatch.setattr(bootstrap, "_upgrade_head", fake_upgrade_head)
+# ---------------------------------------------------------------------------
+# Criterion 3b: a legacy database that is genuinely stale — its create_all
+# schema predates migrations that shipped after it — has NO single correct
+# stamp target. This test documents (does not "fix") that failure mode:
+# stamping head against a stale schema does not error, but silently leaves
+# the database missing tables/columns those later migrations would have
+# added. This is exactly why docs/deployment.md tells an operator who is not
+# sure their schema is current to diff it against the ORM first rather than
+# guess a stamp point.
+# ---------------------------------------------------------------------------
 
-    await bootstrap.prepare_database(_bootstrap_db)
 
-    assert calls == ["upgrade_head"]
+async def test_stale_legacy_database_stamped_at_head_stays_missing_later_tables(
+    _bootstrap_db: str,
+) -> None:
+    from alembic import command
+
+    # A stale legacy deploy: schema only as of the pre-baseline point (i.e.
+    # predates federations/member_federations/invites and everything added
+    # after them — reached here by running the chain up to the baseline
+    # itself, then dropping the alembic_version row it creates so the
+    # database looks exactly like a legacy create_all deploy with no version
+    # record, just an older one than the previous test's).
+    await asyncio.to_thread(
+        _run_alembic, _bootstrap_db, command.upgrade, "000000000000"
+    )
+    engine = create_async_engine(_bootstrap_db)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP TABLE alembic_version"))
+    finally:
+        await engine.dispose()
+
+    assert "federations" not in await _table_names(_bootstrap_db)
+
+    # Blindly following the common-case advice ("stamp head") on this stale
+    # database does not raise — it just marks everything as done...
+    await asyncio.to_thread(_run_alembic, _bootstrap_db, command.stamp, "head")
+    assert await _alembic_version(_bootstrap_db) == _expected_head_revision()
+
+    # ...leaving tables that real migrations after the baseline would have
+    # created permanently missing, silently. There is no stamp target that
+    # avoids this for a genuinely stale schema — see docs/deployment.md.
+    assert "federations" not in await _table_names(_bootstrap_db)
+    assert "member_federations" not in await _table_names(_bootstrap_db)
+    assert "invites" not in await _table_names(_bootstrap_db)
 
 
 # ---------------------------------------------------------------------------

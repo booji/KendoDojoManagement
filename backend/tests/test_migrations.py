@@ -197,7 +197,10 @@ async def test_alembic_upgrade_head_from_empty_database_reaches_head(
             table_names = await conn.run_sync(lambda c: inspect(c).get_table_names())
         # Tables that only exist because the baseline migration created them —
         # today's chain assumes these already exist and only ALTERs them.
-        for expected in ("members", "sessions", "users", "federations"):
+        # NB: there is no `sessions` table — session rows live in
+        # `session_instances` (see app.sessions.db_models). The name in issue
+        # #264's prose is informal shorthand, not a real table.
+        for expected in ("members", "session_instances", "users", "federations"):
             assert expected in table_names, (
                 f"expected table {expected!r} to exist after alembic upgrade "
                 f"head from empty; got tables: {sorted(table_names)}"

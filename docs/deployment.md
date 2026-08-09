@@ -177,6 +177,61 @@ podman logs -f kendo-traefik   # look for successful ACME / certificate obtained
 
 Migrations run automatically on app startup (`entrypoint.sh` → `alembic upgrade head`).
 
+### Upgrading a deployment created before the Alembic baseline (issue #264)
+
+As of issue #264, the Alembic chain has a baseline migration (`000000000000`)
+that creates the full schema from nothing, so `alembic upgrade head` now
+works against a genuinely empty database. This changes nothing for an
+instance that was already deployed and running:
+
+- **Any instance deployed before this change** already has an
+  `alembic_version` row naming a revision at or after `a1b2c3d4e5f6` (every
+  prior deploy got its schema from `Base.metadata.create_all` followed by
+  `alembic stamp head` on first boot). Alembic walks forward from whatever
+  revision is recorded in `alembic_version`; it does not replay or
+  re-verify ancestors behind that revision. The new baseline is an ancestor
+  of `a1b2c3d4e5f6` and is simply never visited. `alembic upgrade head`
+  continues to work exactly as before — no action needed.
+- **A legacy pre-Alembic instance** (tables exist, but there is no
+  `alembic_version` table at all — only possible if the instance predates
+  `a1b2c3d4e5f6` merging *and* has never restarted since; every restart
+  under the pre-#264 bootstrap already ran `alembic upgrade head`
+  unconditionally for a non-empty database, which creates
+  `alembic_version` on its first successful migration) needs one manual
+  step before its next `alembic upgrade head`:
+
+  ```bash
+  podman exec kendo-app alembic stamp head
+  ```
+
+  This is correct **only if you're confident the instance's schema matches
+  the current ORM exactly** (i.e. it's been kept current) — the same
+  assumption the pre-#264 bootstrap made for a "fresh" database
+  (`create_all` then `stamp head`), and safe for the same reason:
+  `test_migrated_schema_matches_orm_metadata_exactly` guarantees a
+  `create_all` schema and a fully-migrated schema are identical at head.
+  Do **not** stamp at `a1b2c3d4e5f6` or at the new baseline
+  (`000000000000`) — either leaves `alembic_version` naming a revision
+  *before* tables this instance's `create_all` already built (`federations`,
+  `member_federations`, `invites`, and everything added after them), so the
+  next `alembic upgrade head` tries to create things that already exist and
+  fails.
+
+  **If there's any doubt the schema is current** — the instance predates
+  some migration that shipped after it was last redeployed — **no single
+  stamp target is correct**, and guessing one will silently leave the
+  database wrong (either missing real schema changes, or erroring out
+  trying to redo ones it already has). Diff the live schema against
+  `app.db.base.Base.metadata` first (e.g. via
+  `alembic.autogenerate.compare_metadata`, the same check
+  `test_migrated_schema_matches_orm_metadata_exactly` runs) to see exactly
+  what's missing, then either apply those changes by hand and stamp head,
+  or — safer — back up the data, run `alembic upgrade head` against a fresh
+  empty database, and migrate the data across instead of reconciling the
+  old schema in place. See the baseline migration's docstring
+  (`backend/alembic/versions/000000000000_baseline_schema.py`) for the full
+  reasoning.
+
 ---
 
 ## 5. TLS options
