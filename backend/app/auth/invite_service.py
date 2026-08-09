@@ -27,6 +27,11 @@ import webauthn
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from webauthn import options_to_json
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+)
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
@@ -45,6 +50,18 @@ from app.auth.passkey_service import (
 )
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
+
+# Registration must request a discoverable (resident) credential -- issue
+# #267 moved passkey login onto discoverable credentials exclusively
+# (app.auth.passkey_service.login_passkey_begin no longer sends
+# allowCredentials), so a credential minted via invite redemption has to be
+# resident or it would be unusable for login afterwards. Both the real
+# redemption path and its decoy below must request the identical shape, per
+# the #239 convention this module already follows for the challenge itself.
+_DISCOVERABLE_CREDENTIAL = AuthenticatorSelectionCriteria(
+    resident_key=ResidentKeyRequirement.REQUIRED,
+    user_verification=UserVerificationRequirement.REQUIRED,
+)
 
 # How long a minted invite stays redeemable.
 INVITE_EXPIRY_HOURS = 72
@@ -143,6 +160,7 @@ def _decoy_response() -> dict:
         rp_name="Kendo Dojo",
         user_id=str(uuid.uuid4()).encode("utf-8"),
         user_name=f"{uuid.uuid4()}@invite.invalid",
+        authenticator_selection=_DISCOVERABLE_CREDENTIAL,
     )
     return {"publicKey": json.loads(options_to_json(options))}
 
@@ -182,6 +200,7 @@ async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
         rp_name="Kendo Dojo",
         user_id=user.id.encode("utf-8"),
         user_name=user.email,
+        authenticator_selection=_DISCOVERABLE_CREDENTIAL,
     )
     user.pending_challenge = _encode_challenge(options.challenge)
     user.challenge_issued_at = datetime.now(UTC)
@@ -233,6 +252,11 @@ async def invite_redeem_complete(
             expected_challenge=expected_challenge,
             expected_rp_id=config.WEBAUTHN_RP_ID,
             expected_origin=config.WEBAUTHN_ORIGIN,
+            # Enforce the userVerification="required" that
+            # _DISCOVERABLE_CREDENTIAL asks for; py_webauthn skips the uv
+            # check entirely without this. See
+            # app.auth.passkey_service.register_passkey_complete.
+            require_user_verification=True,
         )
     except Exception as exc:
         log_security_event("invite_redeemed", "failure", user_id=user.id)

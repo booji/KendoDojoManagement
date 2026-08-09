@@ -11,8 +11,10 @@ from webauthn.helpers.structs import (
     AuthenticationCredential,
     AuthenticatorAssertionResponse,
     AuthenticatorAttestationResponse,
-    PublicKeyCredentialDescriptor,
+    AuthenticatorSelectionCriteria,
     RegistrationCredential,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
 )
 
 from app import config
@@ -80,6 +82,25 @@ def _to_authentication_credential(
     )
 
 
+def _authentication_options_response(options) -> dict:
+    """Serialise generate_authentication_options() output, dropping
+    allowCredentials.
+
+    py_webauthn 3.0.0 always emits an `allowCredentials` key -- an empty
+    list when the argument is omitted, same as when it is passed as `[]` --
+    it never leaves the key out on its own. Real logins now rely entirely on
+    discoverable credentials (see login_passkey_begin), so the field would
+    otherwise sit at `[]` on every path and add nothing; stripping it here,
+    in the one place both the real and decoy paths funnel through, is what
+    makes the two responses byte-identical (issue #267). Do this in one
+    shared helper rather than in both callers, so there is only one place
+    that can drift.
+    """
+    public_key = json.loads(options_to_json(options))
+    public_key.pop("allowCredentials", None)
+    return {"publicKey": public_key}
+
+
 def _decoy_login_response() -> dict:
     """Decoy for an unknown email, shaped exactly like a real begin response.
 
@@ -94,9 +115,12 @@ def _decoy_login_response() -> dict:
     """
     options = webauthn.generate_authentication_options(
         rp_id=config.WEBAUTHN_RP_ID,
-        allow_credentials=[],
+        # Must match the real path's level exactly -- a decoy advertising a
+        # different userVerification is a #239-style shape tell. See
+        # login_passkey_begin for why "required" rather than the default.
+        user_verification=UserVerificationRequirement.REQUIRED,
     )
-    return {"publicKey": json.loads(options_to_json(options))}
+    return _authentication_options_response(options)
 
 
 def _decoy_register_response(email: str) -> dict:
@@ -107,6 +131,22 @@ def _decoy_register_response(email: str) -> dict:
         # user id is not itself a decoy tell. Challenge omitted, as above.
         user_id=str(uuid.uuid4()).encode("utf-8"),
         user_name=email,
+        # user_display_name mirrors user_name on both paths: the caller
+        # already knows the email they typed (attacker-controlled on both
+        # sides), so reusing it here adds a human-readable label without
+        # opening a new width channel. See register_passkey_begin for why
+        # the real path does the same rather than looking up a member name.
+        user_display_name=email,
+        # Registration must request a discoverable (resident) credential:
+        # login no longer sends allowCredentials (see login_passkey_begin),
+        # so it depends on the authenticator surfacing the credential itself
+        # via the browser's account picker. The decoy MUST request the same
+        # shape as the real path -- see register_passkey_begin -- or this
+        # field becomes a new #239-style tell.
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
     )
     return {"publicKey": json.loads(options_to_json(options))}
 
@@ -163,6 +203,21 @@ async def register_passkey_begin(
         rp_name="Kendo Dojo",
         user_id=user.id.encode("utf-8"),
         user_name=user.email,
+        # No Member row is guaranteed reachable here without an extra query
+        # (bootstrap registers with no Member at all), and the decoy path
+        # below would need a same-width value to match -- there is no member
+        # name available to a decoy for an email that doesn't exist. Reusing
+        # the email keeps both paths trivially equal-width; see
+        # _decoy_register_response.
+        user_display_name=user.email,
+        # See _decoy_register_response: this MUST match the decoy's
+        # authenticator_selection exactly, both to preserve the #239
+        # shape guarantee and because login now depends on a discoverable
+        # credential existing (no allowCredentials -- see login_passkey_begin).
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
     )
 
     user.pending_challenge = _encode_challenge(options.challenge)
@@ -201,6 +256,13 @@ async def register_passkey_complete(
             expected_challenge=expected_challenge,
             expected_rp_id=config.WEBAUTHN_RP_ID,
             expected_origin=config.WEBAUTHN_ORIGIN,
+            # Enforce, do not merely request. py_webauthn defaults this to
+            # False and only checks authenticator-data's uv bit when it is
+            # True, so without it the userVerification="required" advertised
+            # by register_passkey_begin is decorative: a caller driving the
+            # API directly could enrol a credential that performed no user
+            # verification at all.
+            require_user_verification=True,
         )
     except Exception as exc:
         log_security_event("passkey_registered", "failure", user_id=user.id)
@@ -245,23 +307,32 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
     if user is None:
         return _decoy_login_response()
 
-    cred_result = await uow.session.execute(
-        select(PasskeyCredential).where(PasskeyCredential.user_id == user.id)
-    )
-    credentials = cred_result.scalars().all()
-
+    # allow_credentials is deliberately not passed (issue #267). It used to
+    # list one PublicKeyCredentialDescriptor per registered passkey, which
+    # made the response body grow with N -- an enumeration oracle by size
+    # alone, no timing analysis needed, sitting right next to the always-
+    # empty list _decoy_login_response returned for unknown emails.
+    # Registration now requires a discoverable (resident) credential (see
+    # register_passkey_begin), so the authenticator itself can surface the
+    # right credential via the browser's account picker; the server does not
+    # need to name candidates up front. Do not "fix" this back to a
+    # per-credential list -- that reintroduces the oracle this issue closed.
+    #
+    # user_verification is "required" rather than py_webauthn's "preferred"
+    # default because login_passkey_complete now enforces the uv flag: a
+    # merely-preferred level lets a conforming authenticator skip UV and then
+    # be rejected at verification, which would look like a broken login.
+    # _decoy_login_response passes the identical level.
     options = webauthn.generate_authentication_options(
         rp_id=config.WEBAUTHN_RP_ID,
-        allow_credentials=[
-            PublicKeyCredentialDescriptor(id=cred.credential_id) for cred in credentials
-        ],
+        user_verification=UserVerificationRequirement.REQUIRED,
     )
 
     user.pending_challenge = _encode_challenge(options.challenge)
     user.challenge_issued_at = datetime.now(UTC)
     await uow.commit()
 
-    return {"publicKey": json.loads(options_to_json(options))}
+    return _authentication_options_response(options)
 
 
 async def login_passkey_complete(
@@ -308,6 +379,9 @@ async def login_passkey_complete(
             expected_origin=config.WEBAUTHN_ORIGIN,
             credential_public_key=stored_cred.public_key,
             credential_current_sign_count=stored_cred.sign_count,
+            # See register_passkey_complete: this is what actually checks the
+            # uv flag that login_passkey_begin asks for.
+            require_user_verification=True,
         )
     except Exception as exc:
         raise _AUTH_FAILED from exc
