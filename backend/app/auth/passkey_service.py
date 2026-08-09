@@ -137,13 +137,24 @@ def _decoy_user_id(identifier: str) -> str:
     width py_webauthn encodes a real UUID id at -- a decoy id of a different
     width would be a #239-style shape tell independent of the stability
     question this function exists to fix.
+
+    version=4 is load-bearing, not cosmetic. Real ids come from uuid4()
+    (app/db/base.py), so their version and variant nibbles are fixed by RFC
+    4122; raw truncated HMAC bytes have effectively random ones. Formatting
+    the digest without forcing those bits would let a caller classify an
+    email from a SINGLE response -- parse the id and check version == 4,
+    which a real account always satisfies and a raw digest satisfies about
+    one time in sixteen -- trading the two-call stability oracle this
+    function closes for a strictly easier one-call format oracle. Fixing
+    six bits costs nothing: the remaining 122 stay HMAC-derived, which is
+    the same entropy budget a genuine uuid4 has.
     """
     digest = hmac.new(
         key=config.JWT_SECRET.encode("utf-8"),
         msg=b"decoy-user-id-v1:" + identifier.encode("utf-8"),
         digestmod=sha256,
     ).digest()
-    return str(uuid.UUID(bytes=digest[:16]))
+    return str(uuid.UUID(bytes=digest[:16], version=4))
 
 
 def _decoy_login_response() -> dict:

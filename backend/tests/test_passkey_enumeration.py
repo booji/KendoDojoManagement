@@ -24,6 +24,7 @@ fixture (conftest.py; savepoint-scoped, rolled back per test), following the
 fixture conventions in test_passkey.py.
 """
 
+import base64
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -602,6 +603,56 @@ async def test_register_begin_real_user_id_stable_across_calls(db_client) -> Non
     assert (
         first.json()["publicKey"]["user"]["id"]
         == second.json()["publicKey"]["user"]["id"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_begin_decoy_user_id_is_a_version_4_uuid(db_client) -> None:
+    """The decoy id must parse as a version-4 RFC 4122 UUID, exactly like the
+    real one.
+
+    Real ids come from uuid4(), so their version and variant nibbles are
+    fixed. A decoy built from raw HMAC bytes has random ones -- which would
+    classify any email from a SINGLE response (parse, check version == 4:
+    always true for a real account, true roughly one time in sixteen for a
+    raw digest). That is a strictly easier oracle than the two-call
+    stability tell #300 exists to close, so assert the format matches on
+    both paths, not just the width.
+    """
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "format-real@dojo.test")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        real = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "format-real@dojo.test"},
+        )
+        decoy = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "format-decoy@dojo.test"},
+        )
+
+    assert real.status_code == decoy.status_code == 200
+
+    def _parsed_user_id(response) -> uuid.UUID:
+        encoded = response.json()["publicKey"]["user"]["id"]
+        padded = encoded + "=" * (-len(encoded) % 4)
+        return uuid.UUID(base64.urlsafe_b64decode(padded).decode())
+
+    real_id = _parsed_user_id(real)
+    decoy_id = _parsed_user_id(decoy)
+    assert real_id.version == 4
+    assert decoy_id.version == real_id.version, (
+        "decoy user.id must carry the same UUID version nibble as a real "
+        "uuid4-derived id, or the version alone classifies an email in one "
+        "request"
+    )
+    assert decoy_id.variant == real_id.variant, (
+        "decoy user.id must carry the same UUID variant bits as a real id, "
+        "for the same reason as the version nibble"
     )
 
 
