@@ -503,6 +503,108 @@ async def test_register_begin_decoy_challenge_differs_per_call(db_client) -> Non
     )
 
 
+# ── issue #300: register-begin decoy user.id must not be a stability oracle ──
+#
+# register_passkey_begin returns the persisted User.id as publicKey.user.id on
+# the real path -- stable forever for a given email -- while
+# _decoy_register_response minted a fresh uuid4() per call. Two POSTs plus one
+# field comparison classified any email with no timing analysis needed, sitting
+# right next to (but distinct from) the #239/AC7 challenge-randomness
+# guarantee above: the CHALLENGE must stay random per call on both paths, but
+# the USER ID must be either stable on both paths or random on both -- never
+# stable on one and random on the other. The fix is expected to derive the
+# decoy id via HMAC(server secret, normalised email), which is what makes it
+# both stable for repeat calls AND unpredictable without the secret -- this
+# test asserts both properties together so it fails for the stability reason
+# under today's random-uuid4 implementation, and would also fail against a
+# fix that derived the id deterministically from the email alone (the exact
+# defect _decoy_login_response's docstring already warns about).
+
+
+@pytest.mark.asyncio
+async def test_register_begin_decoy_user_id_stable_then_secret_dependent(
+    db_client, monkeypatch
+) -> None:
+    """Two decoy register-begin calls for the SAME unauthorized email, under
+    the SAME server secret, must return the SAME publicKey.user.id (today
+    they don't: each call mints a fresh uuid4()). Then, changing the server
+    secret and repeating must change the id -- proving it is not derivable
+    from the email alone."""
+    from app import config
+
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-one-for-issue-300")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        first = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "stability-probe@dojo.test"},
+        )
+        second = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "stability-probe@dojo.test"},
+        )
+
+    assert first.status_code == second.status_code == 200
+    first_id = first.json()["publicKey"]["user"]["id"]
+    second_id = second.json()["publicKey"]["user"]["id"]
+    assert first_id == second_id, (
+        "decoy user.id must be stable across repeat calls for the same "
+        "email, matching the real path's stability -- a decoy that varies "
+        "per call while the real path is stable-forever is the #300 "
+        "enumeration oracle"
+    )
+
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-two-for-issue-300")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        third = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "stability-probe@dojo.test"},
+        )
+
+    assert third.status_code == 200
+    third_id = third.json()["publicKey"]["user"]["id"]
+    assert third_id != first_id, (
+        "the decoy id must be secret-dependent -- changing the server "
+        "secret for the same email must change the derived id, or the "
+        "derivation is just the email in disguise (the exact defect "
+        "_decoy_login_response's docstring already warns about)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_register_begin_real_user_id_stable_across_calls(db_client) -> None:
+    """Sanity check on the OTHER half of AC1: the real (authorized) path's
+    user.id is already stable across repeat begin calls for the same email --
+    this must keep holding once the decoy path is fixed to match it."""
+    session = db_client
+    await _seed_user(session, "existing-admin@dojo.test", role="admin")
+    await _seed_member(session, "real-stability@dojo.test")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        first = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "real-stability@dojo.test"},
+        )
+        second = await c.post(
+            "/auth/register/passkey/begin",
+            json={"email": "real-stability@dojo.test"},
+        )
+
+    assert first.status_code == second.status_code == 200
+    assert (
+        first.json()["publicKey"]["user"]["id"]
+        == second.json()["publicKey"]["user"]["id"]
+    )
+
+
 # ── AC8: decoy paths write nothing to the DB ─────────────────────────────────
 
 
