@@ -42,9 +42,11 @@ services:
       AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
       # Minimum wall-clock time (ms) the passkey begin endpoints take,
       # regardless of whether the email is known or not — closes a timing
-      # side channel that would otherwise enumerate registered emails. Must
-      # stay above the real path's p99 latency.
-      AUTH_BEGIN_MIN_DURATION_MS: ${AUTH_BEGIN_MIN_DURATION_MS:-50}
+      # side channel that would otherwise enumerate registered emails. Only
+      # masks it while the real path finishes underneath it. 100ms is measured
+      # against PostgreSQL (real-path p99 16.8ms, worst observed 27.9ms) plus
+      # headroom for slower storage — see docs/auth-timing-calibration.md.
+      AUTH_BEGIN_MIN_DURATION_MS: ${AUTH_BEGIN_MIN_DURATION_MS:-100}
       # Only set true when a trusted reverse proxy in front of this stack
       # overwrites X-Forwarded-For; otherwise clients can spoof their IP and
       # evade rate limiting and lockout. The published port below is direct,

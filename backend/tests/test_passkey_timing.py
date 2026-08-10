@@ -9,8 +9,9 @@ run as a timing side channel for enumerating emails.
 The chosen fix is a constant-time floor: both branches of each begin endpoint
 are held to a fixed minimum wall-clock duration (`asyncio.sleep` of whatever
 remains), configured via `app.config.AUTH_BEGIN_MIN_DURATION_MS` (env var
-`AUTH_BEGIN_MIN_DURATION_MS`, default 50ms). None of that exists yet -- these
-tests are the red phase.
+`AUTH_BEGIN_MIN_DURATION_MS`, default 100ms since the calibration in #268 --
+50ms when these tests were written). None of that exists yet -- these tests
+are the red phase.
 
 Written against the shared PostgreSQL test database via the `db_client`
 fixture (conftest.py), following the fixture conventions in test_passkey.py /
@@ -318,7 +319,11 @@ def test_non_positive_or_invalid_floor_falls_back_to_default(
     monkeypatch.setenv("AUTH_BEGIN_MIN_DURATION_MS", bad_value)
     reloaded = importlib.reload(config)
     try:
-        assert reloaded.AUTH_BEGIN_MIN_DURATION_MS == 50
+        # 100ms is the calibrated default (#268) — see
+        # docs/auth-timing-calibration.md. Spelled out rather than read from
+        # config, so lowering the default without revisiting the measurement
+        # fails here instead of passing tautologically.
+        assert reloaded.AUTH_BEGIN_MIN_DURATION_MS == 100
     finally:
         monkeypatch.delenv("AUTH_BEGIN_MIN_DURATION_MS", raising=False)
         importlib.reload(config)

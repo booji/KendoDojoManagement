@@ -34,10 +34,23 @@ TIMEZONE: str = os.getenv("TZ", "UTC")
 # enumerate registered emails from response latency alone. This value MUST
 # stay above the real path's p99 latency, or the floor stops masking the
 # asymmetry it exists to hide.
+#
+# 100ms is calibrated, not guessed (#268): measured against PostgreSQL, the
+# real path's p99 is 16.8ms and its worst observed case 27.9ms with requests
+# arriving one at a time. The headroom over that is deliberate — the
+# measurement is from a developer workstation, and the commit that dominates
+# the real path is slower on production storage. Full method, numbers and the
+# reasoning for this figure: docs/auth-timing-calibration.md.
+#
+# Raising this further is not the fix for a *saturated* server: past ~4
+# simultaneous begin requests, queueing alone puts the p99 beyond any sane
+# floor. ConstantTimeAuthMiddleware logs a warning on every overrun; treat that
+# as a capacity or rate-limit signal.
+#
 # A non-positive value would make the pad never fire and silently restore the
 # leak, so a typo or a well-meaning "disable this in dev" is treated as
 # misconfiguration rather than honoured. Same for a non-integer.
-_AUTH_BEGIN_MIN_DURATION_DEFAULT = 50
+_AUTH_BEGIN_MIN_DURATION_DEFAULT = 100
 try:
     AUTH_BEGIN_MIN_DURATION_MS: int = int(
         os.getenv("AUTH_BEGIN_MIN_DURATION_MS", str(_AUTH_BEGIN_MIN_DURATION_DEFAULT))
