@@ -42,7 +42,10 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
     `config.AUTH_BEGIN_MIN_DURATION_MS` is read per request, not bound at
     import, so it can be tuned or overridden in tests. It must stay above the
     real path's p99: once the real path overruns the floor there is nothing
-    left to pad and the delta reappears.
+    left to pad and the delta reappears. That p99 is measured, not assumed --
+    see docs/auth-timing-calibration.md for the numbers behind the default and
+    for why the warning below is a capacity signal rather than a prompt to
+    raise the floor.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
