@@ -103,10 +103,6 @@ def test_admin_can_create_member_via_ui(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="frontend member detail still reads full_name — UI update is a separate issue from #158",
-)
 def test_admin_sees_full_member_profile(page: Page) -> None:
     admin_token = _make_token("admin")
     email = f"profile_{uuid.uuid4().hex[:8]}@dojo.test"
@@ -183,10 +179,6 @@ def test_admin_can_change_member_status_via_ui(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="frontend member list still reads full_name — UI update is a separate issue from #158",
-)
 def test_member_list_filter_by_status(page: Page) -> None:
     admin_token = _make_token("admin")
     suffix = uuid.uuid4().hex[:8]
@@ -208,10 +200,6 @@ def test_member_list_filter_by_status(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="frontend member list still reads full_name — UI update is a separate issue from #158",
-)
 def test_member_list_search_by_name_or_email(page: Page) -> None:
     admin_token = _make_token("admin")
     suffix = uuid.uuid4().hex[:8]
@@ -233,10 +221,6 @@ def test_member_list_search_by_name_or_email(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="frontend member list still reads full_name — UI update is a separate issue from #158",
-)
 def test_member_list_renders_on_mobile(page: Page) -> None:
     admin_token = _make_token("admin")
     suffix = uuid.uuid4().hex[:8]
@@ -256,10 +240,6 @@ def test_member_list_renders_on_mobile(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="frontend member detail still reads full_name — UI update is a separate issue from #158",
-)
 def test_member_detail_renders_on_desktop(page: Page) -> None:
     admin_token = _make_token("admin")
     suffix = uuid.uuid4().hex[:8]

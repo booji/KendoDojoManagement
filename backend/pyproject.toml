@@ -14,7 +14,14 @@ asyncio_default_fixture_loop_scope = "function"
 # failed deterministically (#282). asyncio_mode = "auto" already drives every
 # async test through pytest-asyncio, so the anyio plugin is redundant as well
 # as harmful — disable it and let one plugin own the loop.
-addopts = "-p no:anyio"
+#
+# -rX names every xpassing test in the summary. A non-strict xfail that starts
+# passing is otherwise reported only as a bare "N xpassed" count, so a stub
+# whose behaviour has landed — or one that never asserted anything and passes
+# vacuously — sits in the suite indefinitely with no way to tell which test it
+# was without a separate run (#283). Naming them makes the drift visible in
+# the run that introduces it.
+addopts = "-p no:anyio -rX"
 
 [tool.ruff]
 line-length = 88

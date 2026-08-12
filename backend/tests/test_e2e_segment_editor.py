@@ -154,7 +154,14 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
     expect(dialog.locator('[aria-label="Segment 1"]')).to_be_visible()
 
     # 6. Fill required fields and submit with the remaining single segment
-    dialog.locator("#session-title").fill("AC1 Multi-Segment Test")
+    # Unique per run: e2e sessions are written through the live server and are
+    # never cleaned up, and conftest's schema drop only fires on a *clean*
+    # teardown. An interrupted suite therefore leaves these rows behind, and a
+    # constant title then matches two cells on the next run — a Playwright
+    # strict-mode violation that passes again in isolation once that run's
+    # teardown has dropped the schema (#283).
+    title = f"AC1 Multi-Segment Test {uuid.uuid4().hex[:8]}"
+    dialog.locator("#session-title").fill(title)
     dialog.get_by_label("Date").fill("2099-11-01")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
@@ -163,9 +170,9 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
 
     # Dialog closes; session appears in the list. Assert the visible desktop-table
     # cell (the mobile-card copy is present but hidden at this viewport).
-    expect(
-        page.get_by_role("cell", name="AC1 Multi-Segment Test", exact=True)
-    ).to_be_visible(timeout=10_000)
+    expect(page.get_by_role("cell", name=title, exact=True)).to_be_visible(
+        timeout=10_000
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +199,8 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     expect(dialog).to_be_visible(timeout=10_000)
 
     # 2. In segment 1, select both type_a and type_b (multiple types per segment)
-    dialog.locator("#session-title").fill("AC2 Multi-Type Test")
+    title = f"AC2 Multi-Type Test {uuid.uuid4().hex[:8]}"
+    dialog.locator("#session-title").fill(title)
     dialog.get_by_label("Date").fill("2099-11-02")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
@@ -217,17 +225,15 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     # If validation fails, the dialog stays open and shows an error.
     # Successful submission closes the dialog and shows the session in the list.
     expect(dialog).not_to_be_visible(timeout=10_000)
-    expect(
-        page.get_by_role("cell", name="AC2 Multi-Type Test", exact=True)
-    ).to_be_visible(timeout=10_000)
+    expect(page.get_by_role("cell", name=title, exact=True)).to_be_visible(
+        timeout=10_000
+    )
 
     # Verify via API that segment 1 has 2 type_ids
     sessions_resp = page.request.get(
         f"{API_URL}/sessions", headers=_api_headers(admin_token)
     )
-    our_session = next(
-        (s for s in sessions_resp.json() if s["title"] == "AC2 Multi-Type Test"), None
-    )
+    our_session = next((s for s in sessions_resp.json() if s["title"] == title), None)
     assert our_session is not None, "Created session not found in list"
     detail_resp = page.request.get(
         f"{API_URL}/sessions/{our_session['id']}", headers=_api_headers(admin_token)
@@ -345,7 +351,8 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     expect(dialog.get_by_role("button", name="Next")).not_to_be_visible()
 
     # 3. Fill title, date, type, start_time, duration
-    dialog.locator("#session-title").fill("AC5 Single Segment Flow")
+    title = f"AC5 Single Segment Flow {uuid.uuid4().hex[:8]}"
+    dialog.locator("#session-title").fill(title)
     dialog.get_by_label("Date").fill("2099-11-05")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
@@ -359,9 +366,9 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     # 5. Submit — session appears in the session list
     submit_btn.click()
     expect(dialog).not_to_be_visible(timeout=10_000)
-    expect(
-        page.get_by_role("cell", name="AC5 Single Segment Flow", exact=True)
-    ).to_be_visible(timeout=10_000)
+    expect(page.get_by_role("cell", name=title, exact=True)).to_be_visible(
+        timeout=10_000
+    )
 
 
 # ---------------------------------------------------------------------------

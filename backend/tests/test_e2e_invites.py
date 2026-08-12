@@ -365,31 +365,29 @@ def test_invite_landing_page_shows_same_generic_failure_for_any_bad_token(
     assert unknown_text == expired_text
 
 
-# ── AC10: no timing asymmetry on the redemption path -- not meaningfully
-#          browser-verifiable
+# ── AC10: no timing asymmetry on the redemption path
 #
-# See backend/tests/test_invites.py for the real timing coverage. Kept as
-# xfail(strict=False), matching the established pattern in
-# test_e2e_setup.py's AC5: present as a smoke check, but neither an
-# unexpected pass nor an expected failure affects CI.
+# The *ms-scale* constant-time property is not browser-verifiable — page-load
+# and JS-execution overhead dwarf the signal — and its real coverage lives in
+# backend/tests/test_invites.py
+# (test_invite_redeem_begin_is_registered_as_constant_time_path plus the
+# floor/median-convergence tests).
+#
+# What a browser *can* verify, and what this test now asserts, is the
+# user-visible half of the criterion: a bad token resolves to the invalid
+# state instead of leaving the page hanging on a pending request. It was
+# previously an xfail(strict=False) with a 1000 ms deadline, so it could
+# neither fail nor pass the build — it xpassed in full runs and reported
+# nothing either way (#283). The deadline is now generous enough not to
+# measure headless-Chromium noise, while still failing on an actual stall.
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Wall-clock timing assertions are not meaningful in headless "
-        "Playwright -- page-load and JS-execution overhead dwarf the ms-scale "
-        "signal being defended against. Real coverage: backend/tests/"
-        "test_invites.py::test_invite_redeem_begin_is_registered_as_constant_"
-        "time_path and the floor/median-convergence tests."
-    ),
-)
 def test_invite_landing_page_does_not_visibly_stall_for_bad_token(page: Page) -> None:
     _stub_navigator_credentials(page)
     page.context.clear_cookies()
     page.goto(f"{BASE_URL}/invite/unknown-token-{uuid.uuid4().hex}")
     page.click('[data-testid="invite-register-button"]')
-    page.wait_for_selector('[data-testid="invite-invalid"]', timeout=1000)
+    page.wait_for_selector('[data-testid="invite-invalid"]', timeout=5000)
 
 
 # ── AC11: Admin UI can issue, list with status, and revoke ──────────────────
