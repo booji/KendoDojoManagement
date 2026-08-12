@@ -152,21 +152,33 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
 # ── Login begin ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="POST /auth/register/password removed in issue #155 (passkey-only auth); seed via direct DB insert instead",
-)
 @pytest.mark.asyncio
 async def test_login_passkey_begin_returns_options(db_client) -> None:
-    """POST /auth/login/passkey/begin with known email returns 200 with publicKey.challenge."""
-    # First register a user
+    """POST /auth/login/passkey/begin with known email returns 200 with publicKey.challenge.
+
+    The user is seeded with a direct insert: POST /auth/register/password was
+    removed in #155 (passkey-only auth), so the old two-call setup silently
+    404'd and left no user behind — making this test exercise the *decoy*
+    response for an unknown email, identical to the test directly below it
+    (#283). Asserting that the challenge was persisted on the user row is what
+    distinguishes the real path from the decoy: _decoy_login_response writes
+    nothing to the database.
+    """
+    session = db_client
+    user_id = str(uuid.uuid4())
+    await session.execute(
+        insert(User).values(
+            id=user_id,
+            email="loginbegin@dojo.test",
+            role="member",
+            is_active=True,
+        )
+    )
+    await session.flush()
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        await c.post(
-            "/auth/register/password",
-            json={"email": "loginbegin@dojo.test", "password": "Str0ng!Pass"},
-        )
         response = await c.post(
             "/auth/login/passkey/begin",
             json={"email": "loginbegin@dojo.test"},
@@ -175,8 +187,15 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     body = response.json()
     assert "publicKey" in body
     assert "challenge" in body["publicKey"]
-    assert isinstance(body["publicKey"]["challenge"], str)
-    assert len(body["publicKey"]["challenge"]) > 0
+    challenge = body["publicKey"]["challenge"]
+    assert isinstance(challenge, str)
+    assert len(challenge) > 0
+
+    stored = (
+        await session.execute(select(User).where(User.id == user_id))
+    ).scalar_one()
+    assert stored.pending_challenge == challenge
+    assert stored.challenge_issued_at is not None
 
 
 @pytest.mark.asyncio

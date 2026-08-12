@@ -341,7 +341,12 @@ async def test_member_can_checkin_to_session(
     ) as c:
         response = await c.post(f"/sessions/{session['id']}/checkin")
 
-    assert response.status_code == 200
+    # Body on failure: this assertion produced a bare `assert 403 == 200` once
+    # under a full run and passed in isolation (#283). The session is seeded at
+    # "now" against a 60-min-before / 120-min-after window, so neither
+    # TOO_EARLY nor CLOSED is reachable here — without the response detail
+    # there is no way to tell which 403 branch fired if it recurs.
+    assert response.status_code == 200, response.text
     body = response.json()
     assert "id" in body
     assert body["session_id"] == session["id"]
