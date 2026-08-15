@@ -4,6 +4,7 @@ import os
 from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
+from publicsuffixlist import PublicSuffixList
 
 load_dotenv(override=False)
 
@@ -228,6 +229,27 @@ def _validate_production_origin(origin: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
+_public_suffix_list: PublicSuffixList | None = None
+
+
+def _get_public_suffix_list() -> PublicSuffixList:
+    """Return a process-wide PublicSuffixList, built once from the package's
+    bundled snapshot on first use.
+
+    `PublicSuffixList()` with no `source` argument reads the PSL data that
+    ships inside the wheel — it never fetches or updates the list over the
+    network, which matters because this runs during startup validation,
+    before any outbound I/O is expected (and possibly before it's even
+    permitted, e.g. an egress-locked container). Building the list is not
+    free, so it's done once lazily rather than at import time or on every
+    call.
+    """
+    global _public_suffix_list
+    if _public_suffix_list is None:
+        _public_suffix_list = PublicSuffixList()
+    return _public_suffix_list
+
+
 def _validate_production_rp_id(rp_id: str) -> None:
     """Validate WEBAUTHN_RP_ID is a bare hostname: no scheme, no port, no
     path, not an IP literal, not localhost (or a .localhost subdomain), and
@@ -313,6 +335,37 @@ def validate_startup_config() -> None:
                 "equal to it, or the origin host must end with "
                 f"'.{rp_id}'. Passkeys created under this RP ID would "
                 "never be usable from this origin otherwise."
+            )
+
+        # Per the HTML "is a registrable domain suffix of, or is equal to"
+        # algorithm, equality short-circuits the whole check: when the RP ID
+        # is exactly the origin host, it is always valid and the Public
+        # Suffix List is never consulted — that's the same shape as a
+        # single-tenant deployment hosted directly on a PaaS root domain
+        # (e.g. RP ID and origin host both literally "herokuapp.com"), and
+        # rejecting it would be wrong per spec.
+        #
+        # Only in the strict-suffix branch (rp_id != origin_host) can the RP
+        # ID itself be a *public suffix* — a domain anyone can register a
+        # subdomain of (a PaaS wildcard domain like herokuapp.com, or a
+        # multi-label ccTLD suffix like co.uk) rather than a real
+        # registrable domain the operator controls. Browsers enforce this
+        # client-side (a public-suffix RP ID triggers a SecurityError during
+        # the WebAuthn ceremony), so a server that boots anyway is silently
+        # broken — passkeys would appear to work at signup and then fail
+        # every subsequent authentication. This check is a fail-fast
+        # ergonomics guard, not a security boundary in itself: the browser
+        # remains the actual enforcing boundary, but failing at startup
+        # turns a confusing client-side ceremony failure into an immediate,
+        # actionable server error.
+        if rp_id != origin_host and _get_public_suffix_list().is_public(rp_id):
+            raise RuntimeError(
+                f"WEBAUTHN_RP_ID ('{rp_id}') is a public suffix — a domain "
+                "anyone can register a subdomain of (e.g. a PaaS wildcard "
+                "domain or a multi-label ccTLD), not a registrable domain "
+                "this dojo controls. Browsers refuse to create or use "
+                "passkeys under a public-suffix RP ID. Set WEBAUTHN_RP_ID "
+                "to the full host instead, e.g. 'mydojo.herokuapp.com'."
             )
 
         globals()["WEBAUTHN_RP_ID"] = rp_id

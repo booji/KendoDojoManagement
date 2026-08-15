@@ -14,6 +14,10 @@ pydantic[email]==2.10.3
 typer>=0.9.0
 slowapi>=0.1.9
 python-multipart==0.0.32
+# Bundles a dated snapshot of the Public Suffix List for offline, no-network
+# lookups at startup (issue #309). The snapshot ages with this pin — refresh
+# it by bumping the version, not by letting the library fetch updates itself.
+publicsuffixlist==1.0.2.20260815
 
 # Security-pinned transitive dependencies (issue #235).
 # These are pulled transitively but pinned here to guarantee the CVE-fixed

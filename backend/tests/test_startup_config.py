@@ -516,3 +516,180 @@ def test_cors_origins_explicit_value_is_not_touched_by_origin_normalization(
         monkeypatch.delenv("CORS_ORIGINS", raising=False)
         monkeypatch.delenv("WEBAUTHN_ORIGIN", raising=False)
         importlib.reload(config)
+
+
+# ---------------------------------------------------------------------------
+# Issue #309 — the suffix check above has no Public Suffix List awareness.
+# `rp_id != origin_host and not origin_host.endswith("." + rp_id)` accepts
+# any RP ID that is a string-suffix of the origin host, even when that RP ID
+# is itself a *public suffix* (a domain registrable by anyone, e.g. a PaaS
+# wildcard domain or a multi-label ccTLD) rather than a real registrable
+# domain the operator controls. Per the HTML "is a registrable domain suffix
+# of or is equal to" algorithm, an RP ID that is a public suffix and not
+# identical to the origin host must be rejected — browsers enforce this
+# client-side with a SecurityError, so a server that boots anyway is
+# silently broken. These tests describe the PSL-aware replacement; the
+# behaviour is asserted, not which library provides it.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_startup_config_raises_when_rp_id_is_paas_public_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WEBAUTHN_RP_ID=herokuapp.com is a public suffix (anyone can register
+    <anything>.herokuapp.com) — it must never be usable as an RP ID for a
+    tenant subdomain, even though the old string-suffix check accepted it."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "herokuapp.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://mydojo.herokuapp.com")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "WEBAUTHN_RP_ID" in message
+    assert "public suffix" in message.lower()
+
+
+def test_validate_startup_config_raises_when_rp_id_is_multi_label_public_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WEBAUTHN_RP_ID=co.uk is a multi-label public suffix (like .com, but
+    under the UK ccTLD) — no operator can register 'co.uk' itself, only
+    something.co.uk. Must be rejected exactly like a single-label public
+    suffix."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "co.uk")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.co.uk")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "WEBAUTHN_RP_ID" in message
+    assert "public suffix" in message.lower()
+
+
+def test_validate_startup_config_raises_when_rp_id_is_another_paas_public_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second PaaS wildcard domain (vercel.app) — guards against a fix
+    that special-cases herokuapp.com/co.uk instead of consulting a real
+    PSL."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "vercel.app")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://mydojo.vercel.app")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "WEBAUTHN_RP_ID" in message
+    assert "public suffix" in message.lower()
+
+
+def test_validate_startup_config_allows_rp_id_equal_to_origin_host_even_if_public_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The spec's algorithm is 'is a registrable domain suffix of OR IS EQUAL
+    TO' — the public-suffix rejection only applies to the strict-suffix
+    branch. When the RP ID is exactly the origin host, the PSL is never
+    consulted and the pair is valid (this is the same shape as a
+    single-tenant deployment hosted directly on a PaaS root domain)."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "herokuapp.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://herokuapp.com")
+
+    # Should not raise.
+    config.validate_startup_config()
+
+
+@pytest.mark.parametrize(
+    "rp_id, origin",
+    [
+        ("example.com", "https://dojo.example.com"),
+        ("dojo.co.uk", "https://www.dojo.co.uk"),
+        ("dojo.example.com", "https://dojo.example.com"),
+    ],
+)
+def test_validate_startup_config_still_passes_for_ordinary_valid_configs(
+    monkeypatch: pytest.MonkeyPatch, rp_id: str, origin: str
+) -> None:
+    """Regression guard: PSL-awareness must not start rejecting ordinary
+    valid RP ID / origin pairs, including a registrable domain that sits
+    under a multi-label public suffix (dojo.co.uk, under co.uk)."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", rp_id)
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", origin)
+
+    # Should not raise.
+    config.validate_startup_config()
+
+
+def test_validate_startup_config_still_raises_on_ordinary_non_suffix_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard: the pre-existing non-PSL mismatch case (RP ID is
+    simply the wrong domain, not a public-suffix edge case) must still
+    raise."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "example.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.org")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "WEBAUTHN_RP_ID" in message or "WEBAUTHN_ORIGIN" in message
+
+
+def test_validate_startup_config_public_suffix_check_gated_on_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Development must not be nagged by the new PSL check either — same
+    APP_ENV=='production' gate as every other shape check in this file."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "development", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "herokuapp.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://mydojo.herokuapp.com")
+
+    # Should not raise.
+    config.validate_startup_config()
+
+
+def test_validate_startup_config_public_suffix_check_needs_no_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The PSL data must be bundled offline, not fetched over the network at
+    validation time — this runs at process startup, before any outbound I/O
+    is expected or even necessarily possible (e.g. an egress-locked
+    container). Block socket creation entirely and confirm the public-suffix
+    rejection still fires."""
+    import socket
+
+    def _no_network(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "validate_startup_config() must not touch the network — the "
+            "Public Suffix List must be bundled offline"
+        )
+
+    monkeypatch.setattr(socket, "socket", _no_network)
+    monkeypatch.setattr(socket, "create_connection", _no_network)
+
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "herokuapp.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://mydojo.herokuapp.com")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "WEBAUTHN_RP_ID" in message
+    assert "public suffix" in message.lower()
