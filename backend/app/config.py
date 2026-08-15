@@ -297,11 +297,12 @@ def _validate_production_rp_id(rp_id: str) -> None:
 
 def validate_startup_config() -> None:
     """Raise RuntimeError naming the offending variable if any required
-    startup config is unset, empty, or whitespace-only; if APP_ENV, after
-    normalization (stripped + lowercased), isn't "development" or
-    "production"; or if a production-shaped deployment (normalized
-    APP_ENV=="production") has a WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN pair that
-    isn't shaped like a real, matching production WebAuthn configuration.
+    startup config is unset, empty, or whitespace-only; if APP_ENV is
+    missing or not a string; if APP_ENV, after normalization (stripped and
+    lowercased), isn't "development" or "production"; or if a
+    production-shaped deployment (normalized APP_ENV=="production") has a
+    WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN pair that isn't shaped like a real,
+    matching production WebAuthn configuration.
 
     Reads each variable from this module's globals at call time (not at
     import time), so tests can monkeypatch e.g. `config.JWT_SECRET` and
@@ -325,10 +326,23 @@ def validate_startup_config() -> None:
     # read-globals-at-call-time convention. Re-normalizing here is what
     # makes that monkeypatched value still hit the production path instead
     # of silently falling through to development (#310).
+    #
+    # The import-time assignment above (`os.getenv(...).strip().lower()`)
+    # always produces a str, so a missing or non-string APP_ENV global here
+    # can only mean the module state was tampered with after import (e.g. a
+    # test monkeypatching it to None, or a deleted attribute) — never a
+    # developer's unset environment variable, which the import-time default
+    # already turns into "development" before this function ever runs.
+    # Falling back to "development" for that case would reintroduce exactly
+    # the silent skip #310 closed: every production-only check below would
+    # be bypassed with no signal (#313).
     _raw_app_env = globals().get("APP_ENV")
-    app_env = (
-        _raw_app_env.strip().lower() if isinstance(_raw_app_env, str) else "development"
-    )
+    if not isinstance(_raw_app_env, str):
+        raise RuntimeError(
+            "APP_ENV is missing or not a string. Refusing to start rather "
+            "than falling through to the permissive development path."
+        )
+    app_env = _raw_app_env.strip().lower()
     if app_env not in ("development", "production"):
         raise RuntimeError(
             f"APP_ENV ('{_raw_app_env}') must be 'development' or "
