@@ -12,7 +12,15 @@ DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
 
 # development | production. Explicit and never inferred from other settings
 # (e.g. COOKIE_SECURE) — production-only checks below key off this alone.
-APP_ENV: str = os.getenv("APP_ENV", "development")
+# Normalized (stripped + lowercased) at import so every comparison against
+# it — here and in validate_startup_config() — is exact-value safe. Without
+# this, APP_ENV=Production/PRODUCTION/"production " (a trailing space is an
+# easy copy-paste artifact from a .env file) would silently fall through to
+# the permissive development path and skip every production-only WebAuthn
+# check below with no signal that it happened (#310). An unrecognized value
+# after normalization is rejected outright in validate_startup_config()
+# rather than silently defaulting to development — see the check there.
+APP_ENV: str = os.getenv("APP_ENV", "development").strip().lower()
 
 JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 JWT_ALGORITHM: str = "HS256"
@@ -154,9 +162,9 @@ _REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET", "DATABASE_URL")
 # RP ID that doesn't actually match the origin's domain — sail through
 # uncaught and boot happily into a broken (or spoofable) passkey setup.
 # Checking the *shape* WebAuthn actually requires catches all of those, the
-# two literal defaults included, in one pass. Still gated on
-# APP_ENV=="production" so developers running the stock .env are never
-# nagged.
+# two literal defaults included, in one pass. Still gated on APP_ENV (after
+# normalization — see the module-level assignment near the top of this file)
+# being "production" so developers running the stock .env are never nagged.
 
 
 def _reject_template_placeholder(name: str, value: str) -> None:
@@ -289,10 +297,11 @@ def _validate_production_rp_id(rp_id: str) -> None:
 
 def validate_startup_config() -> None:
     """Raise RuntimeError naming the offending variable if any required
-    startup config is unset, empty, or whitespace-only, or if a
-    production-shaped deployment (APP_ENV=="production") has a
-    WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN pair that isn't shaped like a real,
-    matching production WebAuthn configuration.
+    startup config is unset, empty, or whitespace-only; if APP_ENV, after
+    normalization (stripped + lowercased), isn't "development" or
+    "production"; or if a production-shaped deployment (normalized
+    APP_ENV=="production") has a WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN pair that
+    isn't shaped like a real, matching production WebAuthn configuration.
 
     Reads each variable from this module's globals at call time (not at
     import time), so tests can monkeypatch e.g. `config.JWT_SECRET` and
@@ -307,7 +316,29 @@ def validate_startup_config() -> None:
                 "value. Refusing to start with a missing/blank secret."
             )
 
-    if globals().get("APP_ENV") == "production":
+    # APP_ENV is normalized at import time (see the module-level assignment
+    # above), but this function re-normalizes whatever it reads from
+    # globals() rather than trusting that — tests monkeypatch
+    # `config.APP_ENV` directly (e.g. to "Production" or " production ")
+    # after import, bypassing the import-time normalization entirely, and
+    # every other check in this function already follows the same
+    # read-globals-at-call-time convention. Re-normalizing here is what
+    # makes that monkeypatched value still hit the production path instead
+    # of silently falling through to development (#310).
+    _raw_app_env = globals().get("APP_ENV")
+    app_env = (
+        _raw_app_env.strip().lower() if isinstance(_raw_app_env, str) else "development"
+    )
+    if app_env not in ("development", "production"):
+        raise RuntimeError(
+            f"APP_ENV ('{_raw_app_env}') must be 'development' or "
+            "'production' (case/whitespace-insensitive). An unrecognized "
+            "value is rejected outright here rather than silently falling "
+            "through to the permissive development path and skipping every "
+            "production-only check below with no signal (#310)."
+        )
+
+    if app_env == "production":
         # Stripped/lowercased here BECAUSE these values are read raw
         # elsewhere (passkey_service.py, invite_service.py) and passed
         # straight to py_webauthn — validating a cleaned-up copy while

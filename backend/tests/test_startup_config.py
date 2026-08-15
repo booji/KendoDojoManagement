@@ -693,3 +693,113 @@ def test_validate_startup_config_public_suffix_check_needs_no_network(
     message = str(exc_info.value)
     assert "WEBAUTHN_RP_ID" in message
     assert "public suffix" in message.lower()
+
+
+# ---------------------------------------------------------------------------
+# Issue #310 — APP_ENV comparison is case-sensitive. The production gate is
+# `if globals().get("APP_ENV") == "production":` with no normalization, so
+# APP_ENV=Production (or PRODUCTION, or "production " with a trailing space
+# copy-pasted from .env) silently falls through to the permissive
+# development path and skips every production-only check above with no
+# signal at all. APP_ENV must be normalized (stripped + lowercased) before
+# that gate, and a value that isn't "development" or "production" after
+# normalization (a typo like "prod"/"producton", or an unrelated value like
+# "staging") must be rejected outright by validate_startup_config() rather
+# than silently treated as development.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "app_env_value",
+    ["Production", "PRODUCTION", "production ", " production", " PrOdUcTiOn "],
+)
+def test_validate_startup_config_treats_mixed_case_app_env_as_production(
+    monkeypatch: pytest.MonkeyPatch, app_env_value: str
+) -> None:
+    """A case/whitespace variant of 'production' must apply the full
+    production validation path — e.g. a stock localhost WEBAUTHN_RP_ID must
+    still raise, exactly as it does for the exact string 'production'."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", app_env_value, raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "localhost")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "WEBAUTHN_RP_ID" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "app_env_value",
+    ["Development", "DEVELOPMENT", "development ", " development", " DevELopment "],
+)
+def test_validate_startup_config_treats_mixed_case_app_env_as_development(
+    monkeypatch: pytest.MonkeyPatch, app_env_value: str
+) -> None:
+    """A case/whitespace variant of 'development' must be recognized as
+    development — the stock localhost WebAuthn config must not raise."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", app_env_value, raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "localhost")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "http://localhost:5173")
+
+    # Should not raise.
+    config.validate_startup_config()
+
+
+def test_validate_startup_config_unset_app_env_still_defaults_to_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard: APP_ENV unset must still default to development and
+    not raise on stock localhost config — normalization must not disturb
+    this existing behaviour."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.delattr(config, "APP_ENV", raising=False)
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "localhost")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "http://localhost:5173")
+
+    # Should not raise.
+    config.validate_startup_config()
+
+
+@pytest.mark.parametrize("bad_app_env", ["prod", "staging", "producton", ""])
+def test_validate_startup_config_raises_on_unrecognized_app_env(
+    monkeypatch: pytest.MonkeyPatch, bad_app_env: str
+) -> None:
+    """An APP_ENV that is neither 'development' nor 'production' after
+    normalization must be rejected outright at startup, naming APP_ENV and
+    the offending value, rather than silently falling through to the
+    permissive development path with no signal. Deliberately checked here
+    (not just at import) since validate_startup_config() reads the global at
+    call time and tests monkeypatch it directly."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", bad_app_env, raising=False)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    message = str(exc_info.value)
+    assert "APP_ENV" in message
+    if bad_app_env:
+        assert bad_app_env in message
+
+
+def test_app_env_is_normalized_at_import_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """config.APP_ENV itself must hold the normalized value right after
+    import, not only inside validate_startup_config()'s local copy — other
+    call sites may read config.APP_ENV directly. Reload the module with
+    APP_ENV=Production in the environment, following the same
+    importlib.reload pattern the CORS_ORIGINS tests above use for
+    import-time behaviour."""
+    import importlib
+
+    monkeypatch.setenv("APP_ENV", "Production")
+    reloaded = importlib.reload(config)
+    try:
+        assert reloaded.APP_ENV == "production"
+    finally:
+        monkeypatch.delenv("APP_ENV", raising=False)
+        importlib.reload(config)
