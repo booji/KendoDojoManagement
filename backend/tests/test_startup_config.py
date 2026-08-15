@@ -123,17 +123,26 @@ def test_validate_startup_config_passes_in_production_with_real_webauthn_values(
     config.validate_startup_config()
 
 
-@pytest.mark.parametrize("dev_app_env", [None, "development"])
 def test_validate_startup_config_allows_localhost_defaults_outside_production(
-    monkeypatch: pytest.MonkeyPatch, dev_app_env: str | None
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Developers must not be nagged: APP_ENV unset or 'development' with the
-    stock localhost WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN defaults must not raise."""
+    """Developers must not be nagged: APP_ENV 'development' with the stock
+    localhost WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN defaults must not raise.
+
+    This used to also cover APP_ENV unset via
+    `monkeypatch.delattr(config, "APP_ENV", raising=False)` as a stand-in for
+    "APP_ENV unset", but a deleted module global and an unset environment
+    variable are different states, and only the latter is reachable from a
+    real deployment. The unset-at-import route is now asserted directly by
+    test_validate_startup_config_unset_in_environment_still_defaults_to_
+    development via importlib.reload, which is a truer test of the same
+    thing. The deleted-global route is deliberately a startup error under
+    #313 (see test_validate_startup_config_raises_when_app_env_global_is_
+    deleted). So this is not coverage being dropped — it moved to a more
+    accurate test, and the "developers running stock localhost defaults are
+    not nagged" intent is fully preserved by this development case."""
     _set_required_baseline(monkeypatch)
-    if dev_app_env is None:
-        monkeypatch.delattr(config, "APP_ENV", raising=False)
-    else:
-        monkeypatch.setattr(config, "APP_ENV", dev_app_env, raising=False)
+    monkeypatch.setattr(config, "APP_ENV", "development", raising=False)
     monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "localhost")
     monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "http://localhost:5173")
 
@@ -748,19 +757,46 @@ def test_validate_startup_config_treats_mixed_case_app_env_as_development(
     config.validate_startup_config()
 
 
-def test_validate_startup_config_unset_app_env_still_defaults_to_development(
+def test_validate_startup_config_unset_in_environment_still_defaults_to_development(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression guard: APP_ENV unset must still default to development and
-    not raise on stock localhost config — normalization must not disturb
-    this existing behaviour."""
-    _set_required_baseline(monkeypatch)
-    monkeypatch.delattr(config, "APP_ENV", raising=False)
-    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "localhost")
-    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "http://localhost:5173")
+    """Regression guard, superseded by #313: APP_ENV unset in the *process
+    environment* at import time must still normalize to "development" and
+    not raise on stock localhost config — this is the behaviour that
+    actually matters to a developer running the stock .env with no APP_ENV
+    line at all, and it MUST be preserved.
 
-    # Should not raise.
-    config.validate_startup_config()
+    This is deliberately no longer expressed via
+    `monkeypatch.delattr(config, "APP_ENV", raising=False)` — #313 changes
+    that specific case (the module-level global itself absent at
+    validate_startup_config() call time) to raise instead, on the theory
+    that a config module reloaded/constructed without ever assigning
+    APP_ENV at all is more likely a programming error than a developer's
+    intentionally-blank .env. The two are different failure shapes: an
+    unset environment variable still normalizes at import time (this test,
+    via the same importlib.reload pattern test_app_env_is_normalized_at_
+    import_time uses); a deleted-after-import global now raises (see
+    test_validate_startup_config_raises_when_app_env_global_is_deleted
+    below)."""
+    import importlib
+
+    monkeypatch.delenv("APP_ENV", raising=False)
+    reloaded = importlib.reload(config)
+    try:
+        assert reloaded.APP_ENV == "development"
+        monkeypatch.setattr(reloaded, "JWT_SECRET", "a-real-non-empty-secret-value")
+        monkeypatch.setattr(
+            reloaded,
+            "DATABASE_URL",
+            "postgresql+asyncpg://user:pass@db:5432/kendo",
+        )
+        monkeypatch.setattr(reloaded, "WEBAUTHN_RP_ID", "localhost")
+        monkeypatch.setattr(reloaded, "WEBAUTHN_ORIGIN", "http://localhost:5173")
+
+        # Should not raise.
+        reloaded.validate_startup_config()
+    finally:
+        importlib.reload(config)
 
 
 @pytest.mark.parametrize("bad_app_env", ["prod", "staging", "producton", ""])
@@ -803,3 +839,61 @@ def test_app_env_is_normalized_at_import_time(
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(config)
+
+
+# ---------------------------------------------------------------------------
+# Issue #313, follow-up to #310 — validate_startup_config() has one remaining
+# branch where an absent/non-string APP_ENV does not raise:
+#
+#     _raw_app_env = globals().get("APP_ENV")
+#     app_env = (
+#         _raw_app_env.strip().lower()
+#         if isinstance(_raw_app_env, str)
+#         else "development"
+#     )
+#
+# If the APP_ENV global is missing or not a string at call time, this
+# silently falls back to the permissive "development" path instead of
+# raising — the same failure shape #310 closed for unrecognized *string*
+# values like "prod"/"staging". A missing or non-string APP_ENV must now
+# raise RuntimeError naming APP_ENV, consistent with how #310 already
+# treats an unrecognized-but-present string. This does NOT change the
+# import-time default: an unset environment variable still normalizes to
+# "development" at import (see
+# test_validate_startup_config_unset_in_environment_still_defaults_to_
+# development above and test_app_env_is_normalized_at_import_time) — only
+# the module-level global being absent or non-string *when
+# validate_startup_config() reads it* is newly rejected.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_startup_config_raises_when_app_env_global_is_deleted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deleted config.APP_ENV global (as opposed to an unset environment
+    variable at import time) must raise, naming APP_ENV, rather than
+    silently falling through to the permissive development path."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.delattr(config, "APP_ENV")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "APP_ENV" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("bad_app_env", [None, 123, True, ["production"]])
+def test_validate_startup_config_raises_when_app_env_is_not_a_string(
+    monkeypatch: pytest.MonkeyPatch, bad_app_env: object
+) -> None:
+    """A non-string APP_ENV (None, an int, a bool, a list — anything that
+    isn't str) must raise, naming APP_ENV, rather than silently falling
+    through to the permissive development path. Parametrized over several
+    shapes so a fix that only special-cases None doesn't slip through."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", bad_app_env, raising=False)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "APP_ENV" in str(exc_info.value)
