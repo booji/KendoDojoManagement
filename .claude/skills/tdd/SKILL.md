@@ -47,10 +47,15 @@ DATABASE_URL=postgresql+asyncpg://kendo_test:kendo_test_password@db:5432/kendo_t
 **Running the container stack:**
 ```bash
 # One-shot: runs all tests (unit + integration + e2e) then exits
-docker compose -f docker-compose.test.yml run --rm test
+podman-compose -f docker-compose.test.yml run --rm test
+
+# Scope it, or pass pytest flags (trailing args after the service name are the
+# container command under podman-compose, so flags must go through PYTEST_ARGS)
+podman-compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_foo.py -e PYTEST_ARGS=-x test
 
 # Drop the stack when done
-docker compose -f docker-compose.test.yml down
+podman-compose -f docker-compose.test.yml down
 ```
 
 The test container (`backend-e2e-deps` stage) includes Python, Node 22, and Playwright/Chromium. `run_tests.sh` starts uvicorn on `:8000` and Vite on `:5173`, waits for both, then runs `pytest tests/ -x -q`. The `db` service is ephemeral — destroyed on `down`.
@@ -104,9 +109,9 @@ After any new route or repository method, verify tests exist for:
 ## Playwright browser tests
 
 ### Setup
-Playwright is included in `requirements-dev.txt` and installed with browsers in the `backend-e2e-deps` Docker stage — no local setup required.
+Playwright is included in `requirements-dev.txt` and installed with browsers in the `backend-e2e-deps` image stage — no local setup required.
 
-Tests live in `backend/tests/test_e2e_*.py`. They run automatically as part of `docker compose -f docker-compose.test.yml run --rm test` — `run_tests.sh` starts uvicorn and Vite before invoking pytest.
+Tests live in `backend/tests/test_e2e_*.py`. They run automatically as part of `podman-compose -f docker-compose.test.yml run --rm test` — `run_tests.sh` starts uvicorn and Vite before invoking pytest.
 
 ### Fixtures
 ```python
@@ -166,5 +171,5 @@ def test_user_can_register(page: Page) -> None:
 ### Rules
 - Browser tests assert **observable UI behaviour** — visible text, button states, navigation — not implementation details
 - One browser test per acceptance criterion from the issue; do not write exhaustive UI tests
-- Run via: `docker compose -f docker-compose.test.yml run --rm test` (includes e2e automatically)
+- Run via: `podman-compose -f docker-compose.test.yml run --rm test` (includes e2e automatically)
 - Never leave `xfail` stubs in place after implementation — promote or escalate

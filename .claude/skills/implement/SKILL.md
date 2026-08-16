@@ -83,9 +83,11 @@ Lint on the host, from backend/ with the venv active (. .venv/bin/activate):
   ruff check . --fix
   ruff format .
 
-Tests run in Docker, from the repo root. Bare pytest on the host raises a
-RuntimeError in conftest.py (it requires a PostgreSQL DATABASE_URL):
-  docker compose -f docker-compose.test.yml run --rm test
+Tests run in a container, from the repo root. Podman is the supported
+runtime (`docker compose` works only with the podman-docker shim). Bare
+pytest on the host raises a RuntimeError in conftest.py (it requires a
+PostgreSQL DATABASE_URL):
+  podman-compose -f docker-compose.test.yml run --rm test
 
 Never start uvicorn or npm run dev yourself — the container entrypoint
 (run_tests.sh) starts both servers before invoking pytest. Running one in the
@@ -157,7 +159,7 @@ raises unless `DATABASE_URL` is a PostgreSQL URL naming a "test" database.
 
 From the repo root. A full run takes ~11 minutes.
 ```bash
-docker compose -f docker-compose.test.yml run --rm test \
+podman-compose -f docker-compose.test.yml run --rm test \
   > /tmp/suite.log 2>&1; echo "exit=$?"
 grep -aE "short test summary|[0-9]+ passed" /tmp/suite.log | tail -5
 ```
@@ -169,10 +171,12 @@ Do NOT pass `--entrypoint bash`. That skips `run_tests.sh`, so no servers start
 and every `test_e2e_*` test fails with connection-refused. That looks like a
 catastrophic regression and is only a misconfigured run.
 
-To scope a run to one file, keep the entrypoint and use `PYTEST_TARGET`:
+To scope a run to one file, keep the entrypoint and use `PYTEST_TARGET`.
+Pytest flags go through `PYTEST_ARGS` — trailing arguments after the service
+name become the container command under `podman-compose`, not pytest flags:
 ```bash
-docker compose -f docker-compose.test.yml run --rm \
-  -e PYTEST_TARGET=tests/test_e2e_foo.py test
+podman-compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_e2e_foo.py -e PYTEST_ARGS=-x test
 ```
 
 ## Step 2 — Promote xfail stubs

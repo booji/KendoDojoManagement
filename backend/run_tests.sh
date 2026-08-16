@@ -61,11 +61,25 @@ echo "Both servers ready — running tests"
 cd /app
 # No -x: a full run reports on the whole suite, so a passing run is evidence
 # and a failing run names every problem at once (see #221). Fail-fast is still
-# available on demand — the script forwards "$@", so pass -x explicitly to
-# stop at the first failure while iterating.
+# available on demand — see PYTEST_ARGS below.
 #
 # PYTEST_TARGET overrides which paths are collected (default: the whole suite),
 # so a single file can be exercised without editing this script, e.g.
-#   docker compose -f docker-compose.test.yml run --rm \
+#   podman-compose -f docker-compose.test.yml run --rm \
 #     -e PYTEST_TARGET=tests/test_e2e_settings.py test
-exec pytest ${PYTEST_TARGET:-tests/} -q "$@"
+#
+# PYTEST_ARGS passes extra flags to pytest, e.g.
+#   podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
+#
+# Flags cannot be passed positionally on the primary runtime: podman-compose
+# treats anything after the service name as the container command, so
+# `run --rm test -x` fails with `crun: executable file '-x' not found in
+# $PATH`. Only real `docker compose` forwards them into "$@" (#284). An env
+# var works identically on both, so PYTEST_ARGS is the documented route;
+# "$@" is still honoured for anyone on Docker.
+#
+# Both variables interpolate unquoted so multiple space-separated values
+# word-split into separate arguments. That also means the shell glob-expands
+# any value containing * ? [ ] against /app — keep values free of those
+# characters.
+exec pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "$@"
