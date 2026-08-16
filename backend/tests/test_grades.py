@@ -513,13 +513,20 @@ async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> N
     assert "id" in body
 
 
-async def test_post_grades_non_admin_forbidden(member_repo, grade_repo) -> None:
-    """AC2: POST /members/{id}/grades is admin-only — non-admin gets 401/403."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
+async def test_post_grades_non_admin_forbidden(
+    member_repo, grade_repo, cookies_for
+) -> None:
+    """AC2: POST /members/{id}/grades is admin-only — non-admin gets 401/403.
+
+    No REQUIRE_ADMIN override is set, so the real guard fires against a real
+    member token — overriding the guard here would test nothing.
+    """
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",

@@ -394,14 +394,21 @@ async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> No
 # ---------------------------------------------------------------------------
 
 
-async def test_approve_non_admin_returns_403(member_repo, grade_repo) -> None:
-    """AC5: Non-admin caller on POST approve → 403 Forbidden."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
+async def test_approve_non_admin_returns_403(
+    member_repo, grade_repo, cookies_for
+) -> None:
+    """AC5: Non-admin caller on POST approve → 403 Forbidden.
+
+    No REQUIRE_ADMIN override is set, so the real guard fires against a real
+    member token — overriding the guard here would test nothing.
+    """
     member_id = _MEMBER_A_ID
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
@@ -410,14 +417,21 @@ async def test_approve_non_admin_returns_403(member_repo, grade_repo) -> None:
     ), f"Non-admin must be rejected with 403; got {response.status_code}"
 
 
-async def test_delete_non_admin_returns_403(member_repo, grade_repo) -> None:
-    """AC5: Non-admin caller on DELETE → 403 Forbidden."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
+async def test_delete_non_admin_returns_403(
+    member_repo, grade_repo, cookies_for
+) -> None:
+    """AC5: Non-admin caller on DELETE → 403 Forbidden.
+
+    No REQUIRE_ADMIN override is set, so the real guard fires against a real
+    member token — overriding the guard here would test nothing.
+    """
     member_id = _MEMBER_A_ID
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 

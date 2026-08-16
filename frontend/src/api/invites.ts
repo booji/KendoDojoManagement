@@ -1,4 +1,5 @@
 import type { ApiError, PasskeyCreationOptions, RegisterResponse } from "@/api/auth"
+import { throwApiError } from "@/api/client"
 import { runPasskeyCreationCeremony } from "@/api/auth"
 
 export type InviteStatus = "pending" | "redeemed" | "expired" | "revoked"
@@ -22,17 +23,6 @@ export type InviteMintResponse = {
   token: string
   link: string
   expires_at: string
-}
-
-const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {
-  let message = defaultMessage
-  try {
-    const body = (await res.json()) as { detail?: string }
-    if (body.detail) message = body.detail
-  } catch {
-    // ignore parse errors
-  }
-  throw { status: res.status, message } satisfies ApiError
 }
 
 // --- Admin invite management ---

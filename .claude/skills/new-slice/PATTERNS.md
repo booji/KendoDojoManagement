@@ -27,17 +27,22 @@ class {Concept}(UUIDBase):
 
 ```python
 # backend/app/{concept}/repository.py
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base_repository import AbstractRepository
 from app.{concept}.models import {Concept}
 
 
-class Abstract{Concept}Repository(AbstractRepository[{Concept}]):
+class Abstract{Concept}Repository(ABC):
+    @abstractmethod
+    async def get(self, id: UUID) -> {Concept} | None: ...
+
+    @abstractmethod
+    async def add(self, entity: {Concept}) -> {Concept}: ...
+
     @abstractmethod
     async def list_all(self) -> list[{Concept}]: ...
     # add domain-specific query methods here

@@ -1,4 +1,5 @@
 import type { MemberResponse } from "@/api/members"
+import { throwApiError } from "@/api/client"
 
 export type SelfUpdateMemberRequest = {
   first_name?: string
@@ -12,7 +13,7 @@ export type SelfUpdateMemberRequest = {
 export const getMyMember = async (): Promise<MemberResponse | null> => {
   const res = await fetch("/api/users/me/member", { credentials: "include" })
   if (res.status === 404) return null
-  if (!res.ok) throw new Error("Failed to fetch member profile")
+  if (!res.ok) await throwApiError(res, "Failed to fetch member profile")
   return res.json() as Promise<MemberResponse>
 }
 
@@ -23,9 +24,6 @@ export const putMyMember = async (data: SelfUpdateMemberRequest): Promise<Member
     credentials: "include",
     body: JSON.stringify(data),
   })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error((body as { detail?: string }).detail ?? "Failed to save profile")
-  }
+  if (!res.ok) await throwApiError(res, "Failed to save profile")
   return res.json() as Promise<MemberResponse>
 }

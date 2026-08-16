@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.db.unit_of_work import AbstractUnitOfWork
+from app.dependencies import get_uow
 from app.grades.dependencies import get_grade_repo
 from app.grades.models import (
     CurrentGradeResponse,
@@ -27,6 +29,7 @@ _GradeRepo = Annotated[AbstractGradeRepository, Depends(get_grade_repo)]
 _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 
 
 def _entry_from_dict(
@@ -53,10 +56,6 @@ async def list_pending_grades(
     claims: _Admin,
     grade_repo: _GradeRepo,
 ) -> list[PendingGradeEntry]:
-    if claims.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
     entries = await grade_repo.list_pending()
     return [PendingGradeEntry(**e) for e in entries]
 
@@ -73,12 +72,8 @@ async def set_member_grade(
     claims: _Admin,
     member_repo: _MemberRepo,
     grade_repo: _GradeRepo,
+    uow: _UoW,
 ) -> SetGradeResponse:
-    if claims.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
-
     if body.grade == Grade.MUKYUU:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -104,6 +99,7 @@ async def set_member_grade(
         promoted_at=awarded_at,
         status="confirmed",
     )
+    await uow.commit()
     return SetGradeResponse(
         id=record["id"],
         member_id=record["member_id"],
@@ -127,6 +123,7 @@ async def propose_member_grade(
     claims: _Member,
     member_repo: _MemberRepo,
     grade_repo: _GradeRepo,
+    uow: _UoW,
 ) -> SetGradeResponse:
     if claims.role == "admin":
         raise HTTPException(
@@ -165,6 +162,7 @@ async def propose_member_grade(
         promoted_at=proposed_at,
         status="pending",
     )
+    await uow.commit()
     return SetGradeResponse(
         id=record["id"],
         member_id=record["member_id"],
@@ -254,11 +252,8 @@ async def approve_grade_entry(
     entry_id: uuid.UUID,
     claims: _Admin,
     grade_repo: _GradeRepo,
+    uow: _UoW,
 ) -> GradeHistoryEntry:
-    if claims.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
     try:
         record = await grade_repo.approve_entry(
             str(member_id), str(entry_id), claims.sub
@@ -271,6 +266,7 @@ async def approve_grade_entry(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Entry is not pending"
         )
+    await uow.commit()
     return _entry_from_dict(record, include_assigned_by=True)
 
 
@@ -289,11 +285,8 @@ async def delete_grade_entry(
     entry_id: uuid.UUID,
     claims: _Admin,
     grade_repo: _GradeRepo,
+    uow: _UoW,
 ) -> None:
-    if claims.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
     try:
         await grade_repo.delete_entry(str(member_id), str(entry_id))
     except KeyError:
@@ -305,3 +298,4 @@ async def delete_grade_entry(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only pending entries may be deleted",
         )
+    await uow.commit()

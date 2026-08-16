@@ -1,3 +1,5 @@
+import { throwApiError } from "@/api/client"
+
 export type SessionType = {
   id: string
   name: string
@@ -55,25 +57,19 @@ export type SessionInstanceUpdate = {
 
 export const getSessions = async (): Promise<SessionInstance[]> => {
   const res = await fetch("/api/sessions", { credentials: "include" })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch sessions: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to fetch sessions")
   return res.json() as Promise<SessionInstance[]>
 }
 
 export const getSessionTypes = async (): Promise<SessionType[]> => {
   const res = await fetch("/api/session-types", { credentials: "include" })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch session types: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to fetch session types")
   return res.json() as Promise<SessionType[]>
 }
 
 export const getSession = async (id: string): Promise<SessionInstance> => {
   const res = await fetch(`/api/sessions/${id}`, { credentials: "include" })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch session: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to fetch session")
   return res.json() as Promise<SessionInstance>
 }
 
@@ -87,9 +83,7 @@ export const updateSession = async (
     credentials: "include",
     body: JSON.stringify(payload),
   }))
-  if (!res.ok) {
-    throw new Error(`Failed to update session: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to update session")
   return res.json() as Promise<SessionInstance>
 }
 
@@ -98,9 +92,7 @@ export const cancelSession = async (id: string): Promise<SessionInstance> => {
     method: "POST",
     credentials: "include",
   }))
-  if (!res.ok) {
-    throw new Error(`Failed to cancel session: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to cancel session")
   return res.json() as Promise<SessionInstance>
 }
 
@@ -109,9 +101,7 @@ export const deleteTemplate = async (templateId: string): Promise<void> => {
     method: "DELETE",
     credentials: "include",
   }))
-  if (!res.ok) {
-    throw new Error(`Failed to delete template: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to delete template")
 }
 
 export type SessionInstanceCreate = {
@@ -132,10 +122,7 @@ export const createSession = async (
     credentials: "include",
     body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `Failed to create session: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to create session")
   return res.json() as Promise<SessionInstance>
 }
 
@@ -169,26 +156,6 @@ export type SessionTemplate = {
 // FastAPI returns validation failures (422) as `{ detail: [{ msg, loc, ... }] }`
 // rather than a plain string. Flatten either shape into one readable message
 // so callers never have to show a raw JSON blob to the user.
-async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { detail?: unknown }
-    if (typeof body.detail === "string") return body.detail
-    if (Array.isArray(body.detail)) {
-      const msgs = body.detail
-        .map((d) =>
-          d && typeof d === "object" && "msg" in d
-            ? String((d as { msg: unknown }).msg)
-            : null,
-        )
-        .filter((m): m is string => m !== null)
-      if (msgs.length > 0) return msgs.join("; ")
-    }
-  } catch {
-    // non-JSON body; fall through to the generic fallback
-  }
-  return fallback
-}
-
 export const createSessionTemplate = async (
   payload: SessionTemplateCreate,
 ): Promise<SessionTemplate> => {
@@ -198,11 +165,7 @@ export const createSessionTemplate = async (
     credentials: "include",
     body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    throw new Error(
-      await extractErrorMessage(res, `Failed to create session template: ${res.status}`),
-    )
-  }
+  if (!res.ok) await throwApiError(res, "Failed to create session template")
   return res.json() as Promise<SessionTemplate>
 }
 
@@ -210,9 +173,7 @@ export const getSessionTemplate = async (templateId: string): Promise<SessionTem
   const res = await fetch(`/api/sessions/templates/${templateId}`, {
     credentials: "include",
   })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch session template: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to fetch session template")
   return res.json() as Promise<SessionTemplate>
 }
 
@@ -228,11 +189,7 @@ export const extendSessionTemplate = async (
       body: JSON.stringify({ end_date: endDate }),
     }),
   )
-  if (!res.ok) {
-    throw new Error(
-      await extractErrorMessage(res, `Failed to extend session template: ${res.status}`),
-    )
-  }
+  if (!res.ok) await throwApiError(res, "Failed to extend session template")
   return res.json() as Promise<SessionTemplate>
 }
 
@@ -243,10 +200,7 @@ export const createSessionType = async (name: string): Promise<SessionType> => {
     credentials: "include",
     body: JSON.stringify({ name }),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `Failed to create session type: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to create session type")
   return res.json() as Promise<SessionType>
 }
 
@@ -258,9 +212,7 @@ export const getSessionsForRange = async (
   const res = await fetch(`/api/sessions?${params.toString()}`, {
     credentials: "include",
   })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch sessions: ${res.status}`)
-  }
+  if (!res.ok) await throwApiError(res, "Failed to fetch sessions")
   return res.json() as Promise<SessionInstance[]>
 }
 
@@ -269,18 +221,9 @@ export const deleteSessionType = async (id: string): Promise<void> => {
     method: "DELETE",
     credentials: "include",
   })
-  if (!res.ok) {
-    // The backend returns a 409 with a { detail } message when the type is
-    // still referenced by a segment — surface that message to the admin.
-    let detail: string | null = null
-    try {
-      const body = (await res.json()) as { detail?: unknown }
-      if (typeof body.detail === "string") detail = body.detail
-    } catch {
-      // non-JSON body; fall through to a generic message
-    }
-    throw new Error(detail ?? `Failed to delete session type: ${res.status}`)
-  }
+  // A 409 carries a { detail } explaining that a segment still references the
+  // type; throwApiError surfaces that to the admin.
+  if (!res.ok) await throwApiError(res, "Failed to delete session type")
 }
 
 export const updateSessionTypeColour = async (id: string, colour: string | null): Promise<SessionType> => {
@@ -290,6 +233,6 @@ export const updateSessionTypeColour = async (id: string, colour: string | null)
     credentials: "include",
     body: JSON.stringify({ colour }),
   })
-  if (!res.ok) throw new Error(`Failed to update session type colour: ${res.status}`)
+  if (!res.ok) await throwApiError(res, "Failed to update session type colour")
   return res.json() as Promise<SessionType>
 }

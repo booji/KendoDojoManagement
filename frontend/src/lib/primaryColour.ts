@@ -17,9 +17,11 @@
  * its own background *and* against its paired `--primary-foreground`. This
  * mirrors how #214 derives the status/`--category-*` tokens per theme.
  *
- * WCAG 2.1 relative-luminance + contrast maths mirror the backend's
- * app/settings/wcag.py so the two stay in agreement; the OKLCH conversion is
- * Björn Ottosson's reference sRGB↔OKLab transform.
+ * Contrast is computed here and nowhere else: the backend accepts any valid
+ * hex (see the note in app/settings/router.py's update_dojo_settings), because
+ * a brand hue has no single background to clear. The relative-luminance and
+ * contrast-ratio maths follow the WCAG 2.1 definitions directly; the OKLCH
+ * conversion is Björn Ottosson's reference sRGB↔OKLab transform.
  */
 
 const NEAR_WHITE = "#ffffff"
