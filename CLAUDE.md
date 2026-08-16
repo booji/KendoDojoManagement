@@ -53,6 +53,33 @@ Apply security best practices at all system boundaries:
 - Apply least-privilege principles to auth and data access.
 - Use parameterized queries / ORM-level protections against injection.
 
+## Database Migrations
+
+Alembic is the single source of truth for the schema. `Base.metadata.create_all`
+is not a deployment path — schema changes flow exclusively through the
+migration chain.
+
+### Reversals must justify themselves
+
+A migration that **reverses an earlier migration** — adding back an object a
+previous revision dropped, or dropping one a previous revision added — must
+explain why in its module docstring: what changed, and what supersedes the
+earlier decision. A summary line alone is not enough.
+
+This is enforced by `backend/tests/test_migration_conventions.py`, which walks
+the revision chain statically (no database) and fails naming the offending
+revision, the object, and the revision being reversed.
+`a5b6c7d8e9f0_drop_federation_number_from_members.py` is the reference example
+of the expected shape.
+
+The convention exists because `members.federation_number` was dropped as
+superseded, silently re-added one revision later with no stated reason, and
+then sat orphaned in the schema for roughly three months (issue #299).
+
+Revisions predating the convention are listed in `GRANDFATHERED_REVISIONS` in
+that test. That list must only ever shrink — new reversals write a docstring
+instead.
+
 ## Build / Test / Lint
 
 ### Tests — always via Docker
