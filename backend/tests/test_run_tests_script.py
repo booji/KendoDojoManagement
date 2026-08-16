@@ -270,6 +270,57 @@ def test_frontend_readiness_failure_message_names_frontend():
 
 
 # ---------------------------------------------------------------------------
+# PYTEST_ARGS (Issue #284)
+# ---------------------------------------------------------------------------
+
+
+def _exec_pytest_line() -> str:
+    """The `exec pytest ...` invocation, as a single line of text."""
+    text = _script_text()
+    match = re.search(r"^.*exec\s+pytest.*$", text, re.MULTILINE)
+    assert match, "could not find the 'exec pytest' invocation in run_tests.sh"
+    return match.group(0)
+
+
+def test_pytest_invocation_interpolates_pytest_args():
+    """
+    Issue #284: extra pytest flags cannot be passed positionally under
+    `podman-compose` — anything after the service name replaces the container
+    command, so `... run --rm test -x` fails with
+    `crun: executable file '-x' not found in $PATH`. Only `docker compose`
+    forwards them into "$@".
+
+    Podman is the primary supported runtime, so the documented way to pass
+    flags must work on it: an environment variable the script interpolates
+    itself. Assert `PYTEST_ARGS` appears, unquoted (so multiple flags word-
+    split into separate arguments), on the `exec pytest` line.
+    """
+    line = _exec_pytest_line()
+    assert re.search(r"\$\{PYTEST_ARGS[:-]*[^}]*\}|\$PYTEST_ARGS", line), (
+        "expected the 'exec pytest' line to interpolate a PYTEST_ARGS "
+        f"environment variable so flags reach pytest on podman-compose; got: {line}"
+    )
+    assert not re.search(r'"\$\{?PYTEST_ARGS', line), (
+        "PYTEST_ARGS must be interpolated unquoted so that a value like "
+        "'-x -q' word-splits into separate pytest arguments rather than "
+        "arriving as one argument"
+    )
+
+
+def test_pytest_args_defaults_to_empty_under_set_u():
+    """
+    The script runs under `set -u`, so a bare `$PYTEST_ARGS` would abort the
+    run with 'unbound variable' whenever the variable is not passed — i.e.
+    on every normal full-suite run. It must carry a default expansion.
+    """
+    line = _exec_pytest_line()
+    assert re.search(r"\$\{PYTEST_ARGS:?-", line), (
+        "PYTEST_ARGS must use a default expansion (${PYTEST_ARGS:-}) so that "
+        "an unset value does not abort the script under 'set -u'"
+    )
+
+
+# ---------------------------------------------------------------------------
 # exec pytest must not be reachable on failure
 # ---------------------------------------------------------------------------
 

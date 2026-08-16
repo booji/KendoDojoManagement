@@ -1,6 +1,6 @@
 # KendoDojoManagement
 
-Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployable with Docker Compose (or Podman).
+Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployed with rootless Podman.
 
 ## Features
 
@@ -13,11 +13,40 @@ Self-hosted web application for managing the members, sessions, and attendance o
 - **Auth** — passkey (WebAuthn) primary, email/password fallback, recovery codes, admin-issued recovery tokens, and break-glass CLI token
 - **Security** — rate limiting, account lockout, security headers, CORS, and structured security event logging
 
+## Container runtime
+
+**Podman is the supported runtime.** It is what the project is developed and
+tested against, and what the production deployment (`deploy/quadlet`) targets:
+rootless, daemonless, systemd-native.
+
+**Docker is best-effort and unverified.** The Compose files use no
+Podman-specific syntax and the Makefile auto-detects `docker compose`, so it is
+expected to work — but nothing here is tested under Docker and no parity is
+promised. Bug reports are welcome; behaviour differences are not treated as
+release blockers.
+
+Every command in this README is written in its `podman` / `podman-compose`
+form. With the `podman-docker` shim installed, `docker` and `docker compose`
+are aliases for these, so both spellings work; a clean Podman install has no
+`docker` binary at all, which is why the Podman form is the one written out.
+
+Compose files keep their `docker-compose.*.yml` names — that is the filename
+Compose implementations look for by convention, and `-f` names them explicitly
+at every call site regardless of runtime.
+
+## Deployment paths
+
+Two supported ways to run this in production — pick one:
+
+| Path | Files | Use when |
+|------|-------|----------|
+| **Compose** | `docker-compose.yml` + `.env` | You want a single host up quickly. HTTP on port 8000; put your own TLS in front. See [Quick start](#quick-start-production) below. |
+| **Quadlet** | `deploy/quadlet` | You want the hardened deployment: rootless systemd units, Traefik with automatic TLS, network segmentation, Podman secrets, automated backups. See **[docs/deployment.md](docs/deployment.md)**. |
+
 ## Quick start (production)
 
-> **Deploying to a real UAT/PROD host with HTTPS?** Follow the full runbook in
-> **[docs/deployment.md](docs/deployment.md)** — rootless Podman + Quadlet, Traefik
-> for automatic TLS, network segmentation, Podman secrets, and automated backups.
+> **Deploying to a real UAT/PROD host with HTTPS?** Use the Quadlet path
+> instead — full runbook in **[docs/deployment.md](docs/deployment.md)**.
 > The steps below are a minimal single-host HTTP trial only.
 
 **1. Copy and fill in the environment file:**
@@ -47,11 +76,6 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ```bash
 make build   # build the production image
-docker compose up -d
-```
-
-Or with Podman:
-```bash
 podman-compose up -d
 ```
 
@@ -63,7 +87,7 @@ the database in `postgres_data` — both survive `down`/`up` and image rebuilds.
 
 ### Prerequisites
 
-- Docker Compose **or** Podman + podman-compose
+- Podman + podman-compose (Docker Compose may work — see [Container runtime](#container-runtime))
 - Python 3.13 + a virtual environment (`python3 -m venv backend/.venv`)
 - Node 22
 
@@ -116,7 +140,9 @@ Two runtime quirks are worth knowing, both verified on podman 5.6.0:
   networks are otherwise mutually routable *by IP* — the frontend cannot resolve
   `db`, but it can open a socket to the database's `10.89.x.x` address. The
   `driver_opts` in both Compose files close that. Docker isolates user-defined
-  bridges natively and does not need the option.
+  bridges natively, so the option is redundant there — and untested, like
+  everything else on Docker. If a Docker version rejects the `driver_opts`
+  key, dropping it loses nothing on that runtime.
 - **The `backend` network is not `internal: true`**, unlike `Internal=true` on
   `kendo-backend.network` in `deploy/quadlet`. Podman disables DNS on internal
   networks (`dnsname and internal networks are incompatible`), so the service
@@ -130,7 +156,7 @@ Two runtime quirks are worth knowing, both verified on podman 5.6.0:
 used to make it bind host port 5432 directly — the conventional PostgreSQL port.
 Anything else on the machine holding that port (a system install, another
 project's stack, a leftover container) claimed it first, and the dev database
-then exited 1 while `docker compose up -d db` still reported success. A
+then exited 1 while `podman-compose up -d db` still reported success. A
 published port fails loudly on a collision, and 5433 avoids the common one
 entirely.
 
@@ -169,9 +195,9 @@ problem, the port is.
 | `make migrate` | Run `alembic upgrade head` in the running dev container |
 | `make help` | List all targets |
 
-The Makefile auto-detects `podman-compose` vs `docker compose` — no changes needed for either runtime.
+The Makefile auto-detects `podman-compose` vs `docker compose`, so the targets run under either. That detection is kept because it costs nothing, not because Docker is tested — see [Container runtime](#container-runtime).
 
-### Running tests locally (without Docker)
+### Running tests locally (without a container)
 
 ```bash
 cd backend
@@ -189,11 +215,22 @@ This mounts `./backend` into a container alongside an ephemeral PostgreSQL insta
 
 One-shot run inside the running container:
 ```bash
-# docker:
-docker compose -f docker-compose.test.yml exec test pytest -q
-# podman:
 podman-compose -f docker-compose.test.yml exec test pytest -q
 ```
+
+A one-shot run of the whole suite, with optional pytest flags:
+```bash
+podman-compose -f docker-compose.test.yml run --rm test
+podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
+podman-compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_members.py test
+```
+
+Pass pytest flags through `PYTEST_ARGS`, not positionally after the service
+name: `podman-compose` treats trailing arguments as the container command, so
+`run --rm test -x` fails with ``crun: executable file `-x` not found in
+$PATH``. Only real `docker compose` forwards them. Both variables interpolate
+unquoted, so keep values free of `*`, `?` and `[]`.
 
 ## Container architecture
 
@@ -218,11 +255,11 @@ are still named after the directory (`kendodojomanagement_*`) and are now
 orphaned. To carry dev data across:
 
 ```bash
-docker exec kendodojomanagement_db_1 pg_dump -U kendo_dev -d kendo_dev > dev.sql
-docker rm -f kendodojomanagement_db_1
-docker compose -f docker-compose.dev.yml --env-file .env.dev up -d db
-docker exec -i kendodojo-dev_db_1 psql -U kendo_dev -d kendo_dev < dev.sql
-docker volume rm kendodojomanagement_postgres_dev_data   # once you are happy
+podman exec kendodojomanagement_db_1 pg_dump -U kendo_dev -d kendo_dev > dev.sql
+podman rm -f kendodojomanagement_db_1
+podman-compose -f docker-compose.dev.yml --env-file .env.dev up -d db
+podman exec -i kendodojo-dev_db_1 psql -U kendo_dev -d kendo_dev < dev.sql
+podman volume rm kendodojomanagement_postgres_dev_data   # once you are happy
 ```
 
 Nothing needs carrying across for the test stack — its database is deliberately
@@ -233,8 +270,6 @@ volume-less and is rebuilt on every run.
 Use this when the only admin is locked out and has no recovery codes.
 
 ```bash
-docker exec kendo-app python -m app.cli create-recovery-token <email>
-# podman:
 podman exec kendo-app python -m app.cli create-recovery-token <email>
 ```
 

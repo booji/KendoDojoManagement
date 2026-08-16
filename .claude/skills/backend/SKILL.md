@@ -27,12 +27,16 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
    # Lint on the host, from backend/
    .venv/bin/ruff check . --fix
 
-   # Tests in Docker, from the repo root. Bare pytest on the host raises a
-   # RuntimeError in conftest.py, which requires a PostgreSQL DATABASE_URL.
-   docker compose -f docker-compose.test.yml run --rm test
+   # Tests in a container, from the repo root. Podman is the supported
+   # runtime (`docker compose` works only with the podman-docker shim). Bare
+   # pytest on the host raises a RuntimeError in conftest.py, which requires
+   # a PostgreSQL DATABASE_URL.
+   podman-compose -f docker-compose.test.yml run --rm test
    ```
-   Scope a run with `-e PYTEST_TARGET=tests/test_foo.py`. Never start uvicorn
-   or Vite yourself — the container entrypoint does it.
+   Scope a run with `-e PYTEST_TARGET=tests/test_foo.py`, and pass pytest
+   flags with `-e PYTEST_ARGS=-x` — trailing arguments after the service name
+   are the container command under podman-compose, not pytest flags. Never
+   start uvicorn or Vite yourself — the container entrypoint does it.
 4. Register new routers in `app/main.py`.
 5. When a model changes, remind the user to create an Alembic migration:
    ```

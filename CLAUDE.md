@@ -13,7 +13,7 @@ KendoDojoManagement — manages sessions and members of a kendo dojo. Open sourc
 - **Database:** PostgreSQL (dev, test, prod) via SQLAlchemy
 - **Auth:** Passkeys/WebAuthn (`py_webauthn`) primary; email/password fallback
 - **API:** REST
-- **Deployment:** Docker Compose (app + PostgreSQL containers)
+- **Deployment:** rootless Podman — Quadlet units (`deploy/quadlet`) for the hardened deployment, Compose (app + PostgreSQL containers) for a quick self-host
 - **Primary keys:** UUID
 
 ## Type Configuration Convention
@@ -82,24 +82,42 @@ instead.
 
 ## Build / Test / Lint
 
-### Tests — always via Docker
+### Container runtime
 
-Tests run in Docker, never on the host. `backend/tests/conftest.py` refuses to
-collect unless `DATABASE_URL` is a PostgreSQL URL naming a database whose name
+**Podman is the supported, tested runtime.** Docker is best-effort and
+unverified — the Compose files and the Makefile's runtime auto-detection are
+expected to work under it, but nothing here is tested against Docker and no
+parity is promised. Commands below lead with `podman-compose` / `podman`.
+
+If you have the `podman-docker` shim installed, `docker` and `docker compose`
+are aliases and every command works unchanged. A clean Podman install has no
+`docker` binary, so the `podman-compose` form is the one written out.
+
+### Tests — always in a container
+
+Tests run in a container, never on the host. `backend/tests/conftest.py` refuses
+to collect unless `DATABASE_URL` is a PostgreSQL URL naming a database whose name
 contains "test", so a bare `pytest` fails at import with a `RuntimeError` before
 a single test runs. Run from the repo root:
 
 ```bash
 # Full suite (backend + e2e)
-docker compose -f docker-compose.test.yml run --rm test
+podman-compose -f docker-compose.test.yml run --rm test
 
 # A single file or directory
-docker compose -f docker-compose.test.yml run --rm \
+podman-compose -f docker-compose.test.yml run --rm \
   -e PYTEST_TARGET=tests/test_members.py test
 
-# Extra pytest flags are forwarded, e.g. fail-fast while iterating
-docker compose -f docker-compose.test.yml run --rm test -x
+# Extra pytest flags, e.g. fail-fast while iterating
+podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
 ```
+
+Pass pytest flags via `PYTEST_ARGS`, **not** positionally after the service
+name. `podman-compose` treats trailing arguments as the container command, so
+`run --rm test -x` fails with ``crun: executable file `-x` not found in $PATH``;
+only real `docker compose` forwards them. `PYTEST_ARGS` works on both runtimes.
+It interpolates unquoted (as `PYTEST_TARGET` already did), so keep values free
+of `*`, `?` and `[]` — the shell would glob-expand them against `/app`.
 
 The compose service's entrypoint is `backend/run_tests.sh`, which installs
 frontend deps and starts uvicorn (:8000) and Vite (:5173) *before* invoking
