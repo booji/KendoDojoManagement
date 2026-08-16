@@ -13,7 +13,7 @@ Scaffolds a full vertical slice for a domain concept: SQLAlchemy model, abstract
 
 Before generating anything, read:
 - `backend/app/db/base.py` — UUIDBase model
-- `backend/app/db/base_repository.py` — AbstractRepository
+- `backend/app/grades/repository.py` — per-concept `Abstract{Concept}Repository(ABC)` + SQL implementation
 - `backend/app/db/unit_of_work.py` — AbstractUnitOfWork / SQLAlchemyUnitOfWork
 - `backend/app/dependencies.py` — get_uow pattern
 - `backend/app/routers/health.py` — router pattern

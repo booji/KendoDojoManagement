@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from joserfc import jwt
+from joserfc.errors import JoseError
 from joserfc.jwk import OctKey
 
 from app import config
@@ -31,7 +32,11 @@ def decode_token(token: str) -> UserClaims:
         payload = token_obj.claims
         if int(payload["exp"]) < int(datetime.now(UTC).timestamp()):
             raise ValueError("Token expired")
-    except (ValueError, KeyError) as exc:
+    # JoseError covers a malformed or badly-signed token. It does NOT subclass
+    # ValueError, so leaving it out let a corrupt access_token cookie escape as
+    # an unhandled exception — a 500 from every authenticated endpoint instead
+    # of the 401 the guard intends.
+    except (JoseError, ValueError, KeyError) as exc:
         raise ValueError("Invalid or expired token") from exc
     return UserClaims(
         sub=payload["sub"],

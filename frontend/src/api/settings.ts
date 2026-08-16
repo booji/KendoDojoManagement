@@ -1,13 +1,4 @@
-const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {
-  let message = defaultMessage
-  try {
-    const body = (await res.json()) as { detail?: string }
-    if (body.detail) message = body.detail
-  } catch {
-    // ignore parse errors
-  }
-  throw { status: res.status, message }
-}
+import { throwApiError } from "@/api/client"
 
 export type DojoSettings = {
   dojo_name: string

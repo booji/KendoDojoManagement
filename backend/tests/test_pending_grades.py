@@ -49,10 +49,6 @@ def _admin_override() -> UserClaims:
     return _ADMIN
 
 
-def _member_a_override() -> UserClaims:
-    return _MEMBER_A
-
-
 # ---------------------------------------------------------------------------
 # Stub repositories
 # ---------------------------------------------------------------------------
@@ -314,12 +310,16 @@ async def test_pending_response_includes_promoted_at(member_repo, grade_repo) ->
 # ---------------------------------------------------------------------------
 
 
-async def test_non_admin_member_gets_403(member_repo, grade_repo) -> None:
-    """AC2: A non-admin member calling GET /grades/pending receives 403."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _member_a_override
+async def test_non_admin_member_gets_403(member_repo, grade_repo, cookies_for) -> None:
+    """AC2: A non-admin member calling GET /grades/pending receives 403.
 
+    No REQUIRE_ADMIN override is set, so the real guard fires against a real
+    member token — overriding the guard here would test nothing.
+    """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.get("/grades/pending")
 

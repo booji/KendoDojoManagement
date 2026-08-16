@@ -1,4 +1,4 @@
-import type { ApiError } from "@/api/auth"
+import { throwApiError } from "@/api/client"
 
 export type MembershipStatus = "active" | "inactive" | "suspended" | "archived"
 
@@ -50,17 +50,6 @@ export type UpdateMemberRequest = {
 export type ListMembersParams = {
   status?: MembershipStatus
   search?: string
-}
-
-const throwApiError = async (res: Response, defaultMessage: string): Promise<never> => {
-  let message = defaultMessage
-  try {
-    const body = (await res.json()) as { detail?: string }
-    if (body.detail) message = body.detail
-  } catch {
-    // ignore parse errors
-  }
-  throw { status: res.status, message } satisfies ApiError
 }
 
 export const listMembers = async (

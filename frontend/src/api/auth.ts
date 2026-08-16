@@ -1,3 +1,5 @@
+import type { ApiError } from "@/api/client"
+
 export type RegisterResponse = {
   sub: string
   email: string
@@ -18,15 +20,9 @@ export type UserClaims = {
   theme: "light" | "dark" | "system"
 }
 
-export type ApiError = {
-  status: number
-  message: string
-}
-
-const isApiError = (e: unknown): e is ApiError =>
-  typeof e === "object" && e !== null && "status" in e && "message" in e
-
-export { isApiError }
+// Re-exported for the many call sites that already import them from here.
+export { isApiError, throwApiError } from "@/api/client"
+export type { ApiError } from "@/api/client"
 
 export const getMe = async (): Promise<UserClaims> => {
   const res = await fetch("/api/auth/me", {

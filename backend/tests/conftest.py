@@ -89,6 +89,28 @@ def pytest_collection_modifyitems(items: list) -> None:
     items[:] = non_e2e + e2e
 
 
+@pytest.fixture()
+def cookies_for():
+    """Build a real signed access-token cookie for the given claims.
+
+    Use this for any test asserting an *authorization* outcome. Overriding the
+    guard under test (e.g. ``dependency_overrides[REQUIRE_ADMIN] = a member
+    stub``) replaces the code that produces the 403, so the assertion ends up
+    exercising whatever redundant role check happens to sit inside the route
+    instead — such a test passes even if the route's guard is removed. Handing
+    the real guard a real member token keeps the check honest.
+
+    No DB is involved: the token is signed with the JWT_SECRET set above.
+    """
+    from app.auth.models import UserClaims
+    from app.auth.token import encode_token
+
+    def _make(claims: "UserClaims") -> dict[str, str]:
+        return {"access_token": encode_token(claims)}
+
+    return _make
+
+
 @pytest.fixture(autouse=True)
 def _default_attendance_repo_stub():
     """Install a no-op attendance repo so tests that don't mock it don't hit the DB.
