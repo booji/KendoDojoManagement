@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app import config
 from app.auth.attempt_repository import AbstractAttemptRepository
@@ -36,7 +36,6 @@ from app.auth.models import (
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
-    ThemeUpdate,
     UserClaims,
 )
 from app.auth.passkey_repository import AbstractPasskeyRepository
@@ -85,25 +84,6 @@ async def me(
     claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
 ) -> UserClaims:
     return claims
-
-
-@router.patch("/me/theme", response_model=UserClaims)
-async def update_theme(
-    payload: ThemeUpdate,
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> UserClaims:
-    await uow.session.execute(
-        update(User).where(User.id == claims.sub).values(theme=payload.theme)
-    )
-    await uow.commit()
-    return UserClaims(
-        sub=claims.sub,
-        email=claims.email,
-        role=claims.role,
-        is_active=claims.is_active,
-        theme=payload.theme,
-    )
 
 
 @router.get("/admin-only", response_model=UserClaims)

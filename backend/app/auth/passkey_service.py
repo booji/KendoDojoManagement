@@ -365,7 +365,6 @@ async def register_passkey_complete(
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
-        theme=user.theme,  # type: ignore[arg-type]
         show_nudge=show_nudge,
     )
 
@@ -476,7 +475,6 @@ async def login_passkey_complete(
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
-        theme=user.theme,  # type: ignore[arg-type]
     )
     log_security_event("login_passkey", "success", user_id=user.id)
     return TokenResponse(access_token=encode_token(claims))

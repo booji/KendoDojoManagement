@@ -3,11 +3,12 @@ E2E Playwright tests for issue #14 — Theme toggle.
 
 Each test covers one acceptance criterion.
 
-Implementation note: encode_token / decode_token does not round-trip the
-`theme` field, so getMe() always returns theme="system" regardless of the
-stored DB value.  Tests exercise the observable client-side behaviour that
-IS implemented (localStorage, dark-class toggling, cycle order, keyboard
-navigation, sidebar visibility).  AC6 is marked with an explanatory comment.
+Implementation note: theme is a user preference, not an auth claim (#322).  It
+is never carried on the JWT or returned by getMe(); the server-side copy lives
+in `users.theme` and is read and written solely through
+GET/PUT /users/me/preferences.  These tests exercise the observable client-side
+behaviour (localStorage, dark-class toggling, cycle order, keyboard navigation,
+sidebar visibility); the server reconcile is covered by the preferences tests.
 """
 
 import os
@@ -173,16 +174,10 @@ def test_selecting_theme_applies_dark_class_immediately(page: Page) -> None:
 def test_theme_preference_survives_page_refresh(page: Page) -> None:
     """AC4: Theme preference is saved to localStorage and restored after a refresh.
 
-    Note: on reload the app calls getMe() which returns theme="system" and
-    overwrites localStorage.  However, React's useState initialiser runs before
-    the async getMe() resolves, so it reads localStorage first — giving a
-    brief window where the saved theme is applied.  After getMe() resolves and
-    setTheme("system") is called the theme reverts to "system".
-
-    Because the JWT does not carry the user's saved theme, persistence across a
-    full reload is limited to the period before getMe() resolves.  This test
-    verifies that localStorage IS written when the user changes the theme (the
-    client-side persistence half of AC4 that IS implemented).
+    The blocking script in index.html reads localStorage before first paint, so
+    the saved theme survives a reload without a flash.  ThemeProvider then
+    reconciles against GET /users/me/preferences on mount.  This test covers the
+    client-side persistence half of AC4.
     """
     page.emulate_media(color_scheme="light")
     page.set_viewport_size({"width": 1280, "height": 800})
@@ -210,10 +205,9 @@ def test_theme_preference_survives_page_refresh(page: Page) -> None:
 def test_theme_from_server_profile_applied_after_login(browser) -> None:
     """AC6: Fresh browser context defaults to system theme (matching server default).
 
-    The current backend encode_token/decode_token does not include the 'theme'
-    field in the JWT, so getMe() always returns theme='system'.  On a fresh
-    context the app correctly applies the system preference.  This test
-    verifies that observable behaviour: OS=light → no 'dark' class on load.
+    With empty localStorage the pre-paint script in index.html falls back to the
+    OS preference, so a fresh context starts on 'system'.  This test verifies
+    that observable behaviour: OS=light → no 'dark' class on load.
     """
     context: BrowserContext = browser.new_context()
     page = context.new_page()

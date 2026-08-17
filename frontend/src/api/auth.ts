@@ -17,7 +17,6 @@ export type UserClaims = {
   email: string
   role: "admin" | "member"
   is_active: boolean
-  theme: "light" | "dark" | "system"
 }
 
 // Re-exported for the many call sites that already import them from here.
@@ -299,15 +298,4 @@ export const redeemRecoveryCode = async (
   }
 
   return res.json() as Promise<{ access_token: string }>
-}
-
-export const updateTheme = async (theme: "light" | "dark" | "system"): Promise<UserClaims> => {
-  const res = await fetch("/api/auth/me/theme", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ theme }),
-  })
-  if (!res.ok) throw { status: res.status, message: "Failed to update theme" } satisfies ApiError
-  return res.json() as Promise<UserClaims>
 }
