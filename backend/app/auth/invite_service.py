@@ -308,6 +308,5 @@ async def invite_redeem_complete(
         email=user.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
-        theme=user.theme,  # type: ignore[arg-type]
         show_nudge=True,
     )

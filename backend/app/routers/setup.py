@@ -98,7 +98,6 @@ async def setup_passkey_complete(
             email=claims.email,
             role="admin",
             is_active=claims.is_active,
-            theme=claims.theme,
         )
 
     token = encode_token(claims)
