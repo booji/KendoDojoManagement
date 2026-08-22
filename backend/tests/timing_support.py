@@ -7,10 +7,10 @@ touched nothing on the auth path.
 
 The tolerance here is derived from the noise present in the very run being
 judged, rather than guessed in advance. Each branch's samples are split into
-two interleaved halves and the delta between those halves' medians is a
+two interleaved halves and the delta between those halves' statistic is a
 *same-path control*: its true value is zero, so whatever it measures is
 measurement noise. The cross-path delta is then judged against a multiple of
-the noisier branch's control.
+that control.
 
 Two bounds keep that honest:
 
@@ -23,6 +23,37 @@ Two bounds keep that honest:
 Calibration alone was not sufficient. Sampling order matters too: see
 `sample_counterbalanced`, which exists because a fixed A-then-B loop let
 run-scale drift masquerade as a cross-path difference.
+
+Issue #306: taking the *noisier* branch's control (as issue #298 originally
+did) has a blind spot -- a conditional slow path (cache miss, retry,
+early-return) that only a subset of requests take doesn't shift the median
+much, but it does inflate that branch's own split-half control, since the
+slow/fast split falls independently into each half. The leaked branch then
+finances its own tolerance: the very asymmetry that should fail the check
+instead widens the budget it is judged against. The fix has two parts:
+
+* a p90 comparison runs alongside the median, with its own split-half
+  control and its own (looser) bounds, because a low-duty-cycle conditional
+  slow path can leave the median almost untouched while still moving the
+  tail. This is what actually closes the #306 gap: a 200,000-trial Monte
+  Carlo sweep (`slow_fraction` 5-30%, spread_s=0.1ms) found detection is
+  carried almost entirely by the p90 check, whose own false-failure rate at
+  the #298 noise level is ~0.07-0.1%;
+* the same-path control *may* prefer the quieter of the two branches over
+  the noisier one, gated by `CONTROL_RATIO_MIN_ABS_S` -- see that constant
+  for why the gate is necessary and what it buys. A first cut of this idea
+  (unconditionally discarding the wider control once the ratio passed
+  `CONTROL_RATIO_SIGNAL_THRESHOLD`) shipped in #306 without the gate and
+  made things worse: two independent Monte Carlo reviews measured its
+  false-failure rate at the #298 noise level (±3ms spread, n=31, 20,000+
+  trials) at ~6.2-6.4%, *above* the pre-#306 `max()` baseline of ~5.4-5.6%.
+  The mechanism turned out to add no measured detection power of its own --
+  the p90 check catches every fixture in this suite regardless of which
+  control the median comparison picks -- so it is kept only because the
+  gated version is a strict improvement on false-failure rate (empirically
+  identical to the `max()` baseline) and there is no evidence it hurts;
+  drop it in a future revision if that continues to hold and the extra
+  moving part isn't earning its keep.
 
 Note this is not the production defence -- that is the constant-time floor
 (`AUTH_BEGIN_MIN_DURATION_MS`), asserted separately by the floor tests. This
@@ -44,16 +75,70 @@ __all__ = [
 SAMPLE_COUNT = 31
 
 #: Multiple of the observed same-path noise allowed for the cross-path delta.
+#: Shared between the median and p90 checks -- both bound their tolerance the
+#: same number of controls wide; it is the bounds themselves (below) that
+#: differ per statistic.
 NOISE_MULTIPLIER = 3.0
 
-#: Floor for the tolerance: the historical fixed budget from issue #255.
+#: Floor for the median tolerance: the historical fixed budget from issue
+#: #255.
 MIN_TOLERANCE_S = 0.001
 
-#: Ceiling for the tolerance. Issue #255 measured the real leak at a median
-#: delta of ~2.02ms, so this must sit clearly *below* that rather than at it:
-#: a capped-out tolerance must still fail a regression of the same class that
-#: happens to land somewhat under the originally-measured figure.
+#: Ceiling for the median tolerance. Issue #255 measured the real leak at a
+#: median delta of ~2.02ms, so this must sit clearly *below* that rather than
+#: at it: a capped-out tolerance must still fail a regression of the same
+#: class that happens to land somewhat under the originally-measured figure.
 MAX_TOLERANCE_S = 0.0015
+
+#: Bounds for the p90 tolerance (issue #306). A p90 estimate on 31 samples
+#: rests on roughly its top 3-4 points, so it swings more per-run than a
+#: median does; both bounds sit above the median's for that reason. Chosen
+#: empirically so every convergence fixture (including the heavy-noise and
+#: linear-drift cases, whose p90 controls run wider than their median
+#: controls) still passes, while the bimodal leak fixtures -- whose p90 delta
+#: lands at ~5.9-6.3ms, far beyond either bound -- still fail.
+P90_MIN_TOLERANCE_S = 0.0015
+P90_MAX_TOLERANCE_S = 0.0025
+
+#: Ratio, between one branch's split-half control and its sibling's, above
+#: which the wider one is *candidate* to be excluded as that branch's own
+#: signal rather than shared run noise (issue #306) -- subject to the
+#: `CONTROL_RATIO_MIN_ABS_S` gate below, which decides whether the ratio is
+#: trusted at all.
+#:
+#: 20x was chosen from two fixture fingerprints (~19x for two identical
+#: branches, ~30x for a genuine leak) and looked like a clean separation.
+#: It was not: a 200,000-trial Monte Carlo over two branches drawn from an
+#: *identical* distribution at n=31 found the hi/lo control ratio itself
+#: distributes as p50~2.4, p90~12.5, p95~24.9, p99~122, with a tail into the
+#: thousands. Pure sampling luck alone clears 20x roughly 6% of the time, so
+#: the threshold sits inside the ordinary noise distribution, not past it.
+#: The 20x cutoff is kept anyway (it still separates the two fingerprints
+#: that motivated it, and raising it further only weakens an already-inert
+#: mechanism -- see `CONTROL_RATIO_MIN_ABS_S`), but it is no longer trusted
+#: to decide anything on its own.
+CONTROL_RATIO_SIGNAL_THRESHOLD = 20.0
+
+#: Absolute floor the *quieter* control must clear before its ratio to the
+#: wider one is trusted to discard the wider one (issue #306 fix-round).
+#:
+#: A ratio computed between two near-zero controls carries no information --
+#: dividing noise by noise produces huge, meaningless ratios, and that is
+#: exactly what was driving the false-failure regression: at the #298 noise
+#: level (±3ms spread, n=31), the quieter-of-the-pair control for two
+#: *identical* branches has p10~0.07ms, p25~0.17ms, p50~0.39ms. Below this
+#: floor there are not enough real counts backing the control for a 20x
+#: separation to mean anything, so the wider (more conservative) control is
+#: kept instead, as it was before #306.
+#:
+#: 0.2ms sits just above the p25 of that quieter-control distribution --
+#: enough of the low tail that the ratio mechanism's contribution to the
+#: false-failure rate at ±3ms drops to being empirically indistinguishable
+#: from the pre-#306 `max()` baseline (100,000-trial Monte Carlo: 5.370% for
+#: both, versus 6.193% for the ungated ratio). Detection of the bimodal leak
+#: fixtures (5-30% duty cycle) was unaffected in the same sweep -- it never
+#: depended on this control in the first place; see the module docstring.
+CONTROL_RATIO_MIN_ABS_S = 0.0002
 
 #: Fewest samples per branch that can support a split-half control.
 _MIN_SAMPLES = 8
@@ -105,8 +190,16 @@ async def sample_counterbalanced(
     return samples_a, samples_b
 
 
-def _split_half_control(samples: list[float]) -> float:
-    """Median delta between two interleaved halves of one branch's samples.
+def _percentile_90(samples: list[float]) -> float:
+    """The 90th percentile of one branch's samples."""
+    return statistics.quantiles(samples, n=100)[89]
+
+
+def _split_half_control(
+    samples: list[float], statistic: Callable[[list[float]], float]
+) -> float:
+    """`statistic` delta between two interleaved halves of one branch's
+    samples.
 
     Both halves come from the same code path, so the true delta is zero and
     the result is a direct read on this run's measurement noise. Splitting by
@@ -119,7 +212,58 @@ def _split_half_control(samples: list[float]) -> float:
     slightly high while the cross-path delta has the same bias cancelled out,
     which errs toward tolerating noise rather than toward false confidence.
     """
-    return abs(statistics.median(samples[0::2]) - statistics.median(samples[1::2]))
+    return abs(statistic(samples[0::2]) - statistic(samples[1::2]))
+
+
+def _same_path_control(control_a: float, control_b: float) -> float:
+    """Pick the same-path control to calibrate against from a branch pair.
+
+    Defaults to the wider (more conservative) of the two controls. It is
+    only replaced by the quieter one when both `CONTROL_RATIO_MIN_ABS_S` and
+    `CONTROL_RATIO_SIGNAL_THRESHOLD` agree that the wider control looks like
+    the branch's own signal rather than shared run noise: the quieter
+    control must itself be large enough to make a ratio meaningful (the
+    absolute-floor gate -- see that constant for why this is necessary), and
+    only then does a wide ratio count as evidence (the threshold gate).
+    """
+    lo, hi = (
+        (control_a, control_b) if control_a <= control_b else (control_b, control_a)
+    )
+    if lo >= CONTROL_RATIO_MIN_ABS_S and hi / lo > CONTROL_RATIO_SIGNAL_THRESHOLD:
+        return lo
+    return hi
+
+
+def _check_statistic(
+    name: str,
+    statistic: Callable[[list[float]], float],
+    samples_a: list[float],
+    samples_b: list[float],
+    *,
+    min_tolerance: float,
+    max_tolerance: float,
+    label_a: str,
+    label_b: str,
+) -> str | None:
+    """Compare one statistic across branches; return a failure message, or
+    None if it converges."""
+    delta = abs(statistic(samples_a) - statistic(samples_b))
+    control = _same_path_control(
+        _split_half_control(samples_a, statistic),
+        _split_half_control(samples_b, statistic),
+    )
+    tolerance = min(max(NOISE_MULTIPLIER * control, min_tolerance), max_tolerance)
+
+    if delta < tolerance:
+        return None
+
+    return (
+        f"{name} latency delta between {label_a!r} and {label_b!r} exceeds run "
+        f"noise: {name} delta={delta * 1000:.3f}ms, same-path control="
+        f"{control * 1000:.3f}ms, tolerance={tolerance * 1000:.3f}ms "
+        f"(n={len(samples_a)}/{len(samples_b)}). A {name} delta this far above "
+        f"the control suggests a real timing side channel, not scheduling noise."
+    )
 
 
 def assert_latency_medians_converge(
@@ -131,6 +275,11 @@ def assert_latency_medians_converge(
 ) -> None:
     """Assert two code paths show no latency difference beyond run noise.
 
+    Checks both the median and the p90 (issue #306): a conditional slow path
+    taken by only a minority of requests can leave the median all but
+    unmoved while still shifting the tail, so a median-only comparison is
+    blind to it.
+
     Args:
         samples_a, samples_b: per-request wall-clock durations in seconds,
             gathered interleaved so neither branch absorbs warm-up skew.
@@ -138,8 +287,9 @@ def assert_latency_medians_converge(
 
     Raises:
         ValueError: if either branch has too few samples to calibrate against.
-        AssertionError: if the cross-path delta exceeds the calibrated
-            tolerance.
+        AssertionError: if the median or the p90 cross-path delta exceeds its
+            calibrated tolerance. The message names which statistic tripped
+            it.
     """
     if len(samples_a) < _MIN_SAMPLES or len(samples_b) < _MIN_SAMPLES:
         raise ValueError(
@@ -147,14 +297,24 @@ def assert_latency_medians_converge(
             f"against run noise; got {len(samples_a)} and {len(samples_b)}"
         )
 
-    delta = abs(statistics.median(samples_a) - statistics.median(samples_b))
-    control = max(_split_half_control(samples_a), _split_half_control(samples_b))
-    tolerance = min(max(NOISE_MULTIPLIER * control, MIN_TOLERANCE_S), MAX_TOLERANCE_S)
-
-    assert delta < tolerance, (
-        f"latency delta between {label_a!r} and {label_b!r} exceeds run noise: "
-        f"delta={delta * 1000:.3f}ms, same-path control={control * 1000:.3f}ms, "
-        f"tolerance={tolerance * 1000:.3f}ms "
-        f"(n={len(samples_a)}/{len(samples_b)}). A delta this far above the "
-        f"control suggests a real timing side channel, not scheduling noise."
+    failure = _check_statistic(
+        "median",
+        statistics.median,
+        samples_a,
+        samples_b,
+        min_tolerance=MIN_TOLERANCE_S,
+        max_tolerance=MAX_TOLERANCE_S,
+        label_a=label_a,
+        label_b=label_b,
+    ) or _check_statistic(
+        "p90",
+        _percentile_90,
+        samples_a,
+        samples_b,
+        min_tolerance=P90_MIN_TOLERANCE_S,
+        max_tolerance=P90_MAX_TOLERANCE_S,
+        label_a=label_a,
+        label_b=label_b,
     )
+
+    assert failure is None, failure
