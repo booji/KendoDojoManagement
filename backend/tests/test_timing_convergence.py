@@ -37,6 +37,37 @@ def _noisy(centre_s: float, *, spread_s: float, n: int, seed: int) -> list[float
     return [rng.uniform(centre_s - spread_s, centre_s + spread_s) for _ in range(n)]
 
 
+def _bimodal(
+    centre_s: float,
+    *,
+    spread_s: float,
+    n: int,
+    seed: int,
+    slow_fraction: float,
+    slow_offset_s: float,
+) -> list[float]:
+    """n samples where each draw independently takes a slow path.
+
+    Models a conditional slow branch (cache miss, retry, early-return) rather
+    than a clean systematic offset: `slow_fraction` of samples are centred at
+    `centre_s + slow_offset_s`, the rest at `centre_s`; both groups are then
+    jittered uniformly by +/- spread_s. With `slow_fraction` below 0.5 the
+    median stays near `centre_s` (the majority group) while the upper tail --
+    and therefore p90 once `slow_fraction` exceeds ~0.1 -- absorbs the slow
+    group. That is exactly what a median-only, same-path-noise-calibrated
+    check is blind to: the leaked branch's own control also widens, because
+    the slow/fast split falls independently into each split-half.
+    """
+    rng = random.Random(seed)
+    samples = []
+    for _ in range(n):
+        this_centre = (
+            centre_s + slow_offset_s if rng.random() < slow_fraction else centre_s
+        )
+        samples.append(rng.uniform(this_centre - spread_s, this_centre + spread_s))
+    return samples
+
+
 def test_identical_samples_converge() -> None:
     """Two branches with no difference at all pass."""
     samples = [0.020] * 31
@@ -175,6 +206,156 @@ async def test_counterbalancing_cancels_a_linear_drift() -> None:
 
     assert_latency_medians_converge(
         samples_a, samples_b, label_a="drift a", label_b="drift b"
+    )
+
+
+def test_bimodal_leak_with_convergent_median_is_detected() -> None:
+    """A conditional slow path -- not a clean offset -- must still be caught.
+
+    Branch b takes a ~6ms-slower route on ~30% of requests (e.g. a cache
+    miss). With slow_fraction well under 0.5 the median sits in the fast
+    majority for both branches, so a median-only check sees near-equal
+    medians and passes -- exactly the blind spot in issue #306: the leaked
+    branch inflates its own split-half control (the slow/fast split falls
+    independently into each half), which raises its own tolerance and
+    finances the very thing that should fail it. The explicit sub-1ms
+    assertion below proves this fixture exercises that blind spot rather than
+    the already-covered systematic-offset path.
+    """
+    a = _noisy(0.0200, spread_s=0.1 * MS, n=31, seed=101)
+    b = _bimodal(
+        0.0200,
+        spread_s=0.1 * MS,
+        n=31,
+        seed=102,
+        slow_fraction=0.3,
+        slow_offset_s=6 * MS,
+    )
+
+    assert (
+        abs(_median(a) - _median(b)) < 1 * MS
+    ), "fixture must keep the median-shaped signal below the historical 1ms budget"
+
+    with pytest.raises(AssertionError):
+        assert_latency_medians_converge(a, b, label_a="fast-only", label_b="cache-miss")
+
+
+def test_low_duty_cycle_bimodal_leak_moves_p90_and_is_detected() -> None:
+    """A rarer slow path (~20% of requests) must still be caught via the tail.
+
+    A lower duty cycle than the 30% case above, but still far above the ~10%
+    needed to pull p90 itself into the slow cluster. Medians are
+    near-identical (20% is nowhere near the 50% needed to shift the median),
+    so this is only detectable by a statistic that looks at the tail rather
+    than the centre.
+    """
+    a = _noisy(0.0200, spread_s=0.1 * MS, n=31, seed=201)
+    b = _bimodal(
+        0.0200,
+        spread_s=0.1 * MS,
+        n=31,
+        seed=202,
+        slow_fraction=0.2,
+        slow_offset_s=8 * MS,
+    )
+
+    assert abs(_median(a) - _median(b)) < 1 * MS, "medians must stay near-identical"
+
+    with pytest.raises(AssertionError):
+        assert_latency_medians_converge(a, b, label_a="fast-only", label_b="retry-path")
+
+
+def test_branch_cannot_finance_its_own_tolerance_via_max_control() -> None:
+    """A noisy branch must not be allowed to widen the budget it is judged by.
+
+    Branch b is drawn with far more spread than branch a, so its split-half
+    control is much wider (~2.3ms vs ~0.08ms here). Taking max() of the two
+    controls -- the pre-#306 behaviour -- lets that width buy tolerance up to
+    the 1.5ms ceiling, under which the real ~1.4ms cross-path delta slips
+    through. Calibrating against min() instead holds the budget to the
+    quieter branch's noise floor (~1.0ms here), which the same delta clears.
+    Measurement noise is a property of the run and should be common to both
+    branches; a branch whose control is far wider than its sibling's is
+    showing signal, not shared noise, and must not get to set the bar for
+    its own comparison.
+    """
+    a = _noisy(0.0200, spread_s=0.1 * MS, n=31, seed=301)
+    b = _noisy(0.0200 + 1.2 * MS, spread_s=6 * MS, n=31, seed=315)
+
+    with pytest.raises(AssertionError):
+        assert_latency_medians_converge(a, b, label_a="known", label_b="unknown")
+
+
+def test_failure_message_names_the_failing_statistic() -> None:
+    """A failure must say WHICH statistic tripped it -- median or tail --
+    each with its own delta/control/tolerance, so a bimodal leak is not
+    mistaken for a plain offset (or vice versa) when triaging a failure.
+    """
+    a_median = _noisy(0.0200, spread_s=0.05 * MS, n=31, seed=41)
+    b_median = _noisy(0.0200 + 5 * MS, spread_s=0.05 * MS, n=31, seed=42)
+
+    with pytest.raises(AssertionError) as median_excinfo:
+        assert_latency_medians_converge(
+            a_median, b_median, label_a="known", label_b="unknown"
+        )
+
+    median_message = str(median_excinfo.value).lower()
+    assert "median" in median_message
+
+    a_tail = _noisy(0.0200, spread_s=0.1 * MS, n=31, seed=101)
+    b_tail = _bimodal(
+        0.0200,
+        spread_s=0.1 * MS,
+        n=31,
+        seed=102,
+        slow_fraction=0.3,
+        slow_offset_s=6 * MS,
+    )
+
+    with pytest.raises(AssertionError) as tail_excinfo:
+        assert_latency_medians_converge(
+            a_tail, b_tail, label_a="fast-only", label_b="cache-miss"
+        )
+
+    tail_message = str(tail_excinfo.value).lower()
+    assert "p90" in tail_message or "tail" in tail_message
+    assert tail_message != median_message
+
+
+def test_symmetric_noise_and_symmetric_bimodal_both_converge() -> None:
+    """New checks must not introduce new flakiness.
+
+    Two shapes with no real asymmetry must both still pass: heavy symmetric
+    noise on both branches (the original issue #298 flake, unimodal), and a
+    conditional slow path present *equally* on both branches (same cache-miss
+    behaviour on both sides of the comparison). The second case matters
+    specifically for the new tail statistic -- a bimodal distribution is not
+    inherently a leak; it only is one when it is asymmetric between branches.
+    """
+    a_noise = _noisy(0.020, spread_s=3 * MS, n=31, seed=511)
+    b_noise = _noisy(0.020, spread_s=3 * MS, n=31, seed=512)
+    assert_latency_medians_converge(
+        a_noise, b_noise, label_a="valid", label_b="invalid"
+    )
+
+    a_bimodal = _bimodal(
+        0.0200,
+        spread_s=0.1 * MS,
+        n=31,
+        seed=501,
+        slow_fraction=0.3,
+        slow_offset_s=6 * MS,
+    )
+    b_bimodal = _bimodal(
+        0.0200,
+        spread_s=0.1 * MS,
+        n=31,
+        seed=502,
+        slow_fraction=0.3,
+        slow_offset_s=6 * MS,
+    )
+    assert_latency_medians_converge(
+        a_bimodal, b_bimodal, label_a="cache-miss-a", label_b="cache-miss-b"
     )
 
 
