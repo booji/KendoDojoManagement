@@ -89,7 +89,9 @@ def _frontend_loop_region() -> str:
     done_match = re.search(r"\bdone\b", text[frontend_for.end() :])
     assert done_match, "could not find closing 'done' for frontend readiness loop"
     region_start = frontend_for.end() + done_match.end()
-    exec_match = re.search(r"exec\s+pytest", text[region_start:])
+    exec_match = re.search(
+        r"^\s*(?:exec\s+)?pytest\s", text[region_start:], re.MULTILINE
+    )
     region_end = region_start + exec_match.start() if exec_match else len(text)
     return text[region_start:region_end]
 
@@ -275,10 +277,17 @@ def test_frontend_readiness_failure_message_names_frontend():
 
 
 def _exec_pytest_line() -> str:
-    """The `exec pytest ...` invocation, as a single line of text."""
+    """The `pytest ...` invocation, as a single line of text.
+
+    `exec` is optional here: run_tests.sh deliberately stopped exec'ing pytest
+    (#316) because exec replaces the shell's process image and discards its
+    EXIT trap with it, which leaked the per-run database on every run. These
+    tests assert on how the invocation is *composed*, which is unaffected
+    either way.
+    """
     text = _script_text()
-    match = re.search(r"^.*exec\s+pytest.*$", text, re.MULTILINE)
-    assert match, "could not find the 'exec pytest' invocation in run_tests.sh"
+    match = re.search(r"^\s*(?:exec\s+)?pytest\s.*$", text, re.MULTILINE)
+    assert match, "could not find the 'pytest' invocation in run_tests.sh"
     return match.group(0)
 
 
@@ -293,11 +302,11 @@ def test_pytest_invocation_interpolates_pytest_args():
     Podman is the primary supported runtime, so the documented way to pass
     flags must work on it: an environment variable the script interpolates
     itself. Assert `PYTEST_ARGS` appears, unquoted (so multiple flags word-
-    split into separate arguments), on the `exec pytest` line.
+    split into separate arguments), on the pytest invocation line.
     """
     line = _exec_pytest_line()
     assert re.search(r"\$\{PYTEST_ARGS[:-]*[^}]*\}|\$PYTEST_ARGS", line), (
-        "expected the 'exec pytest' line to interpolate a PYTEST_ARGS "
+        "expected the pytest invocation line to interpolate a PYTEST_ARGS "
         f"environment variable so flags reach pytest on podman-compose; got: {line}"
     )
     assert not re.search(r'"\$\{?PYTEST_ARGS', line), (

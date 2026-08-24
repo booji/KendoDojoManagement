@@ -17,17 +17,18 @@ if not _DATABASE_URL.startswith("postgresql"):
         "DATABASE_URL must be a PostgreSQL URL (postgresql+asyncpg://...). "
         "Run tests via: docker compose -f docker-compose.test.yml run --rm test"
     )
-# The session schema fixture calls Base.metadata.drop_all on teardown, so a
-# misdirected DATABASE_URL (e.g. the dev database) would be wiped wholesale.
-# Refuse to run against anything but a dedicated test database — its name must
-# contain "test" (the compose test DB is "kendo_test").
+# run_tests.sh gives each invocation its own throwaway database and drops it
+# wholesale on exit (see run_tests.sh's cleanup()). A misdirected DATABASE_URL
+# (e.g. the dev database) would be just as destructive if it were ever handed
+# to that drop. Refuse to run against anything but a dedicated test database —
+# its name must contain "test" (the compose test DB is "kendo_test").
 _db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
 if "test" not in _db_name.lower():
     raise RuntimeError(
-        f"Refusing to run tests against database {_db_name!r}: the suite calls "
-        "Base.metadata.drop_all on teardown and would destroy all of its data. "
-        "Point DATABASE_URL at a dedicated test database (name containing "
-        "'test'), e.g. via docker compose -f docker-compose.test.yml."
+        f"Refusing to run tests against database {_db_name!r}: run_tests.sh "
+        "drops this database wholesale on exit, which would destroy all of "
+        "its data. Point DATABASE_URL at a dedicated test database (name "
+        "containing 'test'), e.g. via docker compose -f docker-compose.test.yml."
     )
 # Pin it back so load_dotenv() in app/config.py can't override it later.
 os.environ["DATABASE_URL"] = _DATABASE_URL
@@ -160,49 +161,43 @@ def pg_engine():
 
 @pytest.fixture(scope="session", autouse=True)
 def _setup_schema():
-    """Create all tables once per session using a short-lived event loop.
+    """Verify the schema is already migrated — conftest no longer builds it.
+
+    run_tests.sh creates a fresh per-run database and starts uvicorn against
+    it before pytest ever runs; uvicorn's own lifespan runs `alembic upgrade
+    head` via app.db.bootstrap.prepare_database(), which is the sole schema
+    owner (see the module docstring in test_conftest_schema_ownership.py for
+    why two builders/teardowns racing each other was the actual bug in
+    #316). By the time this fixture runs, the schema must already exist —
+    all this does is check that and fail loudly, with one clear diagnostic,
+    if it doesn't, rather than let every DB-touching test fail individually
+    with its own confusing UndefinedTableError.
 
     Using a sync fixture with asyncio.run() avoids leaving an anyio session
     event loop in a running state, which would cause pytest-asyncio to fail
     when trying to run_until_complete on that same loop for later tests.
     """
-    import app.attendance.db_models  # noqa: F401
-    import app.auth.db_models  # noqa: F401
-    import app.federations.db_models  # noqa: F401
-    import app.grades.db_models  # noqa: F401
-    import app.member_federations.db_models  # noqa: F401
-    import app.members.db_models  # noqa: F401
-    import app.sessions.db_models  # noqa: F401
-    import app.settings.models  # noqa: F401
-    from app.db.base import Base
 
-    async def _create() -> None:
+    async def _check_schema_migrated() -> bool:
         engine = create_async_engine(_DATABASE_URL, poolclass=NullPool)
         try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+            async with engine.connect() as conn:
+                result = await conn.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                )
+                return result.scalar() is not None
         finally:
             await engine.dispose()
 
-    async def _drop() -> None:
-        engine = create_async_engine(_DATABASE_URL, poolclass=NullPool)
-        try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.drop_all)
-                # alembic_version is not an ORM table, so drop_all leaves it
-                # behind — still naming head. The next run's uvicorn (started
-                # by run_tests.sh before pytest) bootstraps via
-                # `alembic upgrade head`, which would then see "already at
-                # head" against a database with no tables at all, create
-                # nothing, and die seeding session_types. Leave the database
-                # genuinely empty so the next boot migrates from scratch.
-                await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
-        finally:
-            await engine.dispose()
-
-    asyncio.run(_create())
+    if not asyncio.run(_check_schema_migrated()):
+        raise RuntimeError(
+            "Database has no migrated schema (no 'alembic_version' table "
+            "found). Tests must be run via run_tests.sh, which starts "
+            "uvicorn first — its lifespan runs 'alembic upgrade head' "
+            "before pytest is ever invoked. Run tests via: "
+            "podman-compose -f docker-compose.test.yml run --rm test"
+        )
     yield
-    asyncio.run(_drop())
 
 
 class DbSessionUnitOfWork:
