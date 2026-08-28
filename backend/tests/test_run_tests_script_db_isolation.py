@@ -209,13 +209,22 @@ def test_cleanup_function_drops_the_per_run_database():
     Structural: look for a database-drop command (dropdb, `DROP DATABASE`,
     or an equivalent psql/python invocation) inside cleanup()'s body. The
     unmodified cleanup() only kills the two server processes.
+
+    The `app.db.scratch drop` alternative is the "equivalent python
+    invocation" this test always allowed for: #329 moved the DDL itself out
+    of this script into that module, so the literal `DROP DATABASE` no
+    longer appears here. What matters is that cleanup() still drops, not
+    which layer spells out the SQL.
     """
     region = _cleanup_function_region()
-    assert re.search(r"dropdb\b|DROP\s+DATABASE", region, re.IGNORECASE), (
-        "expected a database-drop command (e.g. dropdb, or 'DROP DATABASE' "
-        "via psql/python) inside cleanup(), so the per-run database is "
-        "removed on both the success and failure exit paths — found none. "
-        "The unmodified cleanup() only kills BACKEND_PID and FRONTEND_PID"
+    assert re.search(
+        r"dropdb\b|DROP\s+DATABASE|app\.db\.scratch\s+drop", region, re.IGNORECASE
+    ), (
+        "expected a database-drop command (e.g. dropdb, 'DROP DATABASE' via "
+        "psql/python, or `python -m app.db.scratch drop`) inside cleanup(), so "
+        "the per-run database is removed on both the success and failure exit "
+        "paths — found none. The unmodified cleanup() only kills BACKEND_PID "
+        "and FRONTEND_PID"
     )
 
 

@@ -506,3 +506,34 @@ class TestSweepGraceWindow:
             if late_conn is not None:
                 await late_conn.close()
             await drop_database(_BASE_URL, db_name)
+
+
+class TestCleanupIsCwdIndependent:
+    """cleanup() runs with whatever the current directory is AT EXIT, not at
+    definition. run_tests.sh cds to /frontend to start Vite and does not cd
+    back until just before pytest, so an exit in between — an ordinary
+    readiness-gate failure, not just a signal — ran the drop from /frontend
+    where the `app` package is not importable, leaking the database with only
+    a warning. Observed live during QA of #329."""
+
+    def test_drop_invocation_sets_its_own_working_directory(self):
+        script = _run_tests_sh_text()
+        cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
+        assert cleanup_match is not None, "could not locate cleanup() function body"
+        body = cleanup_match.group(1)
+        assert "app.db.scratch drop" in body
+        assert "cd /app" in body, (
+            "cleanup()'s drop must set its own working directory: it can fire "
+            "while the script is cd'd to /frontend, where `python -m "
+            "app.db.scratch` raises ModuleNotFoundError and the database leaks"
+        )
+
+    def test_the_cd_does_not_escape_cleanup(self):
+        """The cd belongs in a subshell so it cannot leak into whatever else
+        runs on the exit path."""
+        script = _run_tests_sh_text()
+        cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
+        assert cleanup_match is not None
+        assert "(cd /app" in cleanup_match.group(
+            1
+        ), "wrap the cd in a subshell so it does not change the caller's cwd"

@@ -104,8 +104,18 @@ cleanup() {
     # silently leaks accumulates on the shared server and quietly defeats the
     # isolation this script exists to provide. Never aborts — cleanup also runs
     # on the failure path, where the original error matters more.
-    if ! SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
-        python -m app.db.scratch drop
+    #
+    # `cd /app` in a subshell because cleanup() runs with whatever the current
+    # directory happens to be AT EXIT, not at definition: the script cds to
+    # /frontend to start Vite and does not cd back until just before pytest, so
+    # any exit in between — an ordinary readiness-gate `exit 1`, not just a
+    # signal — would otherwise run `python -m app.db.scratch` from /frontend,
+    # where the `app` package is not importable. Observed: ModuleNotFoundError,
+    # a warning, and a leaked database. The heredoc this replaced was
+    # self-contained and had no such dependency, so the fragility came in with
+    # the module. The subshell keeps the cd from leaking back to the caller.
+    if ! (cd /app && SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" \
+        SCRATCH_DB_NAME="$TEST_DB_NAME" python -m app.db.scratch drop)
     then
         echo "WARNING: could not drop per-run database '$TEST_DB_NAME' — it has been left behind" >&2
     fi
