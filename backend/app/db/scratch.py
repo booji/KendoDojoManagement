@@ -37,6 +37,9 @@ import asyncpg
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
+# Lower bound on the sweep's blast radius — see main().
+_SWEEP_PREFIX_FLOOR = "kendo_test"
+
 
 def is_safe_identifier(name: str) -> bool:
     """True if `name` is safe to interpolate into DDL as a bare identifier.
@@ -123,36 +126,80 @@ def select_sweepable(
     return [name for name, count in rows if name.startswith(prefix) and count == 0]
 
 
-async def sweep_orphaned_databases(
-    base_url: str, prefix: str = "kendo_test_"
-) -> list[str]:
-    """Drop every database matching `prefix` that currently has no connections.
+async def _connection_counts(conn, prefix: str) -> list[tuple[str, int]]:
+    """Fetch `(datname, live_connection_count)` for databases matching `prefix`.
 
-    Queries `pg_database` joined against `pg_stat_activity` for a live
-    connection count per database, hands the rows to `select_sweepable`,
-    then drops whatever it selects. Returns the names actually dropped.
+    The LIKE pattern is looser than it looks — `_` is a single-character
+    wildcard in SQL LIKE, so `kendo_test_%` also matches e.g. `kendoXtestXy`.
+    That is harmless because `select_sweepable` re-filters with a literal
+    Python `startswith`; the LIKE only narrows what we pull back.
+    """
+    rows = await conn.fetch(
+        "SELECT d.datname, COUNT(a.pid) AS connections "
+        "FROM pg_database d "
+        "LEFT JOIN pg_stat_activity a ON a.datname = d.datname "
+        "WHERE d.datname LIKE $1 "
+        "GROUP BY d.datname",
+        f"{prefix}%",
+    )
+    return [(row["datname"], row["connections"]) for row in rows]
+
+
+async def sweep_orphaned_databases(
+    base_url: str, prefix: str = "kendo_test_", grace_seconds: float = 2.0
+) -> list[str]:
+    """Drop every database matching `prefix` that has no connections, twice over.
+
+    Returns the names actually dropped.
+
+    A database is dropped only if it looks orphaned in TWO observations
+    separated by `grace_seconds`. One observation is not enough, because
+    "a live run always holds a connection" is not true for the whole of a
+    run's life. A run's database is genuinely connectionless from the moment
+    `CREATE DATABASE` returns until something first talks to it: `/health`
+    does no database I/O, `app.db.engine`'s engine is lazy, and
+    `app.db.bootstrap` disposes the engine it runs migrations on. `run_tests.sh`
+    closes almost all of that window by holding a sentinel connection open
+    (see the `hold` subcommand), and this second observation covers the
+    remainder — the sliver between CREATE returning and the sentinel
+    connecting, where a single-shot sweep could still drop a starting run's
+    database out from under it and resurrect #316.
     """
     conn = await asyncpg.connect(asyncpg_dsn(base_url, "postgres"))
     try:
-        rows = await conn.fetch(
-            "SELECT d.datname, COUNT(a.pid) AS connections "
-            "FROM pg_database d "
-            "LEFT JOIN pg_stat_activity a ON a.datname = d.datname "
-            "WHERE d.datname LIKE $1 "
-            "GROUP BY d.datname",
-            f"{prefix}%",
-        )
+        first = select_sweepable(await _connection_counts(conn, prefix), prefix=prefix)
+        if not first:
+            return []
+        await asyncio.sleep(grace_seconds)
+        second = select_sweepable(await _connection_counts(conn, prefix), prefix=prefix)
     finally:
         await conn.close()
 
-    candidates = select_sweepable(
-        [(row["datname"], row["connections"]) for row in rows], prefix=prefix
-    )
+    candidates = sorted(set(first) & set(second))
     dropped: list[str] = []
     for db_name in candidates:
         await drop_database(base_url, db_name)
         dropped.append(db_name)
     return dropped
+
+
+async def hold_database(base_url: str, db_name: str) -> None:
+    """Open one connection to `db_name` and keep it open until killed.
+
+    Exists solely to make the sweep's safety rule true by construction: the
+    sweep spares any database with a live backend, so a run that holds this
+    sentinel open for its whole life can never be swept by a concurrent run.
+    Without it the rule rests on the application happening to hold a
+    connection, which it does not do between startup and the first
+    database-touching test.
+    """
+    validate_identifier(db_name)
+    conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
+    try:
+        while True:  # until the process is signalled
+            await asyncio.sleep(3600)
+    finally:
+        await conn.close()
 
 
 def _base_url_from_env() -> str:
@@ -185,10 +232,25 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("create")
     subparsers.add_parser("drop")
+    subparsers.add_parser("hold")
     sweep_parser = subparsers.add_parser("sweep")
-    sweep_parser.add_argument("--prefix", default="kendo_test_")
+    sweep_parser.add_argument("--prefix", default=_SWEEP_PREFIX_FLOOR + "_")
 
     args = parser.parse_args(argv)
+
+    # A sweep DROPs whatever it selects, so the prefix is the entire blast
+    # radius. Refuse to widen it below the floor: `--prefix ""` would make
+    # `startswith` true for every database on the server and turn this into
+    # "drop every idle database". run_tests.sh never passes --prefix, but this
+    # is a general-purpose CLI a human can point at a shared server.
+    if args.command == "sweep" and not args.prefix.startswith(_SWEEP_PREFIX_FLOOR):
+        print(
+            f"refusing to sweep with prefix {args.prefix!r}: "
+            f"must start with {_SWEEP_PREFIX_FLOOR!r}",
+            flush=True,
+        )
+        return 1
+
     base_url = _base_url_from_env()
 
     if args.command == "create":
@@ -217,6 +279,20 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(str(exc), flush=True)
             return 1
+        return 0
+
+    if args.command == "hold":
+        db_name = os.environ.get("SCRATCH_DB_NAME")
+        if not db_name:
+            print("SCRATCH_DB_NAME must be set in the environment", flush=True)
+            return 1
+        try:
+            asyncio.run(hold_database(base_url, db_name))
+        except ValueError as exc:
+            print(str(exc), flush=True)
+            return 1
+        except KeyboardInterrupt:
+            pass
         return 0
 
     if args.command == "sweep":

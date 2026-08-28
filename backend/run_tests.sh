@@ -46,12 +46,16 @@ export DATABASE_URL="${TEST_DB_BASE_URL}/${TEST_DB_NAME}"
 # Sweep databases orphaned by a previous run's container being SIGKILLed
 # before its own cleanup() could fire (e.g. a CI job cancellation). This is a
 # deliberate exception to "a run never drops a database it did not create"
-# (see TEST_DB_CREATED below): it is safe specifically because it only ever
-# targets kendo_test_*-prefixed databases with zero live connections, and a
-# live run's own database always has at least one connection open in
-# pg_stat_activity — so this run's database, and any other still-running
-# run's database, can never be selected. A failed sweep is a nuisance, not a
-# reason to fail the whole run, so it only warns.
+# (see TEST_DB_CREATED below): it is safe because it only ever targets
+# kendo_test_*-prefixed databases with zero live connections, and every
+# concurrently running run holds a sentinel connection to its own database for
+# its whole life (see `scratch hold` below) — so no still-running run's
+# database can be selected. That sentinel is load-bearing, not decorative: the
+# app itself is not connected for most of a run's startup, so without it this
+# sweep could drop a starting run's database. The sweep also requires a
+# database to look orphaned in two observations a couple of seconds apart,
+# which covers the sliver before the sentinel attaches. A failed sweep is a
+# nuisance, not a reason to fail the whole run, so it only warns.
 if ! SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" python -m app.db.scratch sweep; then
     echo "WARNING: startup sweep of orphaned test databases failed — continuing anyway" >&2
 fi
@@ -64,6 +68,19 @@ SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
     python -m app.db.scratch create
 TEST_DB_CREATED=1
 
+# Hold one connection open to this run's database for as long as the run lives.
+# The startup sweep above spares any kendo_test_* database that has a backend in
+# pg_stat_activity, and this is what guarantees ours has one. Without it the
+# sweep's safety rule rests on the app happening to be connected, which it is
+# not for most of a run's startup: /health does no database I/O, app.db.engine's
+# engine is lazy, and app.db.bootstrap disposes the engine it migrates on. That
+# leaves the database genuinely connectionless from CREATE until the first
+# database-touching test — through two 30s readiness gates — and a concurrent
+# run's sweep landing in that window would drop it, which is #316 all over again.
+SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
+    python -m app.db.scratch hold &
+DB_HOLD_PID=$!
+
 # Start backend API server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
@@ -74,7 +91,10 @@ npm run dev -- --host 0.0.0.0 --port 5173 &
 FRONTEND_PID=$!
 
 cleanup() {
-    kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    # Release the sentinel connection along with the servers. Dropping would
+    # survive it either way — drop_database terminates remaining backends — but
+    # killing it here keeps the drop's terminate step for genuine surprises.
+    kill "$BACKEND_PID" "$FRONTEND_PID" "${DB_HOLD_PID:-}" 2>/dev/null || true
     # Drop the per-run database on every exit path (success or failure) so
     # nothing is left behind for the next invocation to collide with.
     if [[ "${TEST_DB_CREATED:-0}" -ne 1 ]]; then

@@ -400,3 +400,109 @@ class TestRunTestsShUsesScratchModule:
             "comment explaining that it is a deliberate exception to the "
             "TEST_DB_CREATED-only-drops-what-it-made rule"
         )
+
+
+class TestSweepPrefixFloor:
+    """The sweep DROPs whatever it selects, so `prefix` is its entire blast
+    radius. `--prefix ""` would make `startswith` true for every database on
+    the server, so the CLI refuses to widen it below a floor."""
+
+    def test_cli_refuses_an_empty_prefix(self, capsys):
+        from app.db.scratch import main
+
+        assert main(["sweep", "--prefix", ""]) == 1
+        assert "refusing to sweep" in capsys.readouterr().out
+
+    def test_cli_refuses_an_unrelated_prefix(self, capsys):
+        from app.db.scratch import main
+
+        assert main(["sweep", "--prefix", "kendo_"]) == 1
+        assert "refusing to sweep" in capsys.readouterr().out
+
+    def test_default_prefix_is_within_the_floor(self):
+        from app.db.scratch import _SWEEP_PREFIX_FLOOR, select_sweepable
+
+        assert select_sweepable([("kendo_dev", 0), ("postgres", 0)]) == []
+        assert _SWEEP_PREFIX_FLOOR == "kendo_test"
+
+
+class TestRunTestsShHoldsASentinelConnection:
+    """The sweep spares any database with a live backend. That rule only
+    protects a concurrently starting run if such a backend actually exists —
+    and the app provides none between CREATE DATABASE and the first
+    database-touching test (/health does no DB I/O, the engine is lazy, and
+    bootstrap disposes its own engine). run_tests.sh must therefore hold a
+    sentinel connection open for the life of the run."""
+
+    def test_holds_a_connection_for_the_life_of_the_run(self):
+        script = _run_tests_sh_text()
+        assert "python -m app.db.scratch hold" in script, (
+            "run_tests.sh must hold a sentinel connection to its own database, "
+            "or a concurrent run's sweep can drop it mid-startup"
+        )
+
+    def test_sentinel_starts_after_create_and_before_the_servers(self):
+        script = _run_tests_sh_text()
+        create_pos = script.find("app.db.scratch create")
+        hold_pos = script.find("app.db.scratch hold")
+        uvicorn_pos = script.find("uvicorn app.main:app")
+        assert -1 not in (create_pos, hold_pos, uvicorn_pos)
+        assert create_pos < hold_pos < uvicorn_pos, (
+            "the sentinel must attach as soon as the database exists — before "
+            "the readiness gates, which are the longest connectionless window"
+        )
+
+    def test_sentinel_is_released_in_cleanup(self):
+        script = _run_tests_sh_text()
+        cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
+        assert cleanup_match is not None
+        assert "DB_HOLD_PID" in cleanup_match.group(
+            1
+        ), "cleanup() must release the sentinel connection"
+
+
+class TestSweepGraceWindow:
+    """A single observation is not enough. A run's database is genuinely
+    connectionless in the sliver between CREATE DATABASE returning and its
+    sentinel attaching, so the sweep requires a database to look orphaned
+    twice, a grace period apart, before dropping it."""
+
+    async def test_spares_a_database_connected_to_during_the_grace_window(self):
+        import asyncio
+
+        from app.db.scratch import (
+            asyncpg_dsn,
+            create_database,
+            drop_database,
+            sweep_orphaned_databases,
+        )
+
+        db_name = _scratch_name("grace")
+        await create_database(_BASE_URL, db_name)
+        late_conn = None
+        try:
+            sweep = asyncio.create_task(
+                sweep_orphaned_databases(_BASE_URL, grace_seconds=3.0)
+            )
+            # Let the first observation see it as an orphan, then attach the
+            # way a starting run's sentinel would.
+            await asyncio.sleep(0.75)
+            late_conn = await asyncpg.connect(asyncpg_dsn(_BASE_URL, db_name))
+            dropped = await sweep
+
+            assert db_name not in dropped, (
+                "a database connected to during the grace window must be "
+                "spared — this is the concurrent-startup case that would "
+                "otherwise reintroduce #316"
+            )
+            check = await asyncpg.connect(asyncpg_dsn(_BASE_URL, "postgres"))
+            try:
+                assert await check.fetchval(
+                    "SELECT 1 FROM pg_database WHERE datname = $1", db_name
+                ), "the spared database should still exist"
+            finally:
+                await check.close()
+        finally:
+            if late_conn is not None:
+                await late_conn.close()
+            await drop_database(_BASE_URL, db_name)
