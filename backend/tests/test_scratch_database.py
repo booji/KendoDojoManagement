@@ -298,7 +298,11 @@ class TestSweepOrphanedDatabases:
         """AC5, against a live server: a sweep run while another "run" is
         still connected must leave that database alone — this is what makes
         the sweep safe against concurrent test-suite runs."""
-        from app.db.scratch import create_database, drop_database, sweep_orphaned_databases
+        from app.db.scratch import (
+            create_database,
+            drop_database,
+            sweep_orphaned_databases,
+        )
 
         db_name = _scratch_name("live")
         await create_database(_BASE_URL, db_name)
@@ -339,7 +343,10 @@ def _run_tests_sh_text() -> str:
 class TestRunTestsShUsesScratchModule:
     def test_invokes_scratch_module_as_cli(self):
         script = _run_tests_sh_text()
-        assert "python -m app.db.scratch" in script or "python3 -m app.db.scratch" in script, (
+        assert (
+            "python -m app.db.scratch" in script
+            or "python3 -m app.db.scratch" in script
+        ), (
             "run_tests.sh should invoke the new app.db.scratch CLI instead of "
             "its inline python3/asyncpg heredocs"
         )
@@ -375,9 +382,9 @@ class TestRunTestsShUsesScratchModule:
         # anywhere in the file.
         cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
         assert cleanup_match is not None, "could not locate cleanup() function body"
-        assert "TEST_DB_CREATED" in cleanup_match.group(1), (
-            "TEST_DB_CREATED guard must live inside cleanup()'s own body"
-        )
+        assert "TEST_DB_CREATED" in cleanup_match.group(
+            1
+        ), "TEST_DB_CREATED guard must live inside cleanup()'s own body"
 
     def test_sweep_invocation_is_commented_as_a_deliberate_exception(self):
         """AC9: the sweep is a deliberate, explicitly-commented exception to

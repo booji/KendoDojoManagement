@@ -36,43 +36,32 @@ if [[ ! "$TEST_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
 fi
 
 # DATABASE_URL from .env.test names the shared 'kendo_test' database; swap in
-# the per-run name and create it before anything connects. python3 (with
-# asyncpg, already a dependency of the app) does the actual DDL rather than
-# shelling out to a psql/createdb client this image doesn't install.
+# the per-run name and create it before anything connects. app.db.scratch
+# (backed by asyncpg, already a dependency of the app) does the actual DDL
+# rather than shelling out to a psql/createdb client this image doesn't
+# install.
 TEST_DB_BASE_URL="${DATABASE_URL%/*}"
 export DATABASE_URL="${TEST_DB_BASE_URL}/${TEST_DB_NAME}"
+
+# Sweep databases orphaned by a previous run's container being SIGKILLed
+# before its own cleanup() could fire (e.g. a CI job cancellation). This is a
+# deliberate exception to "a run never drops a database it did not create"
+# (see TEST_DB_CREATED below): it is safe specifically because it only ever
+# targets kendo_test_*-prefixed databases with zero live connections, and a
+# live run's own database always has at least one connection open in
+# pg_stat_activity — so this run's database, and any other still-running
+# run's database, can never be selected. A failed sweep is a nuisance, not a
+# reason to fail the whole run, so it only warns.
+if ! SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" python -m app.db.scratch sweep; then
+    echo "WARNING: startup sweep of orphaned test databases failed — continuing anyway" >&2
+fi
 
 # cleanup() must never drop a database this run did not create — see the
 # collision note above. Only a successful CREATE flips this to 1.
 TEST_DB_CREATED=0
 
-TEST_DB_NAME="$TEST_DB_NAME" TEST_DB_BASE_URL="$TEST_DB_BASE_URL" python3 - <<'PYEOF'
-import asyncio
-import os
-import re
-
-import asyncpg
-
-# Read the DSN from the environment, not argv: /proc/<pid>/cmdline is readable
-# by anything in the same PID namespace and the DSN carries the DB password.
-db_name, base_url = os.environ["TEST_DB_NAME"], os.environ["TEST_DB_BASE_URL"]
-if not re.fullmatch(r"[A-Za-z0-9_]+", db_name):
-    raise SystemExit(f"refusing unsafe database name: {db_name!r}")
-maint_dsn = base_url.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-
-
-async def _create() -> None:
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        # CREATE DATABASE cannot run inside a transaction block; asyncpg does
-        # not implicitly wrap a bare execute() in one, so this is safe as-is.
-        await conn.execute(f'CREATE DATABASE "{db_name}"')
-    finally:
-        await conn.close()
-
-
-asyncio.run(_create())
-PYEOF
+SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
+    python -m app.db.scratch create
 TEST_DB_CREATED=1
 
 # Start backend API server
@@ -95,37 +84,8 @@ cleanup() {
     # silently leaks accumulates on the shared server and quietly defeats the
     # isolation this script exists to provide. Never aborts — cleanup also runs
     # on the failure path, where the original error matters more.
-    if ! TEST_DB_NAME="$TEST_DB_NAME" TEST_DB_BASE_URL="$TEST_DB_BASE_URL" python3 - <<'PYEOF'
-import asyncio
-import os
-import re
-
-import asyncpg
-
-# Read the DSN from the environment, not argv: /proc/<pid>/cmdline is readable
-# by anything in the same PID namespace and the DSN carries the DB password.
-db_name, base_url = os.environ["TEST_DB_NAME"], os.environ["TEST_DB_BASE_URL"]
-if not re.fullmatch(r"[A-Za-z0-9_]+", db_name):
-    raise SystemExit(f"refusing unsafe database name: {db_name!r}")
-maint_dsn = base_url.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-
-
-async def _drop() -> None:
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        await conn.execute(f'ALTER DATABASE "{db_name}" WITH ALLOW_CONNECTIONS false')
-        await conn.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = $1 AND pid <> pg_backend_pid()",
-            db_name,
-        )
-        await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-    finally:
-        await conn.close()
-
-
-asyncio.run(_drop())
-PYEOF
+    if ! SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
+        python -m app.db.scratch drop
     then
         echo "WARNING: could not drop per-run database '$TEST_DB_NAME' — it has been left behind" >&2
     fi

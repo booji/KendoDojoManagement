@@ -21,78 +21,30 @@ import asyncio
 import os
 import uuid
 
-import asyncpg
 import pytest_asyncio
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.db.scratch import create_database, drop_database, url_parts
+
 _DATABASE_URL = os.environ["DATABASE_URL"]
-
-
-def _url_parts(database_url: str) -> tuple[str, str]:
-    """Split a postgresql+asyncpg:// URL into (base_url_without_db, db_name)."""
-    base, _, db_and_query = database_url.rpartition("/")
-    db_name = db_and_query.split("?", 1)[0]
-    return base, db_name
-
-
-_BASE_URL, _ = _url_parts(_DATABASE_URL)
+_BASE_URL, _ = url_parts(_DATABASE_URL)
 
 
 def _scratch_db_name() -> str:
     return f"kendo_test_mig_{uuid.uuid4().hex[:12]}"
 
 
-def _asyncpg_dsn(base_url: str, db_name: str) -> str:
-    """Build a plain asyncpg DSN (no +asyncpg driver suffix) for maintenance ops."""
-    # base_url looks like postgresql+asyncpg://user:pass@host:port
-    plain = base_url.replace("postgresql+asyncpg://", "postgresql://")
-    return f"{plain}/{db_name}"
-
-
-async def _create_scratch_database() -> str:
-    """Create a new throwaway database on the same server as DATABASE_URL.
-
-    Returns the scratch database's SQLAlchemy URL
-    (postgresql+asyncpg://.../kendo_test_mig_xxxx).
-    """
-    db_name = _scratch_db_name()
-    maint_dsn = _asyncpg_dsn(_BASE_URL, "postgres")
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        # CREATE DATABASE cannot run inside a transaction block; asyncpg does
-        # not implicitly wrap a bare execute() in one, so this is safe as-is.
-        await conn.execute(f'CREATE DATABASE "{db_name}"')
-    finally:
-        await conn.close()
-    return f"{_BASE_URL}/{db_name}"
-
-
-async def _drop_scratch_database(scratch_url: str) -> None:
-    _, db_name = _url_parts(scratch_url)
-    maint_dsn = _asyncpg_dsn(_BASE_URL, "postgres")
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        await conn.execute(f'ALTER DATABASE "{db_name}" WITH ALLOW_CONNECTIONS false')
-        await conn.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = $1 AND pid <> pg_backend_pid()",
-            db_name,
-        )
-        await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-    finally:
-        await conn.close()
-
-
 @pytest_asyncio.fixture
 async def scratch_db_url():
     """Yield the SQLAlchemy URL of a fresh, empty, throwaway database."""
-    url = await _create_scratch_database()
+    db_name = _scratch_db_name()
+    url = await create_database(_BASE_URL, db_name)
     try:
         yield url
     finally:
-        await _drop_scratch_database(url)
+        await drop_database(_BASE_URL, db_name)
 
 
 def _import_all_models():
