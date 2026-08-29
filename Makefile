@@ -19,7 +19,11 @@ COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml
 dev:
 	$(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
 	$(RUNTIME) rm -f kendodojomanagement_db_1 kendodojomanagement_backend_1 kendodojomanagement_frontend_1 2>/dev/null || true
-	$(COMPOSE_DEV) up
+	# --build for the same reason as the test target below (#221, #332): without
+	# it Compose reuses the cached backend-dev-deps image, so a newly pinned
+	# runtime dependency is simply absent and the backend dies at import with
+	# ModuleNotFoundError. Layer caching keeps this a no-op otherwise.
+	$(COMPOSE_DEV) up --build
 
 ## test: Start the test watcher stack (rebuilds the image so pinned dev deps are present)
 test:
