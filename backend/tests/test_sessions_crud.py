@@ -8,16 +8,15 @@ Acceptance criteria:
   4. PATCH /sessions/templates/{id} regenerates future instances from updated template;
      past instances unchanged
   5. DELETE /sessions/templates/{id} cancels all future instances and deactivates the template
-  6. All endpoints covered by StubRepository tests
+  6. All endpoints covered without a database
 
-Uses StubRepository pattern — NO real DB. Dependencies are overridden via
-app.dependency_overrides to inject in-memory stubs.
+NO real DB: dependencies are overridden via app.dependency_overrides to inject
+the shared in-memory fakes from tests/fake_repositories.py (#337).
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 import pytest
@@ -29,6 +28,10 @@ from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
+)
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -52,131 +55,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories (with new methods needed for issue #51)
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTemplateRepo:
-    """In-memory stand-in for a SessionTemplate repository.
-
-    Adds:
-      - update(template_id, data) — update template fields, return updated dict
-      - deactivate(template_id) — mark template as inactive
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "is_active": True, **data}
-        self._store[new_id] = record
-        return record
-
-    async def update(
-        self, template_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def deactivate(self, template_id: str) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record["is_active"] = False
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository.
-
-    Adds:
-      - update(instance_id, data) — update instance fields, return updated dict
-      - cancel_future_for_template(template_id, as_of_date) — cancel instances
-        for template where date >= as_of_date
-      - delete_future_for_template(template_id, as_of_date) — remove instances
-        for template where date >= as_of_date (used before PATCH regeneration)
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.pop(instance_id, None)
-
-    async def cancel_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> list[dict[str, Any]]:
-        affected = []
-        for record in self._store.values():
-            if (
-                record.get("template_id") == template_id
-                and date.fromisoformat(record["date"]) >= as_of_date
-            ):
-                record["cancelled"] = True
-                affected.append(record)
-        return affected
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        to_delete = [
-            k
-            for k, v in self._store.items()
-            if v.get("template_id") == template_id
-            and date.fromisoformat(v["date"]) >= as_of_date
-        ]
-        for k in to_delete:
-            del self._store[k]
-        return len(to_delete)
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -188,15 +66,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
@@ -218,8 +96,10 @@ def _segment(
     }
 
 
-async def _seed_template(template_repo: StubSessionTemplateRepo) -> dict[str, Any]:
-    """Add a minimal template directly to the stub store."""
+async def _seed_template(
+    template_repo: InMemorySessionTemplateRepository,
+) -> dict[str, Any]:
+    """Add a minimal template through the repository's own interface."""
     return await template_repo.add(
         {
             "title": "Weekly Keiko",
@@ -234,13 +114,13 @@ async def _seed_template(template_repo: StubSessionTemplateRepo) -> dict[str, An
 
 
 async def _seed_instance(
-    instance_repo: StubSessionInstanceRepo,
+    instance_repo: InMemorySessionInstanceRepository,
     *,
     template_id: str | None = None,
     instance_date: str = "2099-06-02",
     coach_notes: str | None = None,
 ) -> dict[str, Any]:
-    """Add a minimal session instance directly to the stub store."""
+    """Add a minimal session instance through the repository's own interface."""
     return await instance_repo.add(
         {
             "title": "Weekly Keiko",
@@ -344,7 +224,7 @@ async def test_put_session_instance_updates_target_only(
     assert body["start_time"] == "20:00"
     assert body["duration_minutes"] == 60
 
-    # Sibling must be unchanged — fetch it directly from the stub
+    # Sibling must be unchanged — fetch it back through the repository
     sibling_after = await instance_repo.get(sibling["id"])
     assert sibling_after is not None
     assert sibling_after.get("location") != "Updated Dojo"
