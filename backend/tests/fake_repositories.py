@@ -424,7 +424,9 @@ class InMemoryAttendanceRepository:
     ``display_names`` stands in for the outer join the SQL implementation does
     against Member: a mapping of member id to the name that join would resolve.
     Absent an entry, the name comes back None, which is what the SQL path
-    returns for an attendance row with no matching Member.
+    returns for an attendance row with no matching Member. It is public and
+    mutable so a test can name a member after construction -- that is fixture
+    configuration, not a back door into stored records.
     """
 
     _DEFAULTS: dict[str, Any] = {
@@ -442,7 +444,7 @@ class InMemoryAttendanceRepository:
         display_names: dict[str, str] | None = None,
     ) -> None:
         self._store: list[dict[str, Any]] = []
-        self._display_names = dict(display_names or {})
+        self.display_names = dict(display_names or {})
         for record in records or []:
             self._insert(record)
 
@@ -459,7 +461,7 @@ class InMemoryAttendanceRepository:
         return dict(row)
 
     def _named(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {**row, "display_name": self._display_names.get(row["member_id"])}
+        return {**row, "display_name": self.display_names.get(row["member_id"])}
 
     # -- interface ----------------------------------------------------------
 
