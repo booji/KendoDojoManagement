@@ -7,14 +7,14 @@ Acceptance criteria:
   3. Calendar chips use the admin-chosen colour; fall back to auto-palette if no colour set
   4. Cancelled sessions remain fully grey regardless of type colour
 
-Tests (unit/integration — StubRepository, no DB):
+Tests (unit/integration — in-memory fakes, no DB):
   - PUT /session-types/{id} with valid hex colour succeeds (admin) and colour is returned
   - GET /session-types returns colour field (None when not set, hex string when set)
   - PUT /session-types/{id} returns 404 for unknown id
   - PUT /session-types/{id} returns 403 for non-admin
   - PUT /session-types/{id} with null colour clears the colour
 
-Uses StubRepository pattern — NO real DB. Dependencies are overridden via
+NO real DB: the shared in-memory fakes stand in. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 """
 
@@ -30,6 +30,9 @@ from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
 from app.main import app
 from app.sessions.dependencies import get_session_type_repo
+from tests.fake_repositories import (
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -52,52 +55,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repository
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    """In-memory stand-in for a SessionType repository.
-
-    Implements the AbstractSessionTypeRepository protocol plus the new
-    update(id, colour) method required by issue #76.
-
-    Note: add() intentionally does NOT include a 'colour' key so that the
-    GET tests are genuinely red until SessionTypeRead gains the colour field
-    with a default and the router applies that model.
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def add(self, name: str) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        # No 'colour' key — the router/model must supply it
-        record = {"id": new_id, "name": name}
-        self._store[new_id] = record
-        return record
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        for record in self._store.values():
-            if record["name"] == name:
-                return record
-        return None
-
-    async def get(self, type_id: str) -> dict[str, Any] | None:
-        return self._store.get(type_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def update(self, type_id: str, colour: str | None) -> dict[str, Any] | None:
-        record = self._store.get(type_id)
-        if record is None:
-            return None
-        record["colour"] = colour
-        return record
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -109,8 +66,8 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
@@ -121,7 +78,7 @@ def type_repo() -> StubSessionTypeRepo:
 
 
 async def _seed_type(
-    repo: StubSessionTypeRepo, *, name: str = "Keiko"
+    repo: InMemorySessionTypeRepository, *, name: str = "Keiko"
 ) -> dict[str, Any]:
     """Add a session type directly to the stub store.
 
