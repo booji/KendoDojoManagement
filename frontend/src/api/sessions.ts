@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, request, throwApiError } from "@/api/client"
 
 export type SessionType = {
   id: string
@@ -56,52 +56,30 @@ export type SessionInstanceUpdate = {
 }
 
 export const getSessions = async (): Promise<SessionInstance[]> => {
-  const res = await fetch("/api/sessions", { credentials: "include" })
-  if (!res.ok) await throwApiError(res, "Failed to fetch sessions")
-  return res.json() as Promise<SessionInstance[]>
+  return request<SessionInstance[]>("/api/sessions", { errorMessage: "Failed to fetch sessions" })
 }
 
 export const getSessionTypes = async (): Promise<SessionType[]> => {
-  const res = await fetch("/api/session-types", { credentials: "include" })
-  if (!res.ok) await throwApiError(res, "Failed to fetch session types")
-  return res.json() as Promise<SessionType[]>
+  return request<SessionType[]>("/api/session-types", { errorMessage: "Failed to fetch session types" })
 }
 
 export const getSession = async (id: string): Promise<SessionInstance> => {
-  const res = await fetch(`/api/sessions/${id}`, { credentials: "include" })
-  if (!res.ok) await throwApiError(res, "Failed to fetch session")
-  return res.json() as Promise<SessionInstance>
+  return request<SessionInstance>(`/api/sessions/${id}`, { errorMessage: "Failed to fetch session" })
 }
 
 export const updateSession = async (
   id: string,
   payload: Partial<SessionInstanceUpdate>,
 ): Promise<SessionInstance> => {
-  const res = await fetch(new Request(`${location.origin}/api/sessions/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  }))
-  if (!res.ok) await throwApiError(res, "Failed to update session")
-  return res.json() as Promise<SessionInstance>
+  return request<SessionInstance>(`/api/sessions/${id}`, { method: "PUT", body: payload, errorMessage: "Failed to update session" })
 }
 
 export const cancelSession = async (id: string): Promise<SessionInstance> => {
-  const res = await fetch(new Request(`${location.origin}/api/sessions/${id}/cancel`, {
-    method: "POST",
-    credentials: "include",
-  }))
-  if (!res.ok) await throwApiError(res, "Failed to cancel session")
-  return res.json() as Promise<SessionInstance>
+  return request<SessionInstance>(`/api/sessions/${id}/cancel`, { method: "POST", errorMessage: "Failed to cancel session" })
 }
 
 export const deleteTemplate = async (templateId: string): Promise<void> => {
-  const res = await fetch(new Request(`${location.origin}/api/sessions/templates/${templateId}`, {
-    method: "DELETE",
-    credentials: "include",
-  }))
-  if (!res.ok) await throwApiError(res, "Failed to delete template")
+  return request<void>(`/api/sessions/templates/${templateId}`, { method: "DELETE", errorMessage: "Failed to delete template" })
 }
 
 export type SessionInstanceCreate = {
@@ -116,14 +94,7 @@ export type SessionInstanceCreate = {
 export const createSession = async (
   payload: SessionInstanceCreate,
 ): Promise<SessionInstance> => {
-  const res = await fetch("/api/sessions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) await throwApiError(res, "Failed to create session")
-  return res.json() as Promise<SessionInstance>
+  return request<SessionInstance>("/api/sessions", { method: "POST", body: payload, errorMessage: "Failed to create session" })
 }
 
 export type SessionTemplateCreate = {
@@ -159,49 +130,26 @@ export type SessionTemplate = {
 export const createSessionTemplate = async (
   payload: SessionTemplateCreate,
 ): Promise<SessionTemplate> => {
-  const res = await fetch("/api/sessions/templates", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) await throwApiError(res, "Failed to create session template")
-  return res.json() as Promise<SessionTemplate>
+  return request<SessionTemplate>("/api/sessions/templates", { method: "POST", body: payload, errorMessage: "Failed to create session template" })
 }
 
 export const getSessionTemplate = async (templateId: string): Promise<SessionTemplate> => {
-  const res = await fetch(`/api/sessions/templates/${templateId}`, {
-    credentials: "include",
-  })
-  if (!res.ok) await throwApiError(res, "Failed to fetch session template")
-  return res.json() as Promise<SessionTemplate>
+  return request<SessionTemplate>(`/api/sessions/templates/${templateId}`, { errorMessage: "Failed to fetch session template" })
 }
 
 export const extendSessionTemplate = async (
   templateId: string,
   endDate: string,
 ): Promise<SessionTemplate> => {
-  const res = await fetch(
-    new Request(`${location.origin}/api/sessions/templates/${templateId}/extend`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ end_date: endDate }),
-    }),
-  )
-  if (!res.ok) await throwApiError(res, "Failed to extend session template")
-  return res.json() as Promise<SessionTemplate>
+  return request<SessionTemplate>(`/api/sessions/templates/${templateId}/extend`, {
+    method: "POST",
+    body: { end_date: endDate },
+    errorMessage: "Failed to extend session template",
+  })
 }
 
 export const createSessionType = async (name: string): Promise<SessionType> => {
-  const res = await fetch("/api/session-types", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ name }),
-  })
-  if (!res.ok) await throwApiError(res, "Failed to create session type")
-  return res.json() as Promise<SessionType>
+  return request<SessionType>("/api/session-types", { method: "POST", body: { name }, errorMessage: "Failed to create session type" })
 }
 
 export const getSessionsForRange = async (
@@ -209,30 +157,16 @@ export const getSessionsForRange = async (
   to: string,
 ): Promise<SessionInstance[]> => {
   const params = new URLSearchParams({ from, to })
-  const res = await fetch(`/api/sessions?${params.toString()}`, {
-    credentials: "include",
-  })
-  if (!res.ok) await throwApiError(res, "Failed to fetch sessions")
-  return res.json() as Promise<SessionInstance[]>
+  return request<SessionInstance[]>(`/api/sessions?${params.toString()}`, { errorMessage: "Failed to fetch sessions" })
 }
 
 export const deleteSessionType = async (id: string): Promise<void> => {
-  const res = await fetch(`/api/session-types/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/session-types/${id}`, { method: "DELETE" })
   // A 409 carries a { detail } explaining that a segment still references the
   // type; throwApiError surfaces that to the admin.
   if (!res.ok) await throwApiError(res, "Failed to delete session type")
 }
 
 export const updateSessionTypeColour = async (id: string, colour: string | null): Promise<SessionType> => {
-  const res = await fetch(`/api/session-types/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ colour }),
-  })
-  if (!res.ok) await throwApiError(res, "Failed to update session type colour")
-  return res.json() as Promise<SessionType>
+  return request<SessionType>(`/api/session-types/${id}`, { method: "PUT", body: { colour }, errorMessage: "Failed to update session type colour" })
 }

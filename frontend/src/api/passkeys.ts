@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 export type PasskeyRecord = {
   id: string
@@ -9,7 +9,7 @@ export type PasskeyRecord = {
 }
 
 export const listPasskeys = async (): Promise<PasskeyRecord[]> => {
-  const res = await fetch("/api/auth/passkeys", { credentials: "include" })
+  const res = await apiFetch("/api/auth/passkeys")
 
   if (res.status === 401) {
     await throwApiError(res, "Not authenticated")
@@ -22,12 +22,7 @@ export const listPasskeys = async (): Promise<PasskeyRecord[]> => {
 }
 
 export const renamePasskey = async (id: string, label: string): Promise<PasskeyRecord> => {
-  const res = await fetch(`/api/auth/passkeys/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ label }),
-  })
+  const res = await apiFetch(`/api/auth/passkeys/${id}`, { method: "PATCH", body: { label } })
 
   if (res.status === 401) {
     await throwApiError(res, "Not authenticated")
@@ -47,7 +42,7 @@ export type SecurityStatus = {
 }
 
 export const getSecurityStatus = async (): Promise<SecurityStatus> => {
-  const res = await fetch("/api/auth/security-status", { credentials: "include" })
+  const res = await apiFetch("/api/auth/security-status")
 
   if (res.status === 401) {
     await throwApiError(res, "Not authenticated")
@@ -60,10 +55,7 @@ export const getSecurityStatus = async (): Promise<SecurityStatus> => {
 }
 
 export const deletePasskey = async (id: string): Promise<void> => {
-  const res = await fetch(`/api/auth/passkeys/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/auth/passkeys/${id}`, { method: "DELETE" })
 
   if (res.status === 400) {
     await throwApiError(res, "You need at least one passkey")

@@ -271,9 +271,12 @@ describe("AC4 — check-in button", () => {
     const user = userEvent.setup()
 
     let checkinCalled = false
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url
-      const method = typeof input === "string" ? "GET" : (input as Request).method
+      // The api layer calls fetch(path, init), so the method lives in init.
+      // (It used to build a Request object; both shapes are read here.)
+      const method =
+        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
 
       if (url.includes(`/sessions/${SESSION_ID}/checkin`) && method === "POST") {
         checkinCalled = true
@@ -407,9 +410,12 @@ describe("AC7 — edit form", () => {
     const user = userEvent.setup()
     let putCalled = false
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url
-      const method = typeof input === "string" ? "GET" : (input as Request).method
+      // The api layer calls fetch(path, init), so the method lives in init.
+      // (It used to build a Request object; both shapes are read here.)
+      const method =
+        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
 
       if (url.includes(`/sessions/${SESSION_ID}`) && method === "PUT") {
         putCalled = true
@@ -460,9 +466,12 @@ describe("AC8 — cancel controls", () => {
     const user = userEvent.setup()
     let cancelInstanceCalled = false
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url
-      const method = typeof input === "string" ? "GET" : (input as Request).method
+      // The api layer calls fetch(path, init), so the method lives in init.
+      // (It used to build a Request object; both shapes are read here.)
+      const method =
+        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
 
       if (url.includes(`/sessions/${SESSION_ID}/cancel`) && method === "POST") {
         cancelInstanceCalled = true
@@ -509,9 +518,12 @@ describe("AC8 — cancel controls", () => {
     const user = userEvent.setup()
     let cancelSeriesCalled = false
 
-    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url
-      const method = typeof input === "string" ? "GET" : (input as Request).method
+      // The api layer calls fetch(path, init), so the method lives in init.
+      // (It used to build a Request object; both shapes are read here.)
+      const method =
+        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
 
       if (url.includes(`/sessions/templates/${TEMPLATE_ID}`) && method === "DELETE") {
         cancelSeriesCalled = true

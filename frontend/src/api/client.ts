@@ -58,3 +58,64 @@ export const throwApiError = async (
   const message = await extractErrorMessage(res, defaultMessage)
   throw { status: res.status, message } satisfies ApiError
 }
+
+/**
+ * Perform an API request and return its parsed body.
+ *
+ * Every `src/api/*` call goes through here, so the things each call used to
+ * restate — `credentials: "include"`, the JSON content-type, the ok-check —
+ * live in one place and cannot be forgotten at a call site.
+ *
+ * - A plain-object `body` is JSON-encoded and gets the content-type header.
+ * - A `FormData` body passes through untouched: the browser must set its own
+ *   multipart boundary, and adding a content-type header would break it.
+ * - A non-ok response throws `ApiError` carrying the backend's own message.
+ * - 204 and empty bodies resolve to `undefined` rather than failing in `json()`.
+ */
+export type RequestOptions = Omit<RequestInit, "body"> & {
+  body?: unknown
+  errorMessage?: string
+}
+
+/**
+ * Send a request the way every api module should, and hand back the raw
+ * `Response` without inspecting it.
+ *
+ * `request` covers the common case. This exists for the handful of calls that
+ * must read the failed response themselves — the check-in window's structured
+ * 403 detail, a 404 that means "not found" rather than "error" — and would
+ * otherwise reach for `fetch` directly and lose the credentials and encoding
+ * rules along with it.
+ */
+export const apiFetch = async (
+  path: string,
+  { body, headers, ...init }: Omit<RequestOptions, "errorMessage"> = {},
+): Promise<Response> => {
+  const isFormData = body instanceof FormData
+  return fetch(path, {
+    credentials: "include",
+    ...init,
+    headers:
+      body === undefined || isFormData
+        ? headers
+        : { "Content-Type": "application/json", ...headers },
+    body: isFormData
+      ? (body as FormData)
+      : body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  })
+}
+
+export const request = async <T>(
+  path: string,
+  { errorMessage = "Request failed", ...options }: RequestOptions = {},
+): Promise<T> => {
+  const response = await apiFetch(path, options)
+
+  if (!response.ok) await throwApiError(response, errorMessage)
+  if (response.status === 204) return undefined as T
+
+  const text = await response.text()
+  return (text ? JSON.parse(text) : undefined) as T
+}

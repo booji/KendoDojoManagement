@@ -1,5 +1,5 @@
 import type { ApiError, PasskeyCreationOptions, RegisterResponse } from "@/api/auth"
-import { throwApiError } from "@/api/client"
+import { apiFetch, request, throwApiError } from "@/api/client"
 import { runPasskeyCreationCeremony } from "@/api/auth"
 
 export type InviteStatus = "pending" | "redeemed" | "expired" | "revoked"
@@ -32,33 +32,17 @@ export const issueInvite = async (
   firstName: string,
   surname: string,
 ): Promise<InviteMintResponse> => {
-  const res = await fetch("/api/auth/admin/invites", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, first_name: firstName, surname }),
-  })
-  if (!res.ok) {
-    await throwApiError(res, "Failed to issue invite")
-  }
-  return res.json() as Promise<InviteMintResponse>
+  return request<InviteMintResponse>("/api/auth/admin/invites", { method: "POST", body: { email, first_name: firstName, surname }, errorMessage: "Failed to issue invite" })
 }
 
 export const listInvites = async (): Promise<InviteListItem[]> => {
-  const res = await fetch("/api/auth/admin/invites", { credentials: "include" })
-  if (!res.ok) {
-    await throwApiError(res, "Failed to load invites")
-  }
-  return res.json() as Promise<InviteListItem[]>
+  return request<InviteListItem[]>("/api/auth/admin/invites", { errorMessage: "Failed to load invites" })
 }
 
 export const revokeInvite = async (
   id: string
 ): Promise<{ id: string; status: InviteStatus }> => {
-  const res = await fetch(`/api/auth/admin/invites/${id}/revoke`, {
-    method: "POST",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/auth/admin/invites/${id}/revoke`, { method: "POST" })
   if (res.status === 404) {
     await throwApiError(res, "Invite not found")
   }
@@ -81,11 +65,7 @@ const GENERIC_INVITE_FAILURE: ApiError = {
 }
 
 const inviteRedeemBegin = async (token: string): Promise<PasskeyCreationOptions> => {
-  const res = await fetch("/api/auth/invites/redeem/begin", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  })
+  const res = await apiFetch("/api/auth/invites/redeem/begin", { method: "POST", body: { token } })
   if (!res.ok) {
     throw GENERIC_INVITE_FAILURE
   }
@@ -97,11 +77,7 @@ const inviteRedeemComplete = async (
   token: string,
   credential: object
 ): Promise<RegisterResponse> => {
-  const res = await fetch("/api/auth/invites/redeem/complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, credential }),
-  })
+  const res = await apiFetch("/api/auth/invites/redeem/complete", { method: "POST", body: { token, credential } })
   if (!res.ok) {
     throw GENERIC_INVITE_FAILURE
   }

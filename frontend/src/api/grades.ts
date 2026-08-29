@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 export type PendingGradeEntry = {
   id: string
@@ -62,12 +62,7 @@ export const setMemberGrade = async (
   memberId: string,
   body: SetGradeRequest
 ): Promise<SetGradeResponse> => {
-  const res = await fetch(`/api/members/${memberId}/grades`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades`, { method: "POST", body: body })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -89,12 +84,7 @@ export const proposeGrade = async (
   memberId: string,
   body: SetGradeRequest
 ): Promise<SetGradeResponse> => {
-  const res = await fetch(`/api/members/${memberId}/grades/propose`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades/propose`, { method: "POST", body: body })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -115,9 +105,7 @@ export const proposeGrade = async (
 export const getCurrentGrade = async (
   memberId: string
 ): Promise<CurrentGradeResponse | null> => {
-  const res = await fetch(`/api/members/${memberId}/grades/current`, {
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades/current`)
 
   if (res.status === 404) {
     return null
@@ -136,10 +124,7 @@ export const approveGrade = async (
   memberId: string,
   entryId: string
 ): Promise<GradeHistoryEntry> => {
-  const res = await fetch(`/api/members/${memberId}/grades/${entryId}/approve`, {
-    method: "POST",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades/${entryId}/approve`, { method: "POST" })
   if (res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Grade entry not found")
   if (res.status === 409) await throwApiError(res, "Entry is not pending")
@@ -151,10 +136,7 @@ export const rejectGrade = async (
   memberId: string,
   entryId: string
 ): Promise<void> => {
-  const res = await fetch(`/api/members/${memberId}/grades/${entryId}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades/${entryId}`, { method: "DELETE" })
   if (res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Grade entry not found")
   if (res.status === 409) await throwApiError(res, "Only pending entries may be rejected")
@@ -162,9 +144,7 @@ export const rejectGrade = async (
 }
 
 export const listPendingGrades = async (): Promise<PendingGradeEntry[]> => {
-  const res = await fetch("/api/grades/pending", {
-    credentials: "include",
-  })
+  const res = await apiFetch("/api/grades/pending")
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
   }
@@ -175,9 +155,7 @@ export const listPendingGrades = async (): Promise<PendingGradeEntry[]> => {
 }
 
 export const getGradeHistory = async (memberId: string): Promise<GradeHistoryEntry[]> => {
-  const res = await fetch(`/api/members/${memberId}/grades`, {
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${memberId}/grades`)
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")

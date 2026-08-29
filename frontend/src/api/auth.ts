@@ -1,3 +1,5 @@
+import { apiFetch } from "@/api/client"
+
 import type { ApiError } from "@/api/client"
 
 export type RegisterResponse = {
@@ -24,9 +26,7 @@ export { isApiError, throwApiError } from "@/api/client"
 export type { ApiError } from "@/api/client"
 
 export const getMe = async (): Promise<UserClaims> => {
-  const res = await fetch("/api/auth/me", {
-    credentials: "include",
-  })
+  const res = await apiFetch("/api/auth/me")
 
   if (res.status === 401 || res.status === 403) {
     throw { status: res.status, message: "Not authenticated" } satisfies ApiError
@@ -39,10 +39,7 @@ export const getMe = async (): Promise<UserClaims> => {
 }
 
 export const logout = async (): Promise<void> => {
-  await fetch("/api/auth/logout", {
-    method: "POST",
-    credentials: "include",
-  })
+  await apiFetch("/api/auth/logout", { method: "POST" })
 }
 
 // --- WebAuthn helpers ---
@@ -88,11 +85,7 @@ type PasskeyRequestOptions = {
 }
 
 export const registerPasskeyBegin = async (email: string): Promise<PasskeyCreationOptions> => {
-  const res = await fetch("/api/auth/register/passkey/begin", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  })
+  const res = await apiFetch("/api/auth/register/passkey/begin", { method: "POST", body: { email } })
   if (!res.ok) {
     throw { status: res.status, message: "Failed to begin passkey registration" } satisfies ApiError
   }
@@ -104,11 +97,7 @@ export const registerPasskeyComplete = async (
   email: string,
   credential: object
 ): Promise<RegisterResponse> => {
-  const res = await fetch("/api/auth/register/passkey/complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, credential }),
-  })
+  const res = await apiFetch("/api/auth/register/passkey/complete", { method: "POST", body: { email, credential } })
   if (!res.ok) {
     throw { status: res.status, message: "Passkey registration failed" } satisfies ApiError
   }
@@ -116,11 +105,7 @@ export const registerPasskeyComplete = async (
 }
 
 export const loginPasskeyBegin = async (email: string): Promise<PasskeyRequestOptions> => {
-  const res = await fetch("/api/auth/login/passkey/begin", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  })
+  const res = await apiFetch("/api/auth/login/passkey/begin", { method: "POST", body: { email } })
   if (!res.ok) {
     throw { status: res.status, message: "Failed to begin passkey login" } satisfies ApiError
   }
@@ -132,12 +117,7 @@ export const loginPasskeyComplete = async (
   email: string,
   credential: object
 ): Promise<LoginResponse> => {
-  const res = await fetch("/api/auth/login/passkey/complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, credential }),
-  })
+  const res = await apiFetch("/api/auth/login/passkey/complete", { method: "POST", body: { email, credential } })
   if (!res.ok) {
     throw { status: res.status, message: "Passkey login failed" } satisfies ApiError
   }
@@ -281,11 +261,7 @@ export const redeemRecoveryCode = async (
   email: string,
   code: string
 ): Promise<{ access_token: string }> => {
-  const res = await fetch("/api/auth/recovery/redeem", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, code }),
-  })
+  const res = await apiFetch("/api/auth/recovery/redeem", { method: "POST", body: { email, code } })
 
   if (res.status === 401) {
     throw { status: 401, message: "Invalid or used recovery code" } satisfies ApiError

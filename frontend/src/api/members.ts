@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 export type MembershipStatus = "active" | "inactive" | "suspended" | "archived"
 
@@ -59,7 +59,7 @@ export const listMembers = async (
   if (params?.status !== undefined) url.searchParams.set("status", params.status)
   if (params?.search !== undefined) url.searchParams.set("search", params.search)
 
-  const res = await fetch(url.toString(), { credentials: "include" })
+  const res = await apiFetch(url.toString())
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -72,7 +72,7 @@ export const listMembers = async (
 }
 
 export const getMember = async (id: string): Promise<MemberResponse> => {
-  const res = await fetch(`/api/members/${id}`, { credentials: "include" })
+  const res = await apiFetch(`/api/members/${id}`)
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -90,12 +90,7 @@ export const getMember = async (id: string): Promise<MemberResponse> => {
 export const createMember = async (
   data: CreateMemberRequest
 ): Promise<MemberResponse> => {
-  const res = await fetch("/api/members", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(data),
-  })
+  const res = await apiFetch("/api/members", { method: "POST", body: data })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -117,12 +112,7 @@ export const updateMember = async (
   id: string,
   data: UpdateMemberRequest
 ): Promise<MemberResponse> => {
-  const res = await fetch(`/api/members/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(data),
-  })
+  const res = await apiFetch(`/api/members/${id}`, { method: "PUT", body: data })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -150,7 +140,7 @@ export type MyMemberUpdateRequest = {
 }
 
 export const getMyMember = async (): Promise<MemberResponse | null> => {
-  const res = await fetch("/api/users/me/member", { credentials: "include" })
+  const res = await apiFetch("/api/users/me/member")
 
   if (res.status === 404) {
     return null
@@ -168,12 +158,7 @@ export const getMyMember = async (): Promise<MemberResponse | null> => {
 export const updateMyMember = async (
   data: MyMemberUpdateRequest
 ): Promise<MemberResponse> => {
-  const res = await fetch("/api/users/me/member", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(data),
-  })
+  const res = await apiFetch("/api/users/me/member", { method: "PUT", body: data })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")
@@ -192,10 +177,7 @@ export const updateMyMember = async (
 }
 
 export const eraseMember = async (id: string): Promise<MemberResponse> => {
-  const res = await fetch(`/api/members/${id}/erase`, {
-    method: "POST",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${id}/erase`, { method: "POST" })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")

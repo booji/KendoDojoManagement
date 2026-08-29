@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, request, throwApiError } from "@/api/client"
 
 export type DojoSettings = {
   dojo_name: string
@@ -20,19 +20,11 @@ export type DojoBranding = {
 }
 
 export const getDojoSettings = async (): Promise<DojoSettings> => {
-  const res = await fetch("/api/settings/dojo", { credentials: "include" })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch dojo settings" }
-  }
-  return res.json() as Promise<DojoSettings>
+  return request<DojoSettings>("/api/settings/dojo", { errorMessage: "Failed to fetch dojo settings" })
 }
 
 export const getBranding = async (): Promise<DojoBranding> => {
-  const res = await fetch("/api/settings/branding")
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch branding" }
-  }
-  return res.json() as Promise<DojoBranding>
+  return request<DojoBranding>("/api/settings/branding", { errorMessage: "Failed to fetch branding" })
 }
 
 export const updateDojoSettings = async (
@@ -50,30 +42,13 @@ export const updateDojoSettings = async (
     >
   >
 ): Promise<DojoSettings> => {
-  const res = await fetch("/api/settings/dojo", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to update dojo settings" }
-  }
-  return res.json() as Promise<DojoSettings>
+  return request<DojoSettings>("/api/settings/dojo", { method: "PUT", body: data, errorMessage: "Failed to update dojo settings" })
 }
 
 export const uploadDojoLogo = async (file: File): Promise<{ logo_url: string }> => {
   const form = new FormData()
   form.append("file", file)
-  const res = await fetch("/api/settings/logo", {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to upload logo" }
-  }
-  return res.json() as Promise<{ logo_url: string }>
+  return request<{ logo_url: string }>("/api/settings/logo", { method: "POST", body: form, errorMessage: "Failed to upload logo" })
 }
 
 export const uploadDojoBackground = async (
@@ -81,11 +56,7 @@ export const uploadDojoBackground = async (
 ): Promise<{ background_image_url: string }> => {
   const form = new FormData()
   form.append("file", file)
-  const res = await fetch("/api/settings/background", {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  })
+  const res = await apiFetch("/api/settings/background", { method: "POST", body: form })
   if (!res.ok) {
     return throwApiError(res, "Failed to upload background")
   }
