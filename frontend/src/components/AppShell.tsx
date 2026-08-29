@@ -5,6 +5,7 @@ import { useThemeContext } from "@/contexts/ThemeProvider"
 import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import BottomTabBar from "@/components/BottomTabBar"
 import ThemeToggle from "@/components/ThemeToggle"
+import LogoutButton from "@/components/LogoutButton"
 import {
   SidebarProvider,
   Sidebar,
@@ -104,7 +105,11 @@ const AppShell = ({ role, children }: AppShellProps) => {
           </SidebarContent>
 
           <SidebarFooter>
-            <ThemeToggle theme={theme} setTheme={setTheme} />
+            {/* Destructive action leftmost, safe action rightmost (macOS HIG). */}
+            <div className="flex items-center justify-between gap-2">
+              <LogoutButton />
+              <ThemeToggle theme={theme} setTheme={setTheme} />
+            </div>
           </SidebarFooter>
         </Sidebar>
 
