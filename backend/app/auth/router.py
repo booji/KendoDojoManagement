@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app import config
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import User
 from app.auth.dependencies import (
@@ -62,6 +61,7 @@ from app.auth.recovery_service import (
     hash_codes,
     is_admin_token_valid,
 )
+from app.auth.session_cookie import clear_session_cookie, set_session_cookie
 from app.auth.token import encode_recovery_token, encode_token
 from app.core.request_ip import client_ip
 from app.core.security_logger import log_security_event
@@ -75,7 +75,7 @@ _ALLOW_TEST_AUTH = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 @router.post("/logout", status_code=200)
 async def logout(response: Response) -> dict:
-    response.delete_cookie("access_token")
+    clear_session_cookie(response)
     return {"detail": "logged out"}
 
 
@@ -145,14 +145,7 @@ async def passkey_login_complete(
     except Exception:
         log_security_event("login_passkey", "failure")
         raise
-    response.set_cookie(
-        key="access_token",
-        value=token_response.access_token,
-        httponly=True,
-        samesite="strict",
-        secure=config.COOKIE_SECURE,
-        max_age=60 * int(config.JWT_EXPIRE_MINUTES),
-    )
+    set_session_cookie(response, token_response.access_token)
     return {"detail": "logged in"}
 
 
@@ -475,12 +468,5 @@ if _ALLOW_TEST_AUTH:
                 theme=user.theme,
             )
         )
-        response.set_cookie(
-            key="access_token",
-            value=token,
-            httponly=True,
-            samesite="strict",
-            secure=config.COOKIE_SECURE,
-            max_age=60 * int(config.JWT_EXPIRE_MINUTES),
-        )
+        set_session_cookie(response, token)
         return {"detail": "logged in", "sub": user.id}

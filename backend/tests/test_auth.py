@@ -110,7 +110,9 @@ async def test_logout_clears_access_token_cookie() -> None:
 
     assert response.status_code == 200
     set_cookie = response.headers.get("set-cookie")
-    assert set_cookie is not None, "logout must send a Set-Cookie header to clear the cookie"
+    assert (
+        set_cookie is not None
+    ), "logout must send a Set-Cookie header to clear the cookie"
     assert "access_token=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie.lower()
 
@@ -124,3 +126,23 @@ async def test_logout_succeeds_without_existing_session() -> None:
     ) as c:
         response = await c.post("/auth/logout")
     assert response.status_code == 200
+
+
+async def test_logout_cookie_attributes_match_the_login_cookie() -> None:
+    """The clearing Set-Cookie must mirror the attributes the cookie was set with.
+
+    A cookie is identified for overwrite by (name, domain, path), and browsers
+    apply their own rules to SameSite/Secure — so a clear that omits the
+    attributes login used relies on Starlette's defaults happening to coincide
+    with them. They do today by accident, not by contract: a future change to
+    the login cookie's path or domain would silently stop logout clearing
+    anything. Assert parity instead of the coincidence.
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        cleared = (await c.post("/auth/logout")).headers.get("set-cookie", "")
+
+    assert "Path=/" in cleared
+    assert "SameSite=strict" in cleared
+    assert "HttpOnly" in cleared
