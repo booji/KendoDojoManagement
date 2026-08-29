@@ -14,6 +14,15 @@ migration ever removed it again — even though the ORM `Member` model
 already asserts the model doesn't have it. `test_migrated_schema_matches_orm_metadata_exactly`
 caught the resulting drift: the migrated schema still had the column, the
 ORM metadata didn't. This migration is the missing drop.
+
+The drop is `IF EXISTS`, for the same reason `b2c3d4e5f6a7` guards its own
+drop of this column that way (#332): a database whose schema was built by
+`Base.metadata.create_all` and then stamped at some revision before this one
+never had `federation_number` at all, because the ORM `Member` model has not
+declared it since `b2c3d4e5f6a7`. An unguarded `DROP COLUMN` makes
+`alembic upgrade head` fail on every such database — which is every
+create_all-bootstrapped deployment described in the baseline revision's
+"Deployment migration path" notes, and every long-lived dev volume.
 """
 
 from collections.abc import Sequence
@@ -29,7 +38,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.drop_column("members", "federation_number")
+    op.execute("ALTER TABLE members DROP COLUMN IF EXISTS federation_number")
 
 
 def downgrade() -> None:
