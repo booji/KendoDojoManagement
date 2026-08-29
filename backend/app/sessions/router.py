@@ -19,7 +19,6 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
-from app.sessions.envelope import session_time_envelope
 from app.sessions.ical import build_ical
 from app.sessions.models import (
     GenerateRequest,
@@ -44,36 +43,14 @@ from app.sessions.service import add_months, covered_dates, generate_instances
 router = APIRouter(tags=["sessions"])
 
 
-def _with_envelope(raw: dict[str, Any]) -> dict[str, Any]:
-    """Derive start_time/duration_minutes from the session's segments.
-
-    Repositories that already compute the envelope (e.g. the SQL repo) leave
-    these fields untouched; stub repositories that store the raw payload
-    verbatim get the envelope computed here so the response always carries
-    it, regardless of which repository produced the record.
-    """
-    segments = raw.get("segments") or []
-    if not segments:
-        return raw
-    start_time, end_time = session_time_envelope(segments)
-    duration_minutes = _minutes_between(start_time, end_time)
-    return {**raw, "start_time": start_time, "duration_minutes": duration_minutes}
-
-
-def _minutes_between(start: str, end: str) -> int:
-    sh, sm = (int(p) for p in start.split(":"))
-    eh, em = (int(p) for p in end.split(":"))
-    return (eh * 60 + em) - (sh * 60 + sm)
-
-
 def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply SessionInstanceRead defaults to fill in any missing optional fields."""
-    return SessionInstanceRead.model_validate(_with_envelope(raw)).model_dump()
+    return SessionInstanceRead.model_validate(raw).model_dump()
 
 
 def _normalize_template(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply SessionTemplateRead defaults to fill in any missing optional fields."""
-    return SessionTemplateRead.model_validate(_with_envelope(raw)).model_dump()
+    return SessionTemplateRead.model_validate(raw).model_dump()
 
 
 _TypeRepo = Annotated[AbstractSessionTypeRepository, Depends(get_session_type_repo)]
@@ -366,10 +343,7 @@ async def list_upcoming_sessions(
         return _strip_coach_notes(_strip_cancelled(normalized))
 
     if from_date is not None and to_date is not None:
-        if hasattr(repo, "list_in_range"):
-            rows = await repo.list_in_range(from_date, to_date)
-            return await _finalize(rows)
-        return await _finalize(await repo.list_upcoming())
+        return await _finalize(await repo.list_in_range(from_date, to_date))
 
     return await _finalize(await repo.list_upcoming())
 
