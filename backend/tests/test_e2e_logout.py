@@ -8,10 +8,7 @@ a logout control in the app shell (frontend/src/components/AppShell.tsx
 SidebarFooter, next to ThemeToggle) plus a mobile-reachable equivalent
 (frontend/src/components/BottomTabBar.tsx's "More" sheet).
 
-One browser test per acceptance criterion. All are red-phase stubs
-(`xfail(strict=True)`) until the logout control is implemented — see the tdd
-skill's xfail lifecycle: promote each to a real assertion once the UI exists,
-never leave xfail in place after implementation.
+One browser test per acceptance criterion.
 
 AC3 and AC6 need judgement about what is browser-verifiable:
   - AC3 (back button after logout) IS browser-verifiable: log in, log out,
@@ -25,9 +22,9 @@ Both are written as real browser tests below, not skipped.
 """
 
 import os
+import re
 import uuid
 
-import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
@@ -77,8 +74,15 @@ def _goto_authenticated(page: Page, token: str, path: str = "/") -> None:
     )
     # Second visit so the cookie is sent with the authenticated request.
     page.goto(f"{BASE_URL}{path}")
-    # Wait for the sidebar to confirm AppShell has rendered.
-    page.wait_for_selector("[data-slot='sidebar']", timeout=15000)
+    # Confirm AppShell rendered. The sidebar is display:none below the md
+    # breakpoint, so at a mobile viewport the bottom tab bar is the only half
+    # of the shell that is ever visible — waiting on the sidebar there would
+    # time out however correct the app is.
+    is_mobile = (page.viewport_size or {}).get("width", 1280) < 768
+    selector = (
+        "nav[aria-label='Main navigation']" if is_mobile else "[data-slot='sidebar']"
+    )
+    page.wait_for_selector(selector, timeout=15000)
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +90,6 @@ def _goto_authenticated(page: Page, token: str, path: str = "/") -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_logout_control_reachable_without_settings_navigation(page: Page) -> None:
     """A signed-in user can reach a logout control directly from the app shell.
 
@@ -105,7 +108,6 @@ def test_logout_control_reachable_without_settings_navigation(page: Page) -> Non
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_logout_calls_backend_and_redirects_to_login(page: Page) -> None:
     """Clicking the logout control calls POST /auth/logout and navigates to /login."""
     token = _make_token("admin")
@@ -125,7 +127,6 @@ def test_logout_calls_backend_and_redirects_to_login(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_back_button_after_logout_does_not_restore_protected_view(page: Page) -> None:
     """After signing out, pressing Back must not land on an authenticated page.
 
@@ -136,11 +137,23 @@ def test_back_button_after_logout_does_not_restore_protected_view(page: Page) ->
     page.set_viewport_size({"width": 1280, "height": 800})
     _goto_authenticated(page, token)
 
+    # Push a second authenticated entry onto the history stack. Logout
+    # replaces the entry it navigates from, so this earlier one is what Back
+    # actually returns to — and it is a protected route, which is the point.
+    page.get_by_role("link", name="Sessions").click()
+    expect(page).to_have_url(f"{BASE_URL}/sessions")
+
     page.get_by_role("button", name="Log out").click()
     expect(page).to_have_url(f"{BASE_URL}/login")
 
     page.go_back()
-    expect(page).to_have_url(f"{BASE_URL}/login")
+    # The restored entry is /sessions — a protected route. With the cookie
+    # cleared it must bounce to an unauthenticated screen rather than render
+    # authenticated content, whether it came from the network or bfcache.
+    # /login normally; /setup on an instance with no passkey credential yet
+    # (test_e2e_auth.py makes the same accommodation). Which of the two shows
+    # has nothing to do with sign-out — that neither renders the shell does.
+    expect(page).to_have_url(re.compile(r"/(login|setup)$"))
     expect(page.locator("[data-slot='sidebar']")).not_to_be_visible()
 
 
@@ -149,7 +162,6 @@ def test_back_button_after_logout_does_not_restore_protected_view(page: Page) ->
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_logout_control_keyboard_focusable_with_visible_ring(page: Page) -> None:
     """The logout control can be reached and activated via keyboard, and
     carries the same focus-visible ring treatment as ThemeToggle
@@ -175,7 +187,6 @@ def test_logout_control_keyboard_focusable_with_visible_ring(page: Page) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_logout_reachable_at_mobile_viewport(page: Page) -> None:
     """At a mobile viewport the sidebar is hidden, so the logout control must
     be reachable through the BottomTabBar's "More" overflow sheet instead.
@@ -195,7 +206,6 @@ def test_logout_reachable_at_mobile_viewport(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_logout_network_failure_does_not_strand_user(page: Page) -> None:
     """If POST /auth/logout fails (network error), the user must not be left
     in a half-signed-out state: no client-side redirect to /login while the
@@ -233,7 +243,6 @@ def test_logout_network_failure_does_not_strand_user(page: Page) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="no logout control exists yet (issue #325)")
 def test_sign_out_round_trip(page: Page) -> None:
     """End-to-end: sign in, sign out via the app shell control, land on
     /login, and confirm a protected route now redirects to /login rather
@@ -247,5 +256,8 @@ def test_sign_out_round_trip(page: Page) -> None:
     expect(page).to_have_url(f"{BASE_URL}/login")
 
     page.goto(BASE_URL)
-    expect(page).to_have_url(f"{BASE_URL}/login")
+    # Unauthenticated screen — /login, or /setup on an instance with no
+    # passkey credential yet. The load-bearing assertion is the one below:
+    # the authenticated shell is gone.
+    expect(page).to_have_url(re.compile(r"/(login|setup)$"))
     expect(page.locator("[data-slot='sidebar']")).not_to_be_visible()
