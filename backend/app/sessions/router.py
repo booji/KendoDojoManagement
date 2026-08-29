@@ -306,23 +306,8 @@ async def _enrich_with_attendance(
     if not session_ids:
         return rows
 
-    # Gather attendance for all sessions concurrently via individual calls
-    counts: dict[str, int] = {}
-    checked_in: set[str] = set()
-    for sid in session_ids:
-        records = await attendance_repo.list_for_session(sid)
-        counts[sid] = len(records)
-        if any(r.get("member_id") == member_id for r in records):
-            checked_in.add(sid)
-
-    return [
-        {
-            **r,
-            "attendance_count": counts.get(r["id"], 0),
-            "is_checked_in": r["id"] in checked_in,
-        }
-        for r in rows
-    ]
+    summary = await attendance_repo.summary_for_sessions(session_ids, member_id)
+    return [{**r, **summary[r["id"]]} for r in rows]
 
 
 @router.get("/sessions")
