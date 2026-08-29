@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom"
 import { MoreHorizontalIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { NavItem } from "@/hooks/useNavItems"
+import LogoutButton from "@/components/LogoutButton"
 import {
   Sheet,
   SheetContent,
@@ -21,6 +22,10 @@ const BottomTabBar = ({ primaryItems, overflowItems }: BottomTabBarProps) => {
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
+
+  // The sheet now also hosts account actions (logout), so it must exist even
+  // when a role (e.g. member) has no overflow nav items of its own.
+  const hasMoreContent = true
 
   return (
     <>
@@ -51,7 +56,7 @@ const BottomTabBar = ({ primaryItems, overflowItems }: BottomTabBarProps) => {
           )
         })}
 
-        {overflowItems.length > 0 && (
+        {hasMoreContent && (
           <button
             type="button"
             aria-label="More navigation items"
@@ -69,7 +74,7 @@ const BottomTabBar = ({ primaryItems, overflowItems }: BottomTabBarProps) => {
         )}
       </nav>
 
-      {overflowItems.length > 0 && (
+      {hasMoreContent && (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="bottom" showCloseButton>
             <SheetHeader>
@@ -101,6 +106,7 @@ const BottomTabBar = ({ primaryItems, overflowItems }: BottomTabBarProps) => {
                   </Link>
                 )
               })}
+              <LogoutButton className="min-h-[44px] rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring" />
             </nav>
           </SheetContent>
         </Sheet>
