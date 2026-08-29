@@ -36,44 +36,50 @@ if [[ ! "$TEST_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
 fi
 
 # DATABASE_URL from .env.test names the shared 'kendo_test' database; swap in
-# the per-run name and create it before anything connects. python3 (with
-# asyncpg, already a dependency of the app) does the actual DDL rather than
-# shelling out to a psql/createdb client this image doesn't install.
+# the per-run name and create it before anything connects. app.db.scratch
+# (backed by asyncpg, already a dependency of the app) does the actual DDL
+# rather than shelling out to a psql/createdb client this image doesn't
+# install.
 TEST_DB_BASE_URL="${DATABASE_URL%/*}"
 export DATABASE_URL="${TEST_DB_BASE_URL}/${TEST_DB_NAME}"
+
+# Sweep databases orphaned by a previous run's container being SIGKILLed
+# before its own cleanup() could fire (e.g. a CI job cancellation). This is a
+# deliberate exception to "a run never drops a database it did not create"
+# (see TEST_DB_CREATED below): it is safe because it only ever targets
+# kendo_test_*-prefixed databases with zero live connections, and every
+# concurrently running run holds a sentinel connection to its own database for
+# its whole life (see `scratch hold` below) — so no still-running run's
+# database can be selected. That sentinel is load-bearing, not decorative: the
+# app itself is not connected for most of a run's startup, so without it this
+# sweep could drop a starting run's database. The sweep also requires a
+# database to look orphaned in two observations a couple of seconds apart,
+# which covers the sliver before the sentinel attaches. A failed sweep is a
+# nuisance, not a reason to fail the whole run, so it only warns.
+if ! SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" python -m app.db.scratch sweep; then
+    echo "WARNING: startup sweep of orphaned test databases failed — continuing anyway" >&2
+fi
 
 # cleanup() must never drop a database this run did not create — see the
 # collision note above. Only a successful CREATE flips this to 1.
 TEST_DB_CREATED=0
 
-TEST_DB_NAME="$TEST_DB_NAME" TEST_DB_BASE_URL="$TEST_DB_BASE_URL" python3 - <<'PYEOF'
-import asyncio
-import os
-import re
-
-import asyncpg
-
-# Read the DSN from the environment, not argv: /proc/<pid>/cmdline is readable
-# by anything in the same PID namespace and the DSN carries the DB password.
-db_name, base_url = os.environ["TEST_DB_NAME"], os.environ["TEST_DB_BASE_URL"]
-if not re.fullmatch(r"[A-Za-z0-9_]+", db_name):
-    raise SystemExit(f"refusing unsafe database name: {db_name!r}")
-maint_dsn = base_url.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-
-
-async def _create() -> None:
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        # CREATE DATABASE cannot run inside a transaction block; asyncpg does
-        # not implicitly wrap a bare execute() in one, so this is safe as-is.
-        await conn.execute(f'CREATE DATABASE "{db_name}"')
-    finally:
-        await conn.close()
-
-
-asyncio.run(_create())
-PYEOF
+SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
+    python -m app.db.scratch create
 TEST_DB_CREATED=1
+
+# Hold one connection open to this run's database for as long as the run lives.
+# The startup sweep above spares any kendo_test_* database that has a backend in
+# pg_stat_activity, and this is what guarantees ours has one. Without it the
+# sweep's safety rule rests on the app happening to be connected, which it is
+# not for most of a run's startup: /health does no database I/O, app.db.engine's
+# engine is lazy, and app.db.bootstrap disposes the engine it migrates on. That
+# leaves the database genuinely connectionless from CREATE until the first
+# database-touching test — through two 30s readiness gates — and a concurrent
+# run's sweep landing in that window would drop it, which is #316 all over again.
+SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
+    python -m app.db.scratch hold &
+DB_HOLD_PID=$!
 
 # Start backend API server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 &
@@ -85,7 +91,10 @@ npm run dev -- --host 0.0.0.0 --port 5173 &
 FRONTEND_PID=$!
 
 cleanup() {
-    kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    # Release the sentinel connection along with the servers. Dropping would
+    # survive it either way — drop_database terminates remaining backends — but
+    # killing it here keeps the drop's terminate step for genuine surprises.
+    kill "$BACKEND_PID" "$FRONTEND_PID" "${DB_HOLD_PID:-}" 2>/dev/null || true
     # Drop the per-run database on every exit path (success or failure) so
     # nothing is left behind for the next invocation to collide with.
     if [[ "${TEST_DB_CREATED:-0}" -ne 1 ]]; then
@@ -95,37 +104,18 @@ cleanup() {
     # silently leaks accumulates on the shared server and quietly defeats the
     # isolation this script exists to provide. Never aborts — cleanup also runs
     # on the failure path, where the original error matters more.
-    if ! TEST_DB_NAME="$TEST_DB_NAME" TEST_DB_BASE_URL="$TEST_DB_BASE_URL" python3 - <<'PYEOF'
-import asyncio
-import os
-import re
-
-import asyncpg
-
-# Read the DSN from the environment, not argv: /proc/<pid>/cmdline is readable
-# by anything in the same PID namespace and the DSN carries the DB password.
-db_name, base_url = os.environ["TEST_DB_NAME"], os.environ["TEST_DB_BASE_URL"]
-if not re.fullmatch(r"[A-Za-z0-9_]+", db_name):
-    raise SystemExit(f"refusing unsafe database name: {db_name!r}")
-maint_dsn = base_url.replace("postgresql+asyncpg://", "postgresql://") + "/postgres"
-
-
-async def _drop() -> None:
-    conn = await asyncpg.connect(maint_dsn)
-    try:
-        await conn.execute(f'ALTER DATABASE "{db_name}" WITH ALLOW_CONNECTIONS false')
-        await conn.execute(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            "WHERE datname = $1 AND pid <> pg_backend_pid()",
-            db_name,
-        )
-        await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-    finally:
-        await conn.close()
-
-
-asyncio.run(_drop())
-PYEOF
+    #
+    # `cd /app` in a subshell because cleanup() runs with whatever the current
+    # directory happens to be AT EXIT, not at definition: the script cds to
+    # /frontend to start Vite and does not cd back until just before pytest, so
+    # any exit in between — an ordinary readiness-gate `exit 1`, not just a
+    # signal — would otherwise run `python -m app.db.scratch` from /frontend,
+    # where the `app` package is not importable. Observed: ModuleNotFoundError,
+    # a warning, and a leaked database. The heredoc this replaced was
+    # self-contained and had no such dependency, so the fragility came in with
+    # the module. The subshell keeps the cd from leaking back to the caller.
+    if ! (cd /app && SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" \
+        SCRATCH_DB_NAME="$TEST_DB_NAME" python -m app.db.scratch drop)
     then
         echo "WARNING: could not drop per-run database '$TEST_DB_NAME' — it has been left behind" >&2
     fi
