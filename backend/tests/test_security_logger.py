@@ -35,6 +35,7 @@ from app.auth.dependencies import (
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.fake_repositories import InMemorySessionInstanceRepository
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -159,9 +160,8 @@ class StubCheckinTokenRepo:
         return None
 
 
-class StubSessionInstanceRepo:
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return None
+# An empty session instance fake: get() finds nothing, which is what these
+# tests need.
 
 
 # ---------------------------------------------------------------------------
@@ -604,9 +604,9 @@ async def test_account_lockout_emits_log(
                 )
 
     logs = _capture_security_logs(caplog)
-    assert any(
-        log["event_type"] == "login_lockout" for log in logs
-    ), f"Expected login_lockout event, got: {logs}"
+    assert any(log["event_type"] == "login_lockout" for log in logs), (
+        f"Expected login_lockout event, got: {logs}"
+    )
 
 
 # ===========================================================================
@@ -783,36 +783,20 @@ async def test_checkin_token_generation_emits_log(
     from datetime import UTC, datetime
 
     checkin_token_repo = StubCheckinTokenRepo()
-    session_instance_repo = StubSessionInstanceRepo()
+    session_instance_repo = InMemorySessionInstanceRepository()
     admin_claims = UserClaims(
         sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
     )
 
     session_id = str(uuid.uuid4())
 
-    # Seed a session instance into the session instance repo
-    from typing import Any as _Any
-
-    class _StubSessionInstanceRepoWithData:
-        async def get(self, instance_id: str) -> dict[str, _Any] | None:
-            if instance_id == session_id:
-                return {
-                    "id": session_id,
-                    "date": datetime.now(UTC).date().isoformat(),
-                    "cancelled": False,
-                }
-            return None
-
-        async def update(
-            self, instance_id: str, data: dict[str, _Any]
-        ) -> dict[str, _Any] | None:
-            return None
+    session_repo = InMemorySessionInstanceRepository(
+        [{"id": session_id, "date": datetime.now(UTC).date().isoformat()}]
+    )
 
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: admin_claims
     app.dependency_overrides[get_checkin_token_repo] = lambda: checkin_token_repo
-    app.dependency_overrides[get_session_instance_repo] = (
-        lambda: _StubSessionInstanceRepoWithData()
-    )
+    app.dependency_overrides[get_session_instance_repo] = lambda: session_repo
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(

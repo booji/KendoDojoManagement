@@ -25,7 +25,6 @@ not yet compute/attach `checkin_link` to sessions before calling
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 import pytest
@@ -34,6 +33,10 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app
 from app.sessions.dependencies import get_session_instance_repo, get_session_type_repo
 from app.sessions.ical import build_ical
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Pure build_ical tests — call the builder directly with dicts, matching the
@@ -179,44 +182,6 @@ def test_admin_only_fields_still_stripped_when_checkin_link_present() -> None:
 # ---------------------------------------------------------------------------
 
 
-class _StubSessionInstanceRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = data.get("id") or str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-
-class _StubSessionTypeRepository:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    def seed(self, type_id: str, name: str) -> dict[str, Any]:
-        record = {"id": type_id, "name": name}
-        self._store[type_id] = record
-        return record
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-
 @pytest.fixture(autouse=True)
 def _clear_overrides():
     yield
@@ -224,15 +189,15 @@ def _clear_overrides():
 
 
 @pytest.fixture()
-def instance_repo() -> _StubSessionInstanceRepo:
-    repo = _StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def type_repo() -> _StubSessionTypeRepository:
-    repo = _StubSessionTypeRepository()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
@@ -244,7 +209,7 @@ async def test_get_sessions_ical_enriches_upcoming_session_with_checkin_link(
     {origin}/checkin/session/{id} using PUBLIC_ORIGIN, and the DESCRIPTION
     must show 'Check in: {url}' as its first line."""
     monkeypatch.setenv("PUBLIC_ORIGIN", "https://dojo.example.com")
-    t = type_repo.seed(str(uuid.uuid4()), "Kihon")
+    t = type_repo.seed(name="Kihon")
     inst_id = str(uuid.uuid4())
     await instance_repo.add(
         {

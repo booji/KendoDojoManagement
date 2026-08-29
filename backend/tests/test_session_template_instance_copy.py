@@ -15,7 +15,7 @@ behaviour:
   4. generate_instances deep-copies segments: mutating a generated instance's
      segment in place never reaches back into the template.
 
-Uses the StubRepository pattern — NO real DB tables are touched. The unit test
+NO real DB tables are touched: the shared in-memory fakes stand in. The unit test
 exercises the pure service function; the endpoint tests exercise the route
 layer with stub repositories.
 """
@@ -38,6 +38,11 @@ from app.sessions.dependencies import (
     get_session_type_repo,
 )
 from app.sessions.service import generate_instances
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers / claims
@@ -60,95 +65,15 @@ def _member_override() -> UserClaims:
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories (in-memory, no DB)
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        for name in ("Kihon", "Jigeiko"):
-            new_id = str(uuid.uuid4())
-            self._store[new_id] = {"id": new_id, "name": name}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        return next((r for r in self._store.values() if r["name"] == name), None)
-
-
-class StubSessionTemplateRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionInstanceRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            r
-            for r in self._store.values()
-            if not r.get("cancelled", False) and date.fromisoformat(r["date"]) >= now
-        ]
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {
-            "id": new_id,
-            "cancelled": False,
-            "notes": None,
-            "location": None,
-            "info": None,
-            "coach_notes": None,
-            "checkin_url": None,
-            **data,
-        }
-        self._store[new_id] = record
-        return record
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        # Replace-on-write, mirroring the SQL repository's segment rebuild.
-        record.update(data)
-        return record
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def _wire_overrides() -> Any:
-    type_repo = StubSessionTypeRepo()
-    template_repo = StubSessionTemplateRepo()
-    instance_repo = StubSessionInstanceRepo()
+    type_repo = InMemorySessionTypeRepository([{"name": "Kihon"}, {"name": "Jigeiko"}])
+    template_repo = InMemorySessionTemplateRepository()
+    instance_repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: type_repo
     app.dependency_overrides[get_session_template_repo] = lambda: template_repo
     app.dependency_overrides[get_session_instance_repo] = lambda: instance_repo
@@ -162,7 +87,7 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _type_ids(repo: StubSessionTypeRepo) -> list[str]:
+async def _type_ids(repo: InMemorySessionTypeRepository) -> list[str]:
     return [r["id"] for r in await repo.list()]
 
 
@@ -390,6 +315,6 @@ async def test_recurrence_stays_at_template_level(
         assert field not in inst, f"instance must not carry recurrence field {field!r}"
     for seg in inst["segments"]:
         for field in ("recurrence", "recurrence_days", "interval_weeks"):
-            assert (
-                field not in seg
-            ), f"segment must not carry recurrence field {field!r}"
+            assert field not in seg, (
+                f"segment must not carry recurrence field {field!r}"
+            )

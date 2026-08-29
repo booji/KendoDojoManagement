@@ -7,14 +7,12 @@ Backend acceptance criteria:
   - GET /sessions populates attendance_count from the attendance table
   - GET /sessions populates is_checked_in for the authenticated member
 
-Uses StubRepository pattern — NO real DB.
+NO real DB: the shared in-memory fakes stand in for the repositories.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -32,6 +30,12 @@ from app.sessions.dependencies import (
     get_session_type_repo,
 )
 from app.sessions.models import SessionInstanceRead
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,137 +59,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    def __init__(self) -> None:
-        type_id = str(uuid.uuid4())
-        self._store: dict[str, dict[str, Any]] = {
-            type_id: {"id": type_id, "name": "General Training", "colour": None}
-        }
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item["name"] == name:
-                return item
-        return None
-
-    async def add(self, name: str) -> dict[str, Any]:
-        existing = await self.get_by_name(name)
-        if existing:
-            raise ValueError(f"Session type '{name}' already exists")
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "name": name, "colour": None}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionTemplateRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository (sessions context)."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list_upcoming(self, as_of=None) -> list[dict[str, Any]]:
-        from datetime import date
-
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-
-class StubAttendanceRepo:
-    """In-memory stand-in for an Attendance repository."""
-
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r["session_id"] == session_id]
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
-
-    async def count_for_sessions(self, session_ids: list[str]) -> dict[str, int]:
-        """Return a mapping of session_id -> attendance count."""
-        result: dict[str, int] = {sid: 0 for sid in session_ids}
-        for r in self._store:
-            sid = r["session_id"]
-            if sid in result:
-                result[sid] += 1
-        return result
-
-    async def member_checkins_for_sessions(
-        self, session_ids: list[str], member_id: str
-    ) -> set[str]:
-        """Return the set of session_ids where the given member has checked in."""
-        return {
-            r["session_id"]
-            for r in self._store
-            if r["session_id"] in session_ids and r.get("member_id") == member_id
-        }
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -197,29 +70,29 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository([{"name": "General Training"}])
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def attendance_repo() -> StubAttendanceRepo:
-    repo = StubAttendanceRepo()
+def attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -280,7 +153,7 @@ async def test_list_sessions_includes_attendance_count(
         _admin_override  # use admin for full view
     )
 
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Seed one future session
     session = await instance_repo.add(
@@ -319,7 +192,7 @@ async def test_list_sessions_includes_is_checked_in_for_member(
     """GET /sessions returns is_checked_in=true where the current member has checked in."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Seed two future sessions
     checked_in_session = await instance_repo.add(

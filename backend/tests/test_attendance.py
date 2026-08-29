@@ -34,6 +34,10 @@ from app.main import app
 from app.members.dependencies import get_member_repo
 from app.sessions.envelope import envelope_bounds
 from app.settings.dependencies import get_dojo_settings_repo
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,126 +86,31 @@ def _admin_token() -> str:
 # ---------------------------------------------------------------------------
 
 
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository (attendance context)."""
+class _AttendanceSessionRepo(InMemorySessionInstanceRepository):
+    """The session instance fake, with a seed() that speaks wall-clock times.
 
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+    A 30-minute session starting at ``now``, expressed as the segment that
+    derives that envelope. The fake emits an end past midnight as raw
+    hours-since-midnight with no 24-hour wrap -- a session seeded at 23:52
+    ends at "24:22", not "00:22", which would place the end 23.5 hours before
+    the start once ``envelope_bounds`` resolved it.
+    """
 
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    def seed(
+    def seed(  # type: ignore[override]
         self, cancelled: bool = False, now: datetime | None = None
     ) -> dict[str, Any]:
-        """Seed a 30-minute session starting at ``now`` (defaults to real now).
-
-        The end time is emitted as raw hours-since-midnight relative to the
-        session's own date, with no 24-hour wrap — the same shape
-        ``session_time_envelope`` produces. A session seeded at 23:52 therefore
-        ends at "24:22", not "00:22", which would place the end 23.5 hours
-        before the start once ``envelope_bounds`` resolved it.
-        """
-        new_id = str(uuid.uuid4())
         now = now or datetime.now()
-        start_minutes = now.hour * 60 + now.minute
-        end_minutes = start_minutes + 30
-        record = {
-            "id": new_id,
-            "date": now.strftime("%Y-%m-%d"),
-            "start_time": f"{start_minutes // 60:02d}:{start_minutes % 60:02d}",
-            "end_time": f"{end_minutes // 60:02d}:{end_minutes % 60:02d}",
-            "cancelled": cancelled,
-        }
-        self._store[new_id] = record
-        return record
-
-
-class StubAttendanceRepo:
-    """In-memory stand-in for an Attendance repository."""
-
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self,
-        session_id: str,
-        member_id: str,
-        recorded_by: str,
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r["session_id"] == session_id]
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
-
-    async def admin_mark_attended(
-        self,
-        session_id: str,
-        member_id: str,
-        recorded_by: str,
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "visitor_name": None,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def remove_attendance(self, session_id: str, member_id: str) -> bool:
-        for i, r in enumerate(self._store):
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                self._store.pop(i)
-                return True
-        return False
-
-    async def add_visitor(
-        self,
-        session_id: str,
-        visitor_name: str,
-        recorded_by: str,
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": None,
-            "visitor_name": visitor_name,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r.get("member_id") == member_id]
+        return super().seed(
+            date=now.strftime("%Y-%m-%d"),
+            cancelled=cancelled,
+            segments=[
+                {
+                    "start_time": now.strftime("%H:%M"),
+                    "duration_minutes": 30,
+                    "type_ids": [],
+                }
+            ],
+        )
 
 
 class StubMemberRepo:
@@ -296,15 +205,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def session_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def session_repo() -> _AttendanceSessionRepo:
+    repo = _AttendanceSessionRepo()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def attendance_repo() -> StubAttendanceRepo:
-    repo = StubAttendanceRepo()
+def attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -329,8 +238,8 @@ def settings_repo() -> StubDojoSettingsRepo:
 
 
 async def test_member_can_checkin_to_session(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -365,7 +274,7 @@ async def test_member_can_checkin_to_session(
     ],
 )
 def test_seeded_session_envelope_never_ends_before_it_starts(
-    session_repo: StubSessionInstanceRepo,
+    session_repo: _AttendanceSessionRepo,
     hour: int,
     minute: int,
     expected_start: str,
@@ -392,8 +301,8 @@ def test_seeded_session_envelope_never_ends_before_it_starts(
 
 
 async def test_unauthenticated_checkin_returns_401(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
@@ -406,8 +315,8 @@ async def test_unauthenticated_checkin_returns_401(
 
 
 async def test_checkin_nonexistent_session_returns_404(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     fake_id = str(uuid.uuid4())
@@ -426,8 +335,8 @@ async def test_checkin_nonexistent_session_returns_404(
 
 
 async def test_member_cannot_checkin_to_cancelled_session(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=True)
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -446,7 +355,7 @@ async def test_member_cannot_checkin_to_cancelled_session(
 
 
 async def test_admin_can_generate_checkin_token(
-    session_repo: StubSessionInstanceRepo,
+    session_repo: _AttendanceSessionRepo,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -465,7 +374,7 @@ async def test_admin_can_generate_checkin_token(
 
 
 async def test_member_cannot_generate_checkin_token(
-    session_repo: StubSessionInstanceRepo,
+    session_repo: _AttendanceSessionRepo,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -482,7 +391,7 @@ async def test_member_cannot_generate_checkin_token(
 
 
 async def test_generate_token_for_nonexistent_session(
-    session_repo: StubSessionInstanceRepo,
+    session_repo: _AttendanceSessionRepo,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -502,8 +411,8 @@ async def test_generate_token_for_nonexistent_session(
 
 
 async def test_member_can_checkin_via_token(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -525,8 +434,8 @@ async def test_member_can_checkin_via_token(
 
 
 async def test_unauthenticated_token_checkin_returns_401(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -547,8 +456,8 @@ async def test_unauthenticated_token_checkin_returns_401(
 
 
 async def test_expired_token_returns_410(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     session = session_repo.seed(cancelled=False)
@@ -564,8 +473,8 @@ async def test_expired_token_returns_410(
 
 
 async def test_invalid_token_returns_401(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -584,8 +493,8 @@ async def test_invalid_token_returns_401(
 
 
 async def test_admin_can_list_session_attendance(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -609,8 +518,8 @@ async def test_admin_can_list_session_attendance(
 
 
 async def test_member_cannot_list_attendance(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
@@ -631,8 +540,8 @@ async def test_member_cannot_list_attendance(
 
 
 async def test_admin_mark_attended_returns_201(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -653,8 +562,8 @@ async def test_admin_mark_attended_returns_201(
 
 
 async def test_admin_mark_attended_nonexistent_session_returns_404(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -671,8 +580,8 @@ async def test_admin_mark_attended_nonexistent_session_returns_404(
 
 
 async def test_admin_mark_attended_missing_member_id_returns_422(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -689,8 +598,8 @@ async def test_admin_mark_attended_missing_member_id_returns_422(
 
 
 async def test_member_cannot_admin_mark_attended(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
@@ -712,8 +621,8 @@ async def test_member_cannot_admin_mark_attended(
 
 
 async def test_admin_remove_attendance_returns_204(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     await attendance_repo.admin_mark_attended(
@@ -732,8 +641,8 @@ async def test_admin_remove_attendance_returns_204(
 
 
 async def test_admin_remove_attendance_not_found_returns_404(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -749,8 +658,8 @@ async def test_admin_remove_attendance_not_found_returns_404(
 
 
 async def test_member_cannot_remove_attendance(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
@@ -771,8 +680,8 @@ async def test_member_cannot_remove_attendance(
 
 
 async def test_admin_add_visitor_returns_201(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -793,8 +702,8 @@ async def test_admin_add_visitor_returns_201(
 
 
 async def test_admin_add_visitor_nonexistent_session_returns_404(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
@@ -811,8 +720,8 @@ async def test_admin_add_visitor_nonexistent_session_returns_404(
 
 
 async def test_admin_add_visitor_missing_name_returns_422(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -829,8 +738,8 @@ async def test_admin_add_visitor_missing_name_returns_422(
 
 
 async def test_member_cannot_add_visitor(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
 
@@ -852,8 +761,8 @@ async def test_member_cannot_add_visitor(
 
 
 async def test_session_attendance_includes_visitors(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -879,8 +788,8 @@ async def test_session_attendance_includes_visitors(
 
 
 async def test_attendance_record_has_visitor_name_field(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     """Each record in the list exposes visitor_name (nullable) for the new AttendanceReadV2 shape."""
     session = session_repo.seed(cancelled=False)
@@ -907,7 +816,7 @@ async def test_attendance_record_has_visitor_name_field(
 
 
 async def test_admin_can_get_any_member_attendance_history(
-    attendance_repo: StubAttendanceRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = (
         _admin_override  # admin satisfies REQUIRE_MEMBER
@@ -934,7 +843,7 @@ async def test_admin_can_get_any_member_attendance_history(
 
 
 async def test_member_can_get_own_attendance_history(
-    attendance_repo: StubAttendanceRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     # Stub the member repo: _MEMBER.sub (user UUID) resolves to a member record
@@ -963,7 +872,7 @@ async def test_member_can_get_own_attendance_history(
 
 
 async def test_member_cannot_get_other_member_attendance_history(
-    attendance_repo: StubAttendanceRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _other_member_override
     # _OTHER_MEMBER's user_id resolves to a different member id, not _MEMBER.sub
@@ -994,20 +903,16 @@ async def test_unauthenticated_cannot_get_member_attendance_history() -> None:
 
 
 async def test_attendance_list_includes_display_name_for_member(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     """AC1+AC2: member records have display_name = member's full_name."""
     session = session_repo.seed(cancelled=False)
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
-    # Stub returns display_name when present in the dict
-    record = await attendance_repo.admin_mark_attended(
-        session["id"], "member-1", "admin-uuid"
-    )
-    # Patch the stored record with a display_name (simulating the JOIN result)
-    record["display_name"] = "Alice Kendo"
-    attendance_repo._store[-1] = record
+    # The name the SQL implementation's outer join against Member would resolve
+    attendance_repo.display_names["member-1"] = "Alice Kendo"
+    await attendance_repo.admin_mark_attended(session["id"], "member-1", "admin-uuid")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1021,8 +926,8 @@ async def test_attendance_list_includes_display_name_for_member(
 
 
 async def test_attendance_list_display_name_null_for_visitor(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     """AC3: visitor records have display_name = null."""
     session = session_repo.seed(cancelled=False)

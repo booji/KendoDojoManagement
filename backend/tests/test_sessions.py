@@ -1,7 +1,7 @@
 """
 Unit / integration tests for issue #4 — Session management.
 
-Uses StubRepository pattern — NO real DB. Dependencies are overridden via
+NO real DB: the shared in-memory fakes stand in. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
@@ -20,7 +20,6 @@ Updated for issue #174 — sessions (instance and template) now carry a
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 import pytest
@@ -33,6 +32,11 @@ from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
     get_session_type_repo,
+)
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -66,95 +70,6 @@ def _one_segment(type_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    """In-memory stand-in for a SessionType repository."""
-
-    def __init__(self, seed: bool = True) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        if seed:
-            seeded_id = str(uuid.uuid4())
-            self._store[seeded_id] = {"id": seeded_id, "name": "General Training"}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item["name"] == name:
-                return item
-        return None
-
-    async def add(self, name: str) -> dict[str, Any]:
-        existing = await self.get_by_name(name)
-        if existing:
-            raise ValueError(f"Session type '{name}' already exists")
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "name": name}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionTemplateRepo:
-    """In-memory stand-in for a SessionTemplate repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.pop(instance_id, None)
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -166,22 +81,22 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo(seed=True)
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository([{"name": "General Training"}])
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
@@ -273,7 +188,7 @@ async def test_admin_can_create_session_template(
     type_repo, template_repo, instance_repo
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     payload = {
         "title": "Tuesday Evening Keiko",
         "start_date": "2026-05-06",
@@ -336,7 +251,7 @@ async def test_generate_creates_instances_up_to_horizon(
     type_repo, template_repo, instance_repo
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Create a template first. end_date is set just past start_date so
     # creation only auto-generates the first occurrence, leaving the
@@ -398,7 +313,7 @@ async def test_generate_nonexistent_template_returns_404(
 
 async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     payload = {
         "title": "Summer Session",
         "date": "2026-06-15",
@@ -462,7 +377,7 @@ async def test_admin_can_cancel_session_instance(
     type_repo, template_repo, instance_repo
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Create an ad-hoc session to cancel
     create_payload = {
@@ -493,7 +408,7 @@ async def test_cancelling_instance_does_not_affect_template(
 ) -> None:
     """After cancelling an instance, the template still exists and is unmodified."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Create template. end_date is just past start_date so creation only
     # auto-generates the first occurrence, leaving the /generate call below
@@ -556,7 +471,7 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
 
     # Create an instance first using admin override
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -602,7 +517,7 @@ async def test_get_sessions_returns_upcoming_for_member(
         {
             "title": "Future Session",
             "date": future_date,
-            "segments": [_one_segment(list(type_repo._store.keys())[0])],
+            "segments": [_one_segment((await type_repo.list())[0]["id"])],
         }
     )
     async with AsyncClient(
@@ -625,7 +540,7 @@ async def test_get_sessions_unauthenticated_returns_401(instance_repo) -> None:
 
 async def test_get_sessions_excludes_cancelled(type_repo, instance_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
 
     # Add a future session then cancel it
     inst = await instance_repo.add(

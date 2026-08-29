@@ -7,14 +7,14 @@ Acceptance criteria:
   2. Deleting an unreferenced session type succeeds (HTTP 204 or 200).
   3. Covers both the referenced and unreferenced cases.
 
-Tests (unit/integration — StubRepository, no DB):
+Tests (unit/integration — in-memory fakes, no DB):
   - DELETE /session-types/{id} with an unreferenced type succeeds (204/200)
   - DELETE /session-types/{id} with a type referenced by a template segment returns 409
   - DELETE /session-types/{id} with a type referenced by an instance segment returns 409
   - DELETE /session-types/{id} for a non-existent type returns 404
   - DELETE /session-types/{id} for a non-admin returns 403
 
-Uses StubRepository pattern — NO real DB. Dependencies are overridden via
+NO real DB: the shared in-memory fakes stand in. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 """
 
@@ -35,6 +35,11 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -53,135 +58,6 @@ def _admin_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    """In-memory stand-in for AbstractSessionTypeRepository.
-
-    Adds a delete(type_id) method that the new DELETE endpoint will call.
-    Returning None signals the type was not found.
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def add(self, name: str) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "name": name, "colour": None}
-        self._store[new_id] = record
-        return record
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        for record in self._store.values():
-            if record["name"] == name:
-                return record
-        return None
-
-    async def get(self, type_id: str) -> dict[str, Any] | None:
-        return self._store.get(type_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def update(self, type_id: str, colour: str | None) -> dict[str, Any] | None:
-        record = self._store.get(type_id)
-        if record is None:
-            return None
-        record["colour"] = colour
-        return record
-
-    async def delete(self, type_id: str) -> dict[str, Any] | None:
-        """Remove the type and return the deleted record, or None if not found."""
-        return self._store.pop(type_id, None)
-
-
-class StubSessionTemplateRepo:
-    """Minimal in-memory template repo that exposes segments with type_ids."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "is_active": True, **data}
-        self._store[new_id] = record
-        return record
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def update(
-        self, template_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def deactivate(self, template_id: str) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record["is_active"] = False
-        return record
-
-
-class StubSessionInstanceRepo:
-    """Minimal in-memory instance repo that exposes segments with type_ids."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def list_upcoming(self, as_of=None) -> list[dict[str, Any]]:
-        return [r for r in self._store.values() if not r.get("cancelled")]
-
-    async def list_in_range(self, from_date, to_date) -> list[dict[str, Any]]:
-        return []
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def cancel_future_for_template(
-        self, template_id: str, as_of_date
-    ) -> list[dict[str, Any]]:
-        return []
-
-    async def delete_future_for_template(self, template_id: str, as_of_date) -> int:
-        return 0
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -193,22 +69,22 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
@@ -219,13 +95,13 @@ def instance_repo() -> StubSessionInstanceRepo:
 
 
 async def _seed_type(
-    repo: StubSessionTypeRepo, *, name: str = "Keiko"
+    repo: InMemorySessionTypeRepository, *, name: str = "Keiko"
 ) -> dict[str, Any]:
     return await repo.add(name)
 
 
 async def _seed_template_with_type(
-    repo: StubSessionTemplateRepo, type_id: str
+    repo: InMemorySessionTemplateRepository, type_id: str
 ) -> dict[str, Any]:
     """Add a template with a segment that references type_id."""
     return await repo.add(
@@ -248,7 +124,7 @@ async def _seed_template_with_type(
 
 
 async def _seed_instance_with_type(
-    repo: StubSessionInstanceRepo, type_id: str
+    repo: InMemorySessionInstanceRepository, type_id: str
 ) -> dict[str, Any]:
     """Add an instance with a segment that references type_id."""
     return await repo.add(
@@ -293,9 +169,9 @@ async def test_delete_unreferenced_session_type_succeeds(
     ), f"Expected 200 or 204 for unreferenced type, got {response.status_code}"
     # Type must be gone from the store
     remaining = await type_repo.list()
-    assert all(
-        r["id"] != st["id"] for r in remaining
-    ), "Deleted type must not appear in subsequent list"
+    assert all(r["id"] != st["id"] for r in remaining), (
+        "Deleted type must not appear in subsequent list"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -316,17 +192,17 @@ async def test_delete_session_type_referenced_by_template_segment_returns_409(
     ) as c:
         response = await c.delete(f"/session-types/{st['id']}")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 when type is referenced by a template segment, got {response.status_code}"
+    assert response.status_code == 409, (
+        f"Expected 409 when type is referenced by a template segment, got {response.status_code}"
+    )
     body = response.json()
     assert "detail" in body, "409 response must include a 'detail' field"
     assert body["detail"], "409 detail message must not be empty"
     # Type must NOT have been deleted
     remaining = await type_repo.list()
-    assert any(
-        r["id"] == st["id"] for r in remaining
-    ), "Type referenced by a template segment must not be deleted"
+    assert any(r["id"] == st["id"] for r in remaining), (
+        "Type referenced by a template segment must not be deleted"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -347,17 +223,17 @@ async def test_delete_session_type_referenced_by_instance_segment_returns_409(
     ) as c:
         response = await c.delete(f"/session-types/{st['id']}")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 when type is referenced by an instance segment, got {response.status_code}"
+    assert response.status_code == 409, (
+        f"Expected 409 when type is referenced by an instance segment, got {response.status_code}"
+    )
     body = response.json()
     assert "detail" in body, "409 response must include a 'detail' field"
     assert body["detail"], "409 detail message must not be empty"
     # Type must NOT have been deleted
     remaining = await type_repo.list()
-    assert any(
-        r["id"] == st["id"] for r in remaining
-    ), "Type referenced by an instance segment must not be deleted"
+    assert any(r["id"] == st["id"] for r in remaining), (
+        "Type referenced by an instance segment must not be deleted"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -377,9 +253,9 @@ async def test_delete_nonexistent_session_type_returns_404(
     ) as c:
         response = await c.delete(f"/session-types/{fake_id}")
 
-    assert (
-        response.status_code == 404
-    ), f"Expected 404 for non-existent type, got {response.status_code}"
+    assert response.status_code == 404, (
+        f"Expected 404 for non-existent type, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +281,6 @@ async def test_delete_session_type_forbidden_for_member(
             cookies={"access_token": member_token},
         )
 
-    assert (
-        response.status_code == 403
-    ), f"Expected 403 for non-admin DELETE, got {response.status_code}"
+    assert response.status_code == 403, (
+        f"Expected 403 for non-admin DELETE, got {response.status_code}"
+    )

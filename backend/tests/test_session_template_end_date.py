@@ -17,7 +17,7 @@ Acceptance criteria covered:
   6. Alembic migration adds end_date, backfilling existing rows to
      today + 6 months (structural/static test — no DB).
 
-Uses the StubRepository pattern — NO real DB.
+NO real DB: the shared in-memory fakes stand in for the repositories.
 """
 
 from __future__ import annotations
@@ -38,6 +38,11 @@ from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
     get_session_type_repo,
+)
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -65,193 +70,6 @@ def _member_cookie() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        seeded_id = str(uuid.uuid4())
-        self._store[seeded_id] = {"id": seeded_id, "name": "General Training"}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        return next((r for r in self._store.values() if r["name"] == name), None)
-
-    async def get(self, type_id: str) -> dict[str, Any] | None:
-        return self._store.get(type_id)
-
-
-class StubSessionTemplateRepo:
-    """In-memory stand-in for AbstractSessionTemplateRepository.
-
-    Raises if `list()` is invoked when `forbid_list` is set — used to assert
-    GET /sessions no longer loops over templates (AC4).
-    """
-
-    def __init__(self, forbid_list: bool = False) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        self.forbid_list = forbid_list
-        self.list_calls = 0
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "is_active": True, **data}
-        self._store[new_id] = record
-        return record
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        self.list_calls += 1
-        if self.forbid_list:
-            raise AssertionError(
-                "template_repo.list() must not be called by GET /sessions (AC4)"
-            )
-        return list(self._store.values())
-
-    async def update(
-        self, template_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def deactivate(self, template_id: str) -> dict[str, Any] | None:
-        record = self._store.get(template_id)
-        if record is None:
-            return None
-        record["is_active"] = False
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for AbstractSessionInstanceRepository.
-
-    Tracks write-call counts so tests can assert "no writes happened" (AC4).
-    `forbid_writes`, when set, makes add/update/cancel/delete raise instead of
-    merely counting — used for an unambiguous no-writes-on-GET assertion.
-    """
-
-    def __init__(self, forbid_writes: bool = False) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        self.forbid_writes = forbid_writes
-        self.add_calls = 0
-        self.update_calls = 0
-        self.delete_calls = 0
-
-    def _maybe_forbid(self, what: str) -> None:
-        if self.forbid_writes:
-            raise AssertionError(f"unexpected write via {what}() during GET /sessions")
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        self.add_calls += 1
-        self._maybe_forbid("add")
-        new_id = str(uuid.uuid4())
-        record = {
-            "id": new_id,
-            "cancelled": False,
-            "notes": None,
-            "location": None,
-            "info": None,
-            "coach_notes": None,
-            "checkin_url": None,
-            **data,
-        }
-        self._store[new_id] = record
-        return record
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            r
-            for r in self._store.values()
-            if not r.get("cancelled", False) and date.fromisoformat(r["date"]) >= now
-        ]
-
-    async def list_in_range(
-        self, from_date: date, to_date: date
-    ) -> list[dict[str, Any]]:
-        return [
-            r
-            for r in self._store.values()
-            if from_date <= date.fromisoformat(r["date"]) <= to_date
-        ]
-
-    async def latest_date_for_template(self, template_id: str) -> date | None:
-        # Present here (mirroring the pre-#258 SQL repo) so
-        # test_get_sessions_performs_no_writes exercises the real old
-        # rolling-extension code path today. AC4 requires this method be
-        # deleted from the repository *protocol*; see
-        # test_latest_date_for_template_removed_from_protocol.
-        return None
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        self.update_calls += 1
-        self._maybe_forbid("cancel")
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        self.update_calls += 1
-        self._maybe_forbid("update")
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
-        self.delete_calls += 1
-        self._maybe_forbid("delete")
-        return self._store.pop(instance_id, None)
-
-    async def cancel_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> list[dict[str, Any]]:
-        rows = [
-            r
-            for r in self._store.values()
-            if r.get("template_id") == template_id
-            and date.fromisoformat(r["date"]) >= as_of_date
-            and not r.get("cancelled", False)
-        ]
-        for r in rows:
-            r["cancelled"] = True
-        return rows
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        ids = [
-            r["id"]
-            for r in self._store.values()
-            if r.get("template_id") == template_id
-            and date.fromisoformat(r["date"]) >= as_of_date
-        ]
-        for i in ids:
-            del self._store[i]
-        return len(ids)
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -263,22 +81,22 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository([{"name": "General Training"}])
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
@@ -329,7 +147,7 @@ def _add_months(d: date, months: int) -> date:
 
 
 async def test_create_template_requires_end_date(type_repo) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     payload = {
         "title": "No End Date",
         "start_date": "2026-01-05",
@@ -342,7 +160,7 @@ async def test_create_template_requires_end_date(type_repo) -> None:
 
 
 async def test_create_template_end_date_must_be_after_start_date(type_repo) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     payload = {
         "title": "Backwards range",
         "start_date": "2026-01-05",
@@ -358,7 +176,7 @@ async def test_create_template_end_date_must_be_after_start_date(type_repo) -> N
 async def test_create_template_end_date_beyond_six_month_cap_rejected(
     type_repo,
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     start = date(2026, 1, 5)
     too_far = _add_months(start, 6) + timedelta(days=1)
     payload = {
@@ -376,7 +194,7 @@ async def test_create_template_end_date_beyond_six_month_cap_rejected(
 async def test_create_template_end_date_exactly_six_months_out_accepted(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     start = date(2026, 1, 5)
     boundary = _add_months(start, 6)
     payload = {
@@ -400,7 +218,7 @@ async def test_create_template_end_date_exactly_six_months_out_accepted(
 async def test_create_template_generates_full_range_instances(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     start = date(2026, 1, 5)  # Monday
     end = start + timedelta(weeks=4)  # 5 Mondays: 0,1,2,3,4 weeks out
     payload = {
@@ -417,13 +235,13 @@ async def test_create_template_generates_full_range_instances(
     template_id = response.json()["id"]
 
     generated = [
-        r for r in instance_repo._store.values() if r.get("template_id") == template_id
+        r for r in await instance_repo.list() if r.get("template_id") == template_id
     ]
     generated_dates = sorted(r["date"] for r in generated)
     expected_dates = [(start + timedelta(weeks=w)).isoformat() for w in range(5)]
-    assert (
-        generated_dates == expected_dates
-    ), f"expected instances on {expected_dates}, got {generated_dates}"
+    assert generated_dates == expected_dates, (
+        f"expected instances on {expected_dates}, got {generated_dates}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +252,7 @@ async def test_create_template_generates_full_range_instances(
 async def test_update_template_delta_add_remove_preserve(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     start = date(2026, 2, 2)  # Monday
     end = start + timedelta(weeks=4)
     create_payload = {
@@ -453,7 +271,7 @@ async def test_update_template_delta_add_remove_preserve(
         mondays = sorted(
             (
                 r
-                for r in instance_repo._store.values()
+                for r in await instance_repo.list()
                 if r.get("template_id") == template_id
             ),
             key=lambda r: r["date"],
@@ -482,7 +300,7 @@ async def test_update_template_delta_add_remove_preserve(
         assert patch_resp.status_code == 200, patch_resp.text
 
     all_after_add = [
-        r for r in instance_repo._store.values() if r.get("template_id") == template_id
+        r for r in await instance_repo.list() if r.get("template_id") == template_id
     ]
     thursdays_after_add = [
         r for r in all_after_add if date.fromisoformat(r["date"]).weekday() == 3
@@ -494,9 +312,9 @@ async def test_update_template_delta_add_remove_preserve(
         for r in all_after_add
         if date.fromisoformat(r["date"]).weekday() == 0
     }
-    assert (
-        mondays_after_add[cancelled_target["date"]]["cancelled"] is True
-    ), "cancelled Monday instance must not be clobbered by the delta regen"
+    assert mondays_after_add[cancelled_target["date"]]["cancelled"] is True, (
+        "cancelled Monday instance must not be clobbered by the delta regen"
+    )
     assert (
         mondays_after_add[edited_target["date"]]["title"] == "Individually Edited Keiko"
     ), "individually edited Monday instance must not be clobbered by the delta regen"
@@ -511,14 +329,14 @@ async def test_update_template_delta_add_remove_preserve(
         assert patch_resp2.status_code == 200, patch_resp2.text
 
     all_after_remove = [
-        r for r in instance_repo._store.values() if r.get("template_id") == template_id
+        r for r in await instance_repo.list() if r.get("template_id") == template_id
     ]
     thursdays_after_remove = [
         r for r in all_after_remove if date.fromisoformat(r["date"]).weekday() == 3
     ]
-    assert (
-        len(thursdays_after_remove) == 0
-    ), "Thursdays no longer covered by recurrence must be removed"
+    assert len(thursdays_after_remove) == 0, (
+        "Thursdays no longer covered by recurrence must be removed"
+    )
 
     mondays_after_remove = {
         r["date"]: r
@@ -538,25 +356,63 @@ async def test_update_template_delta_add_remove_preserve(
 # ---------------------------------------------------------------------------
 
 
+class _CountingTemplateRepo(InMemorySessionTemplateRepository):
+    """The template fake, counting list() calls (AC4)."""
+
+    def __init__(self, records: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(records)
+        self.list_calls = 0
+
+    async def list(self) -> list[dict[str, Any]]:
+        self.list_calls += 1
+        return await super().list()
+
+
+class _CountingInstanceRepo(InMemorySessionInstanceRepository):
+    """The instance fake, counting every write (AC4)."""
+
+    def __init__(self, records: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(records)
+        self.add_calls = 0
+        self.update_calls = 0
+        self.delete_calls = 0
+
+    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+        self.add_calls += 1
+        return await super().add(data)
+
+    async def update(
+        self, instance_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        self.update_calls += 1
+        return await super().update(instance_id, data)
+
+    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+        self.delete_calls += 1
+        return await super().delete(instance_id)
+
+
 async def test_get_sessions_performs_no_writes(type_repo) -> None:
-    template_repo = StubSessionTemplateRepo(forbid_list=True)
-    instance_repo = StubSessionInstanceRepo(forbid_writes=True)
+    # Seeded through the constructor rather than counted as a write, so a
+    # stale rolling-extension code path — if one were still present — has a
+    # template to iterate over and attempt to write against.
+    template_id = str(uuid.uuid4())
+    template_repo = _CountingTemplateRepo(
+        [
+            {
+                "id": template_id,
+                "title": "Weekly Keiko",
+                "start_date": (date.today() - timedelta(days=7)).isoformat(),
+                "recurrence_days": [date.today().weekday()],
+                "interval_weeks": 1,
+                "segments": [],
+                "is_active": True,
+            }
+        ]
+    )
+    instance_repo = _CountingInstanceRepo()
     app.dependency_overrides[get_session_template_repo] = lambda: template_repo
     app.dependency_overrides[get_session_instance_repo] = lambda: instance_repo
-
-    # Seed a template directly into the store (bypassing forbid_list, which
-    # only guards .list()) so a stale rolling-extension code path — if still
-    # present — has something to iterate over and attempt to write.
-    template_id = str(uuid.uuid4())
-    template_repo._store[template_id] = {
-        "id": template_id,
-        "title": "Weekly Keiko",
-        "start_date": (date.today() - timedelta(days=7)).isoformat(),
-        "recurrence_days": [date.today().weekday()],
-        "interval_weeks": 1,
-        "segments": [],
-        "is_active": True,
-    }
 
     async with _client() as c:
         response = await c.get("/sessions")
@@ -565,9 +421,9 @@ async def test_get_sessions_performs_no_writes(type_repo) -> None:
     assert instance_repo.add_calls == 0, "GET /sessions must not add instances"
     assert instance_repo.update_calls == 0, "GET /sessions must not update instances"
     assert instance_repo.delete_calls == 0, "GET /sessions must not delete instances"
-    assert (
-        template_repo.list_calls == 0
-    ), "GET /sessions must not loop over templates (rolling extension is gone)"
+    assert template_repo.list_calls == 0, (
+        "GET /sessions must not loop over templates (rolling extension is gone)"
+    )
 
 
 def test_needs_rolling_extension_removed_from_service() -> None:
@@ -575,9 +431,9 @@ def test_needs_rolling_extension_removed_from_service() -> None:
     (AC4) — its presence signals the rolling-extension code path still exists."""
     import app.sessions.service as service_module
 
-    assert not hasattr(
-        service_module, "needs_rolling_extension"
-    ), "needs_rolling_extension must be removed per AC4"
+    assert not hasattr(service_module, "needs_rolling_extension"), (
+        "needs_rolling_extension must be removed per AC4"
+    )
 
 
 def test_latest_date_for_template_removed_from_protocol() -> None:
@@ -585,9 +441,9 @@ def test_latest_date_for_template_removed_from_protocol() -> None:
     AbstractSessionInstanceRepository (AC4)."""
     from app.sessions.repository import AbstractSessionInstanceRepository
 
-    assert not hasattr(
-        AbstractSessionInstanceRepository, "latest_date_for_template"
-    ), "latest_date_for_template must be removed from the repository protocol per AC4"
+    assert not hasattr(AbstractSessionInstanceRepository, "latest_date_for_template"), (
+        "latest_date_for_template must be removed from the repository protocol per AC4"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -614,7 +470,7 @@ async def _create_template_for_extend(
 async def test_extend_bumps_end_date_and_adds_only_new_dates(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     today = date.today()
     start = today - timedelta(days=14)
     initial_end = today + timedelta(days=14)
@@ -625,7 +481,7 @@ async def test_extend_bumps_end_date_and_adds_only_new_dates(
         before_count = len(
             [
                 r
-                for r in instance_repo._store.values()
+                for r in await instance_repo.list()
                 if r.get("template_id") == template_id
             ]
         )
@@ -639,16 +495,16 @@ async def test_extend_bumps_end_date_and_adds_only_new_dates(
     assert extend_resp.json()["end_date"] == new_end.isoformat()
 
     after = [
-        r for r in instance_repo._store.values() if r.get("template_id") == template_id
+        r for r in await instance_repo.list() if r.get("template_id") == template_id
     ]
     assert len(after) > before_count, "extend must generate newly-covered dates"
-    assert any(
-        date.fromisoformat(r["date"]) > initial_end for r in after
-    ), "extend must generate instances beyond the old end_date"
+    assert any(date.fromisoformat(r["date"]) > initial_end for r in after), (
+        "extend must generate instances beyond the old end_date"
+    )
 
 
 async def test_extend_idempotent(type_repo, template_repo, instance_repo) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     today = date.today()
     start = today - timedelta(days=14)
     initial_end = today + timedelta(days=14)
@@ -666,7 +522,7 @@ async def test_extend_idempotent(type_repo, template_repo, instance_repo) -> Non
         count_after_first = len(
             [
                 r
-                for r in instance_repo._store.values()
+                for r in await instance_repo.list()
                 if r.get("template_id") == template_id
             ]
         )
@@ -679,20 +535,20 @@ async def test_extend_idempotent(type_repo, template_repo, instance_repo) -> Non
         count_after_second = len(
             [
                 r
-                for r in instance_repo._store.values()
+                for r in await instance_repo.list()
                 if r.get("template_id") == template_id
             ]
         )
 
-    assert (
-        count_after_second == count_after_first
-    ), "calling extend twice with the same target end_date must add nothing new"
+    assert count_after_second == count_after_first, (
+        "calling extend twice with the same target end_date must add nothing new"
+    )
 
 
 async def test_extend_rejects_beyond_six_month_cap_from_today(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     today = date.today()
     start = today - timedelta(days=14)
     initial_end = today + timedelta(days=14)
@@ -710,7 +566,7 @@ async def test_extend_rejects_beyond_six_month_cap_from_today(
 async def test_extend_rejects_end_date_earlier_than_current(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     today = date.today()
     start = today - timedelta(days=14)
     initial_end = today + timedelta(days=30)
@@ -740,15 +596,15 @@ async def test_extend_unknown_template_404(
     # path also happens to be a 404). Require the endpoint's own
     # template-not-found message, matching the convention used everywhere
     # else in this router (e.g. "Template not found").
-    assert (
-        "template" in resp.json().get("detail", "").lower()
-    ), f"expected a template-not-found detail message, got {resp.json()!r}"
+    assert "template" in resp.json().get("detail", "").lower(), (
+        f"expected a template-not-found detail message, got {resp.json()!r}"
+    )
 
 
 async def test_extend_forbidden_for_non_admin(
     type_repo, template_repo, instance_repo
 ) -> None:
-    type_id = list(type_repo._store.keys())[0]
+    type_id = (await type_repo.list())[0]["id"]
     today = date.today()
     start = today - timedelta(days=14)
     initial_end = today + timedelta(days=14)
@@ -828,7 +684,7 @@ def test_migration_backfills_existing_rows_to_today_plus_six_months() -> None:
     # (e.g. via op.execute with a date/interval expression), not a fixed
     # server_default literal — a static 6-month-out date differs per row's
     # migration run date, so a plain server_default cannot express it.
-    assert (
-        "op.execute" in text
-    ), "backfilling end_date to today + 6 months requires a data migration step (op.execute)"
+    assert "op.execute" in text, (
+        "backfilling end_date to today + 6 months requires a data migration step (op.execute)"
+    )
     assert "6" in text, "backfill expression must reference the 6-month offset"

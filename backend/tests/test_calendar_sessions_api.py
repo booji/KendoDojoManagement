@@ -10,7 +10,6 @@ Uses StubRepository pattern — NO real DB.
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 import pytest
@@ -23,6 +22,11 @@ from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
     get_session_type_repo,
+)
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,94 +50,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        _id = str(uuid.uuid4())
-        self._store[_id] = {"id": _id, "name": "General Training"}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        return next((v for v in self._store.values() if v["name"] == name), None)
-
-    async def add(self, name: str) -> dict[str, Any]:
-        existing = await self.get_by_name(name)
-        if existing:
-            raise ValueError(f"Session type '{name}' already exists")
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "name": name}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionTemplateRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return self._store.get(template_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in that supports list_in_range for calendar queries."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def list_in_range(
-        self, from_date: date, to_date: date
-    ) -> list[dict[str, Any]]:
-        """Return ALL sessions (including cancelled) in the given date range."""
-        return [
-            s
-            for s in self._store.values()
-            if from_date <= date.fromisoformat(s["date"]) <= to_date
-        ]
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record["cancelled"] = True
-        return record
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -145,35 +61,35 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def template_repo() -> StubSessionTemplateRepo:
-    repo = StubSessionTemplateRepo()
+def template_repo() -> InMemorySessionTemplateRepository:
+    repo = InMemorySessionTemplateRepository()
     app.dependency_overrides[get_session_template_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 # ---------------------------------------------------------------------------
-# Helper: seed a session instance directly
+# Helper: seed a session instance
 # ---------------------------------------------------------------------------
 
 _TYPE_ID = str(uuid.uuid4())
 
 
 async def _seed_session(
-    repo: StubSessionInstanceRepo,
+    repo: InMemorySessionInstanceRepository,
     session_date: str,
     *,
     cancelled: bool = False,
@@ -192,8 +108,8 @@ async def _seed_session(
     }
     record = await repo.add(data)
     if cancelled:
-        await repo.cancel(record["id"])
-        record = repo._store[record["id"]]
+        record = await repo.cancel(record["id"])
+        assert record is not None
     return record
 
 
@@ -224,9 +140,9 @@ async def test_range_query_returns_sessions_within_date_range(
     ids = [s["id"] for s in sessions]
     assert inside["id"] in ids
     # outside-range sessions must not appear
-    assert all(
-        "2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions
-    ), f"Some sessions outside range: {[s['date'] for s in sessions]}"
+    assert all("2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions), (
+        f"Some sessions outside range: {[s['date'] for s in sessions]}"
+    )
 
 
 async def test_range_query_response_has_required_fields(

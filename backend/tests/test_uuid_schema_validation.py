@@ -38,6 +38,12 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Shared auth overrides
@@ -99,84 +105,6 @@ class _NoOpGradeRepo:
         return []
 
 
-class _NoOpSessionInstanceRepo:
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        return {}
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        return None
-
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def list(self) -> list[dict[str, Any]]:
-        return []
-
-    async def list_upcoming(self) -> list[dict[str, Any]]:
-        return []
-
-
-class _NoOpSessionTemplateRepo:
-    async def get(self, template_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        return {}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return []
-
-
-class _NoOpSessionTypeRepo:
-    async def get(self, type_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def list(self) -> list[dict[str, Any]]:
-        return []
-
-    async def add(self, name: str) -> dict[str, Any]:
-        return {}
-
-    async def update(self, type_id: str, colour: str) -> dict[str, Any] | None:
-        return None
-
-
-class _NoOpAttendanceRepo:
-    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
-        return []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        return {}
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        return None
-
-    async def admin_mark_attended(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        return {}
-
-    async def remove_attendance(self, session_id: str, member_id: str) -> bool:
-        return False
-
-    async def add_visitor(
-        self, session_id: str, visitor_name: str, recorded_by: str
-    ) -> dict[str, Any]:
-        return {}
-
-    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
-        return []
-
-
 class _NoOpCheckinTokenRepo:
     async def create(self, session_id: str, expires_at: Any) -> dict[str, Any]:
         return {}
@@ -215,16 +143,20 @@ def _stub_all_repos():
     app.dependency_overrides[get_uow] = lambda: _NoOpUoW()
     app.dependency_overrides[get_member_repo] = lambda: _NoOpMemberRepo()
     app.dependency_overrides[get_grade_repo] = lambda: _NoOpGradeRepo()
-    app.dependency_overrides[get_session_instance_repo] = (
-        lambda: _NoOpSessionInstanceRepo()
+    app.dependency_overrides[get_session_instance_repo] = lambda: (
+        InMemorySessionInstanceRepository()
     )
-    app.dependency_overrides[get_session_template_repo] = (
-        lambda: _NoOpSessionTemplateRepo()
+    app.dependency_overrides[get_session_template_repo] = lambda: (
+        InMemorySessionTemplateRepository()
     )
-    app.dependency_overrides[get_session_type_repo] = lambda: _NoOpSessionTypeRepo()
-    app.dependency_overrides[get_attendance_repo] = lambda: _NoOpAttendanceRepo()
-    app.dependency_overrides[get_att_session_instance_repo] = (
-        lambda: _NoOpSessionInstanceRepo()
+    app.dependency_overrides[get_session_type_repo] = lambda: (
+        InMemorySessionTypeRepository()
+    )
+    app.dependency_overrides[get_attendance_repo] = lambda: (
+        InMemoryAttendanceRepository()
+    )
+    app.dependency_overrides[get_att_session_instance_repo] = lambda: (
+        InMemorySessionInstanceRepository()
     )
     app.dependency_overrides[get_checkin_token_repo] = lambda: _NoOpCheckinTokenRepo()
     yield

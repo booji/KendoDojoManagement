@@ -40,6 +40,10 @@ from app.attendance.dependencies import (
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,9 +97,9 @@ async def test_created_token_plaintext_length_is_at_least_43(
     expires_at = datetime.now(UTC) + timedelta(hours=1)
     result = await repo.create(session_id, expires_at)
     plaintext = result["token"]
-    assert (
-        len(plaintext) >= 43
-    ), f"Expected plaintext token length ≥ 43 (token_urlsafe(32)), got {len(plaintext)}"
+    assert len(plaintext) >= 43, (
+        f"Expected plaintext token length ≥ 43 (token_urlsafe(32)), got {len(plaintext)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +125,9 @@ async def test_stored_value_is_not_plaintext(
 
     await db_session.flush()
     row = (await db_session.execute(select(CheckinToken))).scalar_one()
-    assert (
-        row.token != plaintext
-    ), "checkin_tokens.token equals the plaintext — token is NOT hashed"
+    assert row.token != plaintext, (
+        "checkin_tokens.token equals the plaintext — token is NOT hashed"
+    )
 
 
 @pytest.mark.asyncio
@@ -147,12 +151,12 @@ async def test_stored_value_is_bcrypt_hash(
     row = (await db_session.execute(select(CheckinToken))).scalar_one()
     stored = row.token
 
-    assert stored.startswith(
-        "$2b$"
-    ), f"Stored value doesn't look like a bcrypt hash: {stored[:20]!r}"
-    assert _bcrypt.checkpw(
-        plaintext.encode(), stored.encode()
-    ), "bcrypt.checkpw returned False — stored hash doesn't verify the returned plaintext"
+    assert stored.startswith("$2b$"), (
+        f"Stored value doesn't look like a bcrypt hash: {stored[:20]!r}"
+    )
+    assert _bcrypt.checkpw(plaintext.encode(), stored.encode()), (
+        "bcrypt.checkpw returned False — stored hash doesn't verify the returned plaintext"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -218,9 +222,9 @@ async def test_used_at_is_none_before_redemption(
     result = await repo.create(session_id, datetime.now(UTC) + timedelta(hours=1))
 
     assert "used_at" in result, "create() must return a 'used_at' field"
-    assert (
-        result["used_at"] is None
-    ), f"used_at should be None before any redemption, got {result['used_at']!r}"
+    assert result["used_at"] is None, (
+        f"used_at should be None before any redemption, got {result['used_at']!r}"
+    )
 
 
 @pytest.mark.asyncio
@@ -238,9 +242,9 @@ async def test_used_at_is_set_after_first_redemption(
     await db_session.flush()
 
     redeemed = await repo.redeem(plaintext)
-    assert (
-        redeemed["used_at"] is not None
-    ), "used_at should be set to a datetime after first successful redemption"
+    assert redeemed["used_at"] is not None, (
+        "used_at should be set to a datetime after first successful redemption"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -276,77 +280,13 @@ async def test_second_redemption_raises_conflict(
 # ---------------------------------------------------------------------------
 
 
-class _StubSessionInstanceRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+class _TokenSessionRepo(InMemorySessionInstanceRepository):
+    """The session instance fake, seeding a session on a fixed future date."""
 
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    def seed(self, cancelled: bool = False) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "date": "2099-06-01", "cancelled": cancelled}
-        self._store[new_id] = record
-        return record
-
-
-class _StubAttendanceRepo:
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
+    def seed(  # type: ignore[override]
+        self, cancelled: bool = False
     ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "visitor_name": None,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r["session_id"] == session_id]
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
-
-    async def admin_mark_attended(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        return await self.check_in(session_id, member_id, recorded_by)
-
-    async def remove_attendance(self, session_id: str, member_id: str) -> bool:
-        for i, r in enumerate(self._store):
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                self._store.pop(i)
-                return True
-        return False
-
-    async def add_visitor(
-        self, session_id: str, visitor_name: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": None,
-            "visitor_name": visitor_name,
-            "checked_in_at": datetime.now(UTC).isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r.get("member_id") == member_id]
+        return super().seed(date="2099-06-01", cancelled=cancelled)
 
 
 class _HashingStubCheckinTokenRepo:
@@ -430,15 +370,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def http_session_repo() -> _StubSessionInstanceRepo:
-    repo = _StubSessionInstanceRepo()
+def http_session_repo() -> _TokenSessionRepo:
+    repo = _TokenSessionRepo()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def http_attendance_repo() -> _StubAttendanceRepo:
-    repo = _StubAttendanceRepo()
+def http_attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -456,8 +396,8 @@ def http_token_repo() -> _HashingStubCheckinTokenRepo:
 
 
 async def test_http_checkin_via_valid_token_returns_200(
-    http_session_repo: _StubSessionInstanceRepo,
-    http_attendance_repo: _StubAttendanceRepo,
+    http_session_repo: _TokenSessionRepo,
+    http_attendance_repo: InMemoryAttendanceRepository,
     http_token_repo: _HashingStubCheckinTokenRepo,
 ) -> None:
     """POST /checkin/{token} with a valid plaintext token → 200."""
@@ -484,8 +424,8 @@ async def test_http_checkin_via_valid_token_returns_200(
 
 
 async def test_http_checkin_via_wrong_token_returns_401(
-    http_session_repo: _StubSessionInstanceRepo,
-    http_attendance_repo: _StubAttendanceRepo,
+    http_session_repo: _TokenSessionRepo,
+    http_attendance_repo: InMemoryAttendanceRepository,
     http_token_repo: _HashingStubCheckinTokenRepo,
 ) -> None:
     """POST /checkin/{token} with wrong plaintext → 404."""
@@ -499,9 +439,9 @@ async def test_http_checkin_via_wrong_token_returns_401(
     ) as c:
         response = await c.post("/checkin/wrong-plaintext-token-that-wont-match")
 
-    assert (
-        response.status_code == 404
-    ), f"Expected 404 for a wrong token, got {response.status_code}"
+    assert response.status_code == 404, (
+        f"Expected 404 for a wrong token, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -510,8 +450,8 @@ async def test_http_checkin_via_wrong_token_returns_401(
 
 
 async def test_http_second_checkin_via_same_token_returns_409(
-    http_session_repo: _StubSessionInstanceRepo,
-    http_attendance_repo: _StubAttendanceRepo,
+    http_session_repo: _TokenSessionRepo,
+    http_attendance_repo: InMemoryAttendanceRepository,
     http_token_repo: _HashingStubCheckinTokenRepo,
 ) -> None:
     """POST /checkin/{token} second time with same token → 409.
@@ -542,9 +482,9 @@ async def test_http_second_checkin_via_same_token_returns_409(
         app.dependency_overrides[REQUIRE_MEMBER] = lambda: _member_b
         second = await c.post(f"/checkin/{plaintext}")
 
-    assert (
-        first.status_code == 200
-    ), f"First redemption should be 200, got {first.status_code}"
+    assert first.status_code == 200, (
+        f"First redemption should be 200, got {first.status_code}"
+    )
     assert second.status_code == 409, (
         f"Second redemption (different member) should be 409 due to used_at, "
         f"got {second.status_code}"
