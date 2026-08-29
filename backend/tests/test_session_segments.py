@@ -19,17 +19,13 @@ Acceptance criteria exercised here:
      segment, and the read response carries the derived envelope time plus the
      segment with its ordered type_ids
 
-Uses StubRepository pattern — NO real DB. This exercises the route layer,
+NO real DB: the shared in-memory fakes stand in. This exercises the route layer,
 which does not yet support segments — so these tests are expected to fail
 (422/AssertionError) until the feature is implemented. They MUST NOT touch
 production code.
 """
 
 from __future__ import annotations
-
-import uuid
-from datetime import date
-from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -40,6 +36,10 @@ from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_type_repo,
+)
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -63,66 +63,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
-#
-# These mimic the CURRENT (pre-segment) repository shape. They deliberately
-# do NOT support segments — the goal of these tests is to drive the
-# segment-aware service/router layer that does not exist yet.
-# ---------------------------------------------------------------------------
-
-
-class StubSessionTypeRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        seeded_id = str(uuid.uuid4())
-        self._store[seeded_id] = {"id": seeded_id, "name": "General Training"}
-        seeded_id_2 = str(uuid.uuid4())
-        self._store[seeded_id_2] = {"id": seeded_id_2, "name": "Kata Practice"}
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item["name"] == name:
-                return item
-        return None
-
-    async def add(self, name: str) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "name": name}
-        self._store[new_id] = record
-        return record
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository.
-
-    NOTE: this stub stores whatever dict the route/service hands it. It has
-    no special segment-aware behaviour — any nested-segment persistence and
-    derivation logic is expected to live in the service/router layer being
-    tested, not here.
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
 
 
 # ---------------------------------------------------------------------------
@@ -137,15 +77,17 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepo:
-    repo = StubSessionTypeRepo()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository(
+        [{"name": "General Training"}, {"name": "Kata Practice"}]
+    )
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
