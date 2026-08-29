@@ -16,7 +16,6 @@ test_checkin_window_endpoint.py.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -31,6 +30,10 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+)
 
 _MEMBER = UserClaims(
     sub="00000000-0000-0000-0000-000000000002",
@@ -45,56 +48,8 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories — raw seed that can place the envelope past midnight
+# Stub repositories (attendance and dojo settings are out of scope for #337)
 # ---------------------------------------------------------------------------
-
-
-class StubSessionInstanceRepo:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    def seed_raw(self, date_str: str, start_time: str, end_time: str) -> dict[str, Any]:
-        """Seed a session with explicit envelope strings, allowing an end_time
-        of "24:15" / "25:00" etc. that a segment running past midnight yields."""
-        new_id = str(uuid.uuid4())
-        record = {
-            "id": new_id,
-            "date": date_str,
-            "start_time": start_time,
-            "end_time": end_time,
-            "cancelled": False,
-        }
-        self._store[new_id] = record
-        return record
-
-
-class StubAttendanceRepo:
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "checked_in_at": datetime.now().isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
 
 
 class StubDojoSettingsRepo:
@@ -115,15 +70,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def session_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def session_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def attendance_repo() -> StubAttendanceRepo:
-    repo = StubAttendanceRepo()
+def attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -174,8 +129,8 @@ def test_envelope_datetimes_same_day_unchanged() -> None:
 
 
 async def test_checkin_past_midnight_envelope_does_not_500(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: InMemorySessionInstanceRepository,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A session whose envelope ends at "24:15" must be handled gracefully
@@ -194,7 +149,20 @@ async def test_checkin_past_midnight_envelope_does_not_500(
     end_time = f"{end_minutes // 60:02d}:{end_minutes % 60:02d}"
     assert int(end_time.split(":")[0]) >= 24  # guard: envelope really is past midnight
 
-    session = session_repo.seed_raw(date_str, start_time, end_time)
+    # Expressed as the segment that produces that envelope, rather than seeded
+    # as a raw envelope string: an end of "24:15" is what a segment crossing
+    # midnight derives, and the fake derives it the same way production does.
+    start_minutes = int(start_time[:2]) * 60 + int(start_time[3:])
+    session = session_repo.seed(
+        date=date_str,
+        segments=[
+            {
+                "start_time": start_time,
+                "duration_minutes": end_minutes - start_minutes,
+                "type_ids": [],
+            }
+        ],
+    )
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     response = await _post_checkin(session["id"])

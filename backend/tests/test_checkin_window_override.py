@@ -16,7 +16,7 @@ Builds on issue #192 (dojo-wide defaults). Scope here:
      override to NULL.
 
 Uses the StubRepository pattern — NO real DB — mirroring
-test_checkin_window_endpoint.py. The stub session repo's seeded dict can
+test_checkin_window_endpoint.py. The seeded session can
 carry `checkin_window_before_minutes` / `checkin_window_after_minutes`
 keys (None by default, i.e. "no override").
 """
@@ -39,6 +39,10 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+)
 
 _DEFAULT_BEFORE_MINUTES = 60
 _DEFAULT_AFTER_MINUTES = 120
@@ -59,26 +63,16 @@ def _split_date_time(dt: datetime) -> tuple[str, str]:
     return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
 
 
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository, extended so
-    seeded sessions can carry per-instance check-in window overrides."""
+class _WindowSessionRepo(InMemorySessionInstanceRepository):
+    """The session instance fake, with a seed() that speaks wall-clock times.
 
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+    The window tests describe a session as "starts now, ends in an hour", so
+    this converts that pair into the single segment whose envelope derives to
+    it -- the fake derives start_time/end_time exactly as production does
+    rather than storing them.
+    """
 
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    def seed(
+    def seed(  # type: ignore[override]
         self,
         cancelled: bool = False,
         start: datetime | None = None,
@@ -90,47 +84,21 @@ class StubSessionInstanceRepo:
         start = start if start is not None else now
         end = end if end is not None else now + timedelta(minutes=60)
         date_str, start_time = _split_date_time(start)
-        _, end_time = _split_date_time(end)
         assert start.date() == end.date(), "test sessions must not cross midnight"
 
-        new_id = str(uuid.uuid4())
-        record = {
-            "id": new_id,
-            "date": date_str,
-            "start_time": start_time,
-            "end_time": end_time,
-            "cancelled": cancelled,
-            "checkin_window_before_minutes": checkin_window_before_minutes,
-            "checkin_window_after_minutes": checkin_window_after_minutes,
-        }
-        self._store[new_id] = record
-        return record
-
-
-class StubAttendanceRepo:
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "checked_in_at": datetime.now().isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
+        return super().seed(
+            date=date_str,
+            cancelled=cancelled,
+            checkin_window_before_minutes=checkin_window_before_minutes,
+            checkin_window_after_minutes=checkin_window_after_minutes,
+            segments=[
+                {
+                    "start_time": start_time,
+                    "duration_minutes": round((end - start).total_seconds() / 60),
+                    "type_ids": [],
+                }
+            ],
+        )
 
 
 class StubDojoSettingsRepo:
@@ -174,15 +142,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def session_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def session_repo() -> _WindowSessionRepo:
+    repo = _WindowSessionRepo()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def attendance_repo() -> StubAttendanceRepo:
-    repo = StubAttendanceRepo()
+def attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -207,8 +175,8 @@ async def _post_checkin(session_id: str) -> Any:
 
 
 async def test_before_override_opens_checkin_when_dojo_default_would_be_too_early(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """Dojo default before-minutes is 60. Session starts in 90 minutes, so
@@ -235,8 +203,8 @@ async def test_before_override_opens_checkin_when_dojo_default_would_be_too_earl
 
 
 async def test_after_override_opens_checkin_when_dojo_default_would_be_closed(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """Dojo default after-minutes is 120. Session ended 150 minutes ago, so
@@ -264,8 +232,8 @@ async def test_after_override_opens_checkin_when_dojo_default_would_be_closed(
 
 
 async def test_null_override_falls_back_to_dojo_default_too_early(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """No override set (both fields NULL) — behaviour matches dojo default:
@@ -290,8 +258,8 @@ async def test_null_override_falls_back_to_dojo_default_too_early(
 
 
 async def test_before_overridden_after_null_resolves_independently(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """before is overridden to 120 (opens the window for a session starting
@@ -317,8 +285,8 @@ async def test_before_overridden_after_null_resolves_independently(
 
 
 async def test_after_overridden_before_null_resolves_independently(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """after is overridden to 200 (opens the window for a session that
@@ -351,8 +319,8 @@ async def test_after_overridden_before_null_resolves_independently(
 
 
 async def test_changing_dojo_default_affects_session_without_override(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A session with no override is TOO_EARLY under the original 60-minute
