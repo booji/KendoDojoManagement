@@ -44,6 +44,10 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
+from tests.fake_repositories import (
+    InMemoryAttendanceRepository,
+    InMemorySessionInstanceRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Defaults under test (issue #192 AC2)
@@ -81,99 +85,38 @@ def _split_date_time(dt: datetime) -> tuple[str, str]:
     return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M")
 
 
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository, extended with a
-    start/end envelope so window enforcement has something to evaluate."""
+class _WindowSessionRepo(InMemorySessionInstanceRepository):
+    """The session instance fake, with a seed() that speaks wall-clock times.
 
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+    Seeds the single segment whose derived envelope spans [start, end), so
+    window enforcement evaluates a record derived the way production derives
+    it. Defaults to a session happening right now, comfortably inside any sane
+    window.
+    """
 
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    def seed(
+    def seed(  # type: ignore[override]
         self,
         cancelled: bool = False,
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> dict[str, Any]:
-        """Seed a session whose envelope spans [start, end).
-
-        Defaults to a session happening right now (comfortably inside any
-        sane window) when start/end are not given.
-        """
         now = datetime.now()
         start = start if start is not None else now
         end = end if end is not None else now + timedelta(minutes=60)
         date_str, start_time = _split_date_time(start)
-        _, end_time = _split_date_time(end)
-        # Session must not span midnight for these simple string fields.
         assert start.date() == end.date(), "test sessions must not cross midnight"
 
-        new_id = str(uuid.uuid4())
-        record = {
-            "id": new_id,
-            "date": date_str,
-            "start_time": start_time,
-            "end_time": end_time,
-            "cancelled": cancelled,
-        }
-        self._store[new_id] = record
-        return record
-
-
-class StubAttendanceRepo:
-    """In-memory stand-in for an Attendance repository."""
-
-    def __init__(self) -> None:
-        self._store: list[dict[str, Any]] = []
-
-    async def check_in(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "checked_in_at": datetime.now().isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
-
-    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store if r["session_id"] == session_id]
-
-    async def get_by_session_member(
-        self, session_id: str, member_id: str
-    ) -> dict[str, Any] | None:
-        for r in self._store:
-            if r["session_id"] == session_id and r.get("member_id") == member_id:
-                return r
-        return None
-
-    async def admin_mark_attended(
-        self, session_id: str, member_id: str, recorded_by: str
-    ) -> dict[str, Any]:
-        record = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "member_id": member_id,
-            "visitor_name": None,
-            "checked_in_at": datetime.now().isoformat(),
-            "recorded_by": recorded_by,
-        }
-        self._store.append(record)
-        return record
+        return super().seed(
+            date=date_str,
+            cancelled=cancelled,
+            segments=[
+                {
+                    "start_time": start_time,
+                    "duration_minutes": round((end - start).total_seconds() / 60),
+                    "type_ids": [],
+                }
+            ],
+        )
 
 
 class StubCheckinTokenRepo:
@@ -254,15 +197,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def session_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def session_repo() -> _WindowSessionRepo:
+    repo = _WindowSessionRepo()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def attendance_repo() -> StubAttendanceRepo:
-    repo = StubAttendanceRepo()
+def attendance_repo() -> InMemoryAttendanceRepository:
+    repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
     return repo
 
@@ -294,8 +237,8 @@ async def _post_checkin(session_id: str) -> Any:
 
 
 async def test_checkin_inside_window_returns_200(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A session happening right now (comfortably inside the default
@@ -317,8 +260,8 @@ async def test_checkin_inside_window_returns_200(
 
 
 async def test_checkin_before_window_returns_403_too_early(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A session starting well beyond the before-minutes default (60) is
@@ -340,8 +283,8 @@ async def test_checkin_before_window_returns_403_too_early(
 
 
 async def test_checkin_too_early_detail_reports_correct_open_boundary(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """The reported opens_at boundary equals session_start - before_minutes."""
@@ -356,7 +299,7 @@ async def test_checkin_too_early_detail_reports_correct_open_boundary(
 
     assert response.status_code == 403
     # The seeded session only carries minute-granularity start_time/end_time
-    # (see StubSessionInstanceRepo.seed / _split_date_time), so the boundary
+    # (see _WindowSessionRepo.seed / _split_date_time), so the boundary
     # the endpoint reports is necessarily truncated to the minute too.
     truncated_start = start.replace(second=0, microsecond=0)
     expected_open = truncated_start - timedelta(minutes=_DEFAULT_BEFORE_MINUTES)
@@ -370,8 +313,8 @@ async def test_checkin_too_early_detail_reports_correct_open_boundary(
 
 
 async def test_checkin_after_window_returns_403_closed(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """A session that ended well beyond the after-minutes default (120) is
@@ -392,8 +335,8 @@ async def test_checkin_after_window_returns_403_closed(
 
 
 async def test_checkin_closed_detail_reports_correct_close_boundary(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """The reported closes_at boundary equals session_end + after_minutes."""
@@ -407,7 +350,7 @@ async def test_checkin_closed_detail_reports_correct_close_boundary(
 
     assert response.status_code == 403
     # The seeded session only carries minute-granularity start_time/end_time
-    # (see StubSessionInstanceRepo.seed / _split_date_time), so the boundary
+    # (see _WindowSessionRepo.seed / _split_date_time), so the boundary
     # the endpoint reports is necessarily truncated to the minute too.
     truncated_end = end.replace(second=0, microsecond=0)
     expected_close = truncated_end + timedelta(minutes=_DEFAULT_AFTER_MINUTES)
@@ -421,8 +364,8 @@ async def test_checkin_closed_detail_reports_correct_close_boundary(
 
 
 async def test_admin_mark_attended_bypasses_window_when_too_early(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """POST /sessions/{id}/attendance (admin mark-attended) must succeed even
@@ -446,8 +389,8 @@ async def test_admin_mark_attended_bypasses_window_when_too_early(
 
 
 async def test_admin_mark_attended_bypasses_window_when_closed(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     """POST /sessions/{id}/attendance (admin mark-attended) must succeed even
@@ -475,8 +418,8 @@ async def test_admin_mark_attended_bypasses_window_when_closed(
 
 
 async def test_token_checkin_bypasses_window_when_too_early(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -500,8 +443,8 @@ async def test_token_checkin_bypasses_window_when_too_early(
 
 
 async def test_token_checkin_bypasses_window_when_closed(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     token_repo: StubCheckinTokenRepo,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
@@ -529,8 +472,8 @@ async def test_token_checkin_bypasses_window_when_closed(
 
 
 async def test_checkin_nonexistent_session_still_returns_404(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -542,8 +485,8 @@ async def test_checkin_nonexistent_session_still_returns_404(
 
 
 async def test_checkin_cancelled_session_still_returns_409_even_inside_window(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     now = datetime.now()
@@ -558,8 +501,8 @@ async def test_checkin_cancelled_session_still_returns_409_even_inside_window(
 
 
 async def test_checkin_already_checked_in_still_returns_409_inside_window(
-    session_repo: StubSessionInstanceRepo,
-    attendance_repo: StubAttendanceRepo,
+    session_repo: _WindowSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
     settings_repo: StubDojoSettingsRepo,
 ) -> None:
     now = datetime.now()
