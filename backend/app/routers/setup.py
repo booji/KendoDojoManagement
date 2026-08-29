@@ -19,7 +19,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 
-from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.models import (
     PasskeyBeginRequest,
@@ -27,6 +26,7 @@ from app.auth.models import (
     UserClaims,
 )
 from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
+from app.auth.session_cookie import set_session_cookie
 from app.auth.token import encode_token
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -101,12 +101,5 @@ async def setup_passkey_complete(
         )
 
     token = encode_token(claims)
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="strict",
-        secure=config.COOKIE_SECURE,
-        max_age=60 * int(config.JWT_EXPIRE_MINUTES),
-    )
+    set_session_cookie(response, token)
     return claims
