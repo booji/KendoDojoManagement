@@ -10,14 +10,13 @@ Acceptance criteria:
   5. generate_checkin_token persists the URL to SessionInstance.checkin_url using PUBLIC_ORIGIN
   6. All new behaviour covered by tests
 
-Uses StubRepository pattern — NO real DB. Dependencies are overridden via
+NO real DB: the shared in-memory fakes stand in. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 import pytest
@@ -33,6 +32,10 @@ from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
 from app.main import app
 from app.sessions.dependencies import get_session_instance_repo, get_session_type_repo
+from tests.fake_repositories import (
+    InMemorySessionInstanceRepository,
+    InMemorySessionTypeRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -48,90 +51,8 @@ def _admin_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
+# Stub repository for the check-in token interface (out of scope for #337)
 # ---------------------------------------------------------------------------
-
-
-class StubSessionInstanceRepo:
-    """In-memory stand-in for a SessionInstance repository (sessions domain)."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        now = as_of or date.today()
-        return [
-            s
-            for s in self._store.values()
-            if not s.get("cancelled", False) and date.fromisoformat(s["date"]) >= now
-        ]
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, "cancelled": False, **data}
-        self._store[new_id] = record
-        return record
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-
-class StubAttendanceSessionInstanceRepo:
-    """In-memory stand-in for SessionInstance as seen by the attendance domain."""
-
-    def __init__(self, session_store: dict[str, dict[str, Any]]) -> None:
-        self._store = session_store
-
-    async def get(self, instance_id: str) -> dict[str, Any] | None:
-        return self._store.get(instance_id)
-
-    async def update(
-        self, instance_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(instance_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-
-class StubSessionTypeRepository:
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    def seed(self, type_id: str, name: str) -> dict[str, Any]:
-        record = {"id": type_id, "name": name}
-        self._store[type_id] = record
-        return record
-
-    async def list(self) -> list[dict[str, Any]]:
-        return list(self._store.values())
-
-    async def add(self, name: str) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        return self.seed(new_id, name)
-
-    async def get_by_name(self, name: str) -> dict[str, Any] | None:
-        return next((t for t in self._store.values() if t["name"] == name), None)
-
-    async def update(self, type_id: str, colour: str | None) -> dict[str, Any] | None:
-        record = self._store.get(type_id)
-        if record is None:
-            return None
-        record["colour"] = colour
-        return record
 
 
 class StubCheckinTokenRepo:
@@ -177,15 +98,15 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def instance_repo() -> StubSessionInstanceRepo:
-    repo = StubSessionInstanceRepo()
+def instance_repo() -> InMemorySessionInstanceRepository:
+    repo = InMemorySessionInstanceRepository()
     app.dependency_overrides[get_session_instance_repo] = lambda: repo
     return repo
 
 
 @pytest.fixture()
-def type_repo() -> StubSessionTypeRepository:
-    repo = StubSessionTypeRepository()
+def type_repo() -> InMemorySessionTypeRepository:
+    repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
     return repo
 
@@ -203,7 +124,7 @@ def checkin_token_repo() -> StubCheckinTokenRepo:
 
 
 async def _seed_instance(
-    instance_repo: StubSessionInstanceRepo,
+    instance_repo: InMemorySessionInstanceRepository,
     *,
     title: str = "Weekly Keiko",
     session_type_id: str | None = None,
@@ -274,7 +195,7 @@ async def test_ical_endpoint_returns_valid_ical_structure(
 
 async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) -> None:
     """Each session instance must appear as a VEVENT with SUMMARY set to its title."""
-    t = type_repo.seed(str(uuid.uuid4()), "Men Waza Practice")
+    t = type_repo.seed(name="Men Waza Practice")
     await _seed_instance(
         instance_repo, title="Men Waza Practice", session_type_id=t["id"]
     )
@@ -432,8 +353,8 @@ async def test_generate_checkin_token_persists_checkin_url(
     SessionInstance.checkin_url, built from PUBLIC_ORIGIN."""
     monkeypatch.setenv("PUBLIC_ORIGIN", "https://dojo.example.com")
     # Wire up attendance-domain session repo to share the same store
-    app.dependency_overrides[get_attendance_session_instance_repo] = (
-        lambda: StubAttendanceSessionInstanceRepo(instance_repo._store)
+    app.dependency_overrides[get_attendance_session_instance_repo] = lambda: (
+        instance_repo
     )
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
@@ -463,8 +384,8 @@ async def test_generate_checkin_token_uses_webauthn_origin_fallback(
     for building the checkin URL."""
     monkeypatch.delenv("PUBLIC_ORIGIN", raising=False)
     monkeypatch.setenv("WEBAUTHN_ORIGIN", "https://fallback.dojo.test")
-    app.dependency_overrides[get_attendance_session_instance_repo] = (
-        lambda: StubAttendanceSessionInstanceRepo(instance_repo._store)
+    app.dependency_overrides[get_attendance_session_instance_repo] = lambda: (
+        instance_repo
     )
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
@@ -495,9 +416,9 @@ async def test_ical_feed_includes_all_upcoming_sessions(
     instance_repo, type_repo
 ) -> None:
     """Every upcoming non-cancelled instance appears as its own VEVENT."""
-    ta = type_repo.seed(str(uuid.uuid4()), "Type A")
-    tb = type_repo.seed(str(uuid.uuid4()), "Type B")
-    tc = type_repo.seed(str(uuid.uuid4()), "Type C")
+    ta = type_repo.seed(name="Type A")
+    tb = type_repo.seed(name="Type B")
+    tc = type_repo.seed(name="Type C")
     await _seed_instance(
         instance_repo,
         title="Session A",
@@ -543,8 +464,8 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     yield exactly one VEVENT whose DTSTART/DTEND span the derived envelope and
     whose DESCRIPTION carries both segments' breakdowns then the session info —
     while never leaking segment-level coach_notes."""
-    kihon = type_repo.seed(str(uuid.uuid4()), "Kihon")
-    jigeiko = type_repo.seed(str(uuid.uuid4()), "Jigeiko")
+    kihon = type_repo.seed(name="Kihon")
+    jigeiko = type_repo.seed(name="Jigeiko")
     await instance_repo.add(
         {
             "title": "Tuesday Training",
