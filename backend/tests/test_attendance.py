@@ -944,3 +944,25 @@ async def test_attendance_list_display_name_null_for_visitor(
     body = response.json()
     assert len(body) == 1
     assert body[0]["display_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# Batch attendance summary (#339)
+# ---------------------------------------------------------------------------
+
+
+async def test_summary_for_sessions_counts_and_flags_in_one_call() -> None:
+    """summary_for_sessions returns, per session, the attendance count and
+    whether the given member is among those attending."""
+    repo = InMemoryAttendanceRepository()
+    await repo.check_in("s1", "member-1", "member-1")
+    await repo.check_in("s1", "member-2", "member-2")
+    await repo.check_in("s2", "member-2", "member-2")
+    await repo.check_in("s3", "member-1", "member-1")
+
+    summary = await repo.summary_for_sessions(["s1", "s2", "unknown"], "member-1")
+
+    assert summary["s1"] == {"attendance_count": 2, "is_checked_in": True}
+    assert summary["s2"] == {"attendance_count": 1, "is_checked_in": False}
+    assert summary["unknown"] == {"attendance_count": 0, "is_checked_in": False}
+    assert "s3" not in summary, "only the requested sessions are summarised"

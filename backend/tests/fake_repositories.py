@@ -525,3 +525,21 @@ class InMemoryAttendanceRepository:
 
     async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
         return [dict(r) for r in self._store if r["member_id"] == member_id]
+
+    async def summary_for_sessions(
+        self, session_ids: list[str], member_id: str
+    ) -> dict[str, dict[str, Any]]:
+        wanted = set(session_ids)
+        rows = [r for r in self._store if r["session_id"] in wanted]
+        return {
+            session_id: {
+                "attendance_count": sum(
+                    1 for r in rows if r["session_id"] == session_id
+                ),
+                "is_checked_in": any(
+                    r["session_id"] == session_id and r["member_id"] == member_id
+                    for r in rows
+                ),
+            }
+            for session_id in session_ids
+        }

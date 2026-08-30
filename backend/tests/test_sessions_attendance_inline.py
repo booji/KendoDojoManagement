@@ -13,6 +13,7 @@ NO real DB: the shared in-memory fakes stand in for the repositories.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -237,3 +238,68 @@ async def test_list_sessions_includes_is_checked_in_for_member(
 
     assert by_id[checked_in_session["id"]]["is_checked_in"] is True
     assert by_id[not_checked_in_session["id"]]["is_checked_in"] is False
+
+
+# ---------------------------------------------------------------------------
+# GET /sessions must not query attendance once per session (#339)
+# ---------------------------------------------------------------------------
+
+
+class _CountingAttendanceRepo(InMemoryAttendanceRepository):
+    """The attendance fake, counting per-session reads."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.per_session_calls = 0
+
+    async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        self.per_session_calls += 1
+        return await super().list_for_session(session_id)
+
+
+async def test_list_sessions_reads_attendance_in_one_call(
+    type_repo, template_repo, instance_repo
+) -> None:
+    """GET /sessions must summarise attendance for every session at once.
+
+    The per-session loop it replaces cost one query per session, each one an
+    outer join against Member, to produce a count and a boolean.
+    """
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    attendance_repo = _CountingAttendanceRepo()
+    app.dependency_overrides[get_attendance_repo] = lambda: attendance_repo
+
+    type_id = (await type_repo.list())[0]["id"]
+    sessions = [
+        await instance_repo.add(
+            {
+                "title": "Keiko",
+                "date": f"2099-03-0{day}",
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 90,
+                        "type_ids": [type_id],
+                    }
+                ],
+            }
+        )
+        for day in (1, 2, 3)
+    ]
+    await attendance_repo.check_in(sessions[0]["id"], _MEMBER.sub, _MEMBER.sub)
+    await attendance_repo.check_in(sessions[0]["id"], "someone-else", "admin-uuid")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/sessions")
+
+    assert response.status_code == 200
+    by_id = {s["id"]: s for s in response.json()}
+    assert by_id[sessions[0]["id"]]["attendance_count"] == 2
+    assert by_id[sessions[0]["id"]]["is_checked_in"] is True
+    assert by_id[sessions[1]["id"]]["attendance_count"] == 0
+    assert by_id[sessions[1]["id"]]["is_checked_in"] is False
+    assert attendance_repo.per_session_calls == 0, (
+        "GET /sessions must not read attendance one session at a time"
+    )
