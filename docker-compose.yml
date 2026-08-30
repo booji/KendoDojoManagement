@@ -39,7 +39,6 @@ services:
       # Keep pinned to the single canonical origin — never "*" (auth is
       # cookie-based). Defaults to WEBAUTHN_ORIGIN inside the app if empty.
       CORS_ORIGINS: ${CORS_ORIGINS}
-      AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
       # Minimum wall-clock time (ms) the passkey begin endpoints take,
       # regardless of whether the email is known or not — closes a timing
       # side channel that would otherwise enumerate registered emails. Only

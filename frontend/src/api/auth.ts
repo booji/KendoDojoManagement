@@ -267,7 +267,13 @@ export const redeemRecoveryCode = async (
     throw { status: 401, message: "Invalid or used recovery code" } satisfies ApiError
   }
   if (res.status === 429) {
-    throw { status: 429, message: "Account locked. Too many failed attempts." } satisfies ApiError
+    // Rate limiting, not a lock: per-account lockout went with password auth
+    // (migration f6a7b8c9d0e1). Telling the user their account is locked sends
+    // them to wait for an unlock that never comes.
+    throw {
+      status: 429,
+      message: "Too many attempts. Please wait a minute and try again.",
+    } satisfies ApiError
   }
   if (!res.ok) {
     throw { status: res.status, message: "Recovery code redemption failed" } satisfies ApiError

@@ -285,7 +285,9 @@ systemctl --user start kendo-app
 
 ## 7. Why `TRUST_PROXY_XFF=true` is required behind Traefik
 
-With Traefik in front, every request's peer IP is Traefik's container IP. The app's rate limiting **and** account lockout are keyed on client IP — left unadjusted they would collapse into a single global bucket (one attacker could lock out everyone). Setting `TRUST_PROXY_XFF=true` makes the app read the real client IP from `X-Forwarded-For`.
+With Traefik in front, every request's peer IP is Traefik's container IP. The app's rate limiting is keyed on client IP — left unadjusted every visitor shares one bucket, so a single busy client exhausts the limit for everyone. Setting `TRUST_PROXY_XFF=true` makes the app read the real client IP from `X-Forwarded-For`.
+
+This is the only rate limiting in the deployment: Traefik's dynamic config carries a `security-headers` middleware and no `RateLimit`.
 
 This is safe **only because** of the network design: the app publishes no host ports and is reachable solely through Traefik, which overwrites any client-supplied `X-Forwarded-For` (do **not** enable `forwardedHeaders.insecure` on Traefik's entrypoints). The flag defaults to `false` so local dev — where the app is directly reachable — stays spoof-proof.
 
