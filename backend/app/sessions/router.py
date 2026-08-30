@@ -14,6 +14,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.members.dependencies import get_current_member_id
 from app.sessions import templates
 from app.sessions.dependencies import (
     get_session_instance_repo,
@@ -64,6 +65,7 @@ _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 _AttendanceRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
+_CurrentMemberId = Annotated[str | None, Depends(get_current_member_id)]
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +290,7 @@ def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 async def _enrich_with_attendance(
     rows: list[dict[str, Any]],
     attendance_repo: AbstractAttendanceRepository,
-    member_id: str,
+    member_id: str | None,
 ) -> list[dict[str, Any]]:
     """Enrich session rows with attendance_count and is_checked_in."""
     session_ids = [r["id"] for r in rows]
@@ -304,13 +306,18 @@ async def list_upcoming_sessions(
     claims: _Member,
     repo: _InstRepo,
     attendance_repo: _AttendanceRepo,
+    current_member_id: _CurrentMemberId,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
 ) -> list[dict[str, Any]]:
     is_admin = claims.role == "admin"
 
     async def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        enriched = await _enrich_with_attendance(rows, attendance_repo, claims.sub)
+        # The caller's Member id, not their User id: attendance is keyed by
+        # member however it was recorded (#340).
+        enriched = await _enrich_with_attendance(
+            rows, attendance_repo, current_member_id
+        )
         normalized = [_normalize_instance(r) for r in enriched]
         if is_admin:
             return normalized

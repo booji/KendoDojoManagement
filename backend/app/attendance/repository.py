@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 import bcrypt
-from sqlalchemy import func, or_, select
+from sqlalchemy import false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -41,7 +41,7 @@ class AbstractAttendanceRepository(Protocol):
     async def list_for_member(self, member_id: str) -> list[dict[str, Any]]: ...
 
     async def summary_for_sessions(
-        self, session_ids: list[str], member_id: str
+        self, session_ids: list[str], member_id: str | None
     ) -> dict[str, dict[str, Any]]: ...
 
 
@@ -122,13 +122,7 @@ class SqlAttendanceRepository:
     async def list_for_session(self, session_id: str) -> list[dict[str, Any]]:
         result = await self._session.execute(
             select(Attendance, Member.display_name, Member.first_name, Member.surname)
-            .outerjoin(
-                Member,
-                or_(
-                    Attendance.member_id == Member.id,
-                    Attendance.member_id == Member.user_id,
-                ),
-            )
+            .outerjoin(Member, Attendance.member_id == Member.id)
             .where(Attendance.session_id == session_id)
         )
         return [
@@ -166,13 +160,7 @@ class SqlAttendanceRepository:
         await self._session.flush()
         result = await self._session.execute(
             select(Attendance, Member.display_name, Member.first_name, Member.surname)
-            .outerjoin(
-                Member,
-                or_(
-                    Attendance.member_id == Member.id,
-                    Attendance.member_id == Member.user_id,
-                ),
-            )
+            .outerjoin(Member, Attendance.member_id == Member.id)
             .where(Attendance.id == obj.id)
         )
         row = result.one()
@@ -217,7 +205,7 @@ class SqlAttendanceRepository:
         return [_attendance_to_dict(row) for row in result.scalars().all()]
 
     async def summary_for_sessions(
-        self, session_ids: list[str], member_id: str
+        self, session_ids: list[str], member_id: str | None
     ) -> dict[str, dict[str, Any]]:
         """Attendance count, and whether member_id is among the attendees, for
         every requested session -- in one query.
@@ -225,12 +213,11 @@ class SqlAttendanceRepository:
         Deliberately no join against Member: a count needs no display name, and
         the caller (GET /sessions) wants two numbers per session, not rows.
 
-        member_id is compared by plain equality, matching what the per-session
-        loop this replaced did. Note that attendance.member_id holds a User id
-        for a self check-in and a Member id for an admin-marked one -- see
-        issue #340. Preserved rather than fixed here: what "checked in" should
-        mean for an admin-marked member is a behaviour question, not a
-        performance one.
+        member_id is a Member id however the attendance was recorded (#340), so
+        plain equality answers "am I checked in" for an admin-marked member as
+        well as a self check-in. A caller with no member record (member_id
+        None) is never checked in -- comparing against NULL would instead
+        match every visitor row, which has a NULL member_id.
         """
         if not session_ids:
             return {}
@@ -240,7 +227,9 @@ class SqlAttendanceRepository:
                 Attendance.session_id,
                 func.count().label("attendance_count"),
                 func.count()
-                .filter(Attendance.member_id == member_id)
+                .filter(
+                    false() if member_id is None else Attendance.member_id == member_id
+                )
                 .label("own_records"),
             )
             .where(Attendance.session_id.in_(session_ids))

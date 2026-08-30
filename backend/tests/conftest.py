@@ -91,6 +91,39 @@ def _default_attendance_repo():
 
 
 @pytest.fixture(autouse=True)
+def _default_current_member_id():
+    """Give every authenticated caller a Member id derived from their user id.
+
+    Attendance is keyed by Member id (#340), so the check-in routes and
+    GET /sessions resolve the caller's user id to their member record. Without
+    a default, every stub-based test of those routes would fall through to the
+    real SqlMemberRepository and hit the database.
+
+    The mapping is synthetic but faithful in the ways tests depend on: each
+    user gets one stable member id, and different users get different ones. A
+    test that needs a specific member id -- or the "user with no member
+    record" case -- overrides get_current_member_id itself.
+    """
+    from typing import Annotated
+
+    from fastapi import Depends
+
+    from app.auth.guards import REQUIRE_MEMBER
+    from app.auth.models import UserClaims
+    from app.main import app
+    from app.members.dependencies import get_current_member_id
+
+    async def _member_id_for_caller(
+        claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    ) -> str:
+        return f"member-of-{claims.sub}"
+
+    app.dependency_overrides.setdefault(get_current_member_id, _member_id_for_caller)
+    yield
+    # Teardown is handled by each test file's own clear_overrides fixture.
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """Reset slowapi in-memory rate limit counters and per-account failure counts
     between tests so accumulated state from one test doesn't bleed into the next.

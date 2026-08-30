@@ -40,6 +40,7 @@ from app.attendance.dependencies import (
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from app.members.dependencies import get_current_member_id
 from tests.fake_repositories import (
     InMemoryAttendanceRepository,
     InMemorySessionInstanceRepository,
@@ -49,6 +50,7 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+_MEMBER_RECORD_ID = "member-record-uuid"
 _MEMBER = UserClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
@@ -406,6 +408,7 @@ async def test_http_checkin_via_valid_token_returns_200(
     token_result = await http_token_repo.create(session["id"], expires_at)
     plaintext = token_result["token"]
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    app.dependency_overrides[get_current_member_id] = lambda: _MEMBER_RECORD_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -415,7 +418,8 @@ async def test_http_checkin_via_valid_token_returns_200(
     assert response.status_code == 200
     body = response.json()
     assert body["session_id"] == session["id"]
-    assert body["member_id"] == _MEMBER.sub
+    # The caller's Member id, not their User id (#340)
+    assert body["member_id"] == _MEMBER_RECORD_ID
 
 
 # ---------------------------------------------------------------------------

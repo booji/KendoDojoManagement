@@ -28,8 +28,7 @@ from app.auth.models import UserClaims
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
-from app.members.dependencies import get_member_repo
-from app.members.repository import AbstractMemberRepository
+from app.members.dependencies import get_current_member_id
 from app.sessions.checkin_window import CheckinWindowStatus, classify_checkin_window
 from app.sessions.envelope import envelope_bounds
 from app.settings.dependencies import get_dojo_settings_repo
@@ -45,10 +44,21 @@ _SessRepo = Annotated[
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
-_MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
+_CurrentMemberId = Annotated[str | None, Depends(get_current_member_id)]
 _SettingsRepo = Annotated[
     AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)
 ]
+
+
+def _require_member_id(member_id: str | None) -> str:
+    """Attendance rows are keyed by Member id (#340); a user without a member
+    record has no key to write under."""
+    if member_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No member record for this user",
+        )
+    return member_id
 
 
 def _session_envelope_datetimes(session: dict) -> tuple[datetime, datetime]:
@@ -61,11 +71,13 @@ def _session_envelope_datetimes(session: dict) -> tuple[datetime, datetime]:
 async def checkin_to_session(
     session_id: uuid.UUID,
     current_user: _Member,
+    current_member_id: _CurrentMemberId,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
     settings_repo: _SettingsRepo,
     uow: _UoW,
 ) -> AttendanceRead:
+    member_id = _require_member_id(current_member_id)
     session = await session_repo.get(str(session_id))
     if session is None:
         raise HTTPException(
@@ -75,9 +87,7 @@ async def checkin_to_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Session is cancelled"
         )
-    existing = await attendance_repo.get_by_session_member(
-        str(session_id), current_user.sub
-    )
+    existing = await attendance_repo.get_by_session_member(str(session_id), member_id)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
@@ -120,7 +130,7 @@ async def checkin_to_session(
             },
         )
     record = await attendance_repo.check_in(
-        str(session_id), current_user.sub, current_user.sub
+        str(session_id), member_id, current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)
@@ -161,11 +171,13 @@ async def generate_checkin_token(
 async def checkin_via_token(
     token: str,
     current_user: _Member,
+    current_member_id: _CurrentMemberId,
     token_repo: _TokRepo,
     session_repo: _SessRepo,
     attendance_repo: _AttRepo,
     uow: _UoW,
 ) -> AttendanceRead:
+    member_id = _require_member_id(current_member_id)
     try:
         token_record = await token_repo.redeem(token)
     except ValueError:
@@ -187,14 +199,14 @@ async def checkin_via_token(
             status_code=status.HTTP_409_CONFLICT, detail="Session is cancelled"
         )
     existing = await attendance_repo.get_by_session_member(
-        token_record["session_id"], current_user.sub
+        token_record["session_id"], member_id
     )
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
         )
     record = await attendance_repo.check_in(
-        token_record["session_id"], current_user.sub, current_user.sub
+        token_record["session_id"], member_id, current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)
@@ -283,16 +295,16 @@ async def add_visitor(
 async def get_member_attendance_history(
     member_id: uuid.UUID,
     current_user: _Member,
+    current_member_id: _CurrentMemberId,
     attendance_repo: _AttRepo,
-    member_repo: _MemberRepo,
 ) -> list[AttendanceRead]:
     if current_user.role != "admin":
-        # Resolve the calling user's own member record to compare by member UUID
-        # (current_user.sub is a user UUID; member_id is a member record UUID)
-        own_member = await member_repo.get_by_user_id(current_user.sub)
-        raw_id = own_member["id"] if own_member is not None else None
         try:
-            own_member_id = str(uuid.UUID(raw_id)) if raw_id is not None else None
+            own_member_id = (
+                str(uuid.UUID(current_member_id))
+                if current_member_id is not None
+                else None
+            )
         except ValueError:
             own_member_id = None
         if own_member_id != str(member_id):

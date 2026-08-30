@@ -25,6 +25,7 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
+from app.members.dependencies import get_current_member_id
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
@@ -48,7 +49,10 @@ _ADMIN = UserClaims(
 _MEMBER = UserClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
-_MEMBER_ID = "member-uuid"
+# The Member record id behind _MEMBER's user. Attendance is keyed by Member id
+# (#340), so it must differ from the User id in the token for these tests to
+# tell the two apart.
+_MEMBER_ID = "member-record-uuid"
 
 
 def _admin_override():
@@ -62,6 +66,14 @@ def _member_override():
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def current_member_id() -> str:
+    """_MEMBER's user resolves to their Member record; attendance is keyed by
+    Member id (#340)."""
+    app.dependency_overrides[get_current_member_id] = lambda: _MEMBER_ID
+    return _MEMBER_ID
 
 
 @pytest.fixture(autouse=True)
@@ -286,7 +298,7 @@ async def test_list_sessions_reads_attendance_in_one_call(
         )
         for day in (1, 2, 3)
     ]
-    await attendance_repo.check_in(sessions[0]["id"], _MEMBER.sub, _MEMBER.sub)
+    await attendance_repo.check_in(sessions[0]["id"], _MEMBER_ID, _MEMBER.sub)
     await attendance_repo.check_in(sessions[0]["id"], "someone-else", "admin-uuid")
 
     async with AsyncClient(
@@ -303,3 +315,38 @@ async def test_list_sessions_reads_attendance_in_one_call(
     assert attendance_repo.per_session_calls == 0, (
         "GET /sessions must not read attendance one session at a time"
     )
+
+
+async def test_admin_marked_member_sees_themselves_as_checked_in(
+    type_repo, template_repo, instance_repo, attendance_repo
+) -> None:
+    """Being marked present by an admin counts as checked in for that member.
+
+    Issue #340: the roster said the member was attending while their own
+    session list said they were not, because self check-in wrote a User id and
+    admin marking wrote a Member id into the same column.
+    """
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    type_id = (await type_repo.list())[0]["id"]
+    session = await instance_repo.add(
+        {
+            "title": "Keiko",
+            "date": "2099-05-01",
+            "segments": [
+                {"start_time": "19:00", "duration_minutes": 90, "type_ids": [type_id]}
+            ],
+        }
+    )
+    await attendance_repo.admin_mark_attended(session["id"], _MEMBER_ID, "admin-uuid")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get(
+            "/sessions", cookies={"access_token": encode_token(_MEMBER)}
+        )
+
+    assert response.status_code == 200, response.text
+    target = next(s for s in response.json() if s["id"] == session["id"])
+    assert target["is_checked_in"] is True

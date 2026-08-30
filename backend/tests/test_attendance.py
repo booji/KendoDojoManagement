@@ -31,7 +31,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.auth.token import encode_token
 from app.main import app
-from app.members.dependencies import get_member_repo
+from app.members.dependencies import get_current_member_id
 from app.sessions.envelope import envelope_bounds
 from app.settings.dependencies import get_dojo_settings_repo
 from tests.fake_repositories import (
@@ -55,6 +55,11 @@ _MEMBER = UserClaims(
 _OTHER_MEMBER = UserClaims(
     sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
 )
+
+# The Member record id belonging to _MEMBER's user. attendance.member_id holds
+# a Member id, never a User id (#340), so the two must differ here for the
+# tests to be able to tell them apart.
+_MEMBER_RECORD_ID = "00000000-0000-0000-0000-0000000000a2"
 
 # Valid UUIDs for use in path params
 _SOME_MEMBER_UUID = "00000000-0000-0000-0000-000000000099"
@@ -111,25 +116,6 @@ class _AttendanceSessionRepo(InMemorySessionInstanceRepository):
                 }
             ],
         )
-
-
-class StubMemberRepo:
-    """Minimal stub for AbstractMemberRepository — only implements get_by_user_id."""
-
-    def __init__(self, own_member_id: str | None = None) -> None:
-        # Maps user_id -> member record dict
-        self._by_user_id: dict[str, dict[str, Any]] = {}
-        if own_member_id is not None:
-            # Pre-seed so that any user_id lookup returns a record with the given member id
-            self._seed_user_id = own_member_id
-        else:
-            self._seed_user_id = None
-
-    def seed_member(self, user_id: str, member_id: str) -> None:
-        self._by_user_id[user_id] = {"id": member_id, "email": "stub@test.com"}
-
-    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
-        return self._by_user_id.get(user_id)
 
 
 class StubCheckinTokenRepo:
@@ -232,6 +218,15 @@ def settings_repo() -> StubDojoSettingsRepo:
     return repo
 
 
+@pytest.fixture(autouse=True)
+def current_member_id() -> str:
+    """Every attendance path resolves the caller to a Member id (#340), so the
+    mapping is wired for every test in this module, not just the ones that
+    name it. Tests needing a different caller override it again."""
+    app.dependency_overrides[get_current_member_id] = lambda: _MEMBER_RECORD_ID
+    return _MEMBER_RECORD_ID
+
+
 # ---------------------------------------------------------------------------
 # AC2 — POST /sessions/{id}/checkin
 # ---------------------------------------------------------------------------
@@ -259,7 +254,8 @@ async def test_member_can_checkin_to_session(
     body = response.json()
     assert "id" in body
     assert body["session_id"] == session["id"]
-    assert body["member_id"] == _MEMBER.sub
+    # The Member id, not the caller's User id (#340)
+    assert body["member_id"] == _MEMBER_RECORD_ID
     assert "checked_in_at" in body
     assert body["recorded_by"] == _MEMBER.sub
 
@@ -298,6 +294,28 @@ def test_seeded_session_envelope_never_ends_before_it_starts(
         session["date"], session["start_time"], session["end_time"]
     )
     assert end - start == timedelta(minutes=30)
+
+
+async def test_checkin_without_a_member_record_is_rejected(
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
+    settings_repo: StubDojoSettingsRepo,
+) -> None:
+    """A user with no Member record has nothing to key attendance by (#340).
+
+    Before the normalisation this stored the User id, which no roster, report
+    or history query could resolve back to a person.
+    """
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    app.dependency_overrides[get_current_member_id] = lambda: None
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post(f"/sessions/{session['id']}/checkin")
+
+    assert response.status_code == 403, response.text
 
 
 async def test_unauthenticated_checkin_returns_401(
@@ -429,7 +447,7 @@ async def test_member_can_checkin_via_token(
     body = response.json()
     assert "id" in body
     assert body["session_id"] == session["id"]
-    assert body["member_id"] == _MEMBER.sub
+    assert body["member_id"] == _MEMBER_RECORD_ID
     assert "checked_in_at" in body
 
 
@@ -821,9 +839,8 @@ async def test_admin_can_get_any_member_attendance_history(
     app.dependency_overrides[REQUIRE_MEMBER] = (
         _admin_override  # admin satisfies REQUIRE_MEMBER
     )
-    # Admin bypasses the user→member lookup; still need a stub for the dep
-    member_repo = StubMemberRepo()
-    app.dependency_overrides[get_member_repo] = lambda: member_repo
+    # Admin bypasses the caller→member mapping entirely
+    app.dependency_overrides[get_current_member_id] = lambda: None
 
     # Seed attendance records for a member
     session_id = str(uuid.uuid4())
@@ -846,11 +863,8 @@ async def test_member_can_get_own_attendance_history(
     attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-    # Stub the member repo: _MEMBER.sub (user UUID) resolves to a member record
-    # whose id also equals _MEMBER.sub (matches the URL parameter)
-    member_repo = StubMemberRepo()
-    member_repo.seed_member(user_id=_MEMBER.sub, member_id=_MEMBER.sub)
-    app.dependency_overrides[get_member_repo] = lambda: member_repo
+    # The caller's member record is the one named in the URL
+    app.dependency_overrides[get_current_member_id] = lambda: _MEMBER.sub
 
     session_id = str(uuid.uuid4())
     await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
@@ -871,14 +885,35 @@ async def test_member_can_get_own_attendance_history(
 # ---------------------------------------------------------------------------
 
 
+async def test_own_history_includes_a_self_checkin(
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
+    settings_repo: StubDojoSettingsRepo,
+) -> None:
+    """Checking yourself in must show up in your own attendance history (#340).
+
+    It did not while self check-in wrote the User id and the history query
+    read by Member id.
+    """
+    session = session_repo.seed(cancelled=False)
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        assert (await c.post(f"/sessions/{session['id']}/checkin")).status_code == 200
+        response = await c.get(f"/members/{_MEMBER_RECORD_ID}/attendance")
+
+    assert response.status_code == 200, response.text
+    assert [r["session_id"] for r in response.json()] == [session["id"]]
+
+
 async def test_member_cannot_get_other_member_attendance_history(
     attendance_repo: InMemoryAttendanceRepository,
 ) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _other_member_override
-    # _OTHER_MEMBER's user_id resolves to a different member id, not _MEMBER.sub
-    member_repo = StubMemberRepo()
-    member_repo.seed_member(user_id=_OTHER_MEMBER.sub, member_id=_OTHER_MEMBER.sub)
-    app.dependency_overrides[get_member_repo] = lambda: member_repo
+    # _OTHER_MEMBER's caller maps to a different member id, not _MEMBER.sub
+    app.dependency_overrides[get_current_member_id] = lambda: _OTHER_MEMBER.sub
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
