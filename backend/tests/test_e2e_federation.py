@@ -56,8 +56,13 @@ def _create_member(admin_token: str) -> str:
     return response.json()["id"]
 
 
-def _create_federation(admin_token: str) -> str:
-    """A uniquely-named federation, so the picker's search matches one row."""
+def _create_federation(admin_token: str) -> tuple[str, str]:
+    """A uniquely-named federation, so the picker's search matches one row.
+
+    Returns (id, name): the id saves a caller from re-reading the catalogue to
+    find what it just created, where a miss would surface as a bare
+    StopIteration rather than "federation not found".
+    """
     name = f"Test Federation {uuid.uuid4().hex[:8]}"
     response = requests.post(
         f"{API_URL}/federations",
@@ -65,7 +70,7 @@ def _create_federation(admin_token: str) -> str:
         json={"name": name},
     )
     response.raise_for_status()
-    return name
+    return response.json()["id"], name
 
 
 def _open_add_dialog(page: Page, member_id: str) -> None:
@@ -88,12 +93,12 @@ def test_admin_can_add_a_federation_membership(page: Page) -> None:
     """The membership appears on the member's detail page once saved."""
     admin_token = authenticate(page, "admin")
     member_id = _create_member(admin_token)
-    federation_name = _create_federation(admin_token)
+    _, federation_name = _create_federation(admin_token)
 
     _open_add_dialog(page, member_id)
     _pick_federation(page, federation_name)
     page.locator("#fed_member_number").fill("BKA-10001")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
 
     expect(page.get_by_text("BKA-10001")).to_be_visible(timeout=8000)
 
@@ -113,16 +118,22 @@ def test_admin_can_add_a_federation_membership_with_a_renewal_date(
     """
     admin_token = authenticate(page, "admin")
     member_id = _create_member(admin_token)
-    federation_name = _create_federation(admin_token)
+    _, federation_name = _create_federation(admin_token)
     renewal = date.today() + timedelta(days=365)
 
     _open_add_dialog(page, member_id)
     _pick_federation(page, federation_name)
     page.locator("#fed_member_number").fill("BKA-10002")
     page.locator("#fed_renewal_date").fill(renewal.isoformat())
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
 
     expect(page.get_by_text("BKA-10002")).to_be_visible(timeout=8000)
+    # The date itself, not just the row: a 500 is not the only way this can
+    # break. Were renewal_date ever silently dropped on write — by the
+    # not-None filtering the update handlers use, or by _writable losing the
+    # key — the POST would still return 201 and the member number would still
+    # render. The row reads "Member #… · Renews YYYY-MM-DD" as one paragraph.
+    expect(page.get_by_text(f"Renews {renewal.isoformat()}")).to_be_visible()
 
 
 def test_an_expired_renewal_date_is_flagged_on_the_member_page(page: Page) -> None:
@@ -134,12 +145,7 @@ def test_an_expired_renewal_date_is_flagged_on_the_member_page(page: Page) -> No
     """
     admin_token = authenticate(page, "admin")
     member_id = _create_member(admin_token)
-    federation_name = _create_federation(admin_token)
-
-    federations = requests.get(
-        f"{API_URL}/federations", cookies={"access_token": admin_token}
-    ).json()
-    federation_id = next(f["id"] for f in federations if f["name"] == federation_name)
+    federation_id, _ = _create_federation(admin_token)
 
     created = requests.post(
         f"{API_URL}/members/{member_id}/federations",
