@@ -5,7 +5,7 @@ fixture/driver pattern as the other test_e2e_*.py files: synthetic JWT
 tokens injected as cookies, `page.request` used to seed state via the API,
 then real UI assertions via Playwright (AC1/AC2/AC4). AC3 and AC5 are
 verified at the API layer with httpx, matching the style already used for
-backend-only behaviour with no dedicated UI surface (see test_e2e_ical.py).
+backend-only behaviour with no dedicated UI surface (see test_ical.py).
 """
 
 from __future__ import annotations

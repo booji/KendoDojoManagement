@@ -1,232 +1,165 @@
+"""Playwright browser tests for federation memberships on the member detail page.
+
+This file previously held 25 `xfail(strict=True)` placeholders whose entire
+body was `pytest.fail("not implemented")` — they asserted nothing while
+reporting as `xfailed`, indistinguishable in a run summary from genuinely
+deferred behaviour (#347).
+
+That mattered: adding a membership *with a renewal date* raised a 500 from
+asyncpg for as long as the feature has existed, because the router converted
+the payload's `date` to a string and the column is `Date` (#345). The
+placeholder named exactly that case and never ran it.
+
+These three cover the path the placeholders claimed. `test_admin_can_add_
+federation_membership_with_a_renewal_date` is the regression test for that
+500, driven through the UI rather than the repository.
 """
-Playwright E2E browser test stubs for issue #124 — Multi-federation membership numbers.
 
-One test per acceptance criterion. All marked @pytest.mark.xfail(strict=True) during
-the red phase. Remove xfail and replace the body with real Playwright assertions after
-implementation.
-"""
-
-import pytest
-from playwright.sync_api import Page
-
-BASE_URL = "http://localhost:5173"
-
-
-# ---------------------------------------------------------------------------
-# AC1 — Members can add multiple federation memberships
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_can_add_federation_membership(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC3 — Members can enter a membership number (free text, max 100 chars)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_membership_number_input_accepts_free_text(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC4 — Members can optionally record a renewal date
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_renewal_date_is_optional_on_federation_membership(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC5 — Visual warning when renewal_date expiring soon or expired; no warning if no date
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_expired_renewal_date_shows_warning(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_expiring_soon_renewal_date_shows_warning(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_no_renewal_date_shows_no_warning(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC6 — Members can edit existing federation memberships
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_can_edit_federation_membership(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC7 — Members can remove a federation membership
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_can_remove_federation_membership(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC8 — Pinned federations float to top of selection lists
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_pinned_federations_appear_at_top_of_selection_list(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC9 — Admins can manage memberships on any member via /members/{id}/federations
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_manage_federation_membership_on_any_member(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC10 — Members can manage their own via /users/me/federations; cannot access others'
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_can_manage_own_federations_via_me_endpoint_ui(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_cannot_see_other_members_federation_records(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC11 — Admins can add new federations to the catalogue
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_add_new_federation_to_catalogue(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC12 — Admins can edit federation metadata
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_edit_federation_metadata(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC13 — Admins can pin/unpin a federation
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_pin_federation(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_unpin_federation(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC14 — Admins can deactivate a federation (soft-delete)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_deactivate_federation(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC15 — Admins can reactivate a deactivated federation
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_admin_can_reactivate_federation(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC16 — GET /federations ordering and filtering reflected in UI
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_federation_list_shows_pinned_first_then_alphabetical(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_federation_list_supports_type_filter(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_federation_list_supports_search_by_name_prefix(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC17 — GET /federations requires any authenticated user
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_unauthenticated_user_cannot_see_federation_list(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC18 — Renewal date status is a computed field (not stored)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_renewal_status_badge_matches_computed_server_value(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC19 — Inactive federations hidden from list in UI
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_deactivated_federation_not_shown_in_selection_list(page: Page) -> None:
-    pytest.fail("not implemented")
-
-
-# ---------------------------------------------------------------------------
-# AC20 — federation_number no longer shown on member profile
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.xfail(strict=True, reason="not yet implemented")
-def test_member_profile_has_no_legacy_federation_number_field(page: Page) -> None:
-    pytest.fail("not implemented")
+import os
+import uuid
+from datetime import date, timedelta
+
+import requests
+from dotenv import load_dotenv
+from playwright.sync_api import Page, expect
+
+_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=_dotenv_path, override=False)
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+
+from app import config as _config  # noqa: E402
+from tests.e2e_support import (  # noqa: E402
+    API_URL,
+    BASE_URL,
+    authenticate,
+)
+
+_config.JWT_SECRET = os.environ["JWT_SECRET"]
+
+
+def _create_member(admin_token: str) -> str:
+    response = requests.post(
+        f"{API_URL}/members",
+        cookies={"access_token": admin_token},
+        json={
+            "email": f"fed-{uuid.uuid4().hex[:8]}@dojo.test",
+            "first_name": "Federation",
+            "surname": "Subject",
+            "dob": "1990-01-01",
+            "join_date": "2024-01-01",
+            "membership_status": "active",
+            "is_coach": False,
+            "is_first_aider": False,
+        },
+    )
+    response.raise_for_status()
+    return response.json()["id"]
+
+
+def _create_federation(admin_token: str) -> tuple[str, str]:
+    """A uniquely-named federation, so the picker's search matches one row.
+
+    Returns (id, name): the id saves a caller from re-reading the catalogue to
+    find what it just created, where a miss would surface as a bare
+    StopIteration rather than "federation not found".
+    """
+    name = f"Test Federation {uuid.uuid4().hex[:8]}"
+    response = requests.post(
+        f"{API_URL}/federations",
+        cookies={"access_token": admin_token},
+        json={"name": name},
+    )
+    response.raise_for_status()
+    return response.json()["id"], name
+
+
+def _open_add_dialog(page: Page, member_id: str) -> None:
+    page.goto(f"{BASE_URL}/members/{member_id}")
+    page.wait_for_load_state("networkidle")
+    page.get_by_role("button", name="Add federation membership").click()
+
+
+def _pick_federation(page: Page, name: str) -> None:
+    """Type into the picker and choose the one row that matches.
+
+    Addressed by id: the word "Federation" appears on the card heading, the
+    field label and every row, so a label lookup matches five elements.
+    """
+    page.locator("#fed_search").fill(name)
+    page.get_by_role("button", name=name, exact=True).click()
+
+
+def test_admin_can_add_a_federation_membership(page: Page) -> None:
+    """The membership appears on the member's detail page once saved."""
+    admin_token = authenticate(page, "admin")
+    member_id = _create_member(admin_token)
+    _, federation_name = _create_federation(admin_token)
+
+    _open_add_dialog(page, member_id)
+    _pick_federation(page, federation_name)
+    page.locator("#fed_member_number").fill("BKA-10001")
+    page.get_by_role("button", name="Save", exact=True).click()
+
+    expect(page.get_by_text("BKA-10001")).to_be_visible(timeout=8000)
+
+
+def test_admin_can_add_a_federation_membership_with_a_renewal_date(
+    page: Page,
+) -> None:
+    """Regression test for #345.
+
+    The renewal date is the whole point: writing one raised
+
+        DataError: invalid input for query argument $4: '2027-04-01'
+        ('str' object has no attribute 'toordinal')
+
+    which surfaced as a 500 and left the membership uncreated. Nothing caught
+    it, because the placeholder that named this case never ran.
+    """
+    admin_token = authenticate(page, "admin")
+    member_id = _create_member(admin_token)
+    _, federation_name = _create_federation(admin_token)
+    renewal = date.today() + timedelta(days=365)
+
+    _open_add_dialog(page, member_id)
+    _pick_federation(page, federation_name)
+    page.locator("#fed_member_number").fill("BKA-10002")
+    page.locator("#fed_renewal_date").fill(renewal.isoformat())
+    page.get_by_role("button", name="Save", exact=True).click()
+
+    expect(page.get_by_text("BKA-10002")).to_be_visible(timeout=8000)
+    # The date itself, not just the row: a 500 is not the only way this can
+    # break. Were renewal_date ever silently dropped on write — by the
+    # not-None filtering the update handlers use, or by _writable losing the
+    # key — the POST would still return 201 and the member number would still
+    # render. The row reads "Member #… · Renews YYYY-MM-DD" as one paragraph.
+    expect(page.get_by_text(f"Renews {renewal.isoformat()}")).to_be_visible()
+
+
+def test_an_expired_renewal_date_is_flagged_on_the_member_page(page: Page) -> None:
+    """A membership whose renewal date has passed is badged as expired.
+
+    Seeded through the API rather than the dialog: the point here is what the
+    page renders for a stored past date, not the add flow, which the two tests
+    above already drive.
+    """
+    admin_token = authenticate(page, "admin")
+    member_id = _create_member(admin_token)
+    federation_id, _ = _create_federation(admin_token)
+
+    created = requests.post(
+        f"{API_URL}/members/{member_id}/federations",
+        cookies={"access_token": admin_token},
+        json={
+            "federation_id": federation_id,
+            "member_number": "BKA-10003",
+            "renewal_date": (date.today() - timedelta(days=1)).isoformat(),
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    page.goto(f"{BASE_URL}/members/{member_id}")
+    page.wait_for_load_state("networkidle")
+
+    expect(page.get_by_text("BKA-10003")).to_be_visible(timeout=8000)
+    expect(page.get_by_text("Expired")).to_be_visible()
