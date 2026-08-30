@@ -22,6 +22,29 @@ services:
       db:
         condition: service_healthy
 
+  # The fast half of the suite (#336): same script, same per-run throwaway
+  # database, but BACKEND_ONLY=1 skips the frontend install, Vite and the e2e
+  # files — and the lighter build target skips Node and Playwright's chromium
+  # download entirely. CI runs this on every push; the full `test` service
+  # above stays on release candidates.
+  test-backend:
+    build:
+      context: .
+      target: backend-dev-deps
+    volumes:
+      - ./backend:/app
+      - .:/repo:ro
+    environment:
+      TZ: Europe/London
+      REPO_ROOT: /repo
+      BACKEND_ONLY: "1"
+    env_file:
+      - .env.test
+    command: /app/run_tests.sh
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     environment:

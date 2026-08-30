@@ -112,6 +112,17 @@ podman-compose -f docker-compose.test.yml run --rm \
 podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
 ```
 
+```bash
+# Backend only — no frontend install, no Vite, no e2e collection (~1 minute)
+podman-compose -f docker-compose.test.yml run --rm test-backend
+```
+
+The `test-backend` service is the same `run_tests.sh` with `BACKEND_ONLY=1`,
+built from the lighter `backend-dev-deps` stage. CI runs it on every push
+(`.github/workflows/backend-tests.yml`, advisory); the full suite stays on
+release-candidate tags. It cannot catch an e2e regression — run the full suite
+before opening a PR.
+
 Pass pytest flags via `PYTEST_ARGS`, **not** positionally after the service
 name. `podman-compose` treats trailing arguments as the container command, so
 `run --rm test -x` fails with ``crun: executable file `-x` not found in $PATH``;

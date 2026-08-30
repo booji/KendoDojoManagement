@@ -13,10 +13,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM backend-deps AS backend-dev-deps
 COPY backend/requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
+# curl belongs to this stage rather than the e2e one below: run_tests.sh gates
+# on `curl http://localhost:8000/health` before pytest (#316), and the
+# backend-only CI job (#336) runs that script against this image.
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 FROM backend-dev-deps AS backend-e2e-deps
 # Install Node.js 22 (for Vite dev server) and Playwright system deps
-RUN apt-get update && apt-get install -y curl gnupg && \
+RUN apt-get update && apt-get install -y gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
