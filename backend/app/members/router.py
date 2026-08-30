@@ -163,10 +163,6 @@ async def update_member(
     for key in _CLEARABLE_FIELDS:
         if key in explicitly_set:
             data[key] = explicitly_set[key]
-    if "dob" in data and hasattr(data["dob"], "isoformat"):
-        data["dob"] = data["dob"].isoformat()
-    if "join_date" in data and hasattr(data["join_date"], "isoformat"):
-        data["join_date"] = data["join_date"].isoformat()
     record = await repo.update(str(member_id), data)
     if record is None:
         raise HTTPException(

@@ -24,6 +24,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
+from tests.member_support import as_stored_member
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -90,7 +91,7 @@ class StubMemberRepo:
         if existing:
             raise ValueError(f"Member with email '{data['email']}' already exists")
         new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
+        record = {"id": new_id, **as_stored_member(data)}
         self._store[new_id] = record
         return record
 
@@ -100,7 +101,7 @@ class StubMemberRepo:
         record = self._store.get(member_id)
         if record is None:
             return None
-        record.update(data)
+        record.update(as_stored_member(data))
         return record
 
     async def deactivate(self, member_id: str) -> dict[str, Any] | None:

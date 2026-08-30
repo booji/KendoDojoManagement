@@ -28,11 +28,17 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.federations.db_models import Federation
 from app.federations.dependencies import get_federation_repo  # noqa: F401 — red
 from app.main import app
 from app.member_federations.dependencies import (  # noqa: F401 — red
     get_member_federation_repo,
 )
+from app.member_federations.repository import (
+    MemberFederationRecord,
+    SqlMemberFederationRepository,
+)
+from app.members.db_models import Member
 from app.members.dependencies import get_member_repo  # noqa: F401
 
 # ---------------------------------------------------------------------------
@@ -200,41 +206,50 @@ class StubFederationRepo:
 
 
 class StubMemberFederationRepo:
-    """In-memory stand-in for a MemberFederation repository."""
+    """In-memory stand-in for a MemberFederation repository.
+
+    Returns MemberFederationRecord, like the SQL implementation, and settles
+    renewal_date to an ISO string the same way it does (#345).
+    """
 
     def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
+        self._store: dict[str, MemberFederationRecord] = {}
 
-    async def get(self, membership_id: str) -> dict[str, Any] | None:
+    async def get(self, membership_id: str) -> MemberFederationRecord | None:
         return self._store.get(membership_id)
 
-    async def get_for_member(self, member_id: str) -> list[dict[str, Any]]:
-        return [r for r in self._store.values() if r["member_id"] == member_id]
+    async def get_for_member(self, member_id: str) -> list[MemberFederationRecord]:
+        return [r for r in self._store.values() if r.member_id == member_id]
 
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+    async def add(self, data: dict[str, Any]) -> MemberFederationRecord:
         new_id = str(uuid.uuid4())
-        record: dict[str, Any] = {
-            "id": new_id,
-            "renewal_date": None,
-            **data,
-        }
+        record = MemberFederationRecord(id=new_id, **_iso_dates(data))
         self._store[new_id] = record
         return record
 
     async def update(
         self, membership_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    ) -> MemberFederationRecord | None:
         record = self._store.get(membership_id)
         if record is None:
             return None
-        record.update(data)
-        return record
+        updated = record.model_copy(update=_iso_dates(data))
+        self._store[membership_id] = updated
+        return updated
 
     async def remove(self, membership_id: str) -> bool:
         if membership_id not in self._store:
             return False
         del self._store[membership_id]
         return True
+
+
+def _iso_dates(data: dict[str, Any]) -> dict[str, Any]:
+    """Mirror the SQL repository, which stores a date and reads back a string."""
+    renewal = data.get("renewal_date")
+    if renewal is None:
+        return dict(data)
+    return {**data, "renewal_date": getattr(renewal, "isoformat", lambda: renewal)()}
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +583,7 @@ async def test_admin_can_edit_federation_membership(
             "member_number": "OLD-001",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -591,7 +606,7 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
             "member_number": "AJKF-010",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
     new_date = (date.today() + timedelta(days=365)).isoformat()
 
     async with AsyncClient(
@@ -637,7 +652,7 @@ async def test_admin_can_remove_federation_membership(
             "member_number": "TO-BE-REMOVED",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -671,9 +686,7 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        response = await c.delete(
-            f"/members/member-a-uuid/federations/{membership['id']}"
-        )
+        response = await c.delete(f"/members/member-a-uuid/federations/{membership.id}")
     assert response.status_code == 401
 
 
@@ -781,7 +794,7 @@ async def test_member_can_edit_own_federation_membership(
             "member_number": "BEFORE",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -805,7 +818,7 @@ async def test_member_can_remove_own_federation_membership(
             "member_number": "REMOVE-ME",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -826,7 +839,7 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
             "member_number": "MEMBER-A-ONLY",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -849,7 +862,7 @@ async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
             "member_number": "MEMBER-A-ONLY-2",
         }
     )
-    mf_id = membership["id"]
+    mf_id = membership.id
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
@@ -865,3 +878,80 @@ async def test_me_federations_unauthenticated_returns_401(
     ) as c:
         response = await c.get("/users/me/federations")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# The repository seam settles the date type itself (#345)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_member_and_federation(db_session) -> tuple[str, str]:
+    """Insert the two rows a membership needs to point at."""
+    member = Member(
+        email="seam@dojo.test",
+        first_name="Seam",
+        surname="Test",
+        join_date="2026-01-01",
+        membership_status="active",
+    )
+    federation = Federation(name="Seam Federation")
+    db_session.add_all([member, federation])
+    await db_session.flush()
+    return member.id, federation.id
+
+
+async def test_add_accepts_a_date_and_reads_back_an_iso_string(db_session) -> None:
+    """The seam settles the type: a date goes in, an ISO string comes out.
+
+    Callers used to convert before writing — the router did it in four places
+    — because nothing said which of the two a repository wanted.
+    """
+    member_id, federation_id = await _seed_member_and_federation(db_session)
+    repo = SqlMemberFederationRepository(db_session)
+
+    record = await repo.add(
+        {
+            "member_id": member_id,
+            "federation_id": federation_id,
+            "member_number": "SEAM-1",
+            "renewal_date": date(2027, 3, 1),
+        }
+    )
+
+    assert record.renewal_date == "2027-03-01"
+    assert (await repo.get(record.id)).renewal_date == "2027-03-01"
+
+
+async def test_add_still_accepts_an_iso_string(db_session) -> None:
+    """The other half of settling it: a string is understood too, and stored
+    as a date rather than reaching the Date column as text."""
+    member_id, federation_id = await _seed_member_and_federation(db_session)
+    repo = SqlMemberFederationRepository(db_session)
+
+    record = await repo.add(
+        {
+            "member_id": member_id,
+            "federation_id": federation_id,
+            "member_number": "SEAM-2",
+            "renewal_date": "2027-04-01",
+        }
+    )
+
+    assert record.renewal_date == "2027-04-01"
+
+
+async def test_update_refuses_a_key_that_is_not_a_column(db_session) -> None:
+    """A silently dropped write is a call that reports success and does
+    nothing. The in-memory fakes already refuse one (#337); so does this."""
+    member_id, federation_id = await _seed_member_and_federation(db_session)
+    repo = SqlMemberFederationRepository(db_session)
+    record = await repo.add(
+        {
+            "member_id": member_id,
+            "federation_id": federation_id,
+            "member_number": "SEAM-3",
+        }
+    )
+
+    with pytest.raises(TypeError, match="not a column"):
+        await repo.update(record.id, {"membre_number": "typo"})

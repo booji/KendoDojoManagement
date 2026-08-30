@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import Date, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,4 +18,4 @@ class MemberFederation(UUIDBase):
         UUIDType(), ForeignKey("federations.id"), nullable=False
     )
     member_number: Mapped[str] = mapped_column(String(100), nullable=False)
-    renewal_date: Mapped[str | None] = mapped_column(Date, nullable=True)
+    renewal_date: Mapped[date | None] = mapped_column(Date, nullable=True)

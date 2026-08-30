@@ -26,6 +26,7 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
+from tests.member_support import as_stored_member
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,6 +70,7 @@ class StubMemberRepo:
         return None
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+        data = as_stored_member(data)
         existing = await self.get_by_email(data["email"])
         if existing:
             raise ValueError(f"Member with email '{data['email']}' already exists")
@@ -80,6 +82,7 @@ class StubMemberRepo:
     async def update(
         self, member_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None:
+        data = as_stored_member(data)
         record = self._store.get(member_id)
         if record is None:
             return None
@@ -149,9 +152,9 @@ async def test_first_save_missing_first_name_returns_422(empty_member_repo) -> N
             json={"surname": "Yamada", "dob": "1990-06-15"},
         )
 
-    assert (
-        response.status_code == 422
-    ), f"Expected 422 when first_name is absent on first-save, got {response.status_code}"
+    assert response.status_code == 422, (
+        f"Expected 422 when first_name is absent on first-save, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +174,9 @@ async def test_first_save_missing_surname_returns_422(empty_member_repo) -> None
             json={"first_name": "Taro", "dob": "1990-06-15"},
         )
 
-    assert (
-        response.status_code == 422
-    ), f"Expected 422 when surname is absent on first-save, got {response.status_code}"
+    assert response.status_code == 422, (
+        f"Expected 422 when surname is absent on first-save, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -193,9 +196,9 @@ async def test_first_save_missing_dob_returns_422(empty_member_repo) -> None:
             json={"first_name": "Taro", "surname": "Yamada"},
         )
 
-    assert (
-        response.status_code == 422
-    ), f"Expected 422 when dob is absent on first-save, got {response.status_code}"
+    assert response.status_code == 422, (
+        f"Expected 422 when dob is absent on first-save, got {response.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------

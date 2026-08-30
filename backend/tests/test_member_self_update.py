@@ -29,6 +29,7 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
+from tests.member_support import as_stored_member
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,6 +93,7 @@ class StubMemberRepo:
         return None
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+        data = as_stored_member(data)
         existing = await self.get_by_email(data["email"])
         if existing:
             raise ValueError(f"Member with email '{data['email']}' already exists")
@@ -103,6 +105,7 @@ class StubMemberRepo:
     async def update(
         self, member_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None:
+        data = as_stored_member(data)
         record = self._store.get(member_id)
         if record is None:
             return None
@@ -229,9 +232,9 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         assert field in body, f"Missing field in response: {field}"
     # Legacy fields must be absent
     assert "full_name" not in body, "full_name must not appear in MemberResponse"
-    assert (
-        "parental_consent_obtained" not in body
-    ), "parental_consent_obtained must not appear in MemberResponse"
+    assert "parental_consent_obtained" not in body, (
+        "parental_consent_obtained must not appear in MemberResponse"
+    )
     assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 
