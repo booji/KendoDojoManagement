@@ -16,9 +16,6 @@ Acceptance criteria:
 
 from __future__ import annotations
 
-import uuid
-from typing import Any
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -26,7 +23,7 @@ from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
-from tests.member_support import as_stored_member
+from tests.fake_repositories import InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -44,79 +41,6 @@ def _member_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repository (copied from test_member_self_update.py for isolation)
-# ---------------------------------------------------------------------------
-
-
-class StubMemberRepo:
-    """In-memory stand-in for a Member repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def get(self, member_id: str) -> dict[str, Any] | None:
-        return self._store.get(member_id)
-
-    async def get_by_email(self, email: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item["email"] == email:
-                return item
-        return None
-
-    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item.get("user_id") == user_id:
-                return item
-        return None
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        data = as_stored_member(data)
-        existing = await self.get_by_email(data["email"])
-        if existing:
-            raise ValueError(f"Member with email '{data['email']}' already exists")
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-    async def update(
-        self, member_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        data = as_stored_member(data)
-        record = self._store.get(member_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None:
-        record = self._store.get(member_id)
-        if record is None:
-            return None
-        record["membership_status"] = "inactive"
-        return record
-
-    async def list(
-        self,
-        status: str | None = None,
-        search: str | None = None,
-    ) -> list[dict[str, Any]]:
-        results = list(self._store.values())
-        if status is not None:
-            results = [r for r in results if r["membership_status"] == status]
-        if search is not None:
-            term = search.lower()
-            results = [
-                r
-                for r in results
-                if term in r["first_name"].lower()
-                or term in r["surname"].lower()
-                or term in r["email"].lower()
-            ]
-        return results
-
-
-# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -128,9 +52,9 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def empty_member_repo() -> StubMemberRepo:
+def empty_member_repo() -> InMemoryMemberRepository:
     """A repo with no pre-seeded records — simulates user with no member record."""
-    repo = StubMemberRepo()
+    repo = InMemoryMemberRepository()
     app.dependency_overrides[get_member_repo] = lambda: repo
     return repo
 

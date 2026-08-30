@@ -1,4 +1,4 @@
-"""In-memory fakes for the session and attendance repository interfaces.
+"""In-memory fakes for the session, attendance and member repository interfaces.
 
 These are *fakes*, not stubs: a working implementation of the whole interface,
 not canned answers for the two methods one test happens to call. That
@@ -10,6 +10,10 @@ to tolerate that -- ``hasattr(repo, "list_in_range")`` and a ``_with_envelope``
 fallback in ``app/sessions/router.py`` -- so a partial test double was shaping
 the production interface. One complete implementation per interface removes the
 reason those branches exist.
+
+``members`` repeated the shape: eleven partial stubs, three of which stored a
+``date`` where the implementation stores an ISO string, and two routers
+converting before every write to compensate (#348).
 
 Seeding follows Front Door First (Meszaros, *xUnit Test Patterns*): fixture data
 enters through the constructor or ``seed(**overrides)``, both of which funnel
@@ -547,3 +551,123 @@ class InMemoryAttendanceRepository:
             }
             for session_id in session_ids
         }
+
+
+# ---------------------------------------------------------------------------
+# Members
+# ---------------------------------------------------------------------------
+
+# ``members.dob`` and ``members.join_date`` are ``String(10)`` columns, so
+# ``SqlMemberRepository`` writes a ``date`` as its ISO string. Eleven partial
+# stubs stored whatever they were handed, and ``members/router.py`` and
+# ``users/router.py`` each converted before writing to compensate -- production
+# shaped by incomplete test doubles, the shape #337 found for sessions. #345
+# deleted those guards; the rule lives here now (#348).
+_MEMBER_DATE_COLUMNS = ("dob", "join_date")
+
+
+def _stored_member(data: dict[str, Any]) -> dict[str, Any]:
+    """Return ``data`` the way ``SqlMemberRepository`` would store it."""
+    stored = dict(data)
+    for key in _MEMBER_DATE_COLUMNS:
+        value = stored.get(key)
+        if hasattr(value, "isoformat"):
+            stored[key] = value.isoformat()
+    return stored
+
+
+class InMemoryMemberRepository:
+    """In-memory implementation of ``AbstractMemberRepository``."""
+
+    _DEFAULTS: dict[str, Any] = {
+        "id": None,
+        "email": None,
+        "first_name": "Member",
+        "surname": "Test",
+        "display_name": None,
+        "dob": None,
+        "join_date": None,
+        "membership_status": "active",
+        "is_coach": False,
+        "is_first_aider": False,
+        "emergency_contact_name": None,
+        "emergency_contact_phone": None,
+        "user_id": None,
+        "anonymised_at": None,
+        "anonymised_by": None,
+    }
+
+    def __init__(self, records: list[dict[str, Any]] | None = None) -> None:
+        self._store: dict[str, dict[str, Any]] = {}
+        for record in records or []:
+            self._insert(record)
+
+    # -- seeding ------------------------------------------------------------
+
+    def seed(self, **overrides: Any) -> dict[str, Any]:
+        return self._insert(overrides)
+
+    def _insert(self, data: dict[str, Any]) -> dict[str, Any]:
+        row = _stored_member(_row(self._DEFAULTS, data))
+        row["id"] = row["id"] or str(uuid.uuid4())
+        row["join_date"] = row["join_date"] or date.today().isoformat()
+        self._store[row["id"]] = row
+        return dict(row)
+
+    # -- interface ----------------------------------------------------------
+
+    async def get(self, member_id: str) -> dict[str, Any] | None:
+        row = self._store.get(member_id)
+        return dict(row) if row else None
+
+    async def get_by_email(self, email: str) -> dict[str, Any] | None:
+        # An erased member has a NULL email; Postgres never matches those with
+        # ``=``, so neither does this.
+        if email is None:
+            return None
+        return next(
+            (dict(r) for r in self._store.values() if r["email"] == email), None
+        )
+
+    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
+        return next(
+            (dict(r) for r in self._store.values() if r["user_id"] == user_id), None
+        )
+
+    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+        if await self.get_by_email(data.get("email")):
+            raise ValueError(f"Member with email '{data['email']}' already exists")
+        return self._insert(data)
+
+    async def update(
+        self, member_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        row = self._store.get(member_id)
+        if row is None:
+            return None
+        updates = _stored_member(_row(self._DEFAULTS, data)) if data else {}
+        for key in data:
+            row[key] = updates[key]
+        return dict(row)
+
+    async def list(
+        self,
+        status: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = list(self._store.values())
+        if status is not None:
+            rows = [r for r in rows if r["membership_status"] == status]
+        else:
+            # Archived members are shelved out of the default roster.
+            rows = [r for r in rows if r["membership_status"] != "archived"]
+        if search is not None:
+            term = search.lower()
+            rows = [
+                r
+                for r in rows
+                if term in (r["first_name"] or "").lower()
+                or term in (r["surname"] or "").lower()
+                or term in (r["email"] or "").lower()
+            ]
+        return [dict(r) for r in rows]

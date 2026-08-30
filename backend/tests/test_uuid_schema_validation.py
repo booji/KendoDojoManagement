@@ -40,6 +40,7 @@ from app.sessions.dependencies import (
 )
 from tests.fake_repositories import (
     InMemoryAttendanceRepository,
+    InMemoryMemberRepository,
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
     InMemorySessionTypeRepository,
@@ -68,30 +69,6 @@ _BAD_UUID = "not-a-uuid"
 # ---------------------------------------------------------------------------
 # No-op stub repos (pure Python, no DB)
 # ---------------------------------------------------------------------------
-
-
-class _NoOpMemberRepo:
-    async def get(self, member_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        return {}
-
-    async def update(
-        self, member_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        return None
-
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None:
-        return None
-
-    async def list(
-        self, status: str | None = None, search: str | None = None
-    ) -> list[dict[str, Any]]:
-        return []
-
-    async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
-        return None
 
 
 class _NoOpGradeRepo:
@@ -141,7 +118,7 @@ class _NoOpUoW:
 def _stub_all_repos():
     """Stub every repository and UoW so tests never touch the DB."""
     app.dependency_overrides[get_uow] = lambda: _NoOpUoW()
-    app.dependency_overrides[get_member_repo] = lambda: _NoOpMemberRepo()
+    app.dependency_overrides[get_member_repo] = lambda: InMemoryMemberRepository()
     app.dependency_overrides[get_grade_repo] = lambda: _NoOpGradeRepo()
     app.dependency_overrides[get_session_instance_repo] = lambda: (
         InMemorySessionInstanceRepository()

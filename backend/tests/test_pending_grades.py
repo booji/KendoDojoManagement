@@ -28,6 +28,7 @@ from app.auth.models import UserClaims
 from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo
+from tests.fake_repositories import InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Auth claim helpers
@@ -56,7 +57,8 @@ def _admin_override() -> UserClaims:
 _MEMBER_A_RECORD: dict[str, Any] = {
     "id": _MEMBER_A_ID,
     "email": "member-a@dojo.test",
-    "full_name": "Alice Kendo",
+    "first_name": "Alice",
+    "surname": "Kendo",
     "user_id": _MEMBER_A.sub,
     "membership_status": "active",
 }
@@ -64,65 +66,11 @@ _MEMBER_A_RECORD: dict[str, Any] = {
 _MEMBER_B_RECORD: dict[str, Any] = {
     "id": _MEMBER_B_ID,
     "email": "member-b@dojo.test",
-    "full_name": "Bob Kendo",
+    "first_name": "Bob",
+    "surname": "Kendo",
     "user_id": "member-b-uuid",
     "membership_status": "active",
 }
-
-
-class StubMemberRepo:
-    """Minimal in-memory member repository for pending grade tests."""
-
-    def __init__(self, members: list[dict[str, Any]] | None = None) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-        for m in members or [_MEMBER_A_RECORD, _MEMBER_B_RECORD]:
-            self._store[m["id"]] = dict(m)
-
-    async def get(self, member_id: str) -> dict[str, Any] | None:
-        return self._store.get(member_id)
-
-    async def get_by_email(self, email: str) -> dict[str, Any] | None:
-        for item in self._store.values():
-            if item["email"] == email:
-                return item
-        return None
-
-    async def add(self, data: dict[str, Any]) -> dict[str, Any]:
-        new_id = str(uuid.uuid4())
-        record = {"id": new_id, **data}
-        self._store[new_id] = record
-        return record
-
-    async def update(
-        self, member_id: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        record = self._store.get(member_id)
-        if record is None:
-            return None
-        record.update(data)
-        return record
-
-    async def deactivate(self, member_id: str) -> dict[str, Any] | None:
-        record = self._store.get(member_id)
-        if record is None:
-            return None
-        record["membership_status"] = "inactive"
-        return record
-
-    async def list(
-        self, status: str | None = None, search: str | None = None
-    ) -> list[dict[str, Any]]:
-        results = list(self._store.values())
-        if status is not None:
-            results = [r for r in results if r["membership_status"] == status]
-        if search is not None:
-            term = search.lower()
-            results = [
-                r
-                for r in results
-                if term in r["full_name"].lower() or term in r["email"].lower()
-            ]
-        return results
 
 
 class StubGradeRepo:
@@ -198,8 +146,8 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def member_repo() -> StubMemberRepo:
-    repo = StubMemberRepo()
+def member_repo() -> InMemoryMemberRepository:
+    repo = InMemoryMemberRepository([_MEMBER_A_RECORD, _MEMBER_B_RECORD])
     app.dependency_overrides[get_member_repo] = lambda: repo
     return repo
 

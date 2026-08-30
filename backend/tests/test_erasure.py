@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.fake_repositories import InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Lazy import of the not-yet-existing erasure module.
@@ -198,16 +199,6 @@ class TestCanErase:
 # ===========================================================================
 
 
-class StubMemberRepoForErasure:
-    """Minimal in-memory member repo stand-in, following test_members.py's pattern."""
-
-    def __init__(self, records: dict[str, dict[str, Any]]) -> None:
-        self._store = records
-
-    async def get(self, member_id: str) -> dict[str, Any] | None:
-        return self._store.get(member_id)
-
-
 _MEMBER_CLAIMS = UserClaims(
     sub="member-uuid-self", email="self@dojo.test", role="member", is_active=True
 )
@@ -219,9 +210,8 @@ _ADMIN_CLAIMS = UserClaims(
 def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
     from app.members.dependencies import get_member_repo
 
-    app.dependency_overrides[get_member_repo] = lambda: StubMemberRepoForErasure(
-        records
-    )
+    repo = InMemoryMemberRepository(list(records.values()))
+    app.dependency_overrides[get_member_repo] = lambda: repo
 
 
 async def test_erase_as_non_admin_returns_403() -> None:
