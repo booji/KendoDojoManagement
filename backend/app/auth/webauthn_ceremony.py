@@ -30,10 +30,11 @@ none of the four rules can diverge without the change being visible in one
 place. `tests/test_webauthn_ceremony_conventions.py` fails if a second
 construction site appears.
 
-What that does NOT buy is equal body length on the invite path: the four
-rules govern the fields this module chooses, and `user_name` is a fifth,
-caller-supplied one. See `invite_begin` for the residual channel that leaves,
-and why closing it is a product decision rather than a refactor.
+A fifth rule joins them on the invite path: constant name width. The other
+two paths echo an address the caller already typed, so their two outcomes
+match for free. An invite decoy cannot -- it does not know the invitee's
+address -- so `invite_begin` pads both of its outcomes to one width. See
+there for what that costs and why it is invisible.
 
 What this module deliberately does NOT do is pad the response. The
 constant-time floor lives in `app.core.middleware.ConstantTimeAuthMiddleware`
@@ -132,6 +133,40 @@ def to_authentication_credential(
             ),
         ),
     )
+
+
+# RFC 5321 caps an address at 254 octets and email_validator enforces that
+# (app.auth.models.LenientEmail), so every real invitee address fits inside
+# this width with room to pad. Both invite outcomes are padded to it; see
+# `invite_begin`.
+_INVITE_NAME_OCTETS = 254
+
+
+def _fixed_width(name: str) -> str:
+    """Pad `name` with trailing spaces to exactly _INVITE_NAME_OCTETS UTF-8
+    octets.
+
+    Octets, not characters: an address may have a non-ASCII local part
+    (email_validator allows SMTPUTF8 by default) and FastAPI serialises the
+    response with `ensure_ascii=False`, so a multi-byte character costs more
+    than one byte on the wire. Padding to a character count would leave the
+    Content-Length varying with the address's encoding -- a quieter version
+    of the very channel this closes.
+
+    Spaces are the padding: `user.name` and `user.displayName` are handed
+    straight to `navigator.credentials.create()` and never rendered by this
+    app (see frontend/src/api/auth.ts), so the only place the padding could
+    show is the authenticator's account picker, where trailing whitespace is
+    invisible. Nothing here is stored server-side, and a validated address
+    can contain neither a quote nor a backslash (email_validator rejects
+    quoted local parts), so no JSON escaping can reintroduce a width delta.
+    """
+    # A byte slice can land mid-codepoint; drop the partial tail rather than
+    # emit invalid UTF-8, then pad back to the full width.
+    trimmed = name.encode("utf-8")[:_INVITE_NAME_OCTETS].decode(
+        "utf-8", errors="ignore"
+    )
+    return trimmed + " " * (_INVITE_NAME_OCTETS - len(trimmed.encode("utf-8")))
 
 
 def _decoy_user_id(identifier: str) -> str:
@@ -287,33 +322,45 @@ def invite_begin(token: str, subject: Subject | None) -> Ceremony:
     across two calls. So the name is derived from the same stable id. Both
     fields must be stable, or neither is.
 
-    KNOWN RESIDUAL -- this decoy is distinguishable by response length. The
-    synthesised name is a fixed 51 characters while a real invitee's email is
-    whatever it is, so the JSON body is a constant 679 bytes for any unusable
-    token against 589-663 for the real addresses measured in
-    tests/test_webauthn_ceremony_conventions.py. Content-Length alone
-    classifies a token in one call, and the constant-time middleware pads
-    latency, not size.
+    Stability is not enough on its own, though, because a *stable* name of
+    the wrong LENGTH is still a one-call oracle. A synthesised
+    "<uuid>@invite.invalid" is a fixed 51 octets while a real invitee's
+    address is whatever it is, and `user_name` is echoed into
+    `user.displayName` too -- so before padding, every unusable token
+    answered at one fixed size while a usable one answered at a size that
+    tracked the invitee's address. Content-Length alone classified a token in
+    a single call, and ConstantTimeAuthMiddleware pads latency, not size.
 
-    `register_begin` has no such gap because both of its paths echo the
-    caller's own email. Here the caller does not know the invitee's address,
-    which is the whole point -- so the only way to equalise the width is for
-    the REAL path to synthesise a constant-width name too, and `user_name` is
-    what the browser's account picker shows the invitee at every subsequent
-    login. Trading a legible label for the life of the credential against
-    this oracle is a product call, not a refactor one, so it is recorded here
-    rather than decided here.
+    Both outcomes are therefore padded to `_INVITE_NAME_OCTETS`, which is the
+    only mechanism available here: the decoy cannot imitate a length it
+    cannot know, so the real path has to stop varying. The alternative --
+    giving the real path a constant *synthetic* name -- would have shown the
+    invitee "<uuid>@invite.invalid" in their authenticator's account picker
+    at every subsequent login, for the life of the credential. Padding keeps
+    the real address as the label and puts the width delta in trailing
+    whitespace instead, which nothing renders. See `_fixed_width`.
 
-    Scope of the leak: invite tokens are secrets.token_urlsafe(32), so this
-    enumerates nothing. It tells the holder of one specific link whether that
-    link is still usable -- roughly what attempting to redeem it tells them.
-    That is why it is recorded rather than treated as a release blocker, and
-    it is NOT the email-enumeration class of #239/#267/#300.
+    Every redeem-begin response is now 1045 bytes on the wire, measured, for
+    a usable token and an unusable one alike -- roughly 400 bytes more than
+    before. Timing is unaffected: the real path stays about 2.9ms slower than
+    the decoy raw, the same gap as before padding, and the middleware floor
+    covers it.
+
+    Scope of what this closes: invite tokens are secrets.token_urlsafe(32),
+    so the channel never enumerated anything -- it told the holder of one
+    specific link whether that link was still usable. Smaller than
+    #239/#267/#300, and worth 400 bytes because the guarantee this module
+    exists to make should not carry an asterisk on one of its three paths.
     """
     if subject is None:
         decoy_id = _decoy_user_id(token)
         subject = Subject(user_id=decoy_id, user_name=f"{decoy_id}@invite.invalid")
-    return _registration_ceremony(subject)
+    return _registration_ceremony(
+        Subject(
+            user_id=subject.user_id,
+            user_name=_fixed_width(subject.user_name),
+        )
+    )
 
 
 def login_begin() -> Ceremony:

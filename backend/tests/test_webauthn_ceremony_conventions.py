@@ -29,8 +29,6 @@ import ast
 import json
 from pathlib import Path
 
-import pytest
-
 APP = Path(__file__).resolve().parent.parent / "app"
 CEREMONY = APP / "auth" / "webauthn_ceremony.py"
 
@@ -133,56 +131,93 @@ def test_no_auth_module_imports_private_names_from_another() -> None:
 # ---------------------------------------------------------------------------
 # Body-length parity
 #
-# The four shape rules govern the fields webauthn_ceremony chooses.
-# `user_name` is a fifth, supplied by the caller, and it is the one field
-# whose width the module cannot equalise on its own. These two tests record
-# where that lands today.
+# A begin response that is a constant length whatever the identifier is the
+# fifth rule, alongside the four the module's docstring names. The register
+# and login paths get it for free -- both outcomes echo an address the caller
+# already typed, or carry no name at all. The invite path has to buy it, by
+# padding both outcomes to one width (see webauthn_ceremony._fixed_width),
+# because a decoy cannot imitate a length it does not know.
 # ---------------------------------------------------------------------------
 
 _EMAILS = (
     "a@b.co",
     "sam@dojo.test",
     "a-fairly-long-address@some-dojo.example.org",
+    # Non-ASCII local part and domain: email_validator allows SMTPUTF8, and
+    # FastAPI serialises with ensure_ascii=False, so these cost more octets
+    # than characters. Padding by character count would pass every other
+    # case here and still leak on this one.
+    "kend\u014dka@d\u014dj\u014d.example",
+    "x" * 60 + "@dojo.test",
 )
 
 
-def _body_length(ceremony) -> int:
-    return len(json.dumps(ceremony.response))
+def _wire_length(ceremony) -> int:
+    """Octets an attacker reads off Content-Length.
+
+    `ensure_ascii=False` matches how FastAPI serialises the returned dict:
+    a non-ASCII address goes out as UTF-8, not as \\uXXXX escapes.
+    """
+    return len(json.dumps(ceremony.response, ensure_ascii=False).encode("utf-8"))
 
 
 def test_register_begin_real_and_decoy_bodies_are_the_same_length() -> None:
     """The register decoy echoes the caller's own email, so it matches the
-    real path exactly at every address width -- no Content-Length oracle."""
+    real path at every address width without padding."""
     from app.auth.webauthn_ceremony import Subject, register_begin
 
     for email in _EMAILS:
-        real = _body_length(register_begin(email, Subject("u" * 36, email)))
-        decoy = _body_length(register_begin(email, subject=None))
+        real = _wire_length(register_begin(email, Subject("u" * 36, email)))
+        decoy = _wire_length(register_begin(email, subject=None))
         assert real == decoy, (
             f"register begin bodies differ for {email!r}: real={real} "
-            f"decoy={decoy} -- response size is a one-call oracle that the "
-            "constant-time middleware does not cover, it pads latency only"
+            f"decoy={decoy} -- response size is a one-call oracle that "
+            "ConstantTimeAuthMiddleware does not cover, it pads latency only"
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known residual, see app.auth.webauthn_ceremony.invite_begin. The "
-        "invite decoy synthesises a fixed-width name because it cannot know "
-        "the invitee's address; equalising it means the REAL path must "
-        "synthesise one too, which is what the invitee's authenticator shows "
-        "them at every login. Product call, not a refactor call. Tokens are "
-        "unguessable, so this enumerates nothing -- it only tells the holder "
-        "of one link whether that link is still usable."
-    ),
-)
-def test_invite_begin_real_and_decoy_bodies_are_the_same_length() -> None:
+def test_invite_begin_body_length_is_constant_for_every_address() -> None:
+    """One length for a usable token, an unusable one, and every address.
+
+    Before padding, an unusable token answered at one fixed size while a
+    usable one answered at a size that tracked the invitee's address, so
+    Content-Length classified a token in a single call. Asserting one value
+    across the whole set is stricter than comparing real against decoy
+    pairwise: it also catches a decoy that merely tracked the address width.
+
+    Lengths here are a proxy for the wire -- this serialises with default
+    separators where FastAPI uses compact ones, so the absolute number is
+    larger than the Content-Length a client sees. Equality is what the test
+    is about, and that holds under either separator choice.
+    """
+    from app.auth.webauthn_ceremony import Subject, invite_begin
+
+    lengths = {
+        _wire_length(invite_begin("tok", Subject("u" * 36, email))) for email in _EMAILS
+    }
+    lengths.add(_wire_length(invite_begin("tok", subject=None)))
+
+    assert len(lengths) == 1, (
+        f"invite begin body length varies: {sorted(lengths)}. The decoy "
+        "cannot imitate an address width it does not know, so every outcome "
+        "must be padded to one width -- see webauthn_ceremony._fixed_width"
+    )
+
+
+def test_invite_begin_label_is_still_the_invitee_address() -> None:
+    """The padding must stay invisible.
+
+    `user.name` and `user.displayName` are what the invitee's authenticator
+    shows them in the account picker, at this registration and at every later
+    login. Padding buys the length guarantee only because it is trailing
+    whitespace around the real address -- the moment the label stops being
+    the address, the fix has cost the invitee something they can see.
+    """
     from app.auth.webauthn_ceremony import Subject, invite_begin
 
     for email in _EMAILS:
-        real = _body_length(invite_begin("tok", Subject("u" * 36, email)))
-        decoy = _body_length(invite_begin("tok", subject=None))
-        assert real == decoy, (
-            f"invite begin bodies differ for {email!r}: real={real} decoy={decoy}"
-        )
+        user = invite_begin("tok", Subject("u" * 36, email)).response["publicKey"][
+            "user"
+        ]
+        assert user["name"].strip() == email
+        assert user["displayName"].strip() == email
