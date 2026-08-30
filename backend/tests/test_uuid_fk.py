@@ -105,10 +105,6 @@ class TestAttendanceFKConstraints:
             "session_instances.id" in targets
         ), f"attendance.session_id FK must reference session_instances.id, got {targets}"
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="FK not enforced: checkin_to_session uses current_user.sub as member_id, not a members.id",
-    )
     def test_attendance_member_id_fk_references_members(self) -> None:
         from app.attendance.db_models import Attendance
 

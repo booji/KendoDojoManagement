@@ -527,7 +527,7 @@ class InMemoryAttendanceRepository:
         return [dict(r) for r in self._store if r["member_id"] == member_id]
 
     async def summary_for_sessions(
-        self, session_ids: list[str], member_id: str
+        self, session_ids: list[str], member_id: str | None
     ) -> dict[str, dict[str, Any]]:
         wanted = set(session_ids)
         rows = [r for r in self._store if r["session_id"] in wanted]
@@ -536,7 +536,11 @@ class InMemoryAttendanceRepository:
                 "attendance_count": sum(
                     1 for r in rows if r["session_id"] == session_id
                 ),
-                "is_checked_in": any(
+                # member_id None (a user with no member record) is never
+                # checked in -- matching it against a visitor row's NULL
+                # member_id is the bug the SQL path guards too (#340).
+                "is_checked_in": member_id is not None
+                and any(
                     r["session_id"] == session_id and r["member_id"] == member_id
                     for r in rows
                 ),
