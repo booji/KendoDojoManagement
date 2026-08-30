@@ -216,7 +216,15 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     or GC-pause skew to one branch. The tolerance is calibrated per run
     against same-path noise -- see tests/timing_support.py and issue #298.
     """
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
+    # The floor must sit above the real path's p99 on whatever host is running
+    # this, or there is nothing left to pad and the delta this test measures
+    # reappears through no fault of the application (see ConstantTimeFloor's
+    # docstring and docs/auth-timing-calibration.md). 20ms clears the 16.8ms
+    # p99 measured on a dev machine by only 3ms — too thin for a shared CI
+    # runner, where it voided the floor and failed this test with a 1.2ms
+    # median delta against a 0.17ms control (#336). Use the shipped 100ms
+    # default instead: production's own headroom, at ~5s per test.
+    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 100)
     session = db_client
     await _seed_user(session, "known-median@dojo.test")
 
@@ -244,7 +252,15 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     """Over interleaved samples, the median latency for an AUTHORIZED email
     and an UNAUTHORIZED email must differ by far less than the ~2ms signal in
     the issue."""
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
+    # The floor must sit above the real path's p99 on whatever host is running
+    # this, or there is nothing left to pad and the delta this test measures
+    # reappears through no fault of the application (see ConstantTimeFloor's
+    # docstring and docs/auth-timing-calibration.md). 20ms clears the 16.8ms
+    # p99 measured on a dev machine by only 3ms — too thin for a shared CI
+    # runner, where it voided the floor and failed this test with a 1.2ms
+    # median delta against a 0.17ms control (#336). Use the shipped 100ms
+    # default instead: production's own headroom, at ~5s per test.
+    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 100)
     session = db_client
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
     await _seed_member(session, "authorized-median@dojo.test")
