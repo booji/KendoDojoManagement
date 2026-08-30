@@ -344,3 +344,93 @@ def test_pytest_args_defaults_to_empty_under_set_u():
 # and test_frontend_readiness_is_rechecked_after_the_wait_loop above cover
 # the same acceptance criterion (exec pytest unreachable on failure) with
 # assertions that do fail against the unmodified script.
+
+
+# ---------------------------------------------------------------------------
+# BACKEND_ONLY mode (issue #336)
+# ---------------------------------------------------------------------------
+# The full suite is ~15 minutes, dominated by the Playwright e2e files, and
+# private-repo Actions minutes are metered. A backend-only mode lets CI fire
+# the fast half on every push: same script, same per-run database, but no
+# frontend install, no Vite, and no e2e collection.
+#
+# These assert on structure, not wording. The frontend work must sit inside a
+# BACKEND_ONLY guard, and the e2e ignore must reach pytest.
+
+
+def _backend_only_guarded_regions() -> list[str]:
+    """Text of every `if`-block in the script whose condition tests BACKEND_ONLY.
+
+    Nested `if`s inside such a block would confuse this scan, so it takes the
+    text from the guard to the *last* `fi` at the same indentation — good
+    enough to answer "is this command only reached when BACKEND_ONLY is off".
+    """
+    text = _script_text()
+    regions = []
+    for match in re.finditer(r"^(\s*)if\s+.*BACKEND_ONLY.*$", text, re.MULTILINE):
+        indent = match.group(1)
+        rest = text[match.end() :]
+        close = re.search(rf"^{indent}fi\s*$", rest, re.MULTILINE)
+        regions.append(rest[: close.start()] if close else rest)
+    return regions
+
+
+def test_frontend_install_is_guarded_by_backend_only():
+    """`npm ci` is the single largest fixed cost of a run — it must be skipped."""
+    assert any(
+        "npm ci" in region for region in _backend_only_guarded_regions()
+    ), "the 'npm ci' frontend install must sit inside a BACKEND_ONLY guard"
+
+
+def test_vite_server_start_is_guarded_by_backend_only():
+    assert any(
+        "npm run dev" in region for region in _backend_only_guarded_regions()
+    ), "starting the Vite dev server must sit inside a BACKEND_ONLY guard"
+
+
+def test_frontend_readiness_gate_is_guarded_by_backend_only():
+    """
+    No Vite means nothing ever answers on :5173, so the readiness gate added
+    for #316 would abort every backend-only run. It has to be skipped too.
+    """
+    assert any(
+        "5173" in region for region in _backend_only_guarded_regions()
+    ), "the :5173 readiness gate must sit inside a BACKEND_ONLY guard"
+
+
+def test_backend_server_is_started_even_in_backend_only_mode():
+    """
+    Regression guard: not every non-e2e test is server-free —
+    test_auth_begin_calibration.py drives http://localhost:8000 directly. The
+    backend half of the harness must survive BACKEND_ONLY.
+    """
+    text = _script_text()
+    match = re.search(r"^\s*uvicorn\s.*$", text, re.MULTILINE)
+    assert match, "run_tests.sh must still start uvicorn"
+    assert not any(
+        match.group(0) in region for region in _backend_only_guarded_regions()
+    ), "uvicorn must start in BACKEND_ONLY mode too — some non-e2e tests need it"
+
+
+def test_backend_only_mode_ignores_the_e2e_test_files():
+    """
+    Skipping the servers is only half of it: the e2e files must not be
+    collected either, or every one of them fails on a missing browser.
+    """
+    text = _script_text()
+    assert re.search(r"--ignore-glob=.{0,4}tests/test_e2e_\*\.py", text), (
+        "BACKEND_ONLY mode must pass --ignore-glob for tests/test_e2e_*.py "
+        "so the Playwright files are not collected"
+    )
+
+
+def test_backend_only_defaults_to_off_under_set_u():
+    """
+    The script runs under `set -u`. A bare $BACKEND_ONLY would abort every
+    ordinary full-suite run with 'unbound variable'.
+    """
+    text = _script_text()
+    assert re.search(r"\$\{BACKEND_ONLY:?-", text), (
+        "BACKEND_ONLY must use a default expansion (${BACKEND_ONLY:-0}) so an "
+        "unset value does not abort the script under 'set -u'"
+    )

@@ -3,9 +3,18 @@
 # Used as the entrypoint for docker-compose.test.yml.
 set -euo pipefail
 
+# BACKEND_ONLY=1 runs the fast half of the suite: no frontend install, no Vite,
+# no e2e collection (#336). Private-repo Actions minutes are metered and the
+# full suite is ~15 minutes, almost all of it the 50-odd Playwright files, so
+# CI fires this mode on every push and the full suite only on release tags.
+# The backend server still starts — see the uvicorn note below.
+BACKEND_ONLY="${BACKEND_ONLY:-0}"
+
 # Install frontend dependencies
-cd /frontend
-npm ci --prefer-offline
+if [[ "$BACKEND_ONLY" != "1" ]]; then
+    cd /frontend
+    npm ci --prefer-offline
+fi
 
 # Give this invocation its own throwaway database (#316). Sharing the one
 # `kendo_test` database across every worktree / parallel agent run meant a
@@ -81,20 +90,25 @@ SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
     python -m app.db.scratch hold &
 DB_HOLD_PID=$!
 
-# Start backend API server
+# Start backend API server. Deliberately outside the BACKEND_ONLY guard: not
+# every non-e2e test is server-free — tests/test_auth_begin_calibration.py
+# drives http://localhost:8000 directly — so the backend half of the harness
+# has to come up in both modes.
 uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 # Start Vite dev server
-cd /frontend
-npm run dev -- --host 0.0.0.0 --port 5173 &
-FRONTEND_PID=$!
+if [[ "$BACKEND_ONLY" != "1" ]]; then
+    cd /frontend
+    npm run dev -- --host 0.0.0.0 --port 5173 &
+    FRONTEND_PID=$!
+fi
 
 cleanup() {
     # Release the sentinel connection along with the servers. Dropping would
     # survive it either way — drop_database terminates remaining backends — but
     # killing it here keeps the drop's terminate step for genuine surprises.
-    kill "$BACKEND_PID" "$FRONTEND_PID" "${DB_HOLD_PID:-}" 2>/dev/null || true
+    kill "$BACKEND_PID" "${FRONTEND_PID:-}" "${DB_HOLD_PID:-}" 2>/dev/null || true
     # Drop the per-run database on every exit path (success or failure) so
     # nothing is left behind for the next invocation to collide with.
     if [[ "${TEST_DB_CREATED:-0}" -ne 1 ]]; then
@@ -146,20 +160,23 @@ if ! curl -sf --max-time 5 http://localhost:8000/health >/dev/null; then
     exit 1
 fi
 
-echo "Waiting for frontend on :5173..."
-for i in $(seq 1 30); do
-    curl -sf http://localhost:5173 >/dev/null && break
-    sleep 1
-done
+if [[ "$BACKEND_ONLY" != "1" ]]; then
+    echo "Waiting for frontend on :5173..."
+    for i in $(seq 1 30); do
+        curl -sf http://localhost:5173 >/dev/null && break
+        sleep 1
+    done
 
-# Same reasoning as the backend gate above (#316): confirm the frontend is
-# actually serving before handing off to pytest.
-if ! curl -sf --max-time 5 http://localhost:5173 >/dev/null; then
-    echo "ERROR: frontend never became ready on :5173 — aborting before running tests" >&2
-    exit 1
+    # Same reasoning as the backend gate above (#316): confirm the frontend is
+    # actually serving before handing off to pytest. Nothing serves :5173 in
+    # BACKEND_ONLY mode, so this gate would abort every such run.
+    if ! curl -sf --max-time 5 http://localhost:5173 >/dev/null; then
+        echo "ERROR: frontend never became ready on :5173 — aborting before running tests" >&2
+        exit 1
+    fi
 fi
 
-echo "Both servers ready — running tests"
+echo "Servers ready — running tests"
 cd /app
 # No -x: a full run reports on the whole suite, so a passing run is evidence
 # and a failing run names every problem at once (see #221). Fail-fast is still
@@ -191,8 +208,18 @@ cd /app
 # three databases across three clean runs before this was caught). Run pytest
 # as a child instead, then exit with its status so cleanup() runs in between
 # and a failing suite still fails the container.
+#
+# BACKEND_ONLY additionally drops the Playwright files from collection (#336).
+# It goes in an array rather than into PYTEST_ARGS because the pattern contains
+# a `*`, and PYTEST_ARGS interpolates unquoted — the glob would be expanded
+# against /app before pytest ever saw it.
+BACKEND_ONLY_ARGS=()
+if [[ "$BACKEND_ONLY" == "1" ]]; then
+    BACKEND_ONLY_ARGS=(--ignore-glob="tests/test_e2e_*.py")
+fi
+
 set +e
-pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "$@"
+pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "${BACKEND_ONLY_ARGS[@]}" "$@"
 PYTEST_STATUS=$?
 set -e
 exit "$PYTEST_STATUS"
