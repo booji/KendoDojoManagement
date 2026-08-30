@@ -42,6 +42,7 @@ from app.attendance.repository import (
 from app.attendance.repository import (
     SqlSessionInstanceRepository as SqlAttendanceSessionInstanceRepository,
 )
+from app.members.repository import AbstractMemberRepository, SqlMemberRepository
 from app.sessions.repository import (
     AbstractSessionInstanceRepository,
     AbstractSessionTemplateRepository,
@@ -52,6 +53,7 @@ from app.sessions.repository import (
 )
 from tests.fake_repositories import (
     InMemoryAttendanceRepository,
+    InMemoryMemberRepository,
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
     InMemorySessionTypeRepository,
@@ -78,6 +80,8 @@ _PAIRS = [
     ),
     (AbstractAttendanceRepository, InMemoryAttendanceRepository),
     (AbstractAttendanceRepository, SqlAttendanceRepository),
+    (AbstractMemberRepository, InMemoryMemberRepository),
+    (AbstractMemberRepository, SqlMemberRepository),
 ]
 
 
