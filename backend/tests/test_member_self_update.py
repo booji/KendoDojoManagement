@@ -70,6 +70,19 @@ def _seed_record(**overrides) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _as_stored(data: dict[str, Any]) -> dict[str, Any]:
+    """Mirror SqlMemberRepository: dob and join_date are String columns, so a
+    date is stored as its ISO string. The router used to convert before
+    calling — a guard that existed only because stubs skipped this step
+    (#345)."""
+    stored = dict(data)
+    for key in ("dob", "join_date"):
+        value = stored.get(key)
+        if hasattr(value, "isoformat"):
+            stored[key] = value.isoformat()
+    return stored
+
+
 class StubMemberRepo:
     """In-memory stand-in for a Member repository."""
 
@@ -92,6 +105,7 @@ class StubMemberRepo:
         return None
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
+        data = _as_stored(data)
         existing = await self.get_by_email(data["email"])
         if existing:
             raise ValueError(f"Member with email '{data['email']}' already exists")
@@ -103,6 +117,7 @@ class StubMemberRepo:
     async def update(
         self, member_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None:
+        data = _as_stored(data)
         record = self._store.get(member_id)
         if record is None:
             return None
@@ -229,9 +244,9 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         assert field in body, f"Missing field in response: {field}"
     # Legacy fields must be absent
     assert "full_name" not in body, "full_name must not appear in MemberResponse"
-    assert (
-        "parental_consent_obtained" not in body
-    ), "parental_consent_obtained must not appear in MemberResponse"
+    assert "parental_consent_obtained" not in body, (
+        "parental_consent_obtained must not appear in MemberResponse"
+    )
     assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 

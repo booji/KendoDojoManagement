@@ -95,14 +95,13 @@ async def put_my_member(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Missing required fields for first save: {', '.join(missing)}",
             )
-        dob = data.get("dob")
         # Create a new Member record
         new_data: dict[str, Any] = {
             "email": claims.email,
             "first_name": data.get("first_name", ""),
             "surname": data.get("surname", ""),
             "display_name": data.get("display_name"),
-            "dob": dob.isoformat() if hasattr(dob, "isoformat") else dob,
+            "dob": data.get("dob"),
             "join_date": date.today().isoformat(),
             "membership_status": "active",
             "is_coach": False,
@@ -129,9 +128,6 @@ async def put_my_member(
     for key in _CLEARABLE_FIELDS:
         if key in explicitly_set:
             data[key] = explicitly_set[key]
-    if "dob" in data and hasattr(data["dob"], "isoformat"):
-        data["dob"] = data["dob"].isoformat()
-
     record = await repo.update(record["id"], data)
     await uow.commit()
     return _to_response(record)  # type: ignore[arg-type]
