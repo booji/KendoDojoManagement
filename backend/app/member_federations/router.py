@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -9,7 +9,10 @@ from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.member_federations.dependencies import get_member_federation_repo
-from app.member_federations.repository import AbstractMemberFederationRepository
+from app.member_federations.repository import (
+    AbstractMemberFederationRepository,
+    MemberFederationRecord,
+)
 from app.member_federations.schemas import (
     MemberFederationCreate,
     MemberFederationResponse,
@@ -30,14 +33,14 @@ _Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
 
 
-def _to_response(record: dict[str, Any]) -> MemberFederationResponse:
+def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
     return MemberFederationResponse(
-        id=record["id"],
-        member_id=record["member_id"],
-        federation_id=record["federation_id"],
-        member_number=record["member_number"],
-        renewal_date=record.get("renewal_date"),
-        renewal_status=compute_renewal_status(record.get("renewal_date")),
+        id=record.id,
+        member_id=record.member_id,
+        federation_id=record.federation_id,
+        member_number=record.member_number,
+        renewal_date=record.renewal_date,
+        renewal_status=compute_renewal_status(record.renewal_date),
     )
 
 
@@ -78,10 +81,6 @@ async def admin_add_member_federation(
         )
     data = payload.model_dump()
     data["member_id"] = member_id
-    if data.get("renewal_date") is not None and hasattr(
-        data["renewal_date"], "isoformat"
-    ):
-        data["renewal_date"] = data["renewal_date"].isoformat()
     record = await mf_repo.add(data)
     await uow.commit()
     return _to_response(record)
@@ -103,13 +102,11 @@ async def admin_update_member_federation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != member_id:
+    if existing is None or existing.member_id != member_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    if "renewal_date" in data and hasattr(data["renewal_date"], "isoformat"):
-        data["renewal_date"] = data["renewal_date"].isoformat()
     record = await mf_repo.update(mf_id, data)
     if record is None:
         raise HTTPException(
@@ -138,7 +135,7 @@ async def admin_remove_member_federation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != member_id:
+    if existing is None or existing.member_id != member_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
@@ -184,10 +181,6 @@ async def me_add_federation(
     member = await _get_member_by_user(claims.sub, member_repo)
     data = payload.model_dump()
     data["member_id"] = member["id"]
-    if data.get("renewal_date") is not None and hasattr(
-        data["renewal_date"], "isoformat"
-    ):
-        data["renewal_date"] = data["renewal_date"].isoformat()
     record = await mf_repo.add(data)
     await uow.commit()
     return _to_response(record)
@@ -204,13 +197,11 @@ async def me_update_federation(
 ) -> MemberFederationResponse:
     member = await _get_member_by_user(claims.sub, member_repo)
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != member["id"]:
+    if existing is None or existing.member_id != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    if "renewal_date" in data and hasattr(data["renewal_date"], "isoformat"):
-        data["renewal_date"] = data["renewal_date"].isoformat()
     record = await mf_repo.update(mf_id, data)
     if record is None:
         raise HTTPException(
@@ -234,7 +225,7 @@ async def me_remove_federation(
 ) -> None:
     member = await _get_member_by_user(claims.sub, member_repo)
     existing = await mf_repo.get(mf_id)
-    if existing is None or existing.get("member_id") != member["id"]:
+    if existing is None or existing.member_id != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
