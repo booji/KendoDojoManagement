@@ -11,8 +11,6 @@ erDiagram
         string theme
         string pending_challenge
         timestamptz challenge_issued_at
-        timestamptz locked_until
-        int login_failures
     }
     passkey_credentials {
         string id PK
