@@ -1,3 +1,5 @@
+import { apiFetch } from "@/api/client"
+
 import type { UserClaims, ApiError } from "@/api/auth"
 
 // --- WebAuthn buffer helpers (copied from auth.ts — not exported there) ---
@@ -39,7 +41,7 @@ type PasskeyCreationOptions = {
  * false if setup is already completed.
  */
 export const checkSetupAvailable = async (): Promise<boolean> => {
-  const res = await fetch("/api/setup")
+  const res = await apiFetch("/api/setup")
   if (res.status === 200) return true
   if (res.status === 404) return false
   throw { status: res.status, message: "Failed to check setup status" } satisfies ApiError
@@ -51,11 +53,7 @@ export const checkSetupAvailable = async (): Promise<boolean> => {
  */
 export const performSetupPasskeyRegistration = async (email: string): Promise<UserClaims> => {
   // Begin
-  const beginRes = await fetch("/api/setup/passkey/begin", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  })
+  const beginRes = await apiFetch("/api/setup/passkey/begin", { method: "POST", body: { email } })
   if (!beginRes.ok) {
     throw { status: beginRes.status, message: "Failed to begin setup passkey registration" } satisfies ApiError
   }
@@ -104,12 +102,7 @@ export const performSetupPasskeyRegistration = async (email: string): Promise<Us
   }
 
   // Complete
-  const completeRes = await fetch("/api/setup/passkey/complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, credential: credentialData }),
-  })
+  const completeRes = await apiFetch("/api/setup/passkey/complete", { method: "POST", body: { email, credential: credentialData } })
   if (!completeRes.ok) {
     throw { status: completeRes.status, message: "Setup passkey registration failed" } satisfies ApiError
   }

@@ -1,3 +1,5 @@
+import { apiFetch, request } from "@/api/client"
+
 export type AttendanceRecord = {
   id: string
   session_id: string
@@ -24,10 +26,7 @@ export type CheckinWindowError = {
 }
 
 export const checkIn = async (sessionId: string): Promise<AttendanceRecord> => {
-  const res = await fetch(new Request(`${location.origin}/api/sessions/${sessionId}/checkin`, {
-    method: "POST",
-    credentials: "include",
-  }))
+  const res = await apiFetch(`/api/sessions/${sessionId}/checkin`, { method: "POST" })
   if (!res.ok) {
     const status = res.status
     if (status === 401) throw { status, message: "Not authenticated" }
@@ -94,20 +93,11 @@ const readJsonDetail = async (res: Response): Promise<Record<string, unknown> | 
 }
 
 export const getCheckinToken = async (sessionId: string): Promise<CheckinToken> => {
-  const res = await fetch(`/api/sessions/${sessionId}/checkin-token`, {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to get check-in token" }
-  }
-  return res.json() as Promise<CheckinToken>
+  return request<CheckinToken>(`/api/sessions/${sessionId}/checkin-token`, { errorMessage: "Failed to get check-in token" })
 }
 
 export const checkinViaToken = async (token: string): Promise<AttendanceRecord> => {
-  const res = await fetch(`/api/checkin/${token}`, {
-    method: "POST",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/checkin/${token}`, { method: "POST" })
   if (!res.ok) {
     const status = res.status
     if (status === 401) throw { status, message: "Not authenticated" }
@@ -120,22 +110,11 @@ export const checkinViaToken = async (token: string): Promise<AttendanceRecord> 
 }
 
 export const getSessionAttendance = async (sessionId: string): Promise<AttendanceRecord[]> => {
-  const res = await fetch(`/api/sessions/${sessionId}/attendance`, {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch attendance" }
-  }
-  return res.json() as Promise<AttendanceRecord[]>
+  return request<AttendanceRecord[]>(`/api/sessions/${sessionId}/attendance`, { errorMessage: "Failed to fetch attendance" })
 }
 
 export const markAttended = async (sessionId: string, memberId: string): Promise<AttendanceRecord> => {
-  const res = await fetch(`/api/sessions/${sessionId}/attendance`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ member_id: memberId }),
-  })
+  const res = await apiFetch(`/api/sessions/${sessionId}/attendance`, { method: "POST", body: { member_id: memberId } })
   if (!res.ok) {
     const status = res.status
     if (status === 404) throw { status, message: "Session or member not found" }
@@ -146,34 +125,13 @@ export const markAttended = async (sessionId: string, memberId: string): Promise
 }
 
 export const removeAttendance = async (sessionId: string, memberId: string): Promise<void> => {
-  const res = await fetch(`/api/sessions/${sessionId}/attendance/${memberId}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to remove attendance" }
-  }
+  return request<void>(`/api/sessions/${sessionId}/attendance/${memberId}`, { method: "DELETE", errorMessage: "Failed to remove attendance" })
 }
 
 export const addVisitor = async (sessionId: string, visitorName: string): Promise<AttendanceRecord> => {
-  const res = await fetch(`/api/sessions/${sessionId}/visitors`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ visitor_name: visitorName }),
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to add visitor" }
-  }
-  return res.json() as Promise<AttendanceRecord>
+  return request<AttendanceRecord>(`/api/sessions/${sessionId}/visitors`, { method: "POST", body: { visitor_name: visitorName }, errorMessage: "Failed to add visitor" })
 }
 
 export const getMemberAttendanceHistory = async (memberId: string): Promise<AttendanceRecord[]> => {
-  const res = await fetch(`/api/members/${memberId}/attendance`, {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch attendance history" }
-  }
-  return res.json() as Promise<AttendanceRecord[]>
+  return request<AttendanceRecord[]>(`/api/members/${memberId}/attendance`, { errorMessage: "Failed to fetch attendance history" })
 }

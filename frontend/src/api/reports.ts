@@ -1,3 +1,5 @@
+import { apiFetch, request, throwApiError } from "@/api/client"
+
 export type SessionSummary = {
   session_id: string
   scheduled_at: string
@@ -28,23 +30,11 @@ export const fetchAttendanceReport = async (
   dateTo: string,
 ): Promise<AttendanceReport> => {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
-  const res = await fetch(`/api/reports/attendance?${params.toString()}`, {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch attendance report" }
-  }
-  return res.json() as Promise<AttendanceReport>
+  return request<AttendanceReport>(`/api/reports/attendance?${params.toString()}`, { errorMessage: "Failed to fetch attendance report" })
 }
 
 export const fetchMembersReport = async (): Promise<MemberReport[]> => {
-  const res = await fetch("/api/reports/members", {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to fetch members report" }
-  }
-  return res.json() as Promise<MemberReport[]>
+  return request<MemberReport[]>("/api/reports/members", { errorMessage: "Failed to fetch members report" })
 }
 
 export const downloadAttendanceCsv = async (
@@ -52,12 +42,10 @@ export const downloadAttendanceCsv = async (
   dateTo: string,
 ): Promise<void> => {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
-  const res = await fetch(`/api/reports/attendance/csv?${params.toString()}`, {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to download attendance CSV" }
-  }
+  // A CSV download wants the bytes, not a parsed body, so this goes through
+  // apiFetch rather than request.
+  const res = await apiFetch(`/api/reports/attendance/csv?${params.toString()}`)
+  if (!res.ok) await throwApiError(res, "Failed to download attendance CSV")
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -70,12 +58,8 @@ export const downloadAttendanceCsv = async (
 }
 
 export const downloadMembersCsv = async (): Promise<void> => {
-  const res = await fetch("/api/reports/members/csv", {
-    credentials: "include",
-  })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to download members CSV" }
-  }
+  const res = await apiFetch("/api/reports/members/csv")
+  if (!res.ok) await throwApiError(res, "Failed to download members CSV")
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")

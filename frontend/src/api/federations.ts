@@ -1,4 +1,4 @@
-import { throwApiError } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ export const listFederations = async (params?: {
   if (params?.continental_grouping) qs.set("continental_grouping", params.continental_grouping)
   const query = qs.toString()
   const url = query ? `/api/federations?${query}` : `/api/federations`
-  const res = await fetch(url, { credentials: "include" })
+  const res = await apiFetch(url)
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (!res.ok) await throwApiError(res, "Failed to load federations")
   return res.json() as Promise<FederationResponse[]>
@@ -73,12 +73,7 @@ export const listFederations = async (params?: {
 export const createFederation = async (
   body: FederationCreateRequest
 ): Promise<FederationResponse> => {
-  const res = await fetch(`/api/federations`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/federations`, { method: "POST", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 409) await throwApiError(res, "A federation with this name already exists")
   if (!res.ok) await throwApiError(res, "Failed to create federation")
@@ -89,12 +84,7 @@ export const updateFederation = async (
   id: string,
   body: FederationUpdateRequest
 ): Promise<FederationResponse> => {
-  const res = await fetch(`/api/federations/${id}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/federations/${id}`, { method: "PUT", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation not found")
   if (!res.ok) await throwApiError(res, "Failed to update federation")
@@ -102,10 +92,7 @@ export const updateFederation = async (
 }
 
 export const deactivateFederation = async (id: string): Promise<FederationResponse> => {
-  const res = await fetch(`/api/federations/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/federations/${id}`, { method: "DELETE" })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation not found")
   if (!res.ok) await throwApiError(res, "Failed to deactivate federation")
@@ -115,7 +102,7 @@ export const deactivateFederation = async (id: string): Promise<FederationRespon
 // ── Self-service (member's own profile) ───────────────────────────────────────
 
 export const getMyFederations = async (): Promise<MemberFederationResponse[]> => {
-  const res = await fetch(`/api/users/me/federations`, { credentials: "include" })
+  const res = await apiFetch(`/api/users/me/federations`)
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (!res.ok) await throwApiError(res, "Failed to load federation memberships")
   return res.json() as Promise<MemberFederationResponse[]>
@@ -124,12 +111,7 @@ export const getMyFederations = async (): Promise<MemberFederationResponse[]> =>
 export const addMyFederation = async (
   body: MemberFederationCreateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await fetch(`/api/users/me/federations`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/users/me/federations`, { method: "POST", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 409) await throwApiError(res, "Already a member of this federation")
   if (!res.ok) await throwApiError(res, "Failed to add federation membership")
@@ -140,12 +122,7 @@ export const updateMyFederation = async (
   mfId: string,
   body: MemberFederationUpdateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await fetch(`/api/users/me/federations/${mfId}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/users/me/federations/${mfId}`, { method: "PUT", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to update federation membership")
@@ -153,10 +130,7 @@ export const updateMyFederation = async (
 }
 
 export const deleteMyFederation = async (mfId: string): Promise<void> => {
-  const res = await fetch(`/api/users/me/federations/${mfId}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/users/me/federations/${mfId}`, { method: "DELETE" })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to remove federation membership")
@@ -167,7 +141,7 @@ export const deleteMyFederation = async (mfId: string): Promise<void> => {
 export const getMemberFederations = async (
   memberId: string
 ): Promise<MemberFederationResponse[]> => {
-  const res = await fetch(`/api/members/${memberId}/federations`, { credentials: "include" })
+  const res = await apiFetch(`/api/members/${memberId}/federations`)
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Member not found")
   if (!res.ok) await throwApiError(res, "Failed to load federation memberships")
@@ -178,12 +152,7 @@ export const addMemberFederation = async (
   memberId: string,
   body: MemberFederationCreateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await fetch(`/api/members/${memberId}/federations`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/members/${memberId}/federations`, { method: "POST", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Member not found")
   if (res.status === 409) await throwApiError(res, "Already a member of this federation")
@@ -196,12 +165,7 @@ export const updateMemberFederation = async (
   mfId: string,
   body: MemberFederationUpdateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await fetch(`/api/members/${memberId}/federations/${mfId}`, {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const res = await apiFetch(`/api/members/${memberId}/federations/${mfId}`, { method: "PUT", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to update federation membership")
@@ -209,10 +173,7 @@ export const updateMemberFederation = async (
 }
 
 export const deleteMemberFederation = async (memberId: string, mfId: string): Promise<void> => {
-  const res = await fetch(`/api/members/${memberId}/federations/${mfId}`, {
-    method: "DELETE",
-    credentials: "include",
-  })
+  const res = await apiFetch(`/api/members/${memberId}/federations/${mfId}`, { method: "DELETE" })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to remove federation membership")
