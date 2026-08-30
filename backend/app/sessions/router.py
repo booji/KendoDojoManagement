@@ -14,6 +14,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.sessions import templates
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
@@ -38,7 +39,6 @@ from app.sessions.repository import (
     AbstractSessionTemplateRepository,
     AbstractSessionTypeRepository,
 )
-from app.sessions.service import add_months, covered_dates, generate_instances
 
 router = APIRouter(tags=["sessions"])
 
@@ -199,10 +199,7 @@ async def create_session_template(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    template = await repo.add(payload.model_dump())
-    horizon = date.fromisoformat(template["end_date"])
-    for data in generate_instances(template, horizon):
-        await instance_repo.add(data)
+    template = await templates.create(payload.model_dump(), repo, instance_repo)
     await uow.commit()
     return _normalize_template(template)
 
@@ -230,26 +227,18 @@ async def generate_session_instances(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> list[dict[str, Any]]:
-    template = await template_repo.get(str(template_id))
-    if template is None:
+    created = await templates.generate_to_horizon(
+        str(template_id),
+        date.fromisoformat(payload.horizon),
+        template_repo,
+        instance_repo,
+    )
+    if created is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    horizon = date.fromisoformat(payload.horizon)
-    # Collect already-persisted dates for this template so repeated calls are
-    # idempotent — never add a second instance on a date already generated.
-    existing_dates = {
-        r["date"]
-        for r in (await instance_repo.list())
-        if r.get("template_id") == str(template_id)
-    }
-    instance_data_list = generate_instances(template, horizon, existing_dates)
-    results = []
-    for data in instance_data_list:
-        record = await instance_repo.add(data)
-        results.append(_normalize_instance(record))
     await uow.commit()
-    return results
+    return [_normalize_instance(record) for record in created]
 
 
 # ---------------------------------------------------------------------------
@@ -378,31 +367,6 @@ async def update_session_instance(
     return _normalize_instance(record)
 
 
-async def _apply_recurrence_delta(
-    template: dict[str, Any],
-    template_id: str,
-    instance_repo: AbstractSessionInstanceRepository,
-) -> None:
-    """Reconcile persisted instances with a template's recurrence: add
-    instances for newly-covered dates, remove instances for dates no longer
-    covered. Dates that remain covered are left completely untouched — an
-    individually edited or cancelled instance on a still-covered date is
-    never overwritten or deleted (issue #258 AC3)."""
-    existing = [
-        r for r in (await instance_repo.list()) if r.get("template_id") == template_id
-    ]
-    existing_by_date = {r["date"]: r for r in existing}
-    wanted_dates = covered_dates(template)
-
-    horizon = date.fromisoformat(template["end_date"])
-    for data in generate_instances(template, horizon, set(existing_by_date)):
-        await instance_repo.add(data)
-
-    for iso_date, record in existing_by_date.items():
-        if iso_date not in wanted_dates:
-            await instance_repo.delete(record["id"])
-
-
 @router.patch("/sessions/templates/{template_id}")
 async def update_session_template(
     template_id: uuid.UUID,
@@ -413,12 +377,13 @@ async def update_session_template(
     uow: _UoW,
 ) -> dict[str, Any]:
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    template = await template_repo.update(str(template_id), data)
+    template = await templates.reschedule(
+        str(template_id), data, template_repo, instance_repo
+    )
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    await _apply_recurrence_delta(template, str(template_id), instance_repo)
     await uow.commit()
     return _normalize_template(template)
 
@@ -432,29 +397,21 @@ async def extend_session_template(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    template = await template_repo.get(str(template_id))
+    try:
+        template = await templates.extend(
+            str(template_id),
+            date.fromisoformat(payload.end_date),
+            template_repo,
+            instance_repo,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    current_end = date.fromisoformat(template["end_date"])
-    new_end = date.fromisoformat(payload.end_date)
-    cap = add_months(date.today(), 6)
-    if new_end < current_end:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="end_date must not be earlier than the template's current end_date",
-        )
-    if new_end > cap:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="end_date must not be more than 6 months from today",
-        )
-    template = await template_repo.update(
-        str(template_id), {"end_date": new_end.isoformat()}
-    )
-    assert template is not None
-    await _apply_recurrence_delta(template, str(template_id), instance_repo)
     await uow.commit()
     return _normalize_template(template)
 
@@ -467,12 +424,10 @@ async def delete_session_template(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
-    template = await template_repo.deactivate(str(template_id))
+    template = await templates.cancel(str(template_id), template_repo, instance_repo)
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
-    today = date.today()
-    await instance_repo.cancel_future_for_template(str(template_id), today)
     await uow.commit()
     return _normalize_template(template)
