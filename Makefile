@@ -33,9 +33,13 @@ test:
 	# caching keeps this a no-op when nothing relevant changed.
 	$(COMPOSE_TEST) up --build
 
-## build: Build the production image
+## build: Build the production image (re-resolving base images)
 build:
-	$(COMPOSE_PROD) build
+	# --pull re-resolves node:22-slim and python:3.13-slim against the registry.
+	# Both tags float to the latest patch upstream, but a build reuses whatever
+	# digest is already in local storage, so without this a machine keeps
+	# building on the base it first pulled — silently, for as long as it lives.
+	$(COMPOSE_PROD) build --pull
 
 ## down: Stop all running services (dev, test, and prod)
 down:
