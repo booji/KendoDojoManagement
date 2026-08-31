@@ -146,3 +146,16 @@ async def test_logout_cookie_attributes_match_the_login_cookie() -> None:
     assert "Path=/" in cleared
     assert "SameSite=strict" in cleared
     assert "HttpOnly" in cleared
+
+
+async def test_logout_clears_the_readable_theme_cookie() -> None:
+    """Logout must drop the JS-readable theme cookie along with the session (#324)."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.post("/auth/logout", cookies={"theme": "dark"})
+
+    headers = response.headers.get_list("set-cookie")
+    theme_header = next((h for h in headers if h.startswith("theme=")), None)
+    assert theme_header is not None, "logout must send a Set-Cookie clearing theme"
+    assert "Max-Age=0" in theme_header or "max-age=0" in theme_header.lower()

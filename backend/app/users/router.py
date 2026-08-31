@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.auth.session_cookie import set_theme_cookie
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_member_repo
@@ -142,9 +143,13 @@ async def put_my_member(
 async def get_my_preferences(
     claims: _Member,
     repo: _PrefsRepo,
+    response: Response,
 ) -> _PreferencesResponse:
-    theme = await repo.get_theme(claims.sub)
-    return _PreferencesResponse(theme=theme or "system")
+    theme = await repo.get_theme(claims.sub) or "system"
+    # Seed the readable cookie so the next document load resolves this theme
+    # before first paint rather than flashing the OS default (#324).
+    set_theme_cookie(response, theme)
+    return _PreferencesResponse(theme=theme)
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +163,9 @@ async def put_my_preferences(
     claims: _Member,
     repo: _PrefsRepo,
     uow: _UoW,
+    response: Response,
 ) -> _PreferencesResponse:
     theme = await repo.set_theme(claims.sub, payload.theme)
     await uow.commit()
+    set_theme_cookie(response, theme)
     return _PreferencesResponse(theme=theme)

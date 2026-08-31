@@ -257,3 +257,36 @@ async def test_put_preferences_unauthenticated_returns_401(prefs_repo) -> None:
         response = await c.put("/users/me/preferences", json={"theme": "dark"})
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Issue #324 — the preferences endpoints seed a JS-readable `theme` cookie so
+# a fresh client resolves the saved theme before first paint.
+# ---------------------------------------------------------------------------
+
+
+async def test_get_preferences_sets_readable_theme_cookie(prefs_repo) -> None:
+    """GET must mirror the stored theme into a non-HttpOnly cookie."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await prefs_repo.set_theme(_USER_SUB, "dark")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/users/me/preferences")
+
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "theme=dark" in set_cookie
+    assert "HttpOnly" not in set_cookie, "the pre-paint script must be able to read it"
+
+
+async def test_put_preferences_updates_the_readable_theme_cookie(prefs_repo) -> None:
+    """Changing the theme rewrites the cookie, so a later reload resolves pre-paint."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.put("/users/me/preferences", json={"theme": "light"})
+
+    assert "theme=light" in response.headers.get("set-cookie", "")

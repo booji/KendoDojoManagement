@@ -61,7 +61,11 @@ from app.auth.recovery_service import (
     hash_codes,
     is_admin_token_valid,
 )
-from app.auth.session_cookie import clear_session_cookie, set_session_cookie
+from app.auth.session_cookie import (
+    clear_session_cookie,
+    set_session_cookie,
+    set_theme_cookie,
+)
 from app.auth.token import encode_recovery_token, encode_token
 from app.core.request_ip import client_ip
 from app.core.security_logger import log_security_event
@@ -146,6 +150,10 @@ async def passkey_login_complete(
         log_security_event("login_passkey", "failure")
         raise
     set_session_cookie(response, token_response.access_token)
+    # Seed the readable theme cookie at login, not just on the preferences
+    # endpoints: on a client that has never seen this user it is the only thing
+    # that stops the shell painting the wrong theme and flipping (#324).
+    set_theme_cookie(response, token_response.theme)
     return {"detail": "logged in"}
 
 
@@ -465,8 +473,8 @@ if _ALLOW_TEST_AUTH:
                 email=user.email,
                 role=user.role,
                 is_active=user.is_active,
-                theme=user.theme,
             )
         )
         set_session_cookie(response, token)
+        set_theme_cookie(response, user.theme)
         return {"detail": "logged in", "sub": user.id}

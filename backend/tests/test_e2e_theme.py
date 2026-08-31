@@ -14,6 +14,7 @@ sidebar visibility); the server reconcile is covered by the preferences tests.
 import os
 import uuid
 
+import requests
 from dotenv import load_dotenv
 from playwright.sync_api import BrowserContext, Page, expect
 
@@ -25,7 +26,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
-from tests.e2e_support import complete_onboarding  # noqa: E402
+from tests.e2e_support import API_URL, complete_onboarding  # noqa: E402
 
 # Patch the cached module-level variable in case unit tests ran first.
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
@@ -285,3 +286,115 @@ def test_toggle_visible_in_sidebar_footer_without_scrolling(page: Page) -> None:
     # The current theme is "system" so the button says "Switch to light theme".
     sidebar_btn = sidebar.get_by_role("button", name="Switch to light theme")
     expect(sidebar_btn).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# #324 — a fresh client resolves the server-saved theme before first paint
+# ---------------------------------------------------------------------------
+
+
+def _user_with_saved_theme(theme: str) -> tuple[str, str]:
+    """Create a real user whose saved theme is ``theme``.
+
+    Returns the session token and the ``theme`` cookie value the server issued —
+    the cookie is read off the response rather than invented, so the test fails
+    if the endpoints stop setting it. (The e2e stack runs over http with
+    COOKIE_SECURE on, so cookies are seeded into the browser rather than being
+    stored by it, as everywhere else in this file.)
+    """
+    email = f"theme-{uuid.uuid4().hex[:8]}@example.com"
+    login = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "member"}
+    )
+    login.raise_for_status()
+    token = login.cookies["access_token"]
+    complete_onboarding(token)
+    saved = requests.put(
+        f"{API_URL}/users/me/preferences",
+        json={"theme": theme},
+        cookies={"access_token": token},
+    )
+    saved.raise_for_status()
+    return token, saved.cookies["theme"]
+
+
+def _fresh_client(browser, theme: str, color_scheme: str):
+    """A client that has never seen this user: server cookies only, no localStorage."""
+    token, theme_cookie = _user_with_saved_theme(theme)
+    context: BrowserContext = browser.new_context()
+    page = context.new_page()
+    page.emulate_media(color_scheme=color_scheme)
+    page.goto(BASE_URL)
+    context.add_cookies(
+        [
+            {"name": "access_token", "value": token, "url": BASE_URL},
+            {"name": "theme", "value": theme_cookie, "url": BASE_URL},
+        ]
+    )
+    page.evaluate("() => localStorage.clear()")
+    page.goto(BASE_URL)
+    return context, page
+
+
+def test_saved_dark_theme_applies_pre_paint_on_a_fresh_client(browser) -> None:
+    """AC #324: dark saved server-side, OS light — no light-to-dark flip."""
+    context, page = _fresh_client(browser, "dark", "light")
+    try:
+        assert _is_dark(page), "dark must come from the cookie, before any fetch"
+        page.wait_for_timeout(500)
+        assert _is_dark(page), "and must survive the reconcile fetch"
+    finally:
+        page.close()
+        context.close()
+
+
+def test_saved_light_theme_beats_a_dark_os_preference_on_a_fresh_client(
+    browser,
+) -> None:
+    """AC #324 (reverse): light saved, OS dark — must not paint dark first."""
+    context, page = _fresh_client(browser, "light", "dark")
+    try:
+        assert not _is_dark(page), "saved light must win over the OS dark preference"
+        page.wait_for_timeout(500)
+        assert not _is_dark(page), "and must stay light through the reconcile fetch"
+    finally:
+        page.close()
+        context.close()
+
+
+def test_login_issues_the_readable_theme_cookie() -> None:
+    """Login seeds the cookie too, so the very first client resolves it (#324)."""
+    email = f"theme-{uuid.uuid4().hex[:8]}@example.com"
+    first = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "member"}
+    )
+    first.raise_for_status()
+    saved = requests.put(
+        f"{API_URL}/users/me/preferences",
+        json={"theme": "dark"},
+        cookies={"access_token": first.cookies["access_token"]},
+    )
+    saved.raise_for_status()
+
+    again = requests.post(
+        f"{API_URL}/auth/login/test", json={"email": email, "role": "member"}
+    )
+    again.raise_for_status()
+
+    assert again.cookies["theme"] == "dark"
+
+
+def test_toggling_the_theme_updates_the_cookie_for_the_next_load(browser) -> None:
+    """AC #324: a theme chosen in the UI still resolves pre-paint after a reload."""
+    context, page = _fresh_client(browser, "light", "light")
+    try:
+        page.wait_for_selector("[data-slot='sidebar']", timeout=15000)
+        page.get_by_role("button", name="Switch to dark theme").click()
+        expect(page.get_by_role("button", name="Switch to system theme")).to_be_visible()
+        # Wipe the other client-side source: only the cookie may carry the choice.
+        page.evaluate("() => localStorage.clear()")
+        page.goto(BASE_URL)
+        assert _is_dark(page), "the toggle must leave the cookie holding 'dark'"
+    finally:
+        page.close()
+        context.close()
