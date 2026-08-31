@@ -1040,7 +1040,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 # Same defect as register_passkey_begin (see test_passkey_enumeration.py),
 # keyed by invite token instead of email: invite_redeem_begin's real path
 # returns the persisted User.id (stable forever for a given token, until
-# redeemed), while _decoy_response mints a fresh uuid4() per call. Two POSTs
+# redeemed), while the decoy minted a fresh uuid4() per call. Two POSTs
 # for the same bad token plus one field comparison classifies it.
 # ---------------------------------------------------------------------------
 
@@ -1138,7 +1138,7 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
 
     # publicKey.user.id is base64url(user.id.encode()), not the raw UUID
     # string -- decode before comparing (same convention as the challenge
-    # field; see app.auth.passkey_service._decode_challenge).
+    # field; see app.auth.webauthn_ceremony.decode_challenge).
     returned_id_b64 = response.json()["publicKey"]["user"]["id"]
     padded = returned_id_b64 + "=" * (4 - len(returned_id_b64) % 4)
     returned_id = base64.urlsafe_b64decode(padded).decode()

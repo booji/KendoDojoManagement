@@ -8,16 +8,16 @@ because redemption looks a row up by token alone with no scoping identity
 Redeeming an invite creates the Member row for that email if none exists, or
 links the existing one -- the same convergence point the #239 Member gate
 uses (see app.auth.member_directory.ensure_member_for_email). The redemption
-endpoints reuse the #239 decoy-response shape and the #255 constant-time
-floor (app.core.middleware) rather than inventing new mechanisms: an invalid
+endpoints reuse existing mechanisms rather than inventing new ones: an invalid
 token (unknown, expired, revoked, or already-redeemed) must be
-indistinguishable from a valid one on both response shape and latency.
+indistinguishable from a valid one on both response shape and latency, so the
+shape comes from app.auth.webauthn_ceremony (#239/#267/#300) and the latency
+floor from app.core.middleware (#255).
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -25,12 +25,6 @@ from typing import Any, Literal
 import webauthn
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from webauthn import options_to_json
-from webauthn.helpers.structs import (
-    AuthenticatorSelectionCriteria,
-    ResidentKeyRequirement,
-    UserVerificationRequirement,
-)
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
@@ -42,26 +36,14 @@ from app.auth.models import (
     InviteRedeemCompleteRequest,
     PasskeyRegisterCompleteResponse,
 )
-from app.auth.passkey_service import (
-    _decode_challenge,
-    _decoy_user_id,
-    _encode_challenge,
-    _to_registration_credential,
+from app.auth.webauthn_ceremony import (
+    Subject,
+    decode_challenge,
+    invite_begin,
+    to_registration_credential,
 )
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
-
-# Registration must request a discoverable (resident) credential -- issue
-# #267 moved passkey login onto discoverable credentials exclusively
-# (app.auth.passkey_service.login_passkey_begin no longer sends
-# allowCredentials), so a credential minted via invite redemption has to be
-# resident or it would be unusable for login afterwards. Both the real
-# redemption path and its decoy below must request the identical shape, per
-# the #239 convention this module already follows for the challenge itself.
-_DISCOVERABLE_CREDENTIAL = AuthenticatorSelectionCriteria(
-    resident_key=ResidentKeyRequirement.REQUIRED,
-    user_verification=UserVerificationRequirement.REQUIRED,
-)
 
 # How long a minted invite stays redeemable.
 INVITE_EXPIRY_HOURS = 72
@@ -150,41 +132,6 @@ async def mint_invite(
     return {**record, "token": plaintext, "link": invite_link(plaintext)}
 
 
-def _decoy_response(token: str) -> dict:
-    """Decoy for any unusable token (unknown/expired/revoked/redeemed),
-    shaped exactly like the real begin response -- see passkey_service's
-    `_decoy_register_response` for why the challenge must come from
-    py_webauthn rather than being constructed here.
-
-    user_id is derived via the shared `_decoy_user_id` helper (issue #300):
-    invite_redeem_begin's real path returns the persisted User.id, stable for
-    as long as the token stays unredeemed, while this decoy used to mint a
-    fresh uuid4() per call -- the identical real-stable/decoy-random
-    asymmetry that made register_passkey_begin's decoy an enumeration oracle
-    (see passkey_service._decoy_user_id's docstring for the full reasoning).
-    Keyed by the raw token, not a normalised form: unlike an email, a token
-    is an opaque secret.token_urlsafe() value with no case-insensitive
-    convention to respect, so normalising it would only create new
-    collisions between otherwise-distinct tokens.
-
-    user_name is derived from the same helper for the same reason. The real
-    path returns the invitee's persisted email, which never moves for a given
-    token; a fresh uuid4() local part here would leave the #300 oracle fully
-    intact on this field after closing it on user_id, since a caller can
-    compare either one across two calls. Both fields must be stable, or
-    neither is.
-    """
-    decoy_id = _decoy_user_id(token)
-    options = webauthn.generate_registration_options(
-        rp_id=config.WEBAUTHN_RP_ID,
-        rp_name="Kendo Dojo",
-        user_id=decoy_id.encode("utf-8"),
-        user_name=f"{decoy_id}@invite.invalid",
-        authenticator_selection=_DISCOVERABLE_CREDENTIAL,
-    )
-    return {"publicKey": json.loads(options_to_json(options))}
-
-
 async def _create_invited_user(email: str, uow: AbstractUnitOfWork) -> User | None:
     """Create the invited account, or None if the email already has one.
 
@@ -201,32 +148,38 @@ async def _create_invited_user(email: str, uow: AbstractUnitOfWork) -> User | No
 
 
 async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
+    """Begin redemption for `token`, usable or not.
+
+    Every unusable case -- unknown, expired, revoked, already-redeemed, or an
+    account that appeared for the invited email since minting -- converges on
+    `subject=None`, and app.auth.webauthn_ceremony builds the response for
+    both outcomes. The real and decoy bodies therefore cannot drift apart;
+    see that module for the four shape rules and the three enumeration bugs
+    that parity-by-convention produced (#239, #267, #300).
+
+    Latency parity is a separate mechanism: app.core.middleware's
+    ConstantTimeAuthMiddleware holds this endpoint to a fixed floor, because
+    the real path's extra writes and the unit-of-work commit that follows
+    this function are both observable.
+    """
     repo = SqlInviteRepository(uow.session)
     record = await repo.get_by_token_hash(hash_invite_token(token))
-    if record is None or not _is_usable(record):
-        return _decoy_response(token)
+    if record is not None and _is_usable(record):
+        user = await _create_invited_user(record["email"], uow)
+        if user is not None:
+            directory = member_directory_for(uow)
+            await directory.ensure_member_for_email(
+                record["email"], user.id, record["first_name"], record["surname"]
+            )
+            ceremony = invite_begin(
+                token, Subject(user_id=user.id, user_name=user.email)
+            )
+            user.pending_challenge = ceremony.challenge
+            user.challenge_issued_at = datetime.now(UTC)
+            await uow.commit()
+            return ceremony.response
 
-    user = await _create_invited_user(record["email"], uow)
-    if user is None:
-        return _decoy_response(token)
-
-    directory = member_directory_for(uow)
-    await directory.ensure_member_for_email(
-        record["email"], user.id, record["first_name"], record["surname"]
-    )
-
-    options = webauthn.generate_registration_options(
-        rp_id=config.WEBAUTHN_RP_ID,
-        rp_name="Kendo Dojo",
-        user_id=user.id.encode("utf-8"),
-        user_name=user.email,
-        authenticator_selection=_DISCOVERABLE_CREDENTIAL,
-    )
-    user.pending_challenge = _encode_challenge(options.challenge)
-    user.challenge_issued_at = datetime.now(UTC)
-    await uow.commit()
-
-    return {"publicKey": json.loads(options_to_json(options))}
+    return invite_begin(token, subject=None).response
 
 
 async def invite_redeem_complete(
@@ -264,11 +217,11 @@ async def invite_redeem_complete(
     if age > timedelta(seconds=config.WEBAUTHN_CHALLENGE_TTL_SECONDS):
         log_security_event("invite_redeemed", "failure", user_id=user.id)
         raise _AUTH_FAILED
-    expected_challenge = _decode_challenge(user.pending_challenge)
+    expected_challenge = decode_challenge(user.pending_challenge)
 
     try:
         verified = webauthn.verify_registration_response(
-            credential=_to_registration_credential(payload.credential),
+            credential=to_registration_credential(payload.credential),
             expected_challenge=expected_challenge,
             expected_rp_id=config.WEBAUTHN_RP_ID,
             expected_origin=config.WEBAUTHN_ORIGIN,
