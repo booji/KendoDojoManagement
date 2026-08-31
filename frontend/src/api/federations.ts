@@ -178,3 +178,40 @@ export const deleteMemberFederation = async (memberId: string, mfId: string): Pr
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to remove federation membership")
 }
+
+// ── Federation Membership store ───────────────────────────────────────────────
+
+/**
+ * The four operations a Federation Membership card performs, independent of
+ * whose memberships it is showing.
+ *
+ * Two adapters satisfy it: `myFederationMemberships` for a Member managing
+ * their own, and `memberFederationMemberships(id)` for an Admin managing
+ * someone else's. The card knows only this shape, so neither view can drift
+ * from the other again.
+ */
+export type FederationMembershipStore = {
+  list: () => Promise<MemberFederationResponse[]>
+  add: (body: MemberFederationCreateRequest) => Promise<MemberFederationResponse>
+  update: (
+    mfId: string,
+    body: MemberFederationUpdateRequest
+  ) => Promise<MemberFederationResponse>
+  remove: (mfId: string) => Promise<void>
+}
+
+export const myFederationMemberships: FederationMembershipStore = {
+  list: getMyFederations,
+  add: addMyFederation,
+  update: updateMyFederation,
+  remove: deleteMyFederation,
+}
+
+export const memberFederationMemberships = (
+  memberId: string
+): FederationMembershipStore => ({
+  list: () => getMemberFederations(memberId),
+  add: (body) => addMemberFederation(memberId, body),
+  update: (mfId, body) => updateMemberFederation(memberId, mfId, body),
+  remove: (mfId) => deleteMemberFederation(memberId, mfId),
+})
