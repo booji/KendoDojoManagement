@@ -27,6 +27,7 @@
 | **Membership Status** | The current standing of a member: `active`, `inactive`, or `suspended` | Account status |
 | **Deactivation** | Setting a member's **Membership Status** to `inactive`; the record is retained, not removed | Delete, remove, archive |
 | **Federation Number** | A member's identifier with the national kendo federation | Licence number, membership number |
+| **Federation Membership** | A member's registration with one **Federation**: the federation, their **Federation Number**, and an optional renewal date | Affiliation, federation link, member federation |
 | **Emergency Contact** | A non-member person designated to be contacted on behalf of a member in an emergency | Next of kin |
 | **Parental Consent** | A flag indicating that consent has been obtained from a parent or guardian for an under-18 member | Guardian consent |
 | **Minor** | A member whose date of birth indicates they are under 18 years of age; derived at read-time, never stored | Under-18, child, junior |
@@ -83,6 +84,7 @@
 - A **Check-in Token** is scoped to exactly one **Session** and expires after use or after the session ends.
 - A **Minor** requires a **Parental Consent** flag before being considered fully registered.
 - A **Deactivation** sets **Membership Status** to `inactive`; it never removes the **Member Profile** or the **User**.
+- A **Member** may hold a **Federation Membership** with each of several **Federations**; an **Admin** manages any member's, a **Member** manages their own, and both go through the same card.
 
 ## Example dialogue
 
