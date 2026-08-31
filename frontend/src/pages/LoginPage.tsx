@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { Link } from "react-router-dom"
 import {
   Card,
   CardHeader,
@@ -15,7 +15,6 @@ import { getBranding } from "@/api/settings"
 import type { DojoBranding } from "@/api/settings"
 
 const LoginPage = () => {
-  const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -41,7 +40,11 @@ const LoginPage = () => {
     setLoading(true)
     try {
       await performPasskeyLogin(email)
-      navigate("/")
+      // A full load, not navigate(): login has just issued the theme cookie,
+      // and only a fresh document lets the pre-paint script in index.html read
+      // it. A client-side transition would keep the pre-login theme until the
+      // user happened to reload (#324).
+      window.location.assign("/")
     } catch (err) {
       if (isApiError(err)) {
         setError(err.message)

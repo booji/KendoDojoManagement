@@ -26,6 +26,9 @@ class UserClaims(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
+    # The user's saved theme, carried out of the login ceremony so the caller
+    # can seed the readable theme cookie without a second query (#324).
+    theme: str = "system"
 
 
 class PasskeyBeginRequest(BaseModel):

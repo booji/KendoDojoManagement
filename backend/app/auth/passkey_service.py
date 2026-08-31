@@ -268,4 +268,4 @@ async def login_passkey_complete(
         is_active=user.is_active,
     )
     log_security_event("login_passkey", "success", user_id=user.id)
-    return TokenResponse(access_token=encode_token(claims))
+    return TokenResponse(access_token=encode_token(claims), theme=user.theme)
