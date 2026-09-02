@@ -2,7 +2,6 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   checkIn,
-  getCheckinToken,
   getSessionAttendance,
   markAttended,
   removeAttendance,
@@ -64,12 +63,6 @@ type CheckinState =
   | { kind: "success" }
   | { kind: "error"; message: string }
 
-type ShareState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "url"; url: string }
-  | { kind: "error"; message: string }
-
 type SessionCardActionsProps = {
   session: SessionInstance
   isAdmin: boolean
@@ -77,7 +70,7 @@ type SessionCardActionsProps = {
 
 const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
   const [checkinState, setCheckinState] = useState<CheckinState>({ kind: "idle" })
-  const [shareState, setShareState] = useState<ShareState>({ kind: "idle" })
+  const [shareVisible, setShareVisible] = useState(false)
 
   const handleCheckIn = async () => {
     setCheckinState({ kind: "loading" })
@@ -90,21 +83,6 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
           ? String((err as { message: unknown }).message)
           : "Failed to check in"
       setCheckinState({ kind: "error", message })
-    }
-  }
-
-  const handleShare = async () => {
-    setShareState({ kind: "loading" })
-    try {
-      const tokenData = await getCheckinToken(session.id)
-      const url = `${window.location.origin}/checkin/${tokenData.token}`
-      setShareState({ kind: "url", url })
-    } catch (err) {
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "Failed to get check-in link"
-      setShareState({ kind: "error", message })
     }
   }
 
@@ -139,12 +117,12 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
       {/* Admin-only: share check-in link */}
       {isAdmin && (
         <>
-          {shareState.kind === "url" ? (
+          {shareVisible ? (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Share this check-in link:</p>
               <Input
                 readOnly
-                value={shareState.url}
+                value={session.checkin_link}
                 aria-label="Check-in link"
                 onFocus={(e) => e.target.select()}
                 className="text-xs"
@@ -155,17 +133,11 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={handleShare}
-              disabled={shareState.kind === "loading"}
+              onClick={() => setShareVisible(true)}
               aria-label="Share check-in link for this session"
             >
-              {shareState.kind === "loading" ? "Getting link…" : "Share check-in link"}
+              Share check-in link
             </Button>
-          )}
-          {shareState.kind === "error" && (
-            <p className="text-xs text-destructive" role="alert">
-              {shareState.message}
-            </p>
           )}
 
           <SessionAttendancePanel sessionId={session.id} />

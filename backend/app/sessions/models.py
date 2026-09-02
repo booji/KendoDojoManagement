@@ -210,7 +210,6 @@ class SessionInstanceCreate(BaseModel):
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
-    checkin_url: str | None = None
     segments: list[SegmentCreate]
 
     @field_validator("segments")
@@ -231,7 +230,9 @@ class SessionInstanceRead(BaseModel):
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
-    checkin_url: str | None = None
+    # The session's one check-in link (#191). Public, tokenless and stable;
+    # filled in by the read path, which owns the origin.
+    checkin_link: str | None = None
     checkin_window_before_minutes: int | None = None
     checkin_window_after_minutes: int | None = None
     attendance_count: int = 0

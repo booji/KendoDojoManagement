@@ -7,10 +7,10 @@ app.dependency_overrides to inject in-memory stubs.
 Acceptance criteria exercised here:
   2. POST /sessions/{id}/checkin checks in the authenticated member
   3. A member cannot check in to a cancelled session
-  4. GET /sessions/{id}/checkin-token generates a short-lived token (admin only)
-  5. POST /checkin/{token} resolves token and checks in the authenticated member
-  6. Expired or invalid token returns an appropriate error
   7. Admin can see a live list via GET /sessions/{id}/attendance
+
+AC4-AC6 covered the single-use token link, which was retired in favour of the
+one tokenless check-in link a session has (see test_checkin_link_api.py).
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.attendance.dependencies import (
     get_attendance_repo,
-    get_checkin_token_repo,
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
@@ -118,46 +117,6 @@ class _AttendanceSessionRepo(InMemorySessionInstanceRepository):
         )
 
 
-class StubCheckinTokenRepo:
-    """In-memory stand-in for a CheckinToken repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def create(self, session_id: str, expires_at: datetime) -> dict[str, Any]:
-        token = str(uuid.uuid4())
-        record = {
-            "token": token,
-            "session_id": session_id,
-            "expires_at": expires_at.isoformat(),
-        }
-        self._store[token] = record
-        return record
-
-    async def get(self, token: str) -> dict[str, Any] | None:
-        return self._store.get(token)
-
-    async def redeem(self, token: str) -> dict[str, Any] | None:
-        record = self._store.get(token)
-        if record is None:
-            return None
-        if record.get("used_at") is not None:
-            raise ValueError("Token already used")
-        record["used_at"] = datetime.now(UTC).isoformat()
-        return record
-
-    def seed_expired(self, session_id: str) -> dict[str, Any]:
-        """Seed an already-expired token for testing."""
-        token = str(uuid.uuid4())
-        record = {
-            "token": token,
-            "session_id": session_id,
-            "expires_at": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
-        }
-        self._store[token] = record
-        return record
-
-
 class StubDojoSettingsRepo:
     """In-memory stand-in for the dojo settings repository (check-in window
     defaults only — issue #192) so these tests never need the real DB."""
@@ -201,13 +160,6 @@ def session_repo() -> _AttendanceSessionRepo:
 def attendance_repo() -> InMemoryAttendanceRepository:
     repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
-    return repo
-
-
-@pytest.fixture()
-def token_repo() -> StubCheckinTokenRepo:
-    repo = StubCheckinTokenRepo()
-    app.dependency_overrides[get_checkin_token_repo] = lambda: repo
     return repo
 
 
@@ -365,144 +317,6 @@ async def test_member_cannot_checkin_to_cancelled_session(
         response = await c.post(f"/sessions/{session['id']}/checkin")
 
     assert response.status_code == 409
-
-
-# ---------------------------------------------------------------------------
-# AC4 — GET /sessions/{id}/checkin-token (admin only)
-# ---------------------------------------------------------------------------
-
-
-async def test_admin_can_generate_checkin_token(
-    session_repo: _AttendanceSessionRepo,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    session = session_repo.seed(cancelled=False)
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{session['id']}/checkin-token")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "token" in body
-    assert isinstance(body["token"], str)
-    assert "expires_at" in body
-
-
-async def test_member_cannot_generate_checkin_token(
-    session_repo: _AttendanceSessionRepo,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    session = session_repo.seed(cancelled=False)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(
-            f"/sessions/{session['id']}/checkin-token",
-            cookies={"access_token": _member_token()},
-        )
-
-    assert response.status_code == 403
-
-
-async def test_generate_token_for_nonexistent_session(
-    session_repo: _AttendanceSessionRepo,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    fake_id = str(uuid.uuid4())
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{fake_id}/checkin-token")
-
-    assert response.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# AC5 — POST /checkin/{token}
-# ---------------------------------------------------------------------------
-
-
-async def test_member_can_checkin_via_token(
-    session_repo: _AttendanceSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    session = session_repo.seed(cancelled=False)
-    expires_at = datetime.now(UTC) + timedelta(minutes=15)
-    token_record = await token_repo.create(session["id"], expires_at)
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(f"/checkin/{token_record['token']}")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "id" in body
-    assert body["session_id"] == session["id"]
-    assert body["member_id"] == _MEMBER_RECORD_ID
-    assert "checked_in_at" in body
-
-
-async def test_unauthenticated_token_checkin_returns_401(
-    session_repo: _AttendanceSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    session = session_repo.seed(cancelled=False)
-    expires_at = datetime.now(UTC) + timedelta(minutes=15)
-    token_record = await token_repo.create(session["id"], expires_at)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(f"/checkin/{token_record['token']}")
-
-    assert response.status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# AC6 — Expired / invalid token
-# ---------------------------------------------------------------------------
-
-
-async def test_expired_token_returns_410(
-    session_repo: _AttendanceSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    session = session_repo.seed(cancelled=False)
-    expired = token_repo.seed_expired(session["id"])
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(f"/checkin/{expired['token']}")
-
-    assert response.status_code == 410
-
-
-async def test_invalid_token_returns_401(
-    session_repo: _AttendanceSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-) -> None:
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post("/checkin/this-token-does-not-exist")
-
-    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

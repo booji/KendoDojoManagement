@@ -13,12 +13,6 @@ class AttendanceRead(BaseModel):
     display_name: str | None = None
 
 
-class CheckinTokenRead(BaseModel):
-    token: str
-    session_id: str
-    expires_at: str
-
-
 class MarkAttendedRequest(BaseModel):
     member_id: uuid.UUID
 

@@ -44,9 +44,24 @@ from app.sessions.repository import (
 router = APIRouter(tags=["sessions"])
 
 
+def checkin_link(session_id: str) -> str:
+    """The one check-in link a session has (#191).
+
+    Tokenless, stable and public: it drives POST /sessions/{id}/checkin, which
+    authenticates the member and enforces the check-in window, so the link
+    itself grants nothing on its own.
+    """
+    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv(
+        "WEBAUTHN_ORIGIN", "http://localhost:5173"
+    )
+    return f"{origin.rstrip('/')}/checkin/session/{session_id}"
+
+
 def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
-    """Apply SessionInstanceRead defaults to fill in any missing optional fields."""
-    return SessionInstanceRead.model_validate(raw).model_dump()
+    """Apply SessionInstanceRead defaults and attach the session's check-in link."""
+    record = SessionInstanceRead.model_validate(raw).model_dump()
+    record["checkin_link"] = checkin_link(record["id"])
+    return record
 
 
 def _normalize_template(raw: dict[str, Any]) -> dict[str, Any]:
@@ -109,14 +124,11 @@ def _enrich_segments_with_type_names(
 async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
     sessions = await repo.list_upcoming()
     types = {t["id"]: t["name"] for t in await type_repo.list()}
-    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv(
-        "WEBAUTHN_ORIGIN", "http://localhost:5173"
-    )
     enriched = [
         {
             **s,
             "segments": _enrich_segments_with_type_names(s.get("segments", []), types),
-            "checkin_link": f"{origin.rstrip('/')}/checkin/session/{s['id']}",
+            "checkin_link": checkin_link(s["id"]),
         }
         for s in sessions
     ]

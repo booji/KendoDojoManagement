@@ -280,8 +280,7 @@ async def test_erase_missing_member_returns_404() -> None:
 # Verifies actual SQL side-effects: anonymised member row, deleted auth /
 # passkey / recovery / grade / federation rows, and RETAINED attendance rows
 # that still reference the member id. Uses db_session (savepoint-backed) from
-# conftest.py, following the pattern in test_pg_isolation.py /
-# test_checkin_token_hashing.py.
+# conftest.py, following the pattern in test_pg_isolation.py.
 # ===========================================================================
 
 

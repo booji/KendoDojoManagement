@@ -13,7 +13,6 @@ _VALID_EVENT_TYPES = frozenset(
         "admin_token_generated",
         "passkey_registered",
         "passkey_deleted",
-        "checkin_token_generated",
         "invite_minted",
         "invite_revoked",
         "invite_redeemed",

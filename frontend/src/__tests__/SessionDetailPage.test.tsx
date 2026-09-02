@@ -6,7 +6,7 @@
  *   AC2 — member view shows required fields; coach_notes is NOT rendered
  *   AC3 — info renders as Markdown (not raw text)
  *   AC4 — check-in button calls POST /sessions/{id}/checkin
- *   AC5 — checkin_url is shown when present
+ *   AC5 — the session's check-in link is shown to admins only
  *   AC6 — admin view shows coach_notes, attendance list, edit controls, cancel controls
  *   AC7 — edit form pre-populates with current values and calls PUT /sessions/{id}
  *   AC8 — cancel instance calls POST /sessions/{id}/cancel;
@@ -39,7 +39,7 @@ const BASE_SESSION = {
   location: "Main dojo",
   info: "Some **markdown** info",
   coach_notes: null,
-  checkin_url: null,
+  checkin_link: "https://dojo.example.com/checkin/session/aaaabbbb-0000-0000-0000-000000000001",
   segments: [
     {
       id: "seg-0001",
@@ -57,11 +57,6 @@ const SESSION_TYPES = [
 const ADMIN_SESSION = {
   ...BASE_SESSION,
   coach_notes: "Admin-only **markdown** notes",
-}
-
-const SESSION_WITH_CHECKIN_URL = {
-  ...BASE_SESSION,
-  checkin_url: "https://dojo.example.com/checkin/abc123",
 }
 
 const ATTENDANCE = [
@@ -317,12 +312,26 @@ describe("AC4 — check-in button", () => {
   })
 })
 
-// ── AC5 — checkin_url shown when present ──────────────────────────────────────
+// ── AC5 — check-in link is admin-only ─────────────────────────────────────────
 
-describe("AC5 — checkin_url display", () => {
-  it("shows the checkin URL when the session has a checkin_url", async () => {
+describe("AC5 — check-in link display", () => {
+  it("shows the session's check-in link to an admin", async () => {
     mockFetch({
-      [`/sessions/${SESSION_ID}`]: { status: 200, body: SESSION_WITH_CHECKIN_URL },
+      [`/sessions/${SESSION_ID}`]: { status: 200, body: ADMIN_SESSION },
+      [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
+      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" } },
+    })
+
+    renderDetailPage()
+
+    await waitFor(() => {
+      expect(screen.getByText(BASE_SESSION.checkin_link)).toBeInTheDocument()
+    })
+  })
+
+  it("does not show it to a member — sharing the link is an admin action", async () => {
+    mockFetch({
+      [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
       [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
     })
@@ -330,8 +339,9 @@ describe("AC5 — checkin_url display", () => {
     renderDetailPage()
 
     await waitFor(() => {
-      expect(screen.getByText(/https:\/\/dojo\.example\.com\/checkin\/abc123/i)).toBeInTheDocument()
+      expect(screen.getByText("Evening Practice")).toBeInTheDocument()
     })
+    expect(screen.queryByText(BASE_SESSION.checkin_link)).not.toBeInTheDocument()
   })
 })
 

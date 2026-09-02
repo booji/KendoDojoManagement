@@ -35,7 +35,8 @@ export type SessionInstance = {
   notes: string | null
   info: string | null
   coach_notes: string | null
-  checkin_url: string | null
+  // The session's one check-in link: tokenless, stable, built by the backend.
+  checkin_link: string
   checkin_window_before_minutes: number | null
   checkin_window_after_minutes: number | null
   attendance_count: number

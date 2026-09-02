@@ -1,31 +1,26 @@
 from __future__ import annotations
 
-import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.attendance.dependencies import (
     get_attendance_repo,
-    get_checkin_token_repo,
     get_session_instance_repo,
 )
 from app.attendance.models import (
     AddVisitorRequest,
     AttendanceRead,
-    CheckinTokenRead,
     MarkAttendedRequest,
 )
 from app.attendance.repository import (
     AbstractAttendanceRepository,
-    AbstractCheckinTokenRepository,
     AbstractSessionInstanceRepository,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
-from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_current_member_id
@@ -37,7 +32,6 @@ from app.settings.repository import AbstractDojoSettingsRepository
 router = APIRouter(tags=["attendance"])
 
 _AttRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
-_TokRepo = Annotated[AbstractCheckinTokenRepository, Depends(get_checkin_token_repo)]
 _SessRepo = Annotated[
     AbstractSessionInstanceRepository, Depends(get_session_instance_repo)
 ]
@@ -131,82 +125,6 @@ async def checkin_to_session(
         )
     record = await attendance_repo.check_in(
         str(session_id), member_id, current_user.sub
-    )
-    await uow.commit()
-    return AttendanceRead(**record)
-
-
-@router.get("/sessions/{session_id}/checkin-token")
-async def generate_checkin_token(
-    session_id: uuid.UUID,
-    _claims: _Admin,
-    session_repo: _SessRepo,
-    token_repo: _TokRepo,
-    uow: _UoW,
-) -> CheckinTokenRead:
-    session = await session_repo.get(str(session_id))
-    if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
-    expires_at = datetime.now(UTC) + timedelta(hours=24)
-    record = await token_repo.create(str(session_id), expires_at)
-    origin = os.getenv("PUBLIC_ORIGIN") or os.getenv(
-        "WEBAUTHN_ORIGIN", "http://localhost:5173"
-    )
-    checkin_url = f"{origin.rstrip('/')}/checkin/{record['token']}"
-    await session_repo.update(str(session_id), {"checkin_url": checkin_url})
-    await uow.commit()
-    log_security_event(
-        "checkin_token_generated",
-        "success",
-        detail={"session_id": str(session_id)},
-    )
-    if isinstance(record.get("expires_at"), datetime):
-        record = {**record, "expires_at": record["expires_at"].isoformat()}
-    return CheckinTokenRead(**record)
-
-
-@router.post("/checkin/{token}")
-async def checkin_via_token(
-    token: str,
-    current_user: _Member,
-    current_member_id: _CurrentMemberId,
-    token_repo: _TokRepo,
-    session_repo: _SessRepo,
-    attendance_repo: _AttRepo,
-    uow: _UoW,
-) -> AttendanceRead:
-    member_id = _require_member_id(current_member_id)
-    try:
-        token_record = await token_repo.redeem(token)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Token already used"
-        )
-    if token_record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid token"
-        )
-    expires_at = datetime.fromisoformat(token_record["expires_at"])
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at < datetime.now(UTC):
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Token expired")
-    session = await session_repo.get(token_record["session_id"])
-    if session is not None and session.get("cancelled"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Session is cancelled"
-        )
-    existing = await attendance_repo.get_by_session_member(
-        token_record["session_id"], member_id
-    )
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Already checked in"
-        )
-    record = await attendance_repo.check_in(
-        token_record["session_id"], member_id, current_user.sub
     )
     await uow.commit()
     return AttendanceRead(**record)

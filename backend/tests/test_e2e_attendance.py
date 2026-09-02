@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timedelta
 
@@ -197,11 +198,11 @@ def test_checkin_to_cancelled_session_shows_error(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC4 — Admin can generate a check-in token/link from the Sessions page
+# AC4 — Admin can share the session's check-in link from the Sessions page
 # ---------------------------------------------------------------------------
 
 
-def test_admin_can_generate_checkin_token_via_ui(page: Page) -> None:
+def test_admin_can_share_checkin_link_via_ui(page: Page) -> None:
     admin_token = _make_token("admin")
     _create_session(page, admin_token, "2099-07-29")
 
@@ -223,48 +224,13 @@ def test_admin_can_generate_checkin_token_via_ui(page: Page) -> None:
     link_input = page.locator('input[aria-label="Check-in link"]').first
     expect(link_input).to_be_visible(timeout=8000)
     link_value = link_input.input_value()
-    assert "/checkin/" in link_value, f"Expected /checkin/ in URL, got: {link_value}"
-
-
-# ---------------------------------------------------------------------------
-# AC5 — Navigating to /checkin/{token} checks in the authenticated member
-# ---------------------------------------------------------------------------
-
-
-def test_member_can_checkin_via_token_url(page: Page) -> None:
-    admin_token = _make_token("admin")
-    session_id = _create_session(page, admin_token, "2099-08-05")
-
-    # Generate a token via API
-    token_resp = page.request.get(
-        f"{API_URL}/sessions/{session_id}/checkin-token",
-        headers=_api_headers(admin_token),
-    )
-    assert token_resp.status == 200, f"token gen failed: {token_resp.status}"
-    checkin_token = token_resp.json()["token"]
-
-    # Log in as member, then navigate to the check-in URL
-    member_token = _make_token("member")
-    _set_cookie(page, member_token)
-    page.goto(f"{BASE_URL}/checkin/{checkin_token}")
-
-    # The CheckinPage auto-POSTs and renders success
-    expect(page.get_by_text("You're checked in!")).to_be_visible(timeout=8000)
-
-
-# ---------------------------------------------------------------------------
-# AC6 — Navigating to /checkin/{expired-or-invalid-token} shows an error
-# ---------------------------------------------------------------------------
-
-
-def test_expired_or_invalid_token_shows_error(page: Page) -> None:
-    member_token = _make_token("member")
-    _set_cookie(page, member_token)
-    page.goto(f"{BASE_URL}/checkin/totally-invalid-token-xyz123")
-
-    # The CheckinPage shows "Invalid link" for a 404
-    expect(page.get_by_role("heading", name="Invalid link")).to_be_visible(timeout=8000)
-    expect(page.get_by_text("Invalid check-in link.")).to_be_visible()
+    # `.first` is whichever card the list renders first, not necessarily the
+    # one seeded above — so this asserts the link's shape, not its id. That the
+    # id is the card's own session is covered without a browser in
+    # test_checkin_link_api.py.
+    assert re.fullmatch(
+        r"https?://[^/]+/checkin/session/[0-9a-f-]{36}", link_value
+    ), f"Expected the session's tokenless check-in link, got: {link_value}"
 
 
 # ---------------------------------------------------------------------------

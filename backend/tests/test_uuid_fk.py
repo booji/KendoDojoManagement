@@ -131,25 +131,6 @@ class TestAttendanceFKConstraints:
 
 
 # ---------------------------------------------------------------------------
-# 4. FK constraint on checkin_tokens.session_id
-# ---------------------------------------------------------------------------
-
-
-class TestCheckinTokenFKConstraint:
-    """CheckinToken.session_id must reference session_instances.id."""
-
-    def test_checkin_token_session_id_fk_references_session_instances(self) -> None:
-        from app.attendance.db_models import CheckinToken
-
-        fks = CheckinToken.__table__.c.session_id.foreign_keys
-        assert len(fks) > 0, "checkin_tokens.session_id must have a FK constraint"
-        targets = {fk.target_fullname for fk in fks}
-        assert (
-            "session_instances.id" in targets
-        ), f"checkin_tokens.session_id FK must reference session_instances.id, got {targets}"
-
-
-# ---------------------------------------------------------------------------
 # 5. FK constraints on grade_history columns
 # ---------------------------------------------------------------------------
 

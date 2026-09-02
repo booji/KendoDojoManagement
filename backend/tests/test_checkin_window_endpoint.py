@@ -14,9 +14,11 @@ Acceptance criteria exercised here:
      relevant boundary time when outside.
   5. "Now" is evaluated against server-local time (we drive this by seeding
      sessions relative to datetime.now(), not by mocking the clock).
-  6. Admin mark-attended (POST /sessions/{id}/attendance) and the admin
-     one-off token endpoint (POST /checkin/{token}) remain UNCONSTRAINED by
-     the window.
+  6. Admin mark-attended (POST /sessions/{id}/attendance) remains
+     UNCONSTRAINED by the window. The admin one-off token endpoint that also
+     bypassed it (POST /checkin/{token}) has since been retired — the one
+     check-in link a session has now routes through the window like any
+     other member check-in.
   Preserves existing 404 / 409 already-checked-in / 409 cancelled behaviour.
 
 The session dict handed back by the (stubbed) session repo now needs to
@@ -37,7 +39,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.attendance.dependencies import (
     get_attendance_repo,
-    get_checkin_token_repo,
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
@@ -119,35 +120,6 @@ class _WindowSessionRepo(InMemorySessionInstanceRepository):
         )
 
 
-class StubCheckinTokenRepo:
-    """In-memory stand-in for a CheckinToken repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def create(self, session_id: str, expires_at: datetime) -> dict[str, Any]:
-        token = str(uuid.uuid4())
-        record = {
-            "token": token,
-            "session_id": session_id,
-            "expires_at": expires_at.isoformat(),
-        }
-        self._store[token] = record
-        return record
-
-    async def get(self, token: str) -> dict[str, Any] | None:
-        return self._store.get(token)
-
-    async def redeem(self, token: str) -> dict[str, Any] | None:
-        record = self._store.get(token)
-        if record is None:
-            return None
-        if record.get("used_at") is not None:
-            raise ValueError("Token already used")
-        record["used_at"] = datetime.now().isoformat()
-        return record
-
-
 class StubDojoSettingsRepo:
     """In-memory stand-in for the dojo settings repository, carrying the new
     check-in window default minutes (issue #192 AC2)."""
@@ -207,13 +179,6 @@ def session_repo() -> _WindowSessionRepo:
 def attendance_repo() -> InMemoryAttendanceRepository:
     repo = InMemoryAttendanceRepository()
     app.dependency_overrides[get_attendance_repo] = lambda: repo
-    return repo
-
-
-@pytest.fixture()
-def token_repo() -> StubCheckinTokenRepo:
-    repo = StubCheckinTokenRepo()
-    app.dependency_overrides[get_checkin_token_repo] = lambda: repo
     return repo
 
 
@@ -410,60 +375,6 @@ async def test_admin_mark_attended_bypasses_window_when_closed(
         )
 
     assert response.status_code == 201
-
-
-# ---------------------------------------------------------------------------
-# AC6 — Admin one-off token endpoint bypasses the window entirely
-# ---------------------------------------------------------------------------
-
-
-async def test_token_checkin_bypasses_window_when_too_early(
-    session_repo: _WindowSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-    settings_repo: StubDojoSettingsRepo,
-) -> None:
-    """POST /checkin/{token} (admin-generated one-off token) must succeed
-    even for a session far outside the check-in window."""
-    now = datetime.now()
-    start = now + timedelta(hours=6)
-    session = session_repo.seed(
-        cancelled=False, start=start, end=start + timedelta(minutes=60)
-    )
-    expires_at = datetime.now().astimezone() + timedelta(hours=24)
-    token_record = await token_repo.create(session["id"], expires_at)
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(f"/checkin/{token_record['token']}")
-
-    assert response.status_code == 200
-
-
-async def test_token_checkin_bypasses_window_when_closed(
-    session_repo: _WindowSessionRepo,
-    attendance_repo: InMemoryAttendanceRepository,
-    token_repo: StubCheckinTokenRepo,
-    settings_repo: StubDojoSettingsRepo,
-) -> None:
-    """POST /checkin/{token} (admin-generated one-off token) must succeed
-    even for a session long closed for self check-in."""
-    now = datetime.now()
-    end = now - timedelta(hours=6)
-    start = end - timedelta(minutes=60)
-    session = session_repo.seed(cancelled=False, start=start, end=end)
-    expires_at = datetime.now().astimezone() + timedelta(hours=24)
-    token_record = await token_repo.create(session["id"], expires_at)
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.post(f"/checkin/{token_record['token']}")
-
-    assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------

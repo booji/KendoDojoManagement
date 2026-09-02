@@ -8,8 +8,8 @@ must still produce exactly ONE VEVENT per session:
   - DTSTART/DTEND = the derived envelope (min start -> max end across segments)
   - DESCRIPTION = a per-segment breakdown ("HH:MM-HH:MM Type, Type" per
     segment, newline-joined) followed by the session's public `info` field
-  - coach_notes (session-level AND per-segment), checkin_url, and notes must
-    NEVER appear in the output
+  - coach_notes (session-level AND per-segment) and notes must NEVER appear
+    in the output
 
 These tests exercise `app.sessions.ical.build_ical` directly with
 segment-shaped session dicts. build_ical does not yet understand segments,
@@ -29,7 +29,6 @@ def _segmented_session(**overrides):
         "location": "Main Dojo",
         "info": "Bring your bogu",
         "cancelled": False,
-        "checkin_url": "https://dojo.example.com/checkin/abc123",
         "notes": "Internal scheduling note",
         "segments": [
             {
@@ -199,13 +198,6 @@ def test_segment_level_coach_notes_never_appears() -> None:
     result = build_ical(sessions)
     assert "SECRET: focus on footwork" not in result
     assert "SECRET: sparring pairs TBD" not in result
-
-
-def test_checkin_url_never_appears() -> None:
-    sessions = [_segmented_session()]
-    result = build_ical(sessions)
-    assert "checkin" not in result.lower()
-    assert "abc123" not in result
 
 
 def test_notes_field_never_appears() -> None:

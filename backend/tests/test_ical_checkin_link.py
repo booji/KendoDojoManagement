@@ -14,7 +14,7 @@ Acceptance criteria covered here:
      followed by a blank line, then the existing segment breakdown and info.
   3. The link is present only for upcoming, non-cancelled sessions;
      cancelled sessions remain excluded from the feed entirely; no
-     admin-only fields (coach_notes, checkin_url, notes) leak.
+     admin-only fields (coach_notes, notes) leak.
 
 These tests are RED: `checkin_link` is not yet in `_PUBLIC_FIELDS`, and
 `_build_description` does not yet emit the "Check in:" line. The router does
@@ -154,7 +154,7 @@ def test_cancelled_session_excluded_even_with_checkin_link() -> None:
 
 
 def test_admin_only_fields_still_stripped_when_checkin_link_present() -> None:
-    """coach_notes, checkin_url, and notes must never leak into the output,
+    """coach_notes and notes must never leak into the output,
     even alongside a public checkin_link."""
     url = "https://dojo.example.com/checkin/session/uid-secret"
     sessions = [
@@ -163,14 +163,12 @@ def test_admin_only_fields_still_stripped_when_checkin_link_present() -> None:
             title="Secret Night",
             checkin_link=url,
             coach_notes="SECRET coach guidance",
-            checkin_url="https://dojo.example.com/checkin/tok-legacy",
             notes="Internal scheduling note",
         )
     ]
     result = build_ical(sessions)
     assert "SECRET" not in result
     assert "coach_notes" not in result.lower()
-    assert "tok-legacy" not in result
     assert "Internal scheduling note" not in result
     # The public checkin_link itself is expected to appear.
     assert url in result
