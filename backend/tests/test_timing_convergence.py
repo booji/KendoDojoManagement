@@ -24,6 +24,8 @@ import random
 import pytest
 
 from tests.timing_support import (
+    SAMPLE_COUNT,
+    assert_latency_converges_sampled,
     assert_latency_medians_converge,
     sample_counterbalanced,
 )
@@ -363,3 +365,122 @@ def _median(values: list[float]) -> float:
     import statistics
 
     return statistics.median(values)
+
+
+# ── issue #364: confirm before failing ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sampled_assertion_retries_before_failing_a_one_off_artefact() -> None:
+    """A tripping delta that does not reproduce is a harness artefact.
+
+    The module already documents non-reproduction as the artefact fingerprint
+    (see `sample_counterbalanced`); issue #364 acts on it. Branch b is 5ms
+    slower for the first sampling round only, so the first round trips the
+    assertion and the second converges.
+    """
+    rounds = 0
+
+    async def measure_a() -> float:
+        return 0.020
+
+    async def measure_b() -> float:
+        nonlocal rounds
+        rounds += 1
+        return 0.025 if rounds <= SAMPLE_COUNT else 0.020
+
+    await assert_latency_converges_sampled(
+        measure_a, measure_b, label_a="valid", label_b="invalid"
+    )
+
+    assert (
+        rounds == 2 * SAMPLE_COUNT
+    ), "a tripped assertion must re-measure exactly once"
+
+
+@pytest.mark.asyncio
+async def test_sampled_assertion_fails_when_the_delta_reproduces() -> None:
+    """A real asymmetry is present on every round, so confirming cannot hide
+    it -- only the cost of failing doubles."""
+
+    async def measure_a() -> float:
+        return 0.020
+
+    async def measure_b() -> float:
+        return 0.025
+
+    with pytest.raises(AssertionError) as excinfo:
+        await assert_latency_converges_sampled(
+            measure_a, measure_b, label_a="known", label_b="unknown"
+        )
+
+    message = str(excinfo.value)
+    assert "median" in message
+    assert "reproduced" in message.lower(), "message must say the delta was confirmed"
+    assert "floor" in message.lower(), (
+        "a confirmed delta is most often sustained contention overrunning the "
+        "constant-time floor, so the message must point the reader there"
+    )
+
+
+def _stream(
+    centre_s: float,
+    *,
+    spread_s: float,
+    seed: int,
+    slow_fraction: float = 0.0,
+    slow_offset_s: float = 0.0,
+):
+    """A re-callable measure function drawing fresh samples from one seeded
+    stream, so each confirmation round sees different draws of the same shape
+    while the test as a whole stays deterministic."""
+    rng = random.Random(seed)
+
+    async def measure() -> float:
+        centre = centre_s
+        if slow_fraction and rng.random() < slow_fraction:
+            centre += slow_offset_s
+        return rng.uniform(centre - spread_s, centre + spread_s)
+
+    return measure
+
+
+@pytest.mark.asyncio
+async def test_systematic_offset_still_fails_through_the_sampled_assertion() -> None:
+    """The #255 fixture shape must still fail the assertion the auth tests
+    actually call now (issue #364 acceptance).
+
+    The single-round assertion keeps its own coverage above; this is the same
+    2ms offset judged through the confirmation path, which is the one
+    test_invites.py and test_passkey_timing.py route through.
+    """
+    with pytest.raises(AssertionError, match="median"):
+        await assert_latency_converges_sampled(
+            _stream(0.0200, spread_s=0.05 * MS, seed=201),
+            _stream(0.0200 + 2 * MS, spread_s=0.05 * MS, seed=202),
+            label_a="fast path",
+            label_b="slow path",
+        )
+
+
+@pytest.mark.asyncio
+async def test_bimodal_leak_still_fails_through_the_sampled_assertion() -> None:
+    """A conditional slow branch must survive confirmation too.
+
+    Confirmation squares a detection rate as well as a false-failure rate, so
+    the shapes the suite has fixtures for are re-checked through the sampled
+    path rather than assumed to carry over from the single-round tests.
+    """
+    with pytest.raises(AssertionError):
+        await assert_latency_converges_sampled(
+            _stream(0.0200, spread_s=0.1 * MS, seed=203),
+            _stream(
+                0.0200,
+                spread_s=0.1 * MS,
+                seed=204,
+                slow_fraction=0.30,
+                slow_offset_s=6 * MS,
+            ),
+            label_a="fast path",
+            label_b="leaky path",
+        )

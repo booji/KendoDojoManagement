@@ -55,6 +55,83 @@ instead widens the budget it is judged against. The fix has two parts:
   drop it in a future revision if that continues to hold and the extra
   moving part isn't earning its keep.
 
+Issue #364: the residual false-failure rate is a *floored-tolerance* effect.
+`3 x control` only sets the budget while the control exceeds
+`MIN_TOLERANCE_S / 3` (~0.33ms); below that the calibration is switched off
+by its own lower bound and the run is judged against a flat 1ms budget its
+measured noise had no part in setting. That is where every observed false
+failure lived -- controls of 0.08-0.20ms against deltas of 1.12-1.34ms, on
+three unrelated branches including `main`. Widening the floor is not
+available as a fix: it is the historical #255 budget, and it would eat the
+margin `MAX_TOLERANCE_S` deliberately leaves under the ~2.02ms real leak.
+
+So a tripped assertion is instead re-measured from scratch and reported only
+if it reproduces -- see `assert_latency_converges_sampled`. A false failure
+is a per-run sampling accident and mostly does not recur; a real asymmetry is
+present on every run. Measured over 100,000 trials of two branches drawn from
+an *identical* distribution at the #298 noise level (+/-3ms spread, n=31):
+
+    rounds required   false-failure rate
+    1                 5.503%
+    2 (shipped)       0.317%
+
+Detection was measured over 20,000 trials per fixture shape, single round vs.
+confirmed:
+
+    #255-class 2.02ms offset, quiet     100.000% -> 100.000%
+    1.7ms offset under 1ms noise         98.735% ->  97.380%
+    4ms offset under 3ms noise          100.000% -> 100.000%
+    bimodal 30% duty cycle, +6ms         99.840% ->  99.725%
+    bimodal 20% duty cycle, +8ms         96.055% ->  92.645%
+    bimodal 5% duty cycle, +6ms          19.860% ->   3.975%
+
+Everything the suite has a fixture for keeps its detection. The 5%-duty-cycle
+row is the honest cost: confirmation roughly squares a detection rate too,
+so a shape the check was already mostly blind to (19.9% -- it never had a
+fixture, and n=31 cannot see 1-2 slow samples) becomes near-invisible.
+Detecting that class wants more samples, not fewer confirmations.
+
+Both figures assume the two rounds are independent, which sustained
+contention breaks -- and the direct measurement issue #360 asked for shows
+that a load-induced failure is not one this check should suppress anyway.
+Sampling the redeem-begin pair over 15 rounds per condition, varying only
+the number of tasks contending for the event loop:
+
+    contending tasks   signed median delta   valid slower   control
+    0                  +0.001ms              8/15           0.173ms
+    1                  -0.019ms              7/15           0.149ms
+    2                  +0.005ms              8/15           0.136ms
+    4                  +1.514ms              15/15          1.139ms
+
+Unloaded, the delta is nil and its *sign* is a coin flip -- the fingerprint
+of a sampling accident, and the regime every observed false failure came
+from (quiet controls of 0.08-0.20ms). Under real contention the sign stops
+flipping: 15 rounds out of 15 put the valid path ahead, with the middleware
+logging `Constant-time floor exceeded ... 169.3ms elapsed vs 20ms floor`
+alongside. That is not the harness misreading noise. The real path's work has
+overrun `AUTH_BEGIN_MIN_DURATION_MS`, so the constant-time floor is no longer
+masking it, and for as long as the load lasts the asymmetry is as visible to
+an attacker as it is to the test.
+
+Note which regime the observed false failures came from, because #360 poses
+the choice as "inherent to the endpoint, fix at source" versus "load-induced,
+make the calibration load-robust" and the answer is neither. The failures had
+quiet controls (0.08-0.20ms), and the quiet rows above show no delta to be
+robust *to*: at 0-2 contending tasks the median delta is under 0.02ms and its
+sign is a coin flip. They are sampling accidents in the tail of that
+distribution. The loaded row is a different event -- a true positive that
+should fail, since the floor really has stopped masking -- so suppressing it
+with a quiet phase or a load term would be suppressing the one reading worth
+having. What is left is to separate accident from asymmetry by whether it
+recurs, which is what confirmation does.
+
+So confirmation suppresses the accident and keeps the unmasking: the first
+has a fresh coin to flip and mostly does not recur, while the second holds
+for as long as the machine is busy. 0.317% is the floor of the achievable
+false-failure rate rather than a promise, and a failure that survives both
+rounds should be read as "check whether the floor was exceeded", which is
+what the assertion message now says.
+
 Note this is not the production defence -- that is the constant-time floor
 (`AUTH_BEGIN_MIN_DURATION_MS`), asserted separately by the floor tests. This
 assertion guards against asymmetry *above* that floor.
@@ -64,6 +141,7 @@ import statistics
 from collections.abc import Awaitable, Callable
 
 __all__ = [
+    "assert_latency_converges_sampled",
     "assert_latency_medians_converge",
     "sample_counterbalanced",
     "SAMPLE_COUNT",
@@ -81,7 +159,9 @@ SAMPLE_COUNT = 31
 NOISE_MULTIPLIER = 3.0
 
 #: Floor for the median tolerance: the historical fixed budget from issue
-#: #255.
+#: #255. Below a control of `MIN_TOLERANCE_S / NOISE_MULTIPLIER` this bound
+#: rather than the run's own noise sets the budget, which is the regime issue
+#: #364's confirmation round exists to cover -- see the module docstring.
 MIN_TOLERANCE_S = 0.001
 
 #: Ceiling for the median tolerance. Issue #255 measured the real leak at a
@@ -139,6 +219,10 @@ CONTROL_RATIO_SIGNAL_THRESHOLD = 20.0
 #: fixtures (5-30% duty cycle) was unaffected in the same sweep -- it never
 #: depended on this control in the first place; see the module docstring.
 CONTROL_RATIO_MIN_ABS_S = 0.0002
+
+#: Independent sampling rounds a tripped assertion must survive before it is
+#: reported as a failure (issue #364). See `assert_latency_converges_sampled`.
+CONFIRMATION_ATTEMPTS = 2
 
 #: Fewest samples per branch that can support a split-half control.
 _MIN_SAMPLES = 8
@@ -266,7 +350,7 @@ def _check_statistic(
     )
 
 
-def assert_latency_medians_converge(
+def _first_failure(
     samples_a: list[float],
     samples_b: list[float],
     *,
@@ -317,4 +401,75 @@ def assert_latency_medians_converge(
         label_b=label_b,
     )
 
+    return failure
+
+
+def assert_latency_medians_converge(
+    samples_a: list[float],
+    samples_b: list[float],
+    *,
+    label_a: str,
+    label_b: str,
+) -> None:
+    """Assert one already-collected sample pair converges.
+
+    Judges the samples it is given and nothing more. Where the samples can be
+    re-collected, prefer `assert_latency_converges_sampled`, which confirms a
+    tripped assertion against a fresh run before failing (issue #364).
+    """
+    failure = _first_failure(samples_a, samples_b, label_a=label_a, label_b=label_b)
     assert failure is None, failure
+
+
+async def assert_latency_converges_sampled(
+    measure_a: Callable[[], Awaitable[float]],
+    measure_b: Callable[[], Awaitable[float]],
+    *,
+    label_a: str,
+    label_b: str,
+    count: int = SAMPLE_COUNT,
+    attempts: int = CONFIRMATION_ATTEMPTS,
+) -> None:
+    """Sample two branches and assert they converge, confirming any failure.
+
+    Issue #364: the calibrated tolerance is floored at `MIN_TOLERANCE_S`, so
+    on a run whose measured noise falls below `MIN_TOLERANCE_S / 3` the
+    calibration is switched off by its own lower bound and the run is judged
+    against a flat budget its own noise had no part in setting. That regime
+    is where the residual ~5% false-failure rate lives, and it is common:
+    every observed false failure had a control of 0.08-0.20ms.
+
+    Rather than trade the floor's sensitivity for quiet, a tripped assertion
+    is re-measured from scratch and fails only if it reproduces. A false
+    failure is a per-run sampling accident, so the rate falls roughly as its
+    own square; a real asymmetry is present on every run and reproduces by
+    construction. See the module docstring for the measured figures.
+
+    Args:
+        measure_a, measure_b: awaitables returning one wall-clock duration in
+            seconds for their respective branch, callable repeatedly.
+        label_a, label_b: branch names, used in the failure message.
+        count: samples per branch per attempt.
+        attempts: independent sampling rounds a failure must survive.
+
+    Raises:
+        AssertionError: if the same statistic exceeds its calibrated tolerance
+            on every attempt.
+    """
+    for attempt in range(1, attempts + 1):
+        samples_a, samples_b = await sample_counterbalanced(
+            measure_a, measure_b, count=count
+        )
+        failure = _first_failure(samples_a, samples_b, label_a=label_a, label_b=label_b)
+        if failure is None:
+            return
+
+    raise AssertionError(
+        f"{failure} Reproduced on {attempts} independent sampling rounds, so "
+        f"this is not the per-run sampling accident described in issue #364; "
+        f"the figures above are from the final round. Check the captured log "
+        f"for 'Constant-time floor exceeded': under sustained contention the "
+        f"real path overruns AUTH_BEGIN_MIN_DURATION_MS and the floor stops "
+        f"masking it, which reproduces exactly like a code-level asymmetry "
+        f"because for as long as the load lasts it is one."
+    )

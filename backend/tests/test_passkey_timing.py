@@ -37,10 +37,7 @@ from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
 from app.members.db_models import Member
-from tests.timing_support import (
-    assert_latency_medians_converge,
-    sample_counterbalanced,
-)
+from tests.timing_support import assert_latency_converges_sampled
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -231,18 +228,16 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        known_samples, unknown_samples = await sample_counterbalanced(
+        await assert_latency_converges_sampled(
             lambda: _timed_post(
                 c, "/auth/login/passkey/begin", "known-median@dojo.test"
             ),
             lambda: _timed_post(
                 c, "/auth/login/passkey/begin", "unknown-median@dojo.test"
             ),
+            label_a="known email",
+            label_b="unknown email",
         )
-
-    assert_latency_medians_converge(
-        known_samples, unknown_samples, label_a="known email", label_b="unknown email"
-    )
 
 
 @pytest.mark.asyncio
@@ -268,21 +263,16 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
-        authorized_samples, unauthorized_samples = await sample_counterbalanced(
+        await assert_latency_converges_sampled(
             lambda: _timed_post(
                 c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
             ),
             lambda: _timed_post(
                 c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
             ),
+            label_a="authorized email",
+            label_b="unauthorized email",
         )
-
-    assert_latency_medians_converge(
-        authorized_samples,
-        unauthorized_samples,
-        label_a="authorized email",
-        label_b="unauthorized email",
-    )
 
 
 # ── AC6: the floor is configurable ───────────────────────────────────────────

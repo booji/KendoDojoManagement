@@ -1000,10 +1000,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     Tolerance is calibrated per run against same-path noise -- see
     tests/timing_support.py and issue #298."""
     from app import config
-    from tests.timing_support import (
-        assert_latency_medians_converge,
-        sample_counterbalanced,
-    )
+    from tests.timing_support import assert_latency_converges_sampled
 
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
     session = db_client
@@ -1023,14 +1020,12 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
             assert r.status_code == 200
             return elapsed
 
-        valid_samples, invalid_samples = await sample_counterbalanced(
+        await assert_latency_converges_sampled(
             lambda: _timed_redeem("median-valid-token"),
             lambda: _timed_redeem("median-invalid-token"),
+            label_a="valid token",
+            label_b="invalid token",
         )
-
-    assert_latency_medians_converge(
-        valid_samples, invalid_samples, label_a="valid token", label_b="invalid token"
-    )
 
 
 # ---------------------------------------------------------------------------
