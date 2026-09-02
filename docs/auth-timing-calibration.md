@@ -130,6 +130,78 @@ saturation:
   simultaneous begin requests requires many distinct source addresses, given the
   20/min per-IP limit, which is itself the signal worth acting on.
 
+## The convergence assertion's own false-failure rate
+
+Separately from the floor, `backend/tests/timing_support.py` asserts that the
+real and decoy paths converge in latency. Its tolerance is calibrated against
+the noise in the run being judged, but floored at the 1ms budget inherited from
+#255 — so on a *quiet* run, where `3 × control` falls under that floor, the
+calibration is switched off by its own lower bound and the run is judged
+against a flat 1ms. Every observed false failure lived in that regime
+([#364](https://github.com/booji/KendoDojoManagement/issues/364)): same-path
+controls of 0.08–0.20ms against cross-path deltas of 1.12–1.34ms, on three
+unrelated branches including `main`.
+
+Raising the floor is not available as a remedy — it is the #255 budget, and it
+would eat the margin `MAX_TOLERANCE_S` deliberately leaves under the ~2.02ms
+leak that issue measured. Instead a tripped assertion is **re-measured from
+scratch and fails only if it reproduces** (`assert_latency_converges_sampled`).
+A false failure is a per-run sampling accident; a real asymmetry is present on
+every run.
+
+Measured by Monte Carlo, two branches drawn from an identical distribution at
+the #298 noise level (±3ms spread, n=31, 100,000 trials):
+
+| rounds required | false-failure rate |
+|---|---|
+| 1 | 5.503% |
+| **2 (shipped)** | **0.317%** |
+
+Detection is unaffected for every leak shape the suite has a fixture for; the
+per-shape figures and the one shape that does pay for it are tabulated in the
+`timing_support.py` module docstring. Cost is one extra sampling round on the
+failing path only.
+
+### Why a confirmed failure is worth reading
+
+[#360](https://github.com/booji/KendoDojoManagement/issues/360) asked for the
+delta to be measured directly, isolated and under load, before any bound was
+touched — a load-dependent *real* asymmetry and a sampling accident look alike
+in a single run. Sampling the redeem-begin pair over 15 rounds per condition,
+varying only the number of tasks contending for the event loop:
+
+| contending tasks | signed median delta | valid slower | control |
+|---|---|---|---|
+| 0 | +0.001 ms | 8/15 | 0.173 ms |
+| 1 | −0.019 ms | 7/15 | 0.149 ms |
+| 2 | +0.005 ms | 8/15 | 0.136 ms |
+| **4** | **+1.514 ms** | **15/15** | 1.139 ms |
+
+Unloaded, the delta is nil and its **sign is a coin flip** — the fingerprint of
+a sampling accident, and the regime every observed false failure came from.
+Under real contention the sign stops flipping, and the middleware logs
+`Constant-time floor exceeded ... 169.3ms elapsed vs 20ms floor` alongside it.
+That is not the harness misreading noise: the real path's work has overrun
+`AUTH_BEGIN_MIN_DURATION_MS`, the floor has stopped masking it, and while the
+load lasts the asymmetry is as visible to an attacker as to the test.
+
+#360 poses the choice as *inherent to the endpoint, fix at source* versus
+*load-induced, make the calibration load-robust*. The measurement says
+neither. The observed false failures had quiet controls (0.08–0.20 ms), and
+the quiet rows above show no delta to be robust *to* — under 0.02 ms, sign
+random. They are accidents in the tail of that distribution. The loaded row is
+a different event, and a true positive: the floor really has stopped masking,
+so damping it with a quiet phase or a load term would suppress the one reading
+worth having. What remains is to tell accident from asymmetry by whether it
+recurs.
+
+Confirmation therefore suppresses the accident without suppressing the
+unmasking — the accident gets a fresh coin and mostly does not recur, the
+unmasking holds for as long as the machine is busy. So 0.317% is the floor of
+the achievable rate rather than a promise, and a failure that survives both
+rounds should be read as *check whether the floor was exceeded* — which is what
+the assertion message now says.
+
 ## Caveats
 
 - **Measured on a developer workstation, not on UAT or production hardware.**
