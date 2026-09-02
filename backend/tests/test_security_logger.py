@@ -23,10 +23,6 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.attendance.dependencies import (
-    get_checkin_token_repo,
-    get_session_instance_repo,
-)
 from app.auth.dependencies import (
     get_admin_token_repo,
     get_passkey_repo,
@@ -146,18 +142,6 @@ class StubAttemptRepo:
 
     async def log_attempt(self, user_id: str, ip: str, *, success: bool) -> None:
         self.logged.append({"user_id": user_id, "ip": ip, "success": success})
-
-
-class StubCheckinTokenRepo:
-    async def create(self, session_id: str, expires_at: Any) -> dict[str, Any]:
-        return {
-            "token": "stub-token-abc",
-            "session_id": session_id,
-            "expires_at": expires_at,
-        }
-
-    async def get(self, token: str) -> dict[str, Any] | None:
-        return None
 
 
 # An empty session instance fake: get() finds nothing, which is what these
@@ -388,7 +372,7 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         log_security_event(
-            event_type="checkin_token_generated",
+            event_type="admin_token_generated",
             result="success",
             user_id="admin-456",
             ip_address="10.0.0.1",
@@ -415,13 +399,12 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
         "admin_token_generated",
         "passkey_registered",
         "passkey_deleted",
-        "checkin_token_generated",
     ],
 )
 def test_all_event_types_accepted(
     event_type: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """log_security_event must accept each of the 6 defined event_type values."""
+    """log_security_event must accept each of the defined event_type values."""
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
@@ -769,43 +752,3 @@ async def test_admin_token_generation_emits_log(
         log["event_type"] == "admin_token_generated" and log["result"] == "success"
         for log in logs
     ), f"Expected admin_token_generated/success event, got: {logs}"
-
-
-# ===========================================================================
-# AC7 — attendance/repository.py emits on check-in token generation
-# ===========================================================================
-
-
-async def test_checkin_token_generation_emits_log(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """GET /sessions/{id}/checkin-token must emit a checkin_token_generated/success event."""
-    from datetime import UTC, datetime
-
-    checkin_token_repo = StubCheckinTokenRepo()
-    session_instance_repo = InMemorySessionInstanceRepository()
-    admin_claims = UserClaims(
-        sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-    )
-
-    session_id = str(uuid.uuid4())
-
-    session_repo = InMemorySessionInstanceRepository(
-        [{"id": session_id, "date": datetime.now(UTC).date().isoformat()}]
-    )
-
-    app.dependency_overrides[REQUIRE_ADMIN] = lambda: admin_claims
-    app.dependency_overrides[get_checkin_token_repo] = lambda: checkin_token_repo
-    app.dependency_overrides[get_session_instance_repo] = lambda: session_repo
-
-    with caplog.at_level(logging.INFO, logger="security_events"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            await c.get(f"/sessions/{session_id}/checkin-token")
-
-    logs = _capture_security_logs(caplog)
-    assert any(
-        log["event_type"] == "checkin_token_generated" and log["result"] == "success"
-        for log in logs
-    ), f"Expected checkin_token_generated/success event, got: {logs}"

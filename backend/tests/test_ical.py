@@ -1,5 +1,5 @@
 """
-Tests for issue #52 — iCal feed endpoint + checkin_url persistence.
+Tests for issue #52 — iCal feed endpoint.
 Also covers pure unit tests for build_ical (issue #56).
 
 Acceptance criteria:
@@ -7,8 +7,11 @@ Acceptance criteria:
   2. Feed includes VEVENT blocks with title, date/time, duration, location, info
   3. coach_notes is never included in iCal output
   4. UIDs are stable (UUID of the session instance)
-  5. generate_checkin_token persists the URL to SessionInstance.checkin_url using PUBLIC_ORIGIN
   6. All new behaviour covered by tests
+
+AC5 covered persisting a single-use token URL to SessionInstance.checkin_url.
+That link was retired in favour of the one tokenless check-in link a session
+has; see test_checkin_link_api.py.
 
 NO real DB: the shared in-memory fakes stand in. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
@@ -22,69 +25,12 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.attendance.dependencies import (
-    get_checkin_token_repo,
-)
-from app.attendance.dependencies import (
-    get_session_instance_repo as get_attendance_session_instance_repo,
-)
-from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
 from app.main import app
 from app.sessions.dependencies import get_session_instance_repo, get_session_type_repo
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTypeRepository,
 )
-
-# ---------------------------------------------------------------------------
-# Auth helpers
-# ---------------------------------------------------------------------------
-
-_ADMIN = UserClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-
-
-def _admin_override():
-    return _ADMIN
-
-
-# ---------------------------------------------------------------------------
-# Stub repository for the check-in token interface (out of scope for #337)
-# ---------------------------------------------------------------------------
-
-
-class StubCheckinTokenRepo:
-    """In-memory stand-in for a CheckinToken repository."""
-
-    def __init__(self) -> None:
-        self._store: dict[str, dict[str, Any]] = {}
-
-    async def create(self, session_id: str, expires_at: Any) -> dict[str, Any]:
-        import secrets
-
-        token = secrets.token_urlsafe(16)
-        record = {
-            "token": token,
-            "session_id": session_id,
-            "expires_at": str(expires_at),
-        }
-        self._store[token] = record
-        return record
-
-    async def get(self, token: str) -> dict[str, Any] | None:
-        return self._store.get(token)
-
-    async def redeem(self, token: str) -> dict[str, Any] | None:
-        record = self._store.get(token)
-        if record is None:
-            return None
-        if record.get("used_at") is not None:
-            raise ValueError("Token already used")
-        record["used_at"] = "used"
-        return record
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -108,13 +54,6 @@ def instance_repo() -> InMemorySessionInstanceRepository:
 def type_repo() -> InMemorySessionTypeRepository:
     repo = InMemorySessionTypeRepository()
     app.dependency_overrides[get_session_type_repo] = lambda: repo
-    return repo
-
-
-@pytest.fixture()
-def checkin_token_repo() -> StubCheckinTokenRepo:
-    repo = StubCheckinTokenRepo()
-    app.dependency_overrides[get_checkin_token_repo] = lambda: repo
     return repo
 
 
@@ -152,7 +91,6 @@ async def _seed_instance(
             "info": info,
             "coach_notes": coach_notes,
             "cancelled": cancelled,
-            "checkin_url": None,
         }
     )
 
@@ -342,72 +280,6 @@ async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) 
 
 
 # ---------------------------------------------------------------------------
-# AC5 — generate_checkin_token persists URL to SessionInstance.checkin_url
-# ---------------------------------------------------------------------------
-
-
-async def test_generate_checkin_token_persists_checkin_url(
-    instance_repo, checkin_token_repo, monkeypatch
-) -> None:
-    """POST /sessions/{id}/checkin-token must store a checkin URL in
-    SessionInstance.checkin_url, built from PUBLIC_ORIGIN."""
-    monkeypatch.setenv("PUBLIC_ORIGIN", "https://dojo.example.com")
-    # Wire up attendance-domain session repo to share the same store
-    app.dependency_overrides[get_attendance_session_instance_repo] = lambda: (
-        instance_repo
-    )
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    inst = await _seed_instance(instance_repo)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{inst['id']}/checkin-token")
-
-    assert response.status_code == 200
-    token_data = response.json()
-    token_value = token_data["token"]
-
-    # The session instance checkin_url must now be set
-    updated_inst = await instance_repo.get(inst["id"])
-    assert updated_inst is not None
-    assert updated_inst.get("checkin_url") is not None
-    expected_url = f"https://dojo.example.com/checkin/{token_value}"
-    assert updated_inst["checkin_url"] == expected_url
-
-
-async def test_generate_checkin_token_uses_webauthn_origin_fallback(
-    instance_repo, checkin_token_repo, monkeypatch
-) -> None:
-    """When PUBLIC_ORIGIN is absent, WEBAUTHN_ORIGIN is used as the fallback
-    for building the checkin URL."""
-    monkeypatch.delenv("PUBLIC_ORIGIN", raising=False)
-    monkeypatch.setenv("WEBAUTHN_ORIGIN", "https://fallback.dojo.test")
-    app.dependency_overrides[get_attendance_session_instance_repo] = lambda: (
-        instance_repo
-    )
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    inst = await _seed_instance(instance_repo)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{inst['id']}/checkin-token")
-
-    assert response.status_code == 200
-    token_data = response.json()
-    token_value = token_data["token"]
-
-    updated_inst = await instance_repo.get(inst["id"])
-    assert updated_inst is not None
-    assert updated_inst.get("checkin_url") is not None
-    assert updated_inst["checkin_url"].startswith("https://fallback.dojo.test/checkin/")
-    assert token_value in updated_inst["checkin_url"]
-
-
-# ---------------------------------------------------------------------------
 # AC2 extra — multiple instances all produce VEVENTs
 # ---------------------------------------------------------------------------
 
@@ -487,7 +359,7 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
             "location": "Main Dojo",
             "info": "Bring your bogu",
             "coach_notes": "SECRET: session-level note",
-            "checkin_url": "https://dojo.example.com/checkin/tok123",
+            "notes": "SECRET: internal scheduling note tok123",
             "cancelled": False,
         }
     )
@@ -520,13 +392,11 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     assert "Jigeiko" in description_line
     assert "Bring your bogu" in description_line
 
-    # No private field — session or segment coach_notes, checkin_url — leaks.
+    # No private field — session or segment coach_notes, notes — leaks.
     # (issue #191 legitimately adds a public "Check in:" line to the feed, so
-    # this no longer forbids the substring "checkin" outright — only the
-    # admin-only checkin_url/token value.)
+    # this does not forbid the substring "checkin" outright.)
     assert "SECRET" not in body
     assert "coach_notes" not in body.lower()
-    assert "checkin_url" not in body.lower()
     assert "tok123" not in body
 
 
@@ -617,14 +487,13 @@ def test_build_ical_strips_admin_only_fields() -> None:
             "location": "Dojo",
             "info": "Public info",
             "coach_notes": "SECRET coach guidance",
-            "checkin_url": "https://secret.internal/checkin/tok",
+            "notes": "SECRET internal scheduling note",
             "cancelled": False,
         }
     ]
     result = build_ical(sessions)
     assert "SECRET" not in result
     assert "coach_notes" not in result.lower()
-    assert "checkin_url" not in result.lower()
     # Public fields should be present
     assert "SUMMARY:Tameshigiri Night" in result
     description_line = next(

@@ -7,7 +7,7 @@ Acceptance criteria covered:
   3. Rolling 3-month extension is triggered when latest instance < 14 days away
   4. GET /sessions?from=YYYY-MM-DD&to=YYYY-MM-DD returns only sessions in range
   5. GET /sessions without params returns only upcoming sessions (existing behaviour)
-  6. SessionInstance response includes location, info, coach_notes, checkin_url
+  6. SessionInstance response includes location, info, coach_notes, checkin_link
   7. SessionTemplate response includes recurrence_days, interval_weeks, info, coach_notes
 
 NO real DB: the shared in-memory fakes stand in for the repositories.
@@ -238,7 +238,7 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
 
 async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
     """GET /sessions without params must return only future (today or later) sessions
-    AND each returned instance must include the new info/coach_notes/checkin_url fields
+    AND each returned instance must include the new info/coach_notes fields
     (new fields required by issue #50).
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -296,8 +296,8 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
         assert "coach_notes" in session, (
             f"Field 'coach_notes' missing from session {session.get('id')}"
         )
-        assert "checkin_url" in session, (
-            f"Field 'checkin_url' missing from session {session.get('id')}"
+        assert "checkin_link" in session, (
+            f"Field 'checkin_link' missing from session {session.get('id')}"
         )
 
 
@@ -308,7 +308,7 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
 
 async def test_new_instance_fields(type_repo) -> None:
     """A created SessionInstance response must include location, info,
-    coach_notes, and checkin_url fields (may be None)."""
+    coach_notes, and checkin_link fields."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[get_session_instance_repo] = lambda: (
         InMemorySessionInstanceRepository()
@@ -336,8 +336,8 @@ async def test_new_instance_fields(type_repo) -> None:
     assert "coach_notes" in body, (
         "Field 'coach_notes' missing from SessionInstance response"
     )
-    assert "checkin_url" in body, (
-        "Field 'checkin_url' missing from SessionInstance response"
+    assert "checkin_link" in body, (
+        "Field 'checkin_link' missing from SessionInstance response"
     )
 
 

@@ -21,7 +21,6 @@ import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
 import AdminInvitesPage from "@/pages/AdminInvitesPage"
 import InviteLandingPage from "@/pages/InviteLandingPage"
-import CheckinPage from "@/pages/CheckinPage"
 import SessionCheckinPage from "@/pages/SessionCheckinPage"
 import SetupPage from "@/pages/SetupPage"
 import RecoveryRedeemPage from "@/pages/RecoveryRedeemPage"
@@ -132,7 +131,6 @@ const App = () => (
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/checkin/session/:id" element={<SessionCheckinPage />} />
-              <Route path="/checkin/:token" element={<CheckinPage />} />
 
               {/* Admin-only routes */}
               <Route element={<RequireAdmin />}>

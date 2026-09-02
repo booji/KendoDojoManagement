@@ -148,18 +148,6 @@ def test_admin_token_generation_logged(page: Page) -> None:
     pass
 
 
-# AC7 — Check-in token generation emits checkin_token_generated event
-# Coverage: test_security_logger.py::test_checkin_token_generation_emits_log
-
-
-@pytest.mark.skip(
-    reason="No browser UI surface for security logging. "
-    "Coverage in test_security_logger.py::test_checkin_token_generation_emits_log"
-)
-def test_checkin_token_generation_logged(page: Page) -> None:
-    pass
-
-
 # AC8 — Optional keys (user_id, ip_address, detail) are absent when not applicable
 # Coverage: test_security_logger.py::test_optional_*_omitted_when_not_passed (3 tests)
 #           test_security_logger.py::test_optional_*_included_when_passed (3 tests)

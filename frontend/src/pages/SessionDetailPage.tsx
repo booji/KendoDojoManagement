@@ -625,10 +625,10 @@ const SessionDetailPage = () => {
             </span>
           )}
 
-          {session.checkin_url !== null && (
+          {isAdmin && (
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Check-in URL</p>
-              <p className="text-sm break-all">{session.checkin_url}</p>
+              <p className="text-sm text-muted-foreground">Check-in link</p>
+              <p className="text-sm break-all">{session.checkin_link}</p>
             </div>
           )}
 

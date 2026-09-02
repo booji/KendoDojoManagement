@@ -88,7 +88,6 @@ class SessionInstance(UUIDBase):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     info: Mapped[str | None] = mapped_column(Text, nullable=True)
     coach_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    checkin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     checkin_window_before_minutes: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
     )

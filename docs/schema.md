@@ -104,7 +104,6 @@ erDiagram
         string location
         text info
         text coach_notes
-        string checkin_url
     }
     session_instance_segments {
         string id PK
@@ -127,14 +126,6 @@ erDiagram
         string visitor_name
         string checked_in_at
         string recorded_by
-    }
-    checkin_tokens {
-        string id PK
-        string token UK
-        string token_lookup UK
-        string session_id
-        string expires_at
-        timestamptz used_at
     }
     grade_history {
         string id PK
@@ -168,7 +159,7 @@ erDiagram
 
 ## Notes
 
-- `attendance`, `checkin_tokens`, `grade_history` — `session_id`, `member_id`, `recorded_by` are bare strings with no FK constraints enforced at DB level.
+- `attendance`, `grade_history` — `session_id`, `member_id`, `recorded_by` are bare strings with no FK constraints enforced at DB level.
 - `members.user_id` — links a member to a user account but also unconstrained at DB level.
 - Sessions (`session_templates`/`session_instances`) no longer carry a single `session_type_id`/`start_time`/`duration_minutes`. Each session has one or more **segments** (`session_template_segments`/`session_instance_segments`), each with its own `start_time`/`duration_minutes`/`coach_notes`/`position`, and each segment links to one or more session types via the `*_segment_types` join tables (also ordered by `position`). A session's overall time envelope (for calendar display) is derived as min(segment start) → max(segment end) — see `app/sessions/envelope.py`.
 - `session_instances.title` is required (no longer derived from session type).

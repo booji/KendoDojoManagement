@@ -10,12 +10,6 @@ export type AttendanceRecord = {
   display_name: string | null
 }
 
-export type CheckinToken = {
-  token: string
-  session_id: string
-  expires_at: string
-}
-
 // Structured detail returned by POST /sessions/{id}/checkin when the
 // check-in window (issue #192) rejects the attempt with a 403.
 export type CheckinWindowError = {
@@ -90,23 +84,6 @@ const readJsonDetail = async (res: Response): Promise<Record<string, unknown> | 
   } catch {
     return null
   }
-}
-
-export const getCheckinToken = async (sessionId: string): Promise<CheckinToken> => {
-  return request<CheckinToken>(`/api/sessions/${sessionId}/checkin-token`, { errorMessage: "Failed to get check-in token" })
-}
-
-export const checkinViaToken = async (token: string): Promise<AttendanceRecord> => {
-  const res = await apiFetch(`/api/checkin/${token}`, { method: "POST" })
-  if (!res.ok) {
-    const status = res.status
-    if (status === 401) throw { status, message: "Not authenticated" }
-    if (status === 404) throw { status, message: "Token not found" }
-    if (status === 410) throw { status, message: "Token expired" }
-    if (status === 409) throw { status, message: "Session cancelled" }
-    throw { status, message: "Failed to check in" }
-  }
-  return res.json() as Promise<AttendanceRecord>
 }
 
 export const getSessionAttendance = async (sessionId: string): Promise<AttendanceRecord[]> => {

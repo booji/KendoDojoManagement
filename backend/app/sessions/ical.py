@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from app.sessions.envelope import session_time_envelope
 
 # Explicit allowlist: only these fields reach the public iCal output.
-# coach_notes, checkin_url, notes and other admin-only fields are never included.
+# coach_notes, notes and other admin-only fields are never included.
 _PUBLIC_FIELDS = frozenset(
     {
         "id",
@@ -231,8 +231,8 @@ def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> st
 
     Cancelled sessions are excluded. Only _PUBLIC_FIELDS (and, within each
     segment, only _PUBLIC_SEGMENT_FIELDS) are passed to the event builder —
-    admin-only fields (coach_notes at session or segment level, checkin_url,
-    notes, etc.) are stripped here regardless of what the caller passes in.
+    admin-only fields (session-level coach_notes, notes, etc.) are stripped
+    here regardless of what the caller passes in.
 
     Exactly one VEVENT is produced per session, with DTSTART/DTEND derived
     from the min-start/max-end envelope across all of that session's

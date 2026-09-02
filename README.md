@@ -6,7 +6,7 @@ Self-hosted web application for managing the members, sessions, and attendance o
 
 - **Members** — full profile management with grade history, coach/first-aider flags, and under-18 safeguarding fields
 - **Sessions** — recurring templates and ad-hoc sessions with per-type colour coding, iCal feed, and a calendar/list toggle view
-- **Attendance** — self check-in, shareable check-in tokens (hashed at rest), admin overrides, and visitor records
+- **Attendance** — self check-in, one shareable check-in link per session, admin overrides, and visitor records
 - **Grades** — enforced kendo grade progression (Mukyū → 8-dan) with full audit trail
 - **Federations** — per-member federation memberships with membership numbers and renewal tracking. The catalogue starts empty; add the federations your dojo uses in Admin Settings. The [FIK affiliate list](https://www.kendo-fik.org/organization/affiliate) is the authoritative source for official names, abbreviations and websites.
 - **Reports** — attendance and member-grade reports with CSV export

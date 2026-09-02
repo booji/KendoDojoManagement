@@ -22,7 +22,6 @@ from pydantic import ValidationError
 
 from app.attendance.dependencies import (
     get_attendance_repo,
-    get_checkin_token_repo,
 )
 from app.attendance.dependencies import (
     get_session_instance_repo as get_att_session_instance_repo,
@@ -82,17 +81,6 @@ class _NoOpGradeRepo:
         return []
 
 
-class _NoOpCheckinTokenRepo:
-    async def create(self, session_id: str, expires_at: Any) -> dict[str, Any]:
-        return {}
-
-    async def get(self, token: str) -> dict[str, Any] | None:
-        return None
-
-    async def redeem(self, token: str) -> dict[str, Any] | None:
-        return None
-
-
 class _NoOpUoW:
     session = None
 
@@ -135,7 +123,6 @@ def _stub_all_repos():
     app.dependency_overrides[get_att_session_instance_repo] = lambda: (
         InMemorySessionInstanceRepository()
     )
-    app.dependency_overrides[get_checkin_token_repo] = lambda: _NoOpCheckinTokenRepo()
     yield
     app.dependency_overrides.clear()
 
@@ -293,18 +280,6 @@ async def test_post_session_checkin_bad_uuid_returns_422() -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         response = await c.post(f"/sessions/{_BAD_UUID}/checkin")
-
-    assert response.status_code == 422
-
-
-async def test_get_session_checkin_token_bad_uuid_returns_422() -> None:
-    """GET /sessions/not-a-uuid/checkin-token should return 422 when session_id is uuid.UUID."""
-    app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
-        response = await c.get(f"/sessions/{_BAD_UUID}/checkin-token")
 
     assert response.status_code == 422
 
