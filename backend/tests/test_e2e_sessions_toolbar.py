@@ -151,8 +151,11 @@ def test_ical_card_removed_toolbar_icon_opens_popover(page: Page) -> None:
 
     # Click it and the popover should appear with the URL input and Copy button
     ical_btn.click()
-    expect(page.get_by_label("iCal feed URL")).to_be_visible()
-    expect(page.get_by_role("button", name="Copy")).to_be_visible()
+    # Role-scoped rather than get_by_label: the copy button beside this input
+    # is named "Copy iCal feed URL" (#367), and get_by_label matches on
+    # substring, so a bare label lookup now resolves to both.
+    expect(page.get_by_role("textbox", name="iCal feed URL")).to_be_visible()
+    expect(page.get_by_role("button", name="Copy iCal feed URL")).to_be_visible()
 
 
 # ---------------------------------------------------------------------------

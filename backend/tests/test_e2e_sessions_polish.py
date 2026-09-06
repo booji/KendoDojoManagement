@@ -138,7 +138,9 @@ def test_ical_url_displayed_for_authenticated_member(page: Page) -> None:
     # The iCal input is inside a popover — open it first
     page.get_by_role("button", name="Subscribe to iCal feed").click()
 
-    ical_input = page.get_by_label("iCal feed URL")
+    # Role-scoped: the adjacent copy button is named "Copy iCal feed URL"
+    # (#367) and get_by_label matches on substring.
+    ical_input = page.get_by_role("textbox", name="iCal feed URL")
     expect(ical_input).to_be_visible()
 
     url_value = ical_input.input_value()
@@ -164,12 +166,15 @@ def test_ical_copy_button_copies_url_to_clipboard(page: Page) -> None:
     # Open the iCal popover first
     page.get_by_role("button", name="Subscribe to iCal feed").click()
 
-    copy_button = page.get_by_role("button", name="Copy")
+    copy_button = page.get_by_role("button", name="Copy iCal feed URL")
     expect(copy_button).to_be_visible()
     copy_button.click()
 
-    # Button text should change to "Copied!"
-    expect(page.get_by_role("button", name="Copied!")).to_be_visible()
+    # The confirmation is asserted on visible text, not role+name: CopyButton
+    # carries a fixed aria-label so a copy button is distinguishable from its
+    # neighbours, which means the accessible name no longer changes on copy
+    # (#367).
+    expect(page.get_by_text("Copied!")).to_be_visible()
 
     # The clipboard should contain the iCal URL
     clipboard_text = page.evaluate("navigator.clipboard.readText()")
@@ -220,10 +225,10 @@ def test_e2e_copy_then_navigate_to_session_detail(page: Page) -> None:
 
     # Part 1: copy iCal URL to clipboard (open popover first)
     page.get_by_role("button", name="Subscribe to iCal feed").click()
-    copy_button = page.get_by_role("button", name="Copy")
+    copy_button = page.get_by_role("button", name="Copy iCal feed URL")
     expect(copy_button).to_be_visible()
     copy_button.click()
-    expect(page.get_by_role("button", name="Copied!")).to_be_visible()
+    expect(page.get_by_text("Copied!")).to_be_visible()
 
     clipboard_text = page.evaluate("navigator.clipboard.readText()")
     assert (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
@@ -10,6 +10,7 @@ import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
 import { formatMemberDate } from "@/lib/date"
 import { memberFederationMemberships } from "@/api/federations"
+import CopyButton from "@/components/CopyButton"
 import FederationMembershipsCard from "@/components/FederationMembershipsCard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,7 +34,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { ArrowLeftIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, ClipboardCopyIcon, CheckIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Trash2Icon } from "lucide-react"
 import { generateAdminRecoveryToken } from "@/api/recovery"
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -708,15 +709,6 @@ const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => 
   const [token, setToken] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (copyTimer.current !== null) clearTimeout(copyTimer.current)
-    }
-  }, [])
-
   const handleConfirm = async () => {
     setError(null)
     setGenerating(true)
@@ -733,24 +725,9 @@ const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => 
     }
   }
 
-  const handleCopy = async () => {
-    if (token === null) return
-    try {
-      await navigator.clipboard.writeText(token)
-      setCopied(true)
-      // Cleared on unmount below: this button lives in the recovery-token
-      // dialog, which the admin can close well inside the 2s window.
-      if (copyTimer.current !== null) clearTimeout(copyTimer.current)
-      copyTimer.current = setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // clipboard API not available
-    }
-  }
-
   const handleTokenClose = () => {
     setTokenOpen(false)
     setToken(null)
-    setCopied(false)
   }
 
   return (
@@ -808,19 +785,13 @@ const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => 
             <div className="rounded-md bg-muted px-4 py-3 font-mono text-sm break-all select-all" aria-label="Recovery token">
               {token}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
-              aria-label="Copy token to clipboard"
-              className="w-full sm:w-auto"
-            >
-              {copied ? (
-                <><CheckIcon className="mr-1.5 h-4 w-4" aria-hidden="true" />Copied</>
-              ) : (
-                <><ClipboardCopyIcon className="mr-1.5 h-4 w-4" aria-hidden="true" />Copy to clipboard</>
-              )}
-            </Button>
+            {token !== null && (
+              <CopyButton
+                value={token}
+                label="Copy token to clipboard"
+                className="w-full sm:w-auto"
+              />
+            )}
             <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2" role="note">
               Warning: This token will not be shown again. Store it securely and share it with the member in person.
             </p>
