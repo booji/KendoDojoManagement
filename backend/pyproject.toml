@@ -1,5 +1,13 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    # Wall-clock convergence assertions (issues #298, #364). They measure real
+    # latency, so unlike the synthetic fixtures in test_timing_convergence.py
+    # their outcome depends on the machine underneath them. The per-push CI job
+    # reports them without gating on them -- see .github/workflows/backend-tests.yml
+    # and docs/auth-timing-calibration.md.
+    "timing_sensitive: asserts on measured wall-clock latency",
+]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # anyio ships a pytest plugin (it arrives transitively via httpx/starlette) that

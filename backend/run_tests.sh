@@ -218,8 +218,18 @@ if [[ "$BACKEND_ONLY" == "1" ]]; then
     BACKEND_ONLY_ARGS=(--ignore-glob="tests/test_e2e_*.py")
 fi
 
+# PYTEST_MARK is a marker expression, e.g. "not timing_sensitive". It needs the
+# same array treatment as BACKEND_ONLY_ARGS for the same reason: a marker
+# expression contains spaces, and PYTEST_ARGS interpolates unquoted, so passing
+# one through PYTEST_ARGS would split it into separate words and pytest would
+# see `-m not` followed by a stray argument.
+MARK_ARGS=()
+if [[ -n "${PYTEST_MARK:-}" ]]; then
+    MARK_ARGS=(-m "$PYTEST_MARK")
+fi
+
 set +e
-pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "${BACKEND_ONLY_ARGS[@]}" "$@"
+pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "${BACKEND_ONLY_ARGS[@]}" "${MARK_ARGS[@]}" "$@"
 PYTEST_STATUS=$?
 set -e
 exit "$PYTEST_STATUS"

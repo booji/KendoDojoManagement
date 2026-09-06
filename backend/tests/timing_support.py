@@ -127,7 +127,30 @@ recurs, which is what confirmation does.
 
 So confirmation suppresses the accident and keeps the unmasking: the first
 has a fresh coin to flip and mostly does not recur, while the second holds
-for as long as the machine is busy. 0.317% is the floor of the achievable
+for as long as the machine is busy.
+
+That is the theory. In practice, on GitHub's hosted runners, it has not held:
+since confirmation shipped this assertion failed 2 of 6 CI runs, against the
+0.317% above. Both failures reproduced across both rounds, so whatever drives
+them persists rather than resampling away.
+
+Neither documented mechanism explains the CI case. The most recent had a
+same-path control of 0.026ms -- an exceptionally *quiet* run, not a contended
+one -- a cross-path delta of 1.317ms, and no `Constant-time floor exceeded`
+warning anywhere in the run, so every request finished inside the floor and
+both paths should have been padded to the same total. Two hypotheses were
+tested and ruled out: the response bodies are byte-identical (1045 bytes for
+both paths, so #354's equalisation holds), and the asymmetry is not in the
+post-response unit-of-work teardown -- raising the floor from 20ms to 200ms
+under identical load collapsed a +3.529ms delta to +0.072ms, which a residual
+outside the padded region could not do.
+
+The local contention case is therefore understood and the CI case is not.
+Because of that, the per-push CI job reports these assertions rather than
+gating on them (`timing_sensitive` marker; see
+.github/workflows/backend-tests.yml). The strict assertion is kept where a
+human reads the output: a local run, and the full suite on release-candidate
+tags. Do not read a green push as evidence these converged. 0.317% is the floor of the achievable
 false-failure rate rather than a promise, and a failure that survives both
 rounds should be read as "check whether the floor was exceeded", which is
 what the assertion message now says.
@@ -467,9 +490,13 @@ async def assert_latency_converges_sampled(
     raise AssertionError(
         f"{failure} Reproduced on {attempts} independent sampling rounds, so "
         f"this is not the per-run sampling accident described in issue #364; "
-        f"the figures above are from the final round. Check the captured log "
-        f"for 'Constant-time floor exceeded': under sustained contention the "
-        f"real path overruns AUTH_BEGIN_MIN_DURATION_MS and the floor stops "
-        f"masking it, which reproduces exactly like a code-level asymmetry "
-        f"because for as long as the load lasts it is one."
+        f"the figures above are from the final round. First check the captured "
+        f"log for 'Constant-time floor exceeded': under sustained contention "
+        f"the real path overruns AUTH_BEGIN_MIN_DURATION_MS and the floor "
+        f"stops masking it, which reproduces exactly like a code-level "
+        f"asymmetry because while the load lasts it is one. If that warning "
+        f"is ABSENT and the control above is small, this is the unexplained "
+        f"case documented in this module and in "
+        f"docs/auth-timing-calibration.md -- report the figures there rather "
+        f"than assuming either a leak or a flake."
     )

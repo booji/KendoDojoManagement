@@ -991,6 +991,7 @@ async def test_invite_redeem_begin_invalid_token_meets_configured_floor(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timing_sensitive
 async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
