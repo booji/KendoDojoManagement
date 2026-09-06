@@ -166,3 +166,17 @@ cd frontend
 npm run dev             # dev server
 npm run build           # production build
 ```
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `booji/KendoDojoManagement`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, label strings unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. The glossary is `UBIQUITOUS_LANGUAGE.md` (not `CONTEXT.md`); ADRs in `docs/adr/`. See `docs/agents/domain.md`.
