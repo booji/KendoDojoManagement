@@ -454,10 +454,17 @@ const ICalButton = ({ icalUrl }: ICalButtonProps) => {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(icalUrl).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+    navigator.clipboard
+      .writeText(icalUrl)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      // A rejected write (insecure context, denied permission) left this
+      // button doing nothing at all, with no confirmation and no explanation.
+      // The URL is in a read-only input beside it, so failing quietly is the
+      // right outcome -- but it has to be a chosen one.
+      .catch(() => {})
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
@@ -709,6 +709,13 @@ const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => 
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current !== null) clearTimeout(copyTimer.current)
+    }
+  }, [])
 
   const handleConfirm = async () => {
     setError(null)
@@ -731,7 +738,10 @@ const RecoveryTokenCard = ({ memberId, memberName }: RecoveryTokenCardProps) => 
     try {
       await navigator.clipboard.writeText(token)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      // Cleared on unmount below: this button lives in the recovery-token
+      // dialog, which the admin can close well inside the 2s window.
+      if (copyTimer.current !== null) clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopied(false), 2000)
     } catch {
       // clipboard API not available
     }
