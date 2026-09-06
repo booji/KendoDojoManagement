@@ -86,6 +86,17 @@
 - A **Deactivation** sets **Membership Status** to `inactive`; it never removes the **Member Profile** or the **User**.
 - A **Member** may hold a **Federation Membership** with each of several **Federations**; an **Admin** manages any member's, a **Member** manages their own, and both go through the same card.
 
+## Deployment
+
+These are environment names rather than domain concepts, but they are used
+constantly in discussion and "production" was ambiguous between two different
+stacks, so they are pinned here.
+
+| Term | Definition | Aliases to avoid |
+| --- | --- | --- |
+| **Hardened deployment** | The rootless Podman + Quadlet stack in `deploy/quadlet`: Traefik terminating TLS, `kendo-app`, and `kendo-db` across the `kendo-edge` and `kendo-backend` networks. This is what **production** means when unqualified | The Quadlet thing, systemd deploy |
+| **Quick self-host** | The Compose stack in `docker-compose.yml`: the same app and database images with a simpler single-file setup, for an operator who does not want Quadlet | Prod compose, docker prod |
+
 ## Example dialogue
 
 > **Dev:** "When an admin 'deletes' a member, what happens to their account?"
@@ -117,3 +128,4 @@
 - **"Grading"**: Used in two senses — the event type (a session where grades are awarded) and the act of awarding a grade. Use **Session Type: Grading** for the event and **Promotion** for the act.
 - **"Guest"** and **"Visitor"**: Used interchangeably in early discussion. The canonical term is **Visitor**.
 - **"Rank"** and **"Grade"**: The canonical term is **Grade**, to align with kendo federation terminology.
+- **"Production"**: Meant two different stacks — the Quadlet units in `deploy/quadlet` and the Compose file in `docker-compose.yml`. Unqualified **production** now means the **hardened deployment** (Quadlet); the Compose stack is the **quick self-host**.
