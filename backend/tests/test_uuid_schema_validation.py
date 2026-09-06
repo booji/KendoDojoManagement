@@ -152,7 +152,7 @@ async def test_get_member_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{_BAD_UUID}")
 
@@ -164,7 +164,7 @@ async def test_put_member_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{_BAD_UUID}", json={})
 
@@ -176,7 +176,7 @@ async def test_get_member_grades_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{_BAD_UUID}/grades")
 
@@ -188,7 +188,7 @@ async def test_post_member_grades_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{_BAD_UUID}/grades", json={"grade": "SHODAN"}
@@ -202,7 +202,7 @@ async def test_get_session_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/sessions/{_BAD_UUID}")
 
@@ -214,7 +214,7 @@ async def test_post_session_cancel_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/sessions/{_BAD_UUID}/cancel")
 
@@ -226,7 +226,7 @@ async def test_put_session_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/sessions/{_BAD_UUID}", json={})
 
@@ -238,7 +238,7 @@ async def test_get_session_attendance_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/sessions/{_BAD_UUID}/attendance")
 
@@ -250,7 +250,7 @@ async def test_post_session_attendance_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/sessions/{_BAD_UUID}/attendance",
@@ -265,7 +265,7 @@ async def test_delete_session_attendance_bad_session_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/sessions/{_BAD_UUID}/attendance/{_BAD_UUID}")
 
@@ -277,7 +277,7 @@ async def test_post_session_checkin_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/sessions/{_BAD_UUID}/checkin")
 
@@ -289,7 +289,7 @@ async def test_post_session_visitors_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/sessions/{_BAD_UUID}/visitors",
@@ -304,7 +304,7 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: _MEMBER
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{_BAD_UUID}/attendance")
 

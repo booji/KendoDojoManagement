@@ -160,7 +160,7 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/register/passkey/complete",
@@ -240,7 +240,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/register/passkey/complete",
@@ -281,7 +281,7 @@ async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/security-status")
 
@@ -305,7 +305,7 @@ async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
     passkey_repo._seed(_USER_A.sub, label="MacBook Touch ID")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/security-status")
 
@@ -329,7 +329,7 @@ async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
     passkey_repo._seed(_USER_A.sub, label="iPhone Face ID")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/security-status")
 
@@ -346,7 +346,7 @@ async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
 async def test_security_status_requires_authentication() -> None:
     """GET /auth/security-status returns 401 when no token is provided."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/security-status")
     assert (

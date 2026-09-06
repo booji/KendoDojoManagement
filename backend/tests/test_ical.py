@@ -104,7 +104,7 @@ async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
     """GET /sessions/ical must return 200 with content-type text/calendar
     without requiring any authentication."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     assert response.status_code == 200
@@ -116,7 +116,7 @@ async def test_ical_endpoint_returns_valid_ical_structure(
 ) -> None:
     """GET /sessions/ical must return a valid iCal document beginning with BEGIN:VCALENDAR."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     assert response.status_code == 200
@@ -138,7 +138,7 @@ async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) 
         instance_repo, title="Men Waza Practice", session_type_id=t["id"]
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -156,7 +156,7 @@ async def test_ical_feed_includes_dtstart_and_dtend(instance_repo, type_repo) ->
         duration_minutes=90,
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -171,7 +171,7 @@ async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
     """VEVENT must include LOCATION when set on the instance."""
     await _seed_instance(instance_repo, location="Dojo East Wing")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -184,7 +184,7 @@ async def test_ical_feed_includes_description_from_info(
     """VEVENT must include DESCRIPTION containing the info field."""
     await _seed_instance(instance_repo, info="Practice focus: kote strikes")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -198,7 +198,7 @@ async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> N
     """VEVENT must not include a LOCATION line when location is None."""
     await _seed_instance(instance_repo, location=None)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     assert response.status_code == 200
@@ -214,7 +214,7 @@ async def test_ical_feed_description_omits_info_when_info_null(
     must not contain a trailing info line."""
     await _seed_instance(instance_repo, info=None)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     assert response.status_code == 200
@@ -240,7 +240,7 @@ async def test_ical_feed_never_includes_coach_notes(instance_repo, type_repo) ->
         info="General training",
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     assert response.status_code == 200
@@ -260,7 +260,7 @@ async def test_ical_vevent_uid_equals_instance_uuid(instance_repo, type_repo) ->
     """Each VEVENT UID must equal the session instance UUID."""
     inst = await _seed_instance(instance_repo)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -271,7 +271,7 @@ async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) 
     """VEVENT UIDs must remain identical across two consecutive requests."""
     inst = await _seed_instance(instance_repo)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         r1 = await c.get("/sessions/ical")
         r2 = await c.get("/sessions/ical")
@@ -313,7 +313,7 @@ async def test_ical_feed_includes_all_upcoming_sessions(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
     body = response.text
@@ -365,7 +365,7 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
 

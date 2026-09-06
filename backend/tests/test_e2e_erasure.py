@@ -31,7 +31,7 @@ from app.auth.token import encode_token  # noqa: E402
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 BASE_URL = "http://localhost:5173"
-API_BASE = "http://localhost:8000"
+API_BASE = "http://localhost:8000/api"
 
 
 def _make_token(role: str, sub: str | None = None) -> str:

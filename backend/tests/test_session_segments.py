@@ -120,7 +120,7 @@ async def test_create_session_with_one_segment_then_read_back(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/sessions", json=payload)
     assert create_resp.status_code == 201
@@ -134,7 +134,7 @@ async def test_create_session_with_one_segment_then_read_back(
 
     session_id = created["id"]
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         read_resp = await c.get(f"/sessions/{session_id}")
     assert read_resp.status_code == 200
@@ -172,7 +172,7 @@ async def test_create_session_missing_title_returns_422(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 422
@@ -197,7 +197,7 @@ async def test_session_read_response_has_no_legacy_type_column(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/sessions", json=payload)
     assert create_resp.status_code == 201
@@ -221,7 +221,7 @@ async def test_create_session_with_zero_segments_returns_422(
         "segments": [],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 422
@@ -244,7 +244,7 @@ async def test_create_session_with_segment_missing_types_returns_422(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 422
@@ -268,7 +268,7 @@ async def test_create_session_with_nonpositive_duration_returns_422(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 422
@@ -292,7 +292,7 @@ async def test_create_session_with_negative_duration_returns_422(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 422
@@ -327,7 +327,7 @@ async def test_create_session_with_overlapping_segments_is_accepted(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 201
@@ -363,7 +363,7 @@ async def test_create_session_with_same_type_in_multiple_segments_is_accepted(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
     assert response.status_code == 201
@@ -393,7 +393,7 @@ async def test_member_cannot_create_session_with_segments(
         ],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/sessions", json=payload, cookies={"access_token": token}

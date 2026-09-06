@@ -70,7 +70,7 @@ class TestRoleIsValidated:
     async def test_unknown_role_is_rejected(self, role: str) -> None:
         """`role` lands directly on User.role — it must not be a free string."""
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/login/test",

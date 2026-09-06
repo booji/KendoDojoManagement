@@ -189,7 +189,7 @@ async def test_list_sessions_includes_attendance_count(
     await attendance_repo.check_in(session_id, "member-2", "admin-uuid")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions")
 
@@ -240,7 +240,7 @@ async def test_list_sessions_includes_is_checked_in_for_member(
 
     token = encode_token(_MEMBER)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions", cookies={"access_token": token})
 
@@ -302,7 +302,7 @@ async def test_list_sessions_reads_attendance_in_one_call(
     await attendance_repo.check_in(sessions[0]["id"], "someone-else", "admin-uuid")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions")
 
@@ -312,9 +312,9 @@ async def test_list_sessions_reads_attendance_in_one_call(
     assert by_id[sessions[0]["id"]]["is_checked_in"] is True
     assert by_id[sessions[1]["id"]]["attendance_count"] == 0
     assert by_id[sessions[1]["id"]]["is_checked_in"] is False
-    assert attendance_repo.per_session_calls == 0, (
-        "GET /sessions must not read attendance one session at a time"
-    )
+    assert (
+        attendance_repo.per_session_calls == 0
+    ), "GET /sessions must not read attendance one session at a time"
 
 
 async def test_admin_marked_member_sees_themselves_as_checked_in(
@@ -341,7 +341,7 @@ async def test_admin_marked_member_sees_themselves_as_checked_in(
     await attendance_repo.admin_mark_attended(session["id"], _MEMBER_ID, "admin-uuid")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", cookies={"access_token": encode_token(_MEMBER)}

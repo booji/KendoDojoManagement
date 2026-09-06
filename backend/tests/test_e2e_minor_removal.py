@@ -24,7 +24,7 @@ from playwright.sync_api import Page, expect
 from tests.e2e_support import complete_onboarding, make_token, set_cookie
 
 BASE_URL = "http://localhost:5173"
-API_BASE = "http://localhost:8000"
+API_BASE = "http://localhost:8000/api"
 
 # A dob that makes the person ~10 years old today — well under 18, so prior to
 # this change the backend would have computed is_minor=True and the frontend

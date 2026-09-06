@@ -282,7 +282,7 @@ async def test_cli_generated_token_redeems_returns_200(db_client) -> None:
 
     try:
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/recovery/redeem",
@@ -305,7 +305,7 @@ async def test_cli_generated_token_redeems_returns_access_token(db_client) -> No
 
     try:
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/recovery/redeem",
@@ -334,7 +334,7 @@ async def test_cli_generated_token_marked_used_after_redeem(db_client) -> None:
 
     try:
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/recovery/redeem",

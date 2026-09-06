@@ -94,7 +94,7 @@ async def test_get_my_member_returns_own_record(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -111,7 +111,7 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -121,7 +121,7 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
 async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -134,7 +134,7 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -158,9 +158,9 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         assert field in body, f"Missing field in response: {field}"
     # Legacy fields must be absent
     assert "full_name" not in body, "full_name must not appear in MemberResponse"
-    assert "parental_consent_obtained" not in body, (
-        "parental_consent_obtained must not appear in MemberResponse"
-    )
+    assert (
+        "parental_consent_obtained" not in body
+    ), "parental_consent_obtained must not appear in MemberResponse"
     assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 
@@ -171,7 +171,7 @@ async def test_get_my_member_only_returns_own_record(member_repo) -> None:
     await member_repo.add(_seed_record(email="other@dojo.test", user_id=_OTHER_SUB))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -190,7 +190,7 @@ async def test_put_my_member_updates_first_name(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -207,7 +207,7 @@ async def test_put_my_member_updates_surname(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -224,7 +224,7 @@ async def test_put_my_member_updates_display_name(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -242,7 +242,7 @@ async def test_put_my_member_updates_dob(member_repo) -> None:
 
     new_dob = "1985-03-20"
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -262,7 +262,7 @@ async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -284,12 +284,12 @@ async def test_put_my_member_update_persists(member_repo) -> None:
     await member_repo.add(_seed_record())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put("/users/me/member", json={"first_name": "Persisted"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_response = await c.get("/users/me/member")
 
@@ -300,7 +300,7 @@ async def test_put_my_member_update_persists(member_repo) -> None:
 async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
     """No credentials → 401."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -326,7 +326,7 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
     await member_repo.add(_seed_record(is_coach=False))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -349,7 +349,7 @@ async def test_put_my_member_membership_status_is_rejected_or_ignored(
     await member_repo.add(_seed_record(membership_status="active"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -367,7 +367,7 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
     await member_repo.add(_seed_record(is_first_aider=False))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -389,7 +389,7 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -414,7 +414,7 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(
             "/users/me/member",
@@ -426,7 +426,7 @@ async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
         )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_response = await c.get("/users/me/member")
 
@@ -448,7 +448,7 @@ async def test_put_my_member_display_name_only_preserves_first_and_surname(
     await member_repo.add(_seed_record(first_name="Taro", surname="Yamada"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -470,7 +470,7 @@ async def test_put_my_member_omitting_dob_preserves_existing_dob(
     await member_repo.add(_seed_record(dob="1990-06-15"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -495,7 +495,7 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_phone(
     await member_repo.add(_seed_record(emergency_contact_phone="+447700900001"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -512,7 +512,7 @@ async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) ->
     await member_repo.add(_seed_record(emergency_contact_phone="+447700900001"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(
             "/users/me/member",
@@ -520,7 +520,7 @@ async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) ->
         )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_response = await c.get("/users/me/member")
 
@@ -534,7 +534,7 @@ async def test_put_my_member_explicit_null_clears_display_name(member_repo) -> N
     await member_repo.add(_seed_record(display_name="Taro-san"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -553,7 +553,7 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_name(
     await member_repo.add(_seed_record(emergency_contact_name="Emergency Contact"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -575,7 +575,7 @@ async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
     await member_repo.add(_seed_record(dob="1990-06-15"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -594,7 +594,7 @@ async def test_put_my_member_omitted_emergency_contact_name_untouched(
     await member_repo.add(_seed_record(emergency_contact_name="Emergency Contact"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -617,7 +617,7 @@ async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
     await member_repo.add(_seed_record(first_name="Taro"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -638,7 +638,7 @@ async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
     await member_repo.add(_seed_record(surname="Yamada"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",

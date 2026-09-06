@@ -239,7 +239,7 @@ async def test_admin_can_add_federation_membership(
     fed_id = "fed-ajkf-uuid"
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/federations",
@@ -258,7 +258,7 @@ async def test_add_federation_membership_missing_federation_id_returns_422(
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -272,7 +272,7 @@ async def test_add_federation_membership_missing_member_number_returns_422(
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -287,7 +287,7 @@ async def test_add_federation_membership_member_number_too_long_returns_422(
     """AC3: member_number has max 100 chars."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -305,7 +305,7 @@ async def test_add_federation_membership_max_100_chars_accepted(
     """AC3: exactly 100 chars is valid."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -323,7 +323,7 @@ async def test_add_federation_membership_member_not_found_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{fake_id}/federations",
@@ -336,7 +336,7 @@ async def test_add_federation_membership_unauthenticated_returns_401(
     member_repo, fed_repo, mf_repo
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -353,7 +353,7 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
 
     token = encode_token(_MEMBER_A)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-b-uuid/federations",
@@ -372,7 +372,7 @@ async def test_add_membership_with_renewal_date(member_repo, fed_repo, mf_repo) 
     """AC4: renewal_date is stored when provided."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -392,7 +392,7 @@ async def test_add_membership_without_renewal_date(
     """AC4: renewal_date is optional — None when not supplied."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -411,7 +411,7 @@ async def test_renewal_status_none_when_no_date(member_repo, fed_repo, mf_repo) 
     """AC5/AC18: renewal_status is None when no renewal_date."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -428,7 +428,7 @@ async def test_renewal_status_expired_when_past_date(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     past_date = (date.today() - timedelta(days=1)).isoformat()
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -449,7 +449,7 @@ async def test_renewal_status_expiring_soon_within_30_days(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     soon_date = (date.today() + timedelta(days=15)).isoformat()
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -470,7 +470,7 @@ async def test_renewal_status_expiring_soon_exactly_30_days(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     boundary_date = (date.today() + timedelta(days=30)).isoformat()
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -491,7 +491,7 @@ async def test_renewal_status_ok_when_beyond_30_days(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     future_date = (date.today() + timedelta(days=31)).isoformat()
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-a-uuid/federations",
@@ -527,7 +527,7 @@ async def test_admin_can_edit_federation_membership(
     mf_id = membership.id
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/member-a-uuid/federations/{mf_id}",
@@ -551,7 +551,7 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
     new_date = (date.today() + timedelta(days=365)).isoformat()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/member-a-uuid/federations/{mf_id}",
@@ -567,7 +567,7 @@ async def test_edit_federation_membership_not_found_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/member-a-uuid/federations/{fake_id}",
@@ -596,7 +596,7 @@ async def test_admin_can_remove_federation_membership(
     mf_id = membership.id
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/member-a-uuid/federations/{mf_id}")
     assert response.status_code == 204
@@ -608,7 +608,7 @@ async def test_remove_federation_membership_not_found_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/member-a-uuid/federations/{fake_id}")
     assert response.status_code == 404
@@ -625,7 +625,7 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/member-a-uuid/federations/{membership.id}")
     assert response.status_code == 401
@@ -657,7 +657,7 @@ async def test_admin_can_list_member_federations(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members/member-a-uuid/federations")
     assert response.status_code == 200
@@ -670,7 +670,7 @@ async def test_get_member_federations_not_found_returns_404(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{fake_id}/federations")
     assert response.status_code == 404
@@ -687,7 +687,7 @@ async def test_member_can_add_own_federation_membership(
     """AC10: Member can add a federation membership to their own profile."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/users/me/federations",
@@ -715,7 +715,7 @@ async def test_member_can_list_own_federation_memberships(
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/federations")
     assert response.status_code == 200
@@ -737,7 +737,7 @@ async def test_member_can_edit_own_federation_membership(
     )
     mf_id = membership.id
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/users/me/federations/{mf_id}",
@@ -761,7 +761,7 @@ async def test_member_can_remove_own_federation_membership(
     )
     mf_id = membership.id
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/users/me/federations/{mf_id}")
     assert response.status_code == 204
@@ -782,7 +782,7 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
     )
     mf_id = membership.id
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/users/me/federations/{mf_id}",
@@ -805,7 +805,7 @@ async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     )
     mf_id = membership.id
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/users/me/federations/{mf_id}")
     assert response.status_code == 404
@@ -815,7 +815,7 @@ async def test_me_federations_unauthenticated_returns_401(
     member_repo, fed_repo, mf_repo
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/federations")
     assert response.status_code == 401

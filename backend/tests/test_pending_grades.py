@@ -191,7 +191,7 @@ async def test_admin_gets_pending_entries_across_members(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 
@@ -243,7 +243,7 @@ async def test_pending_response_includes_promoted_at(member_repo, grade_repo) ->
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 
@@ -266,7 +266,7 @@ async def test_non_admin_member_gets_403(member_repo, grade_repo, cookies_for) -
     """
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.get("/grades/pending")
@@ -288,7 +288,7 @@ async def test_unauthenticated_gets_401_or_403(member_repo, grade_repo) -> None:
     No REQUIRE_ADMIN override is set, so the real guard fires.
     """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 
@@ -318,7 +318,7 @@ async def test_empty_list_when_no_pending_entries(member_repo, grade_repo) -> No
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 
@@ -334,7 +334,7 @@ async def test_empty_list_when_no_entries_at_all(member_repo, grade_repo) -> Non
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 
@@ -379,7 +379,7 @@ async def test_only_pending_entries_returned(member_repo, grade_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/grades/pending")
 

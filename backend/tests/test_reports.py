@@ -217,7 +217,7 @@ async def test_attendance_report_returns_sessions_in_range(
     report_repo.seed_attendance(s2["id"], "member-1")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -244,7 +244,7 @@ async def test_attendance_report_excludes_sessions_outside_range(
     report_repo.seed_session("2025-02-01")  # after range
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -269,7 +269,7 @@ async def test_attendance_report_includes_headcount(
     report_repo.seed_attendance(session["id"], "member-3")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -297,7 +297,7 @@ async def test_attendance_report_includes_member_rates(
     report_repo.seed_attendance(s1["id"], "member-2")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -327,7 +327,7 @@ async def test_attendance_report_missing_date_params_returns_422(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/attendance")
 
@@ -348,7 +348,7 @@ async def test_members_report_returns_all_members(
     m2 = report_repo.seed_member("Bob Kendo", "2024-09-01")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
@@ -373,7 +373,7 @@ async def test_members_report_current_grade_none_when_no_history(
     m = report_repo.seed_member("New Member", "2025-01-01")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
@@ -393,7 +393,7 @@ async def test_members_report_shows_current_grade(
     report_repo.seed_grade(m["id"], "GOKYUU", "2024-01-01T10:00:00")  # most recent
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
@@ -416,7 +416,7 @@ async def test_attendance_csv_content_type(
     report_repo.seed_session("2025-01-10")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance/csv",
@@ -436,7 +436,7 @@ async def test_attendance_csv_has_correct_columns(
     report_repo.seed_attendance(session["id"], "member-1")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance/csv",
@@ -460,7 +460,7 @@ async def test_members_csv_content_type(
     report_repo.seed_member("Alice", "2024-01-01")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members/csv")
 
@@ -477,7 +477,7 @@ async def test_members_csv_has_correct_columns(
     report_repo.seed_grade(m["id"], "SHODAN", "2025-01-01T10:00:00")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members/csv")
 
@@ -500,7 +500,7 @@ async def test_attendance_report_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -514,7 +514,7 @@ async def test_attendance_report_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance",
@@ -529,7 +529,7 @@ async def test_members_report_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
@@ -540,7 +540,7 @@ async def test_members_report_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/members",
@@ -554,7 +554,7 @@ async def test_attendance_csv_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/reports/attendance/csv",
@@ -568,7 +568,7 @@ async def test_members_csv_unauthenticated_returns_401(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members/csv")
 

@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.exceptions import HTTPException
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.types import Scope
 
 import app.attendance.db_models  # noqa: F401
 
@@ -24,7 +26,7 @@ import app.settings.models  # noqa: F401
 from app.attendance.router import router as attendance_router
 from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
-from app.config import CORS_ORIGINS, validate_startup_config
+from app.config import API_PREFIX, CORS_ORIGINS, validate_startup_config
 from app.core.middleware import ConstantTimeAuthMiddleware, SecurityHeadersMiddleware
 from app.db.bootstrap import prepare_database
 from app.db.engine import engine
@@ -95,18 +97,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Root, not /api: the container healthcheck and Traefik both hit /health, and
+# it is not part of the SPA's API surface.
 app.include_router(health_router)
-app.include_router(setup_router)
-app.include_router(auth_router)
-app.include_router(sessions_router)
-app.include_router(members_router)
-app.include_router(member_federations_router)
-app.include_router(users_router)
-app.include_router(grades_router)
-app.include_router(attendance_router)
-app.include_router(reports_router)
-app.include_router(settings_router)
-app.include_router(federations_router)
+app.include_router(setup_router, prefix=API_PREFIX)
+app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(sessions_router, prefix=API_PREFIX)
+app.include_router(members_router, prefix=API_PREFIX)
+app.include_router(member_federations_router, prefix=API_PREFIX)
+app.include_router(users_router, prefix=API_PREFIX)
+app.include_router(grades_router, prefix=API_PREFIX)
+app.include_router(attendance_router, prefix=API_PREFIX)
+app.include_router(reports_router, prefix=API_PREFIX)
+app.include_router(settings_router, prefix=API_PREFIX)
+app.include_router(federations_router, prefix=API_PREFIX)
 
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
 os.makedirs(_STATIC_DIR, exist_ok=True)
@@ -122,3 +126,38 @@ app.mount(
     StaticFiles(directory=_STATIC_BACKGROUNDS_DIR),
     name="backgrounds",
 )
+
+
+class _SpaFiles(StaticFiles):
+    """StaticFiles that serves index.html for unknown paths.
+
+    Starlette's `html=True` only serves index.html for a *directory*; an unknown
+    path still 404s. The SPA routes client-side, so `/members/<uuid>` must
+    return the shell rather than a 404 when someone refreshes or deep-links.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
+
+
+def mount_spa(target: FastAPI, directory: str) -> None:
+    """Serve the built SPA at the root, if this image has one.
+
+    The production image copies `frontend/dist` to `static/`; the dev image runs
+    from source with Vite serving the frontend, so the directory is absent and
+    there is nothing to mount.
+
+    Mounted last: a mount at "/" matches everything left, so it must be
+    registered after the /api routers and the /static upload mounts.
+    """
+    if not os.path.isfile(os.path.join(directory, "index.html")):
+        return
+    target.mount("/", _SpaFiles(directory=directory, html=True), name="spa")
+
+
+mount_spa(app, os.environ.get("SPA_DIR", "static"))

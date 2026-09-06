@@ -14,10 +14,9 @@ export default defineConfig({
     proxy: {
       "/health": process.env.BACKEND_URL ?? "http://localhost:8000",
       "/static": process.env.BACKEND_URL ?? "http://localhost:8000",
-      "/api": {
-        target: process.env.BACKEND_URL ?? "http://localhost:8000",
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
+      // No rewrite: the backend serves its routers under /api too, so the dev
+      // proxy and production use identical URLs (ADR-0001).
+      "/api": process.env.BACKEND_URL ?? "http://localhost:8000",
     },
   },
 })

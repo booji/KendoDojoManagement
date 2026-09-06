@@ -219,7 +219,7 @@ def invite_repo() -> StubInviteRepo:
 async def test_admin_can_mint_invite(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
@@ -242,7 +242,7 @@ async def test_admin_can_mint_invite(invite_repo) -> None:
 async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
@@ -264,7 +264,7 @@ async def test_mint_invite_stores_only_hash_not_plaintext(invite_repo) -> None:
 async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/admin/invites", json={})
     assert response.status_code == 422
@@ -277,7 +277,7 @@ async def test_mint_invite_missing_email_returns_422(invite_repo) -> None:
 
 async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
@@ -292,7 +292,7 @@ async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
 
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
@@ -304,7 +304,7 @@ async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
 
 async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 401
@@ -315,7 +315,7 @@ async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
 
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites", cookies={"access_token": token})
     assert response.status_code == 403
@@ -323,7 +323,7 @@ async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
 
 async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/auth/admin/invites/{uuid.uuid4()}/revoke")
     assert response.status_code == 401
@@ -334,7 +334,7 @@ async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
 
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/auth/admin/invites/{uuid.uuid4()}/revoke",
@@ -361,7 +361,7 @@ async def test_list_invites_returns_pending_status(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 200
@@ -385,7 +385,7 @@ async def test_list_invites_returns_redeemed_status(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 200
@@ -405,7 +405,7 @@ async def test_list_invites_returns_expired_status(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 200
@@ -426,7 +426,7 @@ async def test_list_invites_returns_revoked_status(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 200
@@ -446,7 +446,7 @@ async def test_list_invites_never_returns_plaintext_token(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin/invites")
     assert response.status_code == 200
@@ -473,7 +473,7 @@ async def test_admin_can_revoke_invite(invite_repo) -> None:
         }
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/auth/admin/invites/{record['id']}/revoke")
     assert response.status_code == 200
@@ -484,7 +484,7 @@ async def test_admin_can_revoke_invite(invite_repo) -> None:
 async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/auth/admin/invites/{uuid.uuid4()}/revoke")
     assert response.status_code == 404
@@ -599,7 +599,7 @@ async def test_redeem_begin_valid_token_returns_real_challenge(db_client) -> Non
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/begin", json={"token": "valid-token-1"}
@@ -622,7 +622,7 @@ async def test_redeem_creates_user_for_invited_email(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-2"})
 
@@ -643,7 +643,7 @@ async def test_redeem_creates_member_when_absent(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-3"})
 
@@ -667,7 +667,7 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-4"})
 
@@ -697,7 +697,7 @@ async def test_redeem_token_twice_second_attempt_fails(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/invites/redeem/complete",
@@ -731,7 +731,7 @@ async def test_redeem_already_redeemed_token_rejected(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/complete",
@@ -759,7 +759,7 @@ async def test_redeem_expired_token_rejected(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/complete",
@@ -784,7 +784,7 @@ async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/begin", json={"token": "expired-begin-token"}
@@ -815,7 +815,7 @@ async def test_redeem_revoked_token_rejected(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/complete",
@@ -834,7 +834,7 @@ async def test_redeem_revoked_token_rejected(db_client) -> None:
 @pytest.mark.asyncio
 async def test_redeem_begin_unknown_token_returns_200_decoy(db_client) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/begin", json={"token": "no-such-token"}
@@ -855,7 +855,7 @@ async def test_redeem_begin_valid_and_invalid_shapes_match(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         valid = await c.post(
             "/auth/invites/redeem/begin", json={"token": "shape-valid-token"}
@@ -903,7 +903,7 @@ async def test_redeem_complete_status_and_body_identical_across_bad_token_reason
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         unknown = await c.post(
             "/auth/invites/redeem/complete",
@@ -938,9 +938,10 @@ def test_invite_redeem_begin_is_registered_as_constant_time_path() -> None:
     """The redemption begin endpoint must be added to the existing
     ConstantTimeAuthMiddleware path set (app.core.middleware) rather than
     growing its own ad hoc timing protection."""
+    from app.config import API_PREFIX
     from app.core.middleware import _CONSTANT_TIME_PATHS
 
-    assert "/auth/invites/redeem/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/invites/redeem/begin" in _CONSTANT_TIME_PATHS
 
 
 @pytest.mark.asyncio
@@ -957,7 +958,7 @@ async def test_invite_redeem_begin_valid_token_meets_configured_floor(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         start = time.perf_counter()
         response = await c.post(
@@ -978,7 +979,7 @@ async def test_invite_redeem_begin_invalid_token_meets_configured_floor(
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         start = time.perf_counter()
         response = await c.post(
@@ -1011,7 +1012,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
 
         async def _timed_redeem(token: str) -> float:
@@ -1054,7 +1055,7 @@ async def test_redeem_begin_decoy_user_id_stable_then_secret_dependent(
 
     monkeypatch.setattr(config, "JWT_SECRET", "secret-one-for-issue-300")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/invites/redeem/begin",
@@ -1077,7 +1078,7 @@ async def test_redeem_begin_decoy_user_id_stable_then_secret_dependent(
 
     monkeypatch.setattr(config, "JWT_SECRET", "secret-two-for-issue-300")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         third = await c.post(
             "/auth/invites/redeem/begin",
@@ -1119,7 +1120,7 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/begin",
@@ -1287,7 +1288,7 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
 async def test_mint_invite_requires_invitee_name(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites", json={"email": "nameless@dojo.test"}
@@ -1313,7 +1314,7 @@ async def test_redeem_creates_member_with_the_name_the_admin_supplied(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/invites/redeem/begin", json={"token": "named-token"}
@@ -1345,7 +1346,7 @@ async def test_mint_invite_for_an_existing_user_is_refused(db_client) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/admin/invites",
@@ -1383,7 +1384,7 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         begin = await c.post(
             "/auth/invites/redeem/begin", json={"token": "racing-token"}

@@ -97,7 +97,7 @@ def member_repo() -> InMemoryMemberRepository:
 async def test_admin_can_create_member(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 201
@@ -118,7 +118,7 @@ async def test_create_member_response_schema_has_all_required_fields(
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 201
@@ -152,7 +152,7 @@ async def test_member_cannot_create_member(member_repo) -> None:
 
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members",
@@ -164,7 +164,7 @@ async def test_member_cannot_create_member(member_repo) -> None:
 
 async def test_create_member_unauthenticated_returns_401(member_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 401
@@ -174,7 +174,7 @@ async def test_create_member_missing_required_fields_returns_422(member_repo) ->
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     # Missing email, first_name, surname, join_date
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json={})
     assert response.status_code == 422
@@ -185,7 +185,7 @@ async def test_create_member_missing_email_returns_422(member_repo) -> None:
     payload = _valid_member_payload()
     del payload["email"]
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=payload)
     assert response.status_code == 422
@@ -196,7 +196,7 @@ async def test_create_member_missing_first_name_returns_422(member_repo) -> None
     payload = _valid_member_payload()
     del payload["first_name"]
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=payload)
     assert response.status_code == 422
@@ -207,7 +207,7 @@ async def test_create_member_missing_surname_returns_422(member_repo) -> None:
     payload = _valid_member_payload()
     del payload["surname"]
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=payload)
     assert response.status_code == 422
@@ -219,7 +219,7 @@ async def test_create_member_dob_is_optional(member_repo) -> None:
     payload = _valid_member_payload()
     del payload["dob"]
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=payload)
     assert response.status_code == 201
@@ -236,7 +236,7 @@ async def test_create_member_with_full_name_returns_422(member_repo) -> None:
         "membership_status": "active",
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=payload)
     assert response.status_code == 422
@@ -245,7 +245,7 @@ async def test_create_member_with_full_name_returns_422(member_repo) -> None:
 async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/members", json=_valid_member_payload())
         response = await c.post("/members", json=_valid_member_payload())
@@ -261,13 +261,13 @@ async def test_admin_can_get_any_member_profile(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/members", json=_valid_member_payload())
     member_id = create_resp.json()["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}")
     assert response.status_code == 200
@@ -286,7 +286,7 @@ async def test_member_can_get_own_profile(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}")
     assert response.status_code == 200
@@ -305,7 +305,7 @@ async def test_member_cannot_get_other_member_profile(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{other_id}")
     assert response.status_code == 403
@@ -316,7 +316,7 @@ async def test_get_member_not_found_returns_404(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{fake_id}")
     assert response.status_code == 404
@@ -325,7 +325,7 @@ async def test_get_member_not_found_returns_404(member_repo) -> None:
 async def test_get_member_unauthenticated_returns_401(member_repo) -> None:
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{fake_id}")
     assert response.status_code == 401
@@ -339,13 +339,13 @@ async def test_get_member_unauthenticated_returns_401(member_repo) -> None:
 async def test_admin_can_update_member_first_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/members", json=_valid_member_payload())
     member_id = create_resp.json()["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"first_name": "Jiro"})
     assert response.status_code == 200
@@ -355,13 +355,13 @@ async def test_admin_can_update_member_first_name(member_repo) -> None:
 async def test_admin_can_update_member_surname(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/members", json=_valid_member_payload())
     member_id = create_resp.json()["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"surname": "Tanaka"})
     assert response.status_code == 200
@@ -372,18 +372,18 @@ async def test_update_persists_change(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/members", json=_valid_member_payload())
     member_id = create_resp.json()["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(f"/members/{member_id}", json={"is_coach": True})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_resp = await c.get(f"/members/{member_id}")
     assert get_resp.status_code == 200
@@ -394,7 +394,7 @@ async def test_update_member_not_found_returns_404(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{fake_id}", json={"first_name": "Ghost"})
     assert response.status_code == 404
@@ -405,7 +405,7 @@ async def test_member_cannot_update_member(member_repo) -> None:
 
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         create_resp = await c.post("/members", json=_valid_member_payload())
     member_id = create_resp.json()["id"]
@@ -413,7 +413,7 @@ async def test_member_cannot_update_member(member_repo) -> None:
     del app.dependency_overrides[REQUIRE_ADMIN]
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}",
@@ -460,7 +460,7 @@ async def test_put_null_emergency_contact_phone_clears_stored_value(
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}", json={"emergency_contact_phone": None}
@@ -488,7 +488,7 @@ async def test_put_null_emergency_contact_name_clears_stored_value(
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}", json={"emergency_contact_name": None}
@@ -512,7 +512,7 @@ async def test_put_null_display_name_clears_stored_value(member_repo) -> None:
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"display_name": None})
 
@@ -534,7 +534,7 @@ async def test_put_null_dob_clears_stored_value(member_repo) -> None:
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"dob": None})
 
@@ -560,7 +560,7 @@ async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"first_name": "X"})
 
@@ -581,7 +581,7 @@ async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> No
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"first_name": None})
 
@@ -602,7 +602,7 @@ async def test_put_null_membership_status_does_not_wipe_stored_value(
     calls = _spy_on_update(member_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}", json={"membership_status": None}
@@ -623,7 +623,7 @@ async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None
     member_id = created["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}", json={"display_name": "Jiro-san"}
@@ -645,7 +645,7 @@ async def test_delete_member_route_removed(member_repo) -> None:
     created = await member_repo.add(_valid_member_payload(email="gone@dojo.test"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/{created['id']}")
     assert response.status_code == 405
@@ -662,7 +662,7 @@ async def test_get_members_returns_all_for_admin(member_repo) -> None:
     await member_repo.add(_valid_member_payload(email="b@dojo.test"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members")
     assert response.status_code == 200
@@ -679,7 +679,7 @@ async def test_get_members_filter_by_active_status(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?status=active")
     assert response.status_code == 200
@@ -705,7 +705,7 @@ async def test_get_members_filter_by_inactive_status(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?status=inactive")
     assert response.status_code == 200
@@ -727,7 +727,7 @@ async def test_get_members_search_by_first_name(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?search=musashi")
     assert response.status_code == 200
@@ -751,7 +751,7 @@ async def test_get_members_search_by_surname(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?search=kojiro")
     assert response.status_code == 200
@@ -772,7 +772,7 @@ async def test_get_members_search_by_email(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?search=findme")
     assert response.status_code == 200
@@ -783,7 +783,7 @@ async def test_get_members_search_by_email(member_repo) -> None:
 
 async def test_get_members_unauthenticated_returns_401(member_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members")
     assert response.status_code == 401
@@ -798,7 +798,7 @@ async def test_member_response_has_no_legacy_fields(member_repo) -> None:
     """AC1: MemberResponse must NOT contain full_name or parental_consent_obtained."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 201
@@ -814,7 +814,7 @@ async def test_member_response_includes_display_name(member_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     # Without display_name in payload — field must be present (null)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 201
@@ -823,7 +823,7 @@ async def test_member_response_includes_display_name(member_repo) -> None:
 
     # With display_name explicitly set
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response2 = await c.post(
             "/members",
@@ -839,7 +839,7 @@ async def test_member_response_includes_dob(member_repo) -> None:
     """AC1: MemberResponse includes dob (nullable)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members", json=_valid_member_payload(dob="1990-06-15")
@@ -862,7 +862,7 @@ async def test_update_member_to_archived(member_repo) -> None:
     member_id = created["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/members/{member_id}", json={"membership_status": "archived"}
@@ -884,7 +884,7 @@ async def test_list_excludes_archived_by_default(member_repo) -> None:
         await member_repo.add(_valid_member_payload(email=email, membership_status=st))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members")
     assert response.status_code == 200
@@ -903,7 +903,7 @@ async def test_list_includes_archived_when_filtered(member_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/members?status=archived")
     assert response.status_code == 200

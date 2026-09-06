@@ -92,7 +92,7 @@ def settings_repo() -> StubDojoSettingsRepo:
 
 async def _post_checkin(session_id: str) -> Any:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         return await c.post(f"/sessions/{session_id}/checkin")
 

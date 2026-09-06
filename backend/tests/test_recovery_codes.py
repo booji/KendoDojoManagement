@@ -350,7 +350,7 @@ async def test_generate_endpoint_returns_8_codes(passkey_repo, recovery_repo) ->
     passkey_repo._seed(_USER_A.sub)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/generate")
 
@@ -370,7 +370,7 @@ async def test_generate_endpoint_codes_match_format(
     passkey_repo._seed(_USER_A.sub)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/generate")
 
@@ -393,7 +393,7 @@ async def test_generate_endpoint_returns_409_if_set_exists(
         recovery_repo._seed(_USER_A.sub, used_at=None)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/generate")
 
@@ -405,7 +405,7 @@ async def test_generate_endpoint_requires_authentication(
 ) -> None:
     """POST /auth/recovery/codes/generate returns 401 when unauthenticated."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/generate")
     assert response.status_code == 401
@@ -427,7 +427,7 @@ async def test_regenerate_endpoint_returns_8_new_codes(
         recovery_repo._seed(_USER_A.sub, set_id=old_set_id)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/regenerate")
 
@@ -449,7 +449,7 @@ async def test_regenerate_endpoint_invalidates_old_set(
         recovery_repo._seed(_USER_A.sub, set_id=old_set_id)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/auth/recovery/codes/regenerate")
 
@@ -466,7 +466,7 @@ async def test_regenerate_endpoint_requires_authentication(
 ) -> None:
     """POST /auth/recovery/codes/regenerate returns 401 when unauthenticated."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/codes/regenerate")
     assert response.status_code == 401
@@ -489,7 +489,7 @@ async def test_status_endpoint_returns_unused_count_and_has_set(
         recovery_repo._seed(_USER_A.sub, used_at=datetime.now(UTC))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/recovery/codes/status")
 
@@ -509,7 +509,7 @@ async def test_status_endpoint_has_set_false_when_no_codes(
     passkey_repo._seed(_USER_A.sub)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/recovery/codes/status")
 
@@ -529,7 +529,7 @@ async def test_status_endpoint_never_returns_plaintext_codes(
         recovery_repo._seed(_USER_A.sub, used_at=None)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/recovery/codes/status")
 
@@ -544,7 +544,7 @@ async def test_status_endpoint_requires_authentication(
 ) -> None:
     """GET /auth/recovery/codes/status returns 401 when unauthenticated."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/recovery/codes/status")
     assert response.status_code == 401
@@ -566,7 +566,7 @@ async def test_delete_last_passkey_blocked_when_no_recovery_codes(
     # No recovery codes — unused_count == 0
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -585,7 +585,7 @@ async def test_delete_last_passkey_blocked_even_with_all_codes_used(
         recovery_repo._seed(_USER_A.sub, used_at=datetime.now(UTC))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -608,7 +608,7 @@ async def test_delete_last_passkey_allowed_when_recovery_codes_exist(
         recovery_repo._seed(_USER_A.sub, used_at=None)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -626,7 +626,7 @@ async def test_delete_non_last_passkey_not_affected_by_recovery_codes(
     # No recovery codes — but this should still succeed (not the last passkey)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 

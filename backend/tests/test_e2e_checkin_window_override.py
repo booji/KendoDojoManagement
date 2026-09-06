@@ -38,7 +38,7 @@ from app.auth.token import encode_token  # noqa: E402
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 
 # ── helpers (mirrors test_e2e_session_detail.py / test_e2e_checkin_window.py) ──

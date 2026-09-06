@@ -8,6 +8,12 @@ from publicsuffixlist import PublicSuffixList
 
 load_dotenv(override=False)
 
+# Every API router is mounted under this prefix so the SPA and the API share
+# one origin (ADR-0001). Anything matching on a request path — the
+# constant-time middleware's endpoint set above all — must build its paths from
+# this, or a change here silently stops it matching.
+API_PREFIX = "/api"
+
 DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
 
 # development | production. Explicit and never inferred from other settings

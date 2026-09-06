@@ -177,7 +177,7 @@ async def test_register_begin_unauthorized_email_creates_no_user(db_client) -> N
     before = await _user_count(session)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -203,7 +203,7 @@ async def test_register_begin_authorized_email_creates_user(db_client) -> None:
     member_id = await _seed_member(session, "authorized@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -233,7 +233,7 @@ async def test_register_begin_links_member_user_id(db_client) -> None:
     member_id = await _seed_member(session, "linkme@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -264,7 +264,7 @@ async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> N
     member_id = await _seed_member(session, "first-ever@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -304,7 +304,7 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
     await _seed_phantom_user(session, "first-ever@dojo.test", role="admin")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         retry = await c.post(
             "/auth/register/passkey/begin",
@@ -330,7 +330,7 @@ async def test_login_begin_unknown_email_returns_200_not_404(db_client) -> None:
     """login_passkey_begin for an unknown email returns 200 with a
     well-formed publicKey challenge -- not a 404."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/login/passkey/begin",
@@ -358,7 +358,7 @@ async def test_login_begin_known_and_unknown_email_shapes_match(db_client) -> No
     await _seed_user(session, "known@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         known_response = await c.post(
             "/auth/login/passkey/begin", json={"email": "known@dojo.test"}
@@ -400,7 +400,7 @@ async def test_register_begin_authorized_and_unauthorized_shapes_match(
     await _seed_member(session, "authorized@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         authorized = await c.post(
             "/auth/register/passkey/begin", json={"email": "authorized@dojo.test"}
@@ -426,7 +426,7 @@ async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) ->
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -462,7 +462,7 @@ async def test_login_begin_decoy_challenge_differs_per_call(db_client) -> None:
     """Two login-begin calls for the same unknown email return DIFFERENT
     challenges, matching the real path's per-call randomness."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/login/passkey/begin", json={"email": "repeat-probe@dojo.test"}
@@ -486,7 +486,7 @@ async def test_register_begin_decoy_challenge_differs_per_call(db_client) -> Non
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/register/passkey/begin",
@@ -538,7 +538,7 @@ async def test_register_begin_decoy_user_id_stable_then_secret_dependent(
 
     monkeypatch.setattr(config, "JWT_SECRET", "secret-one-for-issue-300")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/register/passkey/begin",
@@ -561,7 +561,7 @@ async def test_register_begin_decoy_user_id_stable_then_secret_dependent(
 
     monkeypatch.setattr(config, "JWT_SECRET", "secret-two-for-issue-300")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         third = await c.post(
             "/auth/register/passkey/begin",
@@ -588,7 +588,7 @@ async def test_register_begin_real_user_id_stable_across_calls(db_client) -> Non
     await _seed_member(session, "real-stability@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         first = await c.post(
             "/auth/register/passkey/begin",
@@ -624,7 +624,7 @@ async def test_register_begin_decoy_user_id_is_a_version_4_uuid(db_client) -> No
     await _seed_member(session, "format-real@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         real = await c.post(
             "/auth/register/passkey/begin",
@@ -667,7 +667,7 @@ async def test_login_begin_decoy_path_writes_no_db_rows(db_client) -> None:
     before = await _user_count(session)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/login/passkey/begin", json={"email": "ghost@dojo.test"}
@@ -687,7 +687,7 @@ async def test_register_begin_decoy_path_writes_no_db_rows(db_client) -> None:
     before = await _user_count(session)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -708,7 +708,7 @@ async def test_login_complete_after_decoy_begin_fails_generic(db_client) -> None
     followed a decoy begin) must fail with a generic error -- not the
     user-enumerating 404 'User not found'."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post("/auth/login/passkey/begin", json={"email": "phantom@dojo.test"})
         response = await c.post(
@@ -741,7 +741,7 @@ async def test_register_complete_after_decoy_begin_fails_generic(db_client) -> N
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/register/passkey/begin",
@@ -798,7 +798,7 @@ async def test_login_complete_errors_indistinguishable_unknown_vs_bad_credential
     }
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         unknown_response = await c.post(
             "/auth/login/passkey/complete",
@@ -847,7 +847,7 @@ async def test_login_begin_known_email_byte_length_matches_decoy(
     await _seed_credentials(session, user_id, credential_count)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         known = await c.post("/auth/login/passkey/begin", json={"email": known_email})
         decoy = await c.post(
@@ -869,7 +869,7 @@ async def test_login_begin_response_has_no_allow_credentials_key(db_client) -> N
     await _seed_credentials(session, user_id, 2)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         known = await c.post(
             "/auth/login/passkey/begin", json={"email": "haskeys@dojo.test"}
@@ -896,7 +896,7 @@ async def test_register_begin_requests_discoverable_credential_real_and_decoy(
     await _seed_member(session, "discoverable@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         real = await c.post(
             "/auth/register/passkey/begin", json={"email": "discoverable@dojo.test"}
@@ -936,7 +936,7 @@ async def test_register_begin_real_and_decoy_bodies_same_byte_length(
     await _seed_member(session, real_email)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         real = await c.post("/auth/register/passkey/begin", json={"email": real_email})
         decoy = await c.post(
@@ -955,13 +955,14 @@ async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time
     guarantees -- both begin endpoints still accept an email, still return
     200 for an unknown/unauthorized one, and remain listed in the
     constant-time middleware's protected path set."""
+    from app.config import API_PREFIX
     from app.core.middleware import _CONSTANT_TIME_PATHS
 
-    assert "/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
-    assert "/auth/register/passkey/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/register/passkey/begin" in _CONSTANT_TIME_PATHS
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         login_resp = await c.post(
             "/auth/login/passkey/begin", json={"email": "still-answers@dojo.test"}
@@ -996,7 +997,7 @@ async def test_login_completes_end_to_end_without_allow_credentials(
     await _reset_to_fresh_instance(session)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         register_begin = await c.post(
             "/auth/register/passkey/begin",
@@ -1098,7 +1099,7 @@ async def test_login_begin_requests_user_verification_both_paths(db_client) -> N
     await _seed_user(session, "uv-known@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         known = await c.post(
             "/auth/login/passkey/begin", json={"email": "uv-known@dojo.test"}
@@ -1135,7 +1136,7 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
     mock_registration.aaguid = None
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/register/passkey/begin", json={"email": "uv-flow@dojo.test"}

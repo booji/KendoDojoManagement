@@ -129,7 +129,7 @@ async def test_range_query_returns_sessions_within_date_range(
     await _seed_session(instance_repo, "2099-07-01")  # after range
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
@@ -140,9 +140,9 @@ async def test_range_query_returns_sessions_within_date_range(
     ids = [s["id"] for s in sessions]
     assert inside["id"] in ids
     # outside-range sessions must not appear
-    assert all("2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions), (
-        f"Some sessions outside range: {[s['date'] for s in sessions]}"
-    )
+    assert all(
+        "2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions
+    ), f"Some sessions outside range: {[s['date'] for s in sessions]}"
 
 
 async def test_range_query_response_has_required_fields(
@@ -155,7 +155,7 @@ async def test_range_query_response_has_required_fields(
     await _seed_session(instance_repo, "2099-06-10")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
@@ -178,7 +178,7 @@ async def test_range_query_unauthenticated_returns_401(
 ) -> None:
     """Unauthenticated requests to GET /sessions?from=&to= return 401."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
@@ -197,7 +197,7 @@ async def test_admin_range_query_includes_cancelled_sessions(
     cancelled = await _seed_session(instance_repo, "2099-06-15", cancelled=True)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
@@ -224,7 +224,7 @@ async def test_member_range_query_excludes_cancelled_sessions(
     cancelled = await _seed_session(instance_repo, "2099-06-15", cancelled=True)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
             "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}

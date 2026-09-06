@@ -444,7 +444,7 @@ def test_log_output_is_single_line(caplog: pytest.LogCaptureFixture) -> None:
 
 async def _register_user(email: str, password: str = "Str0ng!Pass") -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/register/password",
@@ -465,7 +465,7 @@ async def test_password_login_success_emits_log(
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/login/password",
@@ -492,7 +492,7 @@ async def test_password_login_failure_emits_log(
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/login/password",
@@ -517,7 +517,7 @@ async def test_password_login_unknown_user_emits_failure_log(
     """Login attempt for unknown email must emit a login_password/failure event."""
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/login/password",
@@ -539,7 +539,7 @@ async def test_passkey_login_failure_emits_log(
     # /login/passkey/complete with a garbage payload should fail
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/login/passkey/complete",
@@ -578,7 +578,7 @@ async def test_account_lockout_emits_log(
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             for _ in range(10):
                 await c.post(
@@ -587,9 +587,9 @@ async def test_account_lockout_emits_log(
                 )
 
     logs = _capture_security_logs(caplog)
-    assert any(log["event_type"] == "login_lockout" for log in logs), (
-        f"Expected login_lockout event, got: {logs}"
-    )
+    assert any(
+        log["event_type"] == "login_lockout" for log in logs
+    ), f"Expected login_lockout event, got: {logs}"
 
 
 # ===========================================================================
@@ -615,7 +615,7 @@ async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> N
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.delete(f"/auth/passkeys/{record2['id']}")
 
@@ -642,7 +642,7 @@ async def test_passkey_registration_emits_log(
     # is covered by the real service calling log_security_event internally).
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/register/passkey/complete",
@@ -695,7 +695,7 @@ async def test_recovery_redeem_failure_emits_log(
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/recovery/redeem",
@@ -740,7 +740,7 @@ async def test_admin_token_generation_emits_log(
 
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             await c.post(
                 "/auth/recovery/admin-token",

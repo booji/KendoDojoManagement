@@ -30,7 +30,7 @@ from playwright.sync_api import Page, Route, expect
 from tests.e2e_support import complete_onboarding
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 pytestmark = pytest.mark.e2e
 

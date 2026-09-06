@@ -18,11 +18,12 @@ from app import config
 _log = logging.getLogger(__name__)
 
 _CONSTANT_TIME_PATHS = frozenset(
-    {
+    config.API_PREFIX + path
+    for path in (
         "/auth/register/passkey/begin",
         "/auth/login/passkey/begin",
         "/auth/invites/redeem/begin",
-    }
+    )
 )
 
 

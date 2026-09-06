@@ -144,7 +144,7 @@ async def test_get_session_instance_not_found(instance_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/sessions/{fake_id}")
     assert response.status_code == 404
@@ -160,7 +160,7 @@ async def test_get_session_instance_admin_sees_coach_notes(instance_repo) -> Non
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
     inst = await _seed_instance(instance_repo, coach_notes="Focus on men-uchi today")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/sessions/{inst['id']}")
     assert response.status_code == 200
@@ -178,7 +178,7 @@ async def test_get_session_instance_member_sees_null_coach_notes(
         instance_repo, coach_notes="Secret notes for admin only"
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/sessions/{inst['id']}")
     assert response.status_code == 200
@@ -215,7 +215,7 @@ async def test_put_session_instance_updates_target_only(
         "segments": [_segment(start_time="20:00", duration_minutes=60)],
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/sessions/{target['id']}", json=update_payload)
     assert response.status_code == 200
@@ -262,7 +262,7 @@ async def test_patch_template_preserves_instances_at_covered_dates(
         "location": "New Location",
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(
             f"/sessions/templates/{tmpl['id']}", json=update_payload
@@ -296,7 +296,7 @@ async def test_patch_template_leaves_past_instances_untouched(
 
     update_payload = {"segments": [_segment(start_time="20:00", duration_minutes=60)]}
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(
             f"/sessions/templates/{tmpl['id']}", json=update_payload
@@ -333,7 +333,7 @@ async def test_delete_template_cancels_future_instances(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200
@@ -352,7 +352,7 @@ async def test_delete_template_deactivates_template(
     tmpl = await _seed_template(template_repo)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200

@@ -158,7 +158,7 @@ def fed_repo() -> StubFederationRepo:
 async def test_admin_can_create_federation(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/federations", json={"name": "All Japan Kendo Federation"}
@@ -174,7 +174,7 @@ async def test_admin_can_create_federation(fed_repo) -> None:
 async def test_create_federation_missing_name_returns_422(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/federations", json={})
     assert response.status_code == 422
@@ -191,7 +191,7 @@ async def test_create_federation_with_all_optional_fields(fed_repo) -> None:
         "type": "National",
     }
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/federations", json=payload)
     assert response.status_code == 201
@@ -205,7 +205,7 @@ async def test_create_federation_with_all_optional_fields(fed_repo) -> None:
 
 async def test_create_federation_unauthenticated_returns_401(fed_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/federations", json={"name": "Unauthenticated Federation"}
@@ -218,7 +218,7 @@ async def test_member_cannot_create_federation(fed_repo) -> None:
 
     token = encode_token(_MEMBER)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/federations",
@@ -239,7 +239,7 @@ async def test_admin_can_edit_federation_metadata(fed_repo) -> None:
     fed_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{fed_id}", json={"name": "New Name"})
     assert response.status_code == 200
@@ -250,7 +250,7 @@ async def test_edit_federation_not_found_returns_404(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{fake_id}", json={"name": "Ghost"})
     assert response.status_code == 404
@@ -259,7 +259,7 @@ async def test_edit_federation_not_found_returns_404(fed_repo) -> None:
 async def test_edit_federation_unauthenticated_returns_401(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{record['id']}", json={"name": "Hack"})
     assert response.status_code == 401
@@ -271,7 +271,7 @@ async def test_member_cannot_edit_federation(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     token = encode_token(_MEMBER)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/federations/{record['id']}",
@@ -293,7 +293,7 @@ async def test_admin_can_pin_federation(fed_repo) -> None:
     assert record["is_pinned"] is False
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{fed_id}", json={"is_pinned": True})
     assert response.status_code == 200
@@ -306,7 +306,7 @@ async def test_admin_can_unpin_federation(fed_repo) -> None:
     fed_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{fed_id}", json={"is_pinned": False})
     assert response.status_code == 200
@@ -324,7 +324,7 @@ async def test_admin_can_deactivate_federation(fed_repo) -> None:
     fed_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/federations/{fed_id}")
     assert response.status_code == 200
@@ -335,7 +335,7 @@ async def test_deactivate_nonexistent_federation_returns_404(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/federations/{fake_id}")
     assert response.status_code == 404
@@ -344,7 +344,7 @@ async def test_deactivate_nonexistent_federation_returns_404(fed_repo) -> None:
 async def test_delete_federation_unauthenticated_returns_401(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/federations/{record['id']}")
     assert response.status_code == 401
@@ -356,7 +356,7 @@ async def test_member_cannot_delete_federation(fed_repo) -> None:
     record = await fed_repo.add({"name": "Test Fed"})
     token = encode_token(_MEMBER)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(
             f"/federations/{record['id']}",
@@ -376,7 +376,7 @@ async def test_admin_can_reactivate_federation(fed_repo) -> None:
     fed_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/federations/{fed_id}", json={"is_active": True})
     assert response.status_code == 200
@@ -395,7 +395,7 @@ async def test_get_federations_returns_active_only(fed_repo) -> None:
     await fed_repo.deactivate(inactive["id"])
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations")
     assert response.status_code == 200
@@ -412,7 +412,7 @@ async def test_get_federations_pinned_first_alphabetical(fed_repo) -> None:
     await fed_repo.add({"name": "Pinned A", "is_pinned": True})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations")
     assert response.status_code == 200
@@ -431,7 +431,7 @@ async def test_get_federations_filter_by_type(fed_repo) -> None:
     await fed_repo.add({"name": "Global A", "type": "Global Body"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations?type=National")
     assert response.status_code == 200
@@ -447,7 +447,7 @@ async def test_get_federations_filter_by_continental_grouping(fed_repo) -> None:
     await fed_repo.add({"name": "Asia Fed", "continental_grouping": "Asia"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations?continental_grouping=Europe")
     assert response.status_code == 200
@@ -463,7 +463,7 @@ async def test_get_federations_search_by_name_prefix(fed_repo) -> None:
     await fed_repo.add({"name": "All Japan Kendo Federation"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations?search=brit")
     assert response.status_code == 200
@@ -478,7 +478,7 @@ async def test_get_federations_search_by_abbreviation_prefix(fed_repo) -> None:
     await fed_repo.add({"name": "All Japan Kendo Federation", "abbreviation": "AJKF"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations?search=bka")
     assert response.status_code == 200
@@ -494,7 +494,7 @@ async def test_get_federations_search_by_abbreviation_prefix(fed_repo) -> None:
 
 async def test_get_federations_unauthenticated_returns_401(fed_repo) -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/federations")
     assert response.status_code == 401
@@ -515,13 +515,13 @@ async def test_deactivated_federation_hidden_from_list_but_record_preserved(
 
     # Deactivate
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.delete(f"/federations/{fed_id}")
 
     # Not in list
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         list_resp = await c.get("/federations")
     assert list_resp.status_code == 200
@@ -530,7 +530,7 @@ async def test_deactivated_federation_hidden_from_list_but_record_preserved(
 
     # But GET by id still works (record preserved for referential integrity)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_resp = await c.get(f"/federations/{fed_id}")
     assert get_resp.status_code == 200

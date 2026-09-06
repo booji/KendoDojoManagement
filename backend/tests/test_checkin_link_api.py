@@ -85,7 +85,7 @@ async def _seed(
 
 async def _get(path: str) -> Any:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         return await c.get(path)
 

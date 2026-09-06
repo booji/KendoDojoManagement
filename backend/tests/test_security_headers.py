@@ -43,7 +43,7 @@ async def test_security_headers_on_non_health_route() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        response = await client.get("/members")
+        response = await client.get("/api/members")
 
     assert "x-frame-options" in response.headers
     assert "x-content-type-options" in response.headers

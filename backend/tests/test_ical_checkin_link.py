@@ -228,7 +228,7 @@ async def test_get_sessions_ical_enriches_upcoming_session_with_checkin_link(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
 
@@ -266,7 +266,7 @@ async def test_get_sessions_ical_falls_back_to_webauthn_origin(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
 
@@ -298,7 +298,7 @@ async def test_get_sessions_ical_cancelled_session_has_no_checkin_link_leak(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/sessions/ical")
 

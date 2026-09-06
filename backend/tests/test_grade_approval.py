@@ -198,7 +198,7 @@ async def test_approve_pending_entry_returns_200_and_confirmed_status(
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
@@ -220,7 +220,7 @@ async def test_approve_sets_assigned_by_from_auth_token(
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
@@ -245,7 +245,7 @@ async def test_approve_nonexistent_entry_returns_404(member_repo, grade_repo) ->
     nonexistent_id = "99999999-0000-0000-0000-000000000000"
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{nonexistent_id}/approve")
 
@@ -263,7 +263,7 @@ async def test_approve_already_confirmed_entry_returns_409(
     entry_id = _CONFIRMED_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
@@ -284,7 +284,7 @@ async def test_delete_pending_entry_returns_204(member_repo, grade_repo) -> None
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
@@ -303,7 +303,7 @@ async def test_delete_pending_entry_removes_it_from_history(
     entry_id = _PENDING_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         delete_resp = await c.delete(f"/members/{member_id}/grades/{entry_id}")
         assert delete_resp.status_code == 204
@@ -327,7 +327,7 @@ async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> No
     entry_id = _CONFIRMED_ENTRY_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
@@ -354,7 +354,7 @@ async def test_approve_non_admin_returns_403(
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
@@ -377,7 +377,7 @@ async def test_delete_non_admin_returns_403(
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")

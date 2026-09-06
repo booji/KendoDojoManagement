@@ -32,7 +32,7 @@ from tests.e2e_support import complete_onboarding  # noqa: E402
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 
 # ---------------------------------------------------------------------------

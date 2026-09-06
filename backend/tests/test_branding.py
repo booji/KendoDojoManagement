@@ -83,7 +83,7 @@ async def test_get_branding_reachable_without_authentication(
 ) -> None:
     """GET /settings/branding requires no auth cookie/token at all."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -95,7 +95,7 @@ async def test_get_branding_always_includes_primary_colour(
 ) -> None:
     """primary_colour is always present in the public branding response."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -112,7 +112,7 @@ async def test_get_branding_hides_dojo_name_when_login_show_name_off(
     await settings_repo.update({"dojo_name": "Secret Dojo", "login_show_name": False})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -131,7 +131,7 @@ async def test_get_branding_hides_logo_when_login_show_logo_off(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -153,7 +153,7 @@ async def test_get_branding_hides_background_when_login_show_background_off(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -179,7 +179,7 @@ async def test_get_branding_shows_assets_when_toggles_on(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/branding")
 
@@ -214,7 +214,7 @@ async def test_post_background_member_returns_403(
 ) -> None:
     """A member token must receive 403 from POST /settings/background."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -230,7 +230,7 @@ async def test_post_background_unauthenticated_returns_401(
 ) -> None:
     """No token must receive 401 from POST /settings/background."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -247,7 +247,7 @@ async def test_post_background_rejects_non_image_mime_type(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -264,7 +264,7 @@ async def test_post_background_accepts_png(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -283,7 +283,7 @@ async def test_post_background_accepts_jpeg(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -300,7 +300,7 @@ async def test_post_background_accepts_webp(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -317,7 +317,7 @@ async def test_post_background_accepts_gif(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -335,7 +335,7 @@ async def test_post_background_rejects_files_over_5mb_cap(
     oversized = _PNG_BYTES + b"0" * (5 * 1024 * 1024 + 1 - len(_PNG_BYTES))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -353,7 +353,7 @@ async def test_post_background_accepts_file_at_exactly_5mb(
     exactly_5mb = _PNG_BYTES + b"0" * (5 * 1024 * 1024 - len(_PNG_BYTES))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/background",
@@ -371,7 +371,7 @@ async def test_post_background_success_persists_background_image_url(
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         upload_resp = await c.post(
             "/settings/background",
@@ -400,7 +400,7 @@ async def test_put_dojo_settings_persists_login_show_name_toggle(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -418,7 +418,7 @@ async def test_put_dojo_settings_persists_login_show_logo_toggle(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -436,7 +436,7 @@ async def test_put_dojo_settings_persists_login_show_background_toggle(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -454,7 +454,7 @@ async def test_put_dojo_settings_persists_background_image_url(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -476,7 +476,7 @@ async def test_put_dojo_settings_null_background_image_url_clears_it(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         put_resp = await c.put(
             "/settings/dojo",
@@ -494,7 +494,7 @@ async def test_put_dojo_settings_toggles_member_returns_403(
 ) -> None:
     """A member token must receive 403 attempting to set branding toggles."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -515,7 +515,7 @@ async def test_get_dojo_settings_member_only(
 ) -> None:
     """GET /settings/dojo requires at least member auth (401 with no token)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -537,7 +537,7 @@ async def test_get_dojo_settings_returns_raw_background_and_toggles(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -565,7 +565,7 @@ async def test_get_dojo_settings_raw_fields_present_regardless_of_toggle_state(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -582,7 +582,7 @@ async def test_get_dojo_settings_default_toggles(
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 

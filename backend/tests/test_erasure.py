@@ -220,7 +220,7 @@ async def test_erase_as_non_admin_returns_403() -> None:
     _override_member_repo({"member-1": _member()})
     token = encode_token(_MEMBER_CLAIMS)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/members/member-1/erase", cookies={"access_token": token}
@@ -231,7 +231,7 @@ async def test_erase_as_non_admin_returns_403() -> None:
 async def test_erase_unauthenticated_returns_401() -> None:
     _override_member_repo({"member-1": _member()})
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members/member-1/erase")
     assert response.status_code == 401
@@ -243,7 +243,7 @@ async def test_erase_member_not_archived_returns_409() -> None:
         {"member-1": _member(membership_status="active", user_id="someone-else")}
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members/member-1/erase")
     assert response.status_code == 409
@@ -256,7 +256,7 @@ async def test_erase_self_returns_409() -> None:
         {"member-1": _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
     )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members/member-1/erase")
     assert response.status_code == 409
@@ -268,7 +268,7 @@ async def test_erase_missing_member_returns_404() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo({})
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/members/does-not-exist/erase")
     assert response.status_code == 404
@@ -456,7 +456,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/erase")
 
