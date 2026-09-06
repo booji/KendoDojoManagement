@@ -235,3 +235,6 @@ Thumbs.db
 
 # Frontend src/lib should be tracked despite the lib/ rule above
 !frontend/src/lib/
+
+# Per-machine dev TLS material
+deploy/certs/
