@@ -13,10 +13,43 @@ COMPOSE_DEV  := $(COMPOSE) -f docker-compose.dev.yml --env-file .env.dev
 COMPOSE_TEST := $(COMPOSE) -f docker-compose.test.yml
 COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml
 
-.PHONY: dev test build down clean logs migrate help
+# Per-machine TLS material for the dev stack. Gitignored, never committed.
+CERT_DIR := deploy/certs
+
+# A bare `make` used to run the first target, which was `dev` — an exploratory
+# keystroke started a foreground image build. It now lists the targets (#373).
+.DEFAULT_GOAL := help
+
+.PHONY: dev test build down down-selfhost clean logs migrate certs help
+
+## certs: Generate the dev TLS certificate if one is missing
+certs:
+	# set -e, and no output swallowed: a generator that fails must say so and
+	# stop, rather than leave `make dev` believing it has TLS material. Both
+	# halves of the pair are checked — a cert with a missing key is not a skip.
+	@set -e; \
+	  if [ -f $(CERT_DIR)/localhost.pem ] && [ -f $(CERT_DIR)/localhost-key.pem ]; then \
+	    exit 0; \
+	  fi; \
+	  mkdir -p $(CERT_DIR); \
+	  if command -v mkcert >/dev/null 2>&1; then \
+	    mkcert -cert-file $(CERT_DIR)/localhost.pem \
+	           -key-file $(CERT_DIR)/localhost-key.pem localhost 127.0.0.1 ::1; \
+	  elif command -v openssl >/dev/null 2>&1; then \
+	    openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+	      -subj '/CN=localhost' \
+	      -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+	      -keyout $(CERT_DIR)/localhost-key.pem \
+	      -out $(CERT_DIR)/localhost.pem; \
+	    echo 'mkcert not on PATH - generated a self-signed certificate. Passkey ceremonies may misbehave until you install a local CA (mkcert -install).'; \
+	  else \
+	    echo 'neither mkcert nor openssl on PATH - skipped the dev certificate.'; \
+	    exit 0; \
+	  fi; \
+	  chmod 600 $(CERT_DIR)/localhost-key.pem
 
 ## dev: Start the dev stack with hot-reload
-dev:
+dev: certs
 	$(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
 	$(RUNTIME) rm -f kendodojomanagement_db_1 kendodojomanagement_backend_1 kendodojomanagement_frontend_1 2>/dev/null || true
 	# --build for the same reason as the test target below (#221, #332): without
@@ -41,10 +74,17 @@ build:
 	# building on the base it first pulled — silently, for as long as it lives.
 	$(COMPOSE_PROD) build --pull
 
-## down: Stop all running services (dev, test, and prod)
+## down: Stop the stacks this checkout starts (dev and test)
 down:
+	# Deliberately not the quick self-host. On a laptop that leg only prints
+	# variable-substitution warnings for an absent .env; on a self-hosting
+	# machine it takes the dojo offline. Same reasoning as `clean` declining to
+	# remove the production volume: stopping the dojo is a deliberate act.
 	$(COMPOSE_DEV) down --remove-orphans
 	$(COMPOSE_TEST) down --remove-orphans
+
+## down-selfhost: Stop the quick self-host stack - takes the dojo offline
+down-selfhost:
 	$(COMPOSE_PROD) down --remove-orphans
 
 ## clean: Remove this project's containers, dev/test volumes and images

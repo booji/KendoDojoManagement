@@ -190,25 +190,30 @@ problem, the port is.
 
 | Target | What it does |
 |--------|-------------|
+| `make` | List the targets (starts nothing) |
 | `make dev` | Start the hot-reload dev stack |
 | `make test` | Start the test watcher (re-runs pytest on every save) |
 | `make build` | Build the production image |
-| `make down` | Stop all running services |
+| `make down` | Stop the stacks this checkout starts — dev and test |
+| `make down-selfhost` | Stop the quick self-host stack — **takes the dojo offline** |
+| `make certs` | Generate the dev TLS certificate (run for you by `make dev`) |
 | `make logs` | Tail dev service logs |
 | `make migrate` | Run `alembic upgrade head` in the running dev container |
 | `make help` | List all targets |
 
 The Makefile auto-detects `podman-compose` vs `docker compose`, so the targets run under either. That detection is kept because it costs nothing, not because Docker is tested — see [Container runtime](#container-runtime).
 
-### Running tests locally (without a container)
+`make down` deliberately leaves the quick self-host alone: on a machine that is
+actually serving a dojo, stopping it must be a deliberate act, so it has its own
+target. The same reasoning already governs `make clean` refusing to remove the
+production database volume.
 
-```bash
-cd backend
-. .venv/bin/activate
-pytest -q --ignore=tests/test_e2e_*.py
-```
+`make dev` generates a per-machine TLS certificate under `deploy/certs/`
+(gitignored) if one is not already there. With `mkcert` on your PATH it is
+issued by your local CA; without it you get a self-signed certificate and a
+note that passkey ceremonies may misbehave until you run `mkcert -install`.
 
-### Running tests in the container
+### Running tests
 
 ```bash
 make test
