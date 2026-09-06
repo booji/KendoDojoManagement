@@ -61,7 +61,7 @@ async def test_get_dojo_settings_returns_checkin_window_defaults(
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -82,7 +82,7 @@ async def test_put_dojo_settings_updates_checkin_window_minutes(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -105,7 +105,7 @@ async def test_put_dojo_settings_checkin_window_visible_on_get(
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(
             "/settings/dojo",
@@ -132,7 +132,7 @@ async def test_put_dojo_settings_rejects_negative_before_minutes(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -148,7 +148,7 @@ async def test_put_dojo_settings_rejects_negative_after_minutes(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -164,7 +164,7 @@ async def test_put_dojo_settings_rejects_before_minutes_over_1440(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -180,7 +180,7 @@ async def test_put_dojo_settings_rejects_after_minutes_over_1440(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -197,7 +197,7 @@ async def test_put_dojo_settings_accepts_boundary_value_1440(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",

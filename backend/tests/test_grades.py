@@ -228,7 +228,7 @@ async def test_promote_from_mukyuu_to_rokkyuu(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -241,7 +241,7 @@ async def test_promote_increments_grade(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -254,7 +254,7 @@ async def test_promote_beyond_hachidan_fails(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -267,7 +267,7 @@ async def test_promote_records_admin_and_date(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -309,7 +309,7 @@ async def test_grade_history_chronological(member_repo, grade_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
@@ -352,7 +352,7 @@ async def test_grade_history_own_member(member_repo, grade_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
@@ -377,7 +377,7 @@ async def test_grade_history_other_member_forbidden(member_repo, grade_repo) -> 
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_a_id}/grades")
 
@@ -399,7 +399,7 @@ async def test_grade_history_admin_can_read_any(member_repo, grade_repo) -> None
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
@@ -424,7 +424,7 @@ async def test_promote_endpoint_removed_returns_404(member_repo, grade_repo) -> 
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -444,7 +444,7 @@ async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> N
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",
@@ -473,7 +473,7 @@ async def test_post_grades_non_admin_forbidden(
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies=cookies_for(_MEMBER_A),
     ) as c:
         response = await c.post(
@@ -493,7 +493,7 @@ async def test_post_grades_member_not_found(member_repo, grade_repo) -> None:
     nonexistent_id = "00000000-0000-0000-0000-000000000099"
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{nonexistent_id}/grades",
@@ -516,7 +516,7 @@ async def test_post_grades_awarded_at_defaults_to_now(member_repo, grade_repo) -
     before = datetime.now(UTC)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",
@@ -558,7 +558,7 @@ async def test_post_grades_invalid_grade_value_returns_422(
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",
@@ -576,7 +576,7 @@ async def test_post_grades_mukyuu_returns_422(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",
@@ -609,7 +609,7 @@ async def test_get_grades_omits_assigned_by_for_non_admin(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
@@ -639,7 +639,7 @@ async def test_get_grades_includes_assigned_by_for_admin(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades")
 
@@ -691,7 +691,7 @@ async def test_current_grade_is_latest_confirmed_by_awarded_at(
 
     # GET the member's detail or a dedicated current-grade endpoint
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades/current")
 
@@ -730,7 +730,7 @@ async def test_current_grade_ignores_non_confirmed_entries(
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{member_id}/grades/current")
 
@@ -760,7 +760,7 @@ async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
 
     # Explicitly assign ROKKYUU to a member with no prior grade history
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades",
@@ -786,7 +786,7 @@ async def test_rokkyu_bug_promote_endpoint_gone(member_repo, grade_repo) -> None
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(f"/members/{member_id}/promote")
 
@@ -807,7 +807,7 @@ async def test_propose_creates_pending_entry(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades/propose",
@@ -834,7 +834,7 @@ async def test_propose_own_record_member_cannot_propose_for_other(
     other_member_id = _MEMBER_B_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{other_member_id}/grades/propose",
@@ -852,7 +852,7 @@ async def test_propose_admin_forbidden(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades/propose",
@@ -872,7 +872,7 @@ async def test_propose_pending_entry_visible_to_own_member(
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         propose_response = await c.post(
             f"/members/{member_id}/grades/propose",
@@ -904,7 +904,7 @@ async def test_propose_pending_entry_not_visible_to_other_member(
     # MEMBER_A proposes a grade via the new endpoint
     app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         propose_response = await c.post(
             f"/members/{_MEMBER_A_ID}/grades/propose",
@@ -917,7 +917,7 @@ async def test_propose_pending_entry_not_visible_to_other_member(
     # MEMBER_B tries to read MEMBER_A's grade history — must be 403
     app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(f"/members/{_MEMBER_A_ID}/grades")
 
@@ -932,7 +932,7 @@ async def test_propose_mukyuu_returns_422(member_repo, grade_repo) -> None:
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades/propose",
@@ -950,7 +950,7 @@ async def test_propose_invalid_grade_returns_422(member_repo, grade_repo) -> Non
     member_id = _MEMBER_A_ID
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/members/{member_id}/grades/propose",

@@ -111,7 +111,10 @@ This starts:
 - `frontend` — Vite dev server with HMR, on host port 5173
 - `db` — PostgreSQL 16, published on host port **5433**
 
-The frontend proxies `/api` to the backend, so everything is available at `http://localhost:5173`.
+The frontend proxies `/api` to the backend without rewriting it — the backend
+serves its routers under `/api` too, so development and production use the same
+URLs (see `docs/adr/0001-single-origin-api-under-api-prefix.md`). Everything is
+available at `http://localhost:5173`.
 
 #### Network layout
 
@@ -120,7 +123,7 @@ Two networks, mirroring the Quadlet production deployment in `deploy/quadlet`
 
 | Network | Members | Purpose |
 |---------|---------|---------|
-| `edge` | `frontend`, `backend` | Vite proxies `/api` to the backend; carries the published host ports |
+| `edge` | `frontend`, `backend` | Vite proxies `/api` through to the backend; carries the published host ports |
 | `backend` | `backend`, `db` | The only path to PostgreSQL |
 
 `frontend` is **not** on the `backend` network. It runs arbitrary npm

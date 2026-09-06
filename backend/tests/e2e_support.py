@@ -21,7 +21,7 @@ from app.auth.models import UserClaims
 from app.auth.token import encode_token
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 
 def make_token(

@@ -17,7 +17,7 @@ import requests
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 # Uploads are content-sniffed (#240), so the payload must really be a PNG.
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32

@@ -390,7 +390,9 @@ def test_toggling_the_theme_updates_the_cookie_for_the_next_load(browser) -> Non
     try:
         page.wait_for_selector("[data-slot='sidebar']", timeout=15000)
         page.get_by_role("button", name="Switch to dark theme").click()
-        expect(page.get_by_role("button", name="Switch to system theme")).to_be_visible()
+        expect(
+            page.get_by_role("button", name="Switch to system theme")
+        ).to_be_visible()
         # Wipe the other client-side source: only the cookie may carry the choice.
         page.evaluate("() => localStorage.clear()")
         page.goto(BASE_URL)

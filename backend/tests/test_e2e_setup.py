@@ -18,7 +18,7 @@ import requests
 from playwright.sync_api import Page, expect
 
 BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 # The backend exposes /setup directly (no /api prefix).
 # The frontend dev-server proxy rewrites /api/setup → /setup on the backend,

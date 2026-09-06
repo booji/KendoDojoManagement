@@ -191,7 +191,7 @@ def settings_repo() -> StubDojoSettingsRepo:
 
 async def _post_checkin(session_id: str) -> Any:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         return await c.post(f"/sessions/{session_id}/checkin")
 
@@ -343,7 +343,7 @@ async def test_admin_mark_attended_bypasses_window_when_too_early(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",
@@ -367,7 +367,7 @@ async def test_admin_mark_attended_bypasses_window_when_closed(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             f"/sessions/{session['id']}/attendance",

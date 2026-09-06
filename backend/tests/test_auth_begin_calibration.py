@@ -60,7 +60,7 @@ pytestmark = pytest.mark.skipif(
     reason="calibration harness; set AUTH_BEGIN_BENCH=1 to collect (issue #268)",
 )
 
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 #: Emails seeded for this run are tagged so teardown can delete exactly them
 #: and nothing else — the benchmark commits, so it cannot lean on the

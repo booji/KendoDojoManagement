@@ -69,16 +69,16 @@ async def test_first_save_missing_first_name_returns_422(empty_member_repo) -> N
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
             json={"surname": "Yamada", "dob": "1990-06-15"},
         )
 
-    assert response.status_code == 422, (
-        f"Expected 422 when first_name is absent on first-save, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 when first_name is absent on first-save, got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -91,16 +91,16 @@ async def test_first_save_missing_surname_returns_422(empty_member_repo) -> None
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
             json={"first_name": "Taro", "dob": "1990-06-15"},
         )
 
-    assert response.status_code == 422, (
-        f"Expected 422 when surname is absent on first-save, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 when surname is absent on first-save, got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -113,16 +113,16 @@ async def test_first_save_missing_dob_returns_422(empty_member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
             json={"first_name": "Taro", "surname": "Yamada"},
         )
 
-    assert response.status_code == 422, (
-        f"Expected 422 when dob is absent on first-save, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 when dob is absent on first-save, got {response.status_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ async def test_first_save_with_required_fields_only_succeeds(empty_member_repo) 
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -170,7 +170,7 @@ async def test_first_save_explicit_null_first_name_returns_422(
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -190,7 +190,7 @@ async def test_first_save_explicit_null_surname_returns_422(
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -213,7 +213,7 @@ async def test_first_save_explicit_null_dob_returns_422(empty_member_repo) -> No
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",

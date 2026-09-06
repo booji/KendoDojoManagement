@@ -98,7 +98,7 @@ async def test_list_session_types_includes_colour_field_when_none(type_repo) -> 
     """GET /session-types must include colour: null for a type with no colour set."""
     await _seed_type(type_repo, name="Keiko")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/session-types")
     assert response.status_code == 200
@@ -118,7 +118,7 @@ async def test_list_session_types_returns_colour_when_set(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     st = await _seed_type(type_repo, name="Jodo")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         put_response = await c.put(
             f"/session-types/{st['id']}", json={"colour": "#ff5733"}
@@ -142,7 +142,7 @@ async def test_put_session_type_colour_succeeds_for_admin(type_repo) -> None:
     st = await _seed_type(type_repo, name="Iaido")
     payload = {"colour": "#3498db"}
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/session-types/{st['id']}", json=payload)
     assert response.status_code == 200
@@ -156,7 +156,7 @@ async def test_put_session_type_colour_persisted_on_get(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     st = await _seed_type(type_repo, name="Naginata")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(f"/session-types/{st['id']}", json={"colour": "#e74c3c"})
         list_response = await c.get("/session-types")
@@ -172,7 +172,7 @@ async def test_put_session_type_colour_not_found(type_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/session-types/{fake_id}", json={"colour": "#000000"})
     assert response.status_code == 404
@@ -188,7 +188,7 @@ async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     token = encode_token(member_claims)
     st = await _seed_type(type_repo, name="Kendo")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             f"/session-types/{st['id']}",
@@ -205,7 +205,7 @@ async def test_put_session_type_colour_null_clears_colour(type_repo) -> None:
     # First set a colour
     await type_repo.update(st["id"], "#123456")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(f"/session-types/{st['id']}", json={"colour": None})
     assert response.status_code == 200

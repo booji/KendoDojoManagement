@@ -235,7 +235,7 @@ async def test_list_passkeys_returns_caller_passkeys_only(passkey_repo) -> None:
     passkey_repo._seed(_USER_B.sub, label="Other user key")  # must NOT appear
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/passkeys")
 
@@ -258,7 +258,7 @@ async def test_list_passkeys_response_fields(passkey_repo) -> None:
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/passkeys")
 
@@ -277,7 +277,7 @@ async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
     passkey_repo._seed(_USER_A.sub)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/passkeys")
 
@@ -289,7 +289,7 @@ async def test_list_passkeys_never_returns_public_key(passkey_repo) -> None:
 async def test_list_passkeys_requires_authentication() -> None:
     """GET /auth/passkeys returns 401 when no token is provided."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/passkeys")
     assert response.status_code == 401
@@ -300,7 +300,7 @@ async def test_list_passkeys_empty_for_new_user(passkey_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/passkeys")
 
@@ -320,7 +320,7 @@ async def test_patch_passkey_label_succeeds(passkey_repo) -> None:
     pk_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(f"/auth/passkeys/{pk_id}", json={"label": "New Label"})
 
@@ -335,7 +335,7 @@ async def test_patch_passkey_label_is_persisted(passkey_repo) -> None:
     pk_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.patch(f"/auth/passkeys/{pk_id}", json={"label": "Renamed"})
         list_resp = await c.get("/auth/passkeys")
@@ -353,7 +353,7 @@ async def test_patch_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     pk_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(
             f"/auth/passkeys/{pk_id}", json={"label": "Stolen Label"}
@@ -368,7 +368,7 @@ async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     random_id = str(uuid.uuid4())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(f"/auth/passkeys/{random_id}", json={"label": "Ghost"})
 
@@ -379,7 +379,7 @@ async def test_patch_passkey_requires_authentication() -> None:
     """PATCH /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(f"/auth/passkeys/{random_id}", json={"label": "X"})
     assert response.status_code == 401
@@ -398,7 +398,7 @@ async def test_delete_passkey_succeeds(passkey_repo) -> None:
     pk_id = record2["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -416,7 +416,7 @@ async def test_delete_last_passkey_returns_400(passkey_repo) -> None:
     pk_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -430,7 +430,7 @@ async def test_delete_passkey_returns_404_for_non_owner(passkey_repo) -> None:
     pk_id = record["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{pk_id}")
 
@@ -443,7 +443,7 @@ async def test_delete_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
     random_id = str(uuid.uuid4())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{random_id}")
 
@@ -454,7 +454,7 @@ async def test_delete_passkey_requires_authentication() -> None:
     """DELETE /auth/passkeys/{id} returns 401 when no token is provided."""
     random_id = str(uuid.uuid4())
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(f"/auth/passkeys/{random_id}")
     assert response.status_code == 401

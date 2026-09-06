@@ -191,7 +191,7 @@ async def test_redeem_valid_code_returns_200(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -209,7 +209,7 @@ async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -234,7 +234,7 @@ async def test_redeem_token_has_recovery_session_claim(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -263,7 +263,7 @@ async def test_redeem_token_expires_in_15_minutes(db_client) -> None:
 
     before = datetime.now(UTC)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -293,7 +293,7 @@ async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> Non
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies={"access_token": token},
     ) as c:
         response = await c.get("/auth/me")
@@ -312,7 +312,7 @@ async def test_recovery_token_blocked_on_members_list(db_client) -> None:
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test",
+        base_url="http://test/api",
         cookies={"access_token": token},
     ) as c:
         response = await c.get("/members")
@@ -331,7 +331,7 @@ async def test_redeem_used_code_returns_401(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext, used=True)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -348,7 +348,7 @@ async def test_redeem_wrong_code_returns_401(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -369,7 +369,7 @@ async def test_fifth_failed_attempt_returns_429(db_client) -> None:
     await _seed_failed_attempt(db_client, user_id, count=4)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -389,7 +389,7 @@ async def test_four_failures_still_allows_attempt(db_client) -> None:
     await _seed_failed_attempt(db_client, user_id, count=3)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -412,7 +412,7 @@ async def test_successful_redemption_logs_attempt(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/recovery/redeem",
@@ -438,7 +438,7 @@ async def test_failed_redemption_logs_attempt(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/recovery/redeem",
@@ -466,7 +466,7 @@ async def test_valid_code_is_marked_used_after_redemption(db_client) -> None:
     code_id = await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
@@ -490,7 +490,7 @@ async def test_wrong_code_increments_attempt_counter(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         for _ in range(2):
             await c.post(
@@ -525,7 +525,7 @@ async def test_successful_attempt_after_prior_failures_resets_counter(
 
     # Successful redemption — should reset the failure counter
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         success_resp = await c.post(
             "/auth/recovery/redeem",
@@ -538,7 +538,7 @@ async def test_successful_attempt_after_prior_failures_resets_counter(
     await _seed_recovery_code(db_client, user_id, plaintext2)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         for _ in range(4):
             r = await c.post(
@@ -558,7 +558,7 @@ async def test_used_code_double_redemption_returns_401(db_client) -> None:
     await _seed_recovery_code(db_client, user_id, plaintext)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         r1 = await c.post(
             "/auth/recovery/redeem",

@@ -18,7 +18,7 @@ def clear_overrides():
 async def test_register_password_route_returns_404() -> None:
     """POST /auth/register/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/password",
@@ -30,7 +30,7 @@ async def test_register_password_route_returns_404() -> None:
 async def test_login_password_route_returns_404() -> None:
     """POST /auth/login/password must be removed and return 404 (AC3)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/login/password",
@@ -44,7 +44,7 @@ async def test_login_password_route_returns_404() -> None:
 
 async def test_protected_route_no_token_returns_401() -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/me")
     assert response.status_code == 401
@@ -56,7 +56,7 @@ async def test_protected_route_member_token_succeeds() -> None:
     )
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/me")
     assert response.status_code == 200
@@ -71,7 +71,7 @@ async def test_admin_route_rejects_member_token() -> None:
     )
     token = encode_token(member_claims)
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin-only", cookies={"access_token": token})
     assert response.status_code == 403
@@ -81,7 +81,7 @@ async def test_admin_route_accepts_admin_token() -> None:
     claims = UserClaims(sub="uuid-3", email="a@dojo.test", role="admin", is_active=True)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/admin-only")
     assert response.status_code == 200
@@ -104,7 +104,7 @@ async def test_logout_clears_access_token_cookie() -> None:
     client-side — the 200 status/body alone would not.
     """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/logout", cookies={"access_token": "some-token"})
 
@@ -122,7 +122,7 @@ async def test_logout_succeeds_without_existing_session() -> None:
     at all must still succeed (idempotent sign-out), not 401.
     """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/logout")
     assert response.status_code == 200
@@ -139,7 +139,7 @@ async def test_logout_cookie_attributes_match_the_login_cookie() -> None:
     anything. Assert parity instead of the coincidence.
     """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         cleared = (await c.post("/auth/logout")).headers.get("set-cookie", "")
 
@@ -151,7 +151,7 @@ async def test_logout_cookie_attributes_match_the_login_cookie() -> None:
 async def test_logout_clears_the_readable_theme_cookie() -> None:
     """Logout must drop the JS-readable theme cookie along with the session (#324)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/logout", cookies={"theme": "dark"})
 

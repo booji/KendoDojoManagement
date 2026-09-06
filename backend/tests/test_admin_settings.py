@@ -88,7 +88,7 @@ async def test_admin_get_my_member_returns_200_with_linked_record(member_repo) -
     await member_repo.add(_seed_admin_member())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -107,7 +107,7 @@ async def test_admin_get_my_member_returns_404_when_no_linked_record(
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/users/me/member")
 
@@ -124,7 +124,7 @@ async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) 
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -149,7 +149,7 @@ async def test_admin_put_my_member_created_record_is_retrievable(member_repo) ->
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         put_resp = await c.put(
             "/users/me/member",
@@ -163,7 +163,7 @@ async def test_admin_put_my_member_created_record_is_retrievable(member_repo) ->
     assert put_resp.status_code in (200, 201)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_response = await c.get("/users/me/member")
 
@@ -183,7 +183,7 @@ async def test_admin_put_my_member_updates_existing_record(member_repo) -> None:
     await member_repo.add(_seed_admin_member())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -200,12 +200,12 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
     await member_repo.add(_seed_admin_member())
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put("/users/me/member", json={"first_name": "Updated Admin"})
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         get_response = await c.get("/users/me/member")
 
@@ -225,7 +225,7 @@ async def test_admin_created_member_record_appears_in_members_list(member_repo) 
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         put_resp = await c.put(
             "/users/me/member",
@@ -240,7 +240,7 @@ async def test_admin_created_member_record_appears_in_members_list(member_repo) 
     created_id = put_resp.json()["id"]
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         list_resp = await c.get("/members")
 
@@ -257,7 +257,7 @@ async def test_admin_member_record_email_matches_admin_email_in_list(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(
             "/users/me/member",
@@ -269,7 +269,7 @@ async def test_admin_member_record_email_matches_admin_email_in_list(
         )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         list_resp = await c.get("/members")
 
@@ -289,7 +289,7 @@ async def test_admin_put_my_member_cannot_set_is_coach(member_repo) -> None:
     await member_repo.add(_seed_admin_member(is_coach=False))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -307,7 +307,7 @@ async def test_admin_put_my_member_cannot_set_membership_status(member_repo) -> 
     await member_repo.add(_seed_admin_member(membership_status="active"))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",
@@ -325,7 +325,7 @@ async def test_admin_put_my_member_cannot_set_is_first_aider(member_repo) -> Non
     await member_repo.add(_seed_admin_member(is_first_aider=False))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/users/me/member",

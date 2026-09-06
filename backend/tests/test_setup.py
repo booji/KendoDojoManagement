@@ -39,7 +39,7 @@ def clear_overrides():
 async def test_get_setup_returns_200_when_no_users(db_client) -> None:
     """GET /setup returns 200 when the users table is empty (fresh instance)."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/setup")
     assert response.status_code == 200
@@ -71,7 +71,7 @@ async def test_get_setup_returns_404_when_passkey_credential_exists(db_client) -
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/setup")
     assert response.status_code == 404
@@ -104,7 +104,7 @@ async def test_get_setup_returns_200_for_phantom_user_without_credential(
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/setup")
     assert response.status_code == 200
@@ -131,7 +131,7 @@ async def test_get_setup_returns_200_for_user_without_credential(
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/setup")
     assert response.status_code == 200
@@ -151,7 +151,7 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
 
     # Fresh instance: setup should be available
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         before = await c.get("/setup")
     assert before.status_code == 200
@@ -179,7 +179,7 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         after = await c.get("/setup")
     assert after.status_code == 404
@@ -194,7 +194,7 @@ async def test_setup_passkey_begin_returns_challenge_on_fresh_instance(
 ) -> None:
     """POST /setup/passkey/begin returns 200 with WebAuthn challenge on fresh instance."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/setup/passkey/begin",
@@ -232,7 +232,7 @@ async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/setup/passkey/begin",
@@ -272,7 +272,7 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/setup/passkey/complete",
@@ -342,7 +342,7 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/setup/passkey/complete",

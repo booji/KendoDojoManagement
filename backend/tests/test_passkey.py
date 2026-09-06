@@ -31,7 +31,7 @@ def clear_overrides():
 async def test_register_passkey_begin_returns_options(db_client) -> None:
     """POST /auth/register/passkey/begin returns 200 with publicKey.challenge."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -51,7 +51,7 @@ async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> N
     session = db_client
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/register/passkey/begin",
@@ -72,7 +72,7 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
     session = db_client
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         # First create via password route
         await c.post(
@@ -123,7 +123,7 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/register/passkey/complete",
@@ -177,7 +177,7 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     await session.flush()
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/login/passkey/begin",
@@ -205,7 +205,7 @@ async def test_login_passkey_begin_unknown_email_returns_200_decoy(db_client) ->
     See tests/test_passkey_enumeration.py for full enumeration-fix coverage.
     """
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/login/passkey/begin",
@@ -254,7 +254,7 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
 
     with patch("webauthn.verify_authentication_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test/api"
         ) as c:
             response = await c.post(
                 "/auth/login/passkey/complete",
@@ -289,7 +289,7 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
 async def test_password_login_still_works(db_client) -> None:
     """POST /auth/login/password still returns 200 after passkey code is added."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
             "/auth/register/password",

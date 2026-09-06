@@ -115,7 +115,7 @@ async def test_login_begin_known_email_meets_floor(db_client, monkeypatch) -> No
     await _seed_user(session, "known-floor@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         elapsed = await _timed_post(
             c, "/auth/login/passkey/begin", "known-floor@dojo.test"
@@ -131,7 +131,7 @@ async def test_login_begin_unknown_email_meets_floor(db_client, monkeypatch) -> 
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         elapsed = await _timed_post(
             c, "/auth/login/passkey/begin", "nobody-floor@dojo.test"
@@ -152,7 +152,7 @@ async def test_register_begin_authorized_email_meets_floor(
     await _seed_member(session, "authorized-floor@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         elapsed = await _timed_post(
             c, "/auth/register/passkey/begin", "authorized-floor@dojo.test"
@@ -170,7 +170,7 @@ async def test_register_begin_bootstrap_email_meets_floor(
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         elapsed = await _timed_post(
             c, "/auth/register/passkey/begin", "bootstrap-floor@dojo.test"
@@ -190,7 +190,7 @@ async def test_register_begin_unauthorized_email_meets_floor(
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         elapsed = await _timed_post(
             c, "/auth/register/passkey/begin", "unauthorized-floor@dojo.test"
@@ -227,7 +227,7 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
     await _seed_user(session, "known-median@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await assert_latency_converges_sampled(
             lambda: _timed_post(
@@ -263,7 +263,7 @@ async def test_register_begin_authorized_vs_unauthorized_median_latency_converge
     await _seed_member(session, "authorized-median@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await assert_latency_converges_sampled(
             lambda: _timed_post(
@@ -288,7 +288,7 @@ async def test_login_begin_floor_is_configurable(db_client, monkeypatch) -> None
     await _seed_user(session, "configurable-floor@dojo.test")
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 15)
         low_elapsed = await _timed_post(

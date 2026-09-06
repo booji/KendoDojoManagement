@@ -80,7 +80,7 @@ async def test_get_dojo_settings_returns_defaults_when_none_saved(
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -99,7 +99,7 @@ async def test_get_dojo_settings_unauthenticated_returns_401(
 ) -> None:
     """GET /settings/dojo without a token returns 401."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/settings/dojo")
 
@@ -118,7 +118,7 @@ async def test_put_dojo_settings_persists_dojo_name(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -137,7 +137,7 @@ async def test_put_dojo_settings_dojo_name_visible_on_get(
     app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put("/settings/dojo", json={"dojo_name": "Osaka Dojo"})
         get_resp = await c.get("/settings/dojo")
@@ -154,7 +154,7 @@ async def test_put_dojo_settings_persists_primary_colour(
 
     # #1D4ED8 (blue-700) has >4.5:1 against white and dark background
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -179,7 +179,7 @@ async def test_put_dojo_settings_accepts_light_brand_hue(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -197,7 +197,7 @@ async def test_put_dojo_settings_accepts_near_white_brand_hue(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -218,7 +218,7 @@ async def test_put_dojo_settings_member_returns_403(
 ) -> None:
     """A member token must receive 403 from PUT /settings/dojo."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
             "/settings/dojo",
@@ -234,7 +234,7 @@ async def test_put_dojo_settings_unauthenticated_returns_401(
 ) -> None:
     """No token must receive 401 from PUT /settings/dojo."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put("/settings/dojo", json={"dojo_name": "Any"})
 
@@ -249,7 +249,7 @@ async def test_put_dojo_settings_unauthenticated_returns_401(
 async def test_post_settings_logo_member_returns_403() -> None:
     """A member token must receive 403 from POST /settings/logo."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/logo",
@@ -263,7 +263,7 @@ async def test_post_settings_logo_member_returns_403() -> None:
 async def test_post_settings_logo_unauthenticated_returns_401() -> None:
     """No token must receive 401 from POST /settings/logo."""
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/logo",
@@ -293,7 +293,7 @@ async def test_upload_rejects_payload_that_is_not_really_an_image(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             endpoint,
@@ -319,7 +319,7 @@ async def test_upload_rejects_sniffed_type_outside_allowed_set(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             endpoint,
@@ -345,7 +345,7 @@ async def test_upload_accepts_a_genuine_png(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/settings/logo",
