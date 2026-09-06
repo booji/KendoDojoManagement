@@ -203,6 +203,7 @@ async def test_register_begin_unauthorized_email_meets_floor(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timing_sensitive
 async def test_login_begin_known_vs_unknown_median_latency_converges(
     db_client, monkeypatch
 ) -> None:
@@ -241,6 +242,7 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timing_sensitive
 async def test_register_begin_authorized_vs_unauthorized_median_latency_converges(
     db_client, monkeypatch
 ) -> None:

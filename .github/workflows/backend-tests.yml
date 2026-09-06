@@ -38,7 +38,35 @@ jobs:
         # backend/run_tests.sh with BACKEND_ONLY=1: uvicorn still comes up (a
         # few non-e2e tests drive :8000), but the Playwright files are not
         # collected and no browser is ever installed.
-        run: docker compose -f docker-compose.test.yml run --rm test-backend
+        #
+        # The wall-clock convergence assertions are excluded here and run in
+        # the reporting step below. Everything else, including the synthetic
+        # fixtures in test_timing_convergence.py, still gates this job.
+        run: >-
+          docker compose -f docker-compose.test.yml run --rm
+          -e PYTEST_MARK="not timing_sensitive" test-backend
+
+      - name: Report the timing-sensitive assertions (advisory)
+        # These measure real latency, so their outcome depends on the machine
+        # underneath them, and a hosted runner is not a machine we control.
+        # They have painted unrelated PRs red repeatedly (#364, and again after
+        # the confirmation round shipped in #366), which trains people to
+        # re-run without reading -- exactly how a real regression gets waved
+        # through.
+        #
+        # So this step reports rather than gates: the numbers stay visible in
+        # the log for anyone investigating, while the strict assertion is kept
+        # where a human is already reading output -- a local run, and the full
+        # suite on release-candidate tags (tests.yml), which does NOT exclude
+        # them.
+        #
+        # If this step fails on a run whose same-path control is NOT unusually
+        # quiet, that is worth investigating rather than dismissing: see
+        # docs/auth-timing-calibration.md.
+        continue-on-error: true
+        run: >-
+          docker compose -f docker-compose.test.yml run --rm
+          -e PYTEST_MARK="timing_sensitive" test-backend
 
       - name: Tear down
         if: always()
