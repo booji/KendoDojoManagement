@@ -9,6 +9,7 @@ import {
   createSessionTemplate,
 } from "@/api/sessions"
 import type { SessionInstance, SessionType, SegmentInput } from "@/api/sessions"
+import CopyButton from "@/components/CopyButton"
 import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
 import {
@@ -451,22 +452,6 @@ type ICalButtonProps = {
 }
 
 const ICalButton = ({ icalUrl }: ICalButtonProps) => {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText(icalUrl)
-      .then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      })
-      // A rejected write (insecure context, denied permission) left this
-      // button doing nothing at all, with no confirmation and no explanation.
-      // The URL is in a read-only input beside it, so failing quietly is the
-      // right outcome -- but it has to be a chosen one.
-      .catch(() => {})
-  }
-
   return (
     <Popover>
       <PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Subscribe to iCal feed" className="shrink-0" />}>
@@ -485,14 +470,11 @@ const ICalButton = ({ icalUrl }: ICalButtonProps) => {
               aria-label="iCal feed URL"
               onFocus={(e) => e.target.select()}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
+            <CopyButton
+              value={icalUrl}
+              label="Copy iCal feed URL"
               className="shrink-0"
-            >
-              {copied ? "Copied!" : "Copy"}
-            </Button>
+            />
           </div>
         </div>
       </PopoverContent>

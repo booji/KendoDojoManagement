@@ -4,6 +4,7 @@ import { issueInvite, listInvites, revokeInvite } from "@/api/invites"
 import type { InviteListItem, InviteMintResponse, InviteStatus } from "@/api/invites"
 import { isApiError } from "@/api/auth"
 import type { UserClaims } from "@/api/auth"
+import CopyButton from "@/components/CopyButton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Copy } from "lucide-react"
 
 type LayoutContext = { user: UserClaims }
 
@@ -58,7 +58,6 @@ export const InviteManagementSection = () => {
   // persisted, never re-derived from the invite list (which never contains
   // it) — so a reload naturally makes it disappear for good.
   const [minted, setMinted] = useState<InviteMintResponse | null>(null)
-  const [copied, setCopied] = useState(false)
 
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [revokeError, setRevokeError] = useState<string | null>(null)
@@ -83,7 +82,6 @@ export const InviteManagementSection = () => {
     if (!trimmed || !trimmedFirstName || !trimmedSurname) return
     setIssuing(true)
     setIssueError(null)
-    setCopied(false)
     try {
       const result = await issueInvite(trimmed, trimmedFirstName, trimmedSurname)
       setMinted(result)
@@ -95,18 +93,6 @@ export const InviteManagementSection = () => {
       setIssueError(isApiError(err) ? err.message : "Failed to issue invite")
     } finally {
       setIssuing(false)
-    }
-  }
-
-  const handleCopy = async () => {
-    if (minted === null) return
-    try {
-      await navigator.clipboard.writeText(minted.link)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access can fail (permissions, insecure context) — the link
-      // text is still visible and selectable, so this is a soft failure.
     }
   }
 
@@ -205,16 +191,7 @@ export const InviteManagementSection = () => {
                 >
                   {minted.link}
                 </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleCopy()}
-                  aria-label="Copy invite link"
-                >
-                  <Copy className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                  {copied ? "Copied!" : "Copy"}
-                </Button>
+                <CopyButton value={minted.link} label="Copy invite link" />
               </div>
               <p className="text-xs text-amber-800 dark:text-amber-300">
                 Expires {formatDate(minted.expires_at)}
