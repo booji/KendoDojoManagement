@@ -15,6 +15,7 @@ import {
 import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput, SessionTemplate } from "@/api/sessions"
 import { getDojoSettings } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
+import CopyButton from "@/components/CopyButton"
 import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
 import { checkIn, getSessionAttendance } from "@/api/attendance"
@@ -628,7 +629,14 @@ const SessionDetailPage = () => {
           {isAdmin && (
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Check-in link</p>
-              <p className="text-sm break-all">{session.checkin_link}</p>
+              <div className="flex items-start gap-2">
+                <p className="text-sm break-all">{session.checkin_link}</p>
+                <CopyButton
+                  value={session.checkin_link}
+                  label="Copy check-in link"
+                  className="shrink-0"
+                />
+              </div>
             </div>
           )}
 
