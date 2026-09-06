@@ -9,6 +9,7 @@ import {
 } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
 import type { SessionInstance, SessionType } from "@/api/sessions"
+import CopyButton from "@/components/CopyButton"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -120,13 +121,20 @@ const SessionCardActions = ({ session, isAdmin }: SessionCardActionsProps) => {
           {shareVisible ? (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Share this check-in link:</p>
-              <Input
-                readOnly
-                value={session.checkin_link}
-                aria-label="Check-in link"
-                onFocus={(e) => e.target.select()}
-                className="text-xs"
-              />
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={session.checkin_link}
+                  aria-label="Check-in link"
+                  onFocus={(e) => e.target.select()}
+                  className="text-xs"
+                />
+                <CopyButton
+                  value={session.checkin_link}
+                  label="Copy check-in link"
+                  className="shrink-0"
+                />
+              </div>
             </div>
           ) : (
             <Button
