@@ -4,10 +4,9 @@ No container is started — these read the Makefile from the repository mount an
 assert the externally-observable contract: which targets exist, what a bare
 `make` does, and which Compose stacks a teardown target touches.
 
-The certificate assertions are the exception: `make` is not installed in the
-test image, so the recipe cannot be run and they read its text instead. They are
-deliberately narrow — which generator is reached for, and what the skip guard
-covers — rather than pinning the recipe's shape.
+The certificate recipe's *behaviour* lives in `deploy/bin/dev-certs.sh` and is
+tested by running it — see `test_dev_certs_script.py`. What is left here is the
+wiring: that the targets exist and delegate to that script.
 """
 
 import os
@@ -111,18 +110,20 @@ def test_cert_directory_is_gitignored():
     assert "deploy/certs/" in ignored
 
 
-def test_certs_skips_generation_only_when_the_whole_pair_exists():
-    guard = recipe_of("certs").split("mkdir")[0]
-    assert "localhost.pem" in guard
-    assert (
-        "localhost-key.pem" in guard
-    ), "a certificate whose key is missing must be regenerated, not skipped"
+def test_certs_delegates_to_the_certificate_script():
+    assert "dev-certs.sh" in recipe_of("certs")
 
 
-def test_certs_prefers_mkcert_but_falls_back():
-    recipe = recipe_of("certs")
-    assert "mkcert" in recipe
-    assert "openssl" in recipe
+def test_a_separately_named_target_forces_a_reissue():
+    recipe = recipe_of("certs-force")
+    assert "dev-certs.sh" in recipe
+    assert "--force" in recipe, "the reissue path must not need a manual `rm`"
+
+
+def test_the_certificate_script_is_executable():
+    script = ROOT / "deploy" / "bin" / "dev-certs.sh"
+    assert script.exists()
+    assert script.stat().st_mode & 0o111, "`make certs` runs it directly"
 
 
 # ---------------------------------------------------------------------------

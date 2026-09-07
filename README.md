@@ -155,6 +155,63 @@ hatch for when a certificate is missing or HMR misbehaves through the proxy. On
 those, cookies are not sent (they are `Secure`) and `X-Forwarded-For` is
 whatever the caller claims — so do not test login or rate limiting there.
 
+#### The dev TLS certificate
+
+The certificate is on the critical path: `.env.dev` sets `COOKIE_SECURE=true`,
+and browsers refuse WebAuthn on a page with a certificate error — so a
+*degraded* certificate looks like a perfectly healthy stack right up until the
+first login or passkey ceremony fails.
+
+**1. Generate.** `make dev` runs `make certs` for you, or run it directly:
+
+```bash
+make certs         # issue if missing, untrusted, or no longer covering dojo.localhost
+make certs-force   # reissue unconditionally (no manual `rm` needed)
+```
+
+It says which generator it used. With [mkcert](https://github.com/FiloSottile/mkcert)
+on your PATH the pair is issued by your local CA; without it you get a
+self-signed pair and a warning saying so. Install mkcert and re-run `make certs`
+— it notices the self-signed certificate and reissues. The pair lives in
+`deploy/certs/` and is gitignored: per-machine, never committed.
+
+**2. Trust the CA — on the machine the *browser* runs on.** `mkcert -install`
+installs the CA into the trust store of the OS it runs on. If the stack and the
+browser are on different systems, a successful-looking install does nothing for
+the browser:
+
+| Stack runs on | Browser runs on | Install the CA where |
+|---------------|-----------------|----------------------|
+| Linux (native) | the same Linux | `mkcert -install` in that shell |
+| WSL2 | Windows | export `$(mkcert -CAROOT)/rootCA.pem` from WSL and import it into the Windows store (`certutil -addstore -user Root rootCA.pem`), or install mkcert on Windows and run `mkcert -install` there |
+| A VM or remote dev box | your laptop | copy `rootCA.pem` off the box and import it into the laptop's store |
+
+**Firefox keeps its own store.** It does not read the OS trust store. Either
+install `nss-tools` (`certutil`) *before* `mkcert -install` so mkcert can add
+the CA to Firefox's NSS database, or on Windows set
+`security.enterprise_roots.enabled` to `true` in `about:config`.
+
+**3. Verify.** Open <https://dojo.localhost:8443> — no warning, and a padlock.
+That is the whole check; a warning means the browser does not trust the CA, not
+that the certificate is malformed.
+
+**4. Restart the proxy after any reissue.** Traefik loads the certificate at
+startup and its file provider watches the config files, not the certificate
+bytes. A replaced pair is not picked up until the proxy restarts (`make down &&
+make dev`), which otherwise looks exactly like the new certificate not working.
+
+When it goes wrong:
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Passkey ceremony fails, everything else looks fine | self-signed certificate | install mkcert, `make certs` |
+| `mkcert -install` succeeded but the browser still warns | CA is in the wrong OS's trust store | see the table above |
+| Chrome is happy, Firefox is not | Firefox's separate NSS store | `nss-tools` + `mkcert -install`, or `security.enterprise_roots.enabled` |
+| The old warning persists after reissuing | Traefik still serving the startup certificate | `make down && make dev` |
+
+If you need to get in without a certificate at all, `http://localhost:5173` is
+still published — but cookies and passkeys do not work there.
+
 #### Network layout
 
 Two networks, mirroring the Quadlet production deployment in `deploy/quadlet`
@@ -239,7 +296,8 @@ problem, the port is.
 | `make build` | Build the production image |
 | `make down` | Stop the stacks this checkout starts — dev and test |
 | `make down-selfhost` | Stop the quick self-host stack — **takes the dojo offline** |
-| `make certs` | Generate the `dojo.localhost` dev TLS certificate (run for you by `make dev`) |
+| `make certs` | Issue the `dojo.localhost` dev TLS certificate if it is missing or untrusted (run for you by `make dev`) |
+| `make certs-force` | Reissue the dev TLS certificate unconditionally |
 | `make logs` | Tail dev service logs |
 | `make migrate` | Run `alembic upgrade head` in the running dev container |
 | `make help` | List all targets |
@@ -252,9 +310,10 @@ target. The same reasoning already governs `make clean` refusing to remove the
 production database volume.
 
 `make dev` generates a per-machine `dojo.localhost` certificate under
-`deploy/certs/` (gitignored) if one is not already there. With `mkcert` on your PATH it is
-issued by your local CA; without it you get a self-signed certificate and a
-note that passkey ceremonies may misbehave until you run `mkcert -install`.
+`deploy/certs/` (gitignored) if one is missing, self-signed while mkcert is
+available, or no longer covering the dev host. The full step — generate, trust,
+verify, reissue, and the failure modes — is [The dev TLS
+certificate](#the-dev-tls-certificate).
 
 ### Running tests
 
