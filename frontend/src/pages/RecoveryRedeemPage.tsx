@@ -10,7 +10,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { redeemRecoveryCode, isApiError } from "@/api/auth"
+import { redeemRecoveryCode } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 import { storeRecoveryToken } from "@/lib/recoverySession"
 
 const RecoveryRedeemPage = () => {
@@ -30,11 +31,7 @@ const RecoveryRedeemPage = () => {
       storeRecoveryToken(access_token)
       navigate("/passkey/register")
     } catch (err) {
-      if (isApiError(err)) {
-        setError(err.message)
-      } else {
-        setError("An unexpected error occurred")
-      }
+      setError(errorMessage(err, "An unexpected error occurred"))
     } finally {
       setLoading(false)
     }

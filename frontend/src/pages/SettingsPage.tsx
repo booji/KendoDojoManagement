@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError, getMe, performPasskeyRegistration } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 import type { UserClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
 import type { PasskeyRecord } from "@/api/passkeys"
@@ -376,7 +377,7 @@ const SecurityCard = () => {
         setNudgeOpen(true)
       }
     } catch (err) {
-      setAddError(isApiError(err) ? err.message : "Failed to register passkey")
+      setAddError(errorMessage(err, "Failed to register passkey"))
     } finally {
       setAddingPasskey(false)
     }
@@ -392,7 +393,7 @@ const SecurityCard = () => {
       loadData()
       setNudgeOpen(false)
     } catch (err) {
-      setNudgeAddError(isApiError(err) ? err.message : "Failed to register passkey")
+      setNudgeAddError(errorMessage(err, "Failed to register passkey"))
     } finally {
       setAddingFromNudge(false)
     }

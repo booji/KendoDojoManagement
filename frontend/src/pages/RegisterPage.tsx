@@ -10,7 +10,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { performPasskeyRegistration, isApiError } from "@/api/auth"
+import { performPasskeyRegistration } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 
 const RegisterPage = () => {
   const navigate = useNavigate()
@@ -32,11 +33,7 @@ const RegisterPage = () => {
       await performPasskeyRegistration(email)
       navigate("/login")
     } catch (err) {
-      if (isApiError(err)) {
-        setError(err.message)
-      } else {
-        setError("An unexpected error occurred")
-      }
+      setError(errorMessage(err, "An unexpected error occurred"))
     } finally {
       setLoading(false)
     }

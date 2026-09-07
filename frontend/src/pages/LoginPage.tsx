@@ -10,7 +10,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { performPasskeyLogin, isApiError } from "@/api/auth"
+import { performPasskeyLogin } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 import { getBranding } from "@/api/settings"
 import type { DojoBranding } from "@/api/settings"
 
@@ -46,11 +47,7 @@ const LoginPage = () => {
       // user happened to reload (#324).
       window.location.assign("/")
     } catch (err) {
-      if (isApiError(err)) {
-        setError(err.message)
-      } else {
-        setError("An unexpected error occurred")
-      }
+      setError(errorMessage(err, "An unexpected error occurred"))
     } finally {
       setLoading(false)
     }

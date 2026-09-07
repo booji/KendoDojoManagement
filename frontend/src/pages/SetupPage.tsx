@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { checkSetupAvailable, performSetupPasskeyRegistration } from "@/api/setup"
-import { isApiError } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 import { generateRecoveryCodes } from "@/api/recovery"
 
 type SetupStep = "passkey" | "recovery"
@@ -58,11 +58,7 @@ const SetupPage = () => {
       await performSetupPasskeyRegistration(email)
       setStep("recovery")
     } catch (err) {
-      if (isApiError(err)) {
-        setError(err.message)
-      } else {
-        setError("An unexpected error occurred")
-      }
+      setError(errorMessage(err, "An unexpected error occurred"))
     } finally {
       setLoading(false)
     }
@@ -75,7 +71,7 @@ const SetupPage = () => {
       const result = await generateRecoveryCodes()
       setCodes(result.codes)
     } catch (err) {
-      setGenerateError(isApiError(err) ? err.message : "Failed to generate codes")
+      setGenerateError(errorMessage(err, "Failed to generate codes"))
     } finally {
       setGenerating(false)
     }
