@@ -1,0 +1,18 @@
+# Bring-your-own-cert for the quick self-host — for hosts that cannot use the
+# HTTP challenge (no inbound port 80, no public DNS, an internal CA, a
+# purchased wildcard).
+#
+# To use: rename to byo-cert.yml, drop cert.pem/key.pem into deploy/certs/, add
+#     - ./deploy/certs:/etc/traefik/certs:ro
+# to the proxy service's volumes in docker-compose.yml, and in kendo.yml replace
+# the router's `tls: {certResolver: letsencrypt}` with just `tls: {}` so Traefik
+# serves the default certificate defined below.
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/cert.pem
+      keyFile: /etc/traefik/certs/key.pem
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/cert.pem
+        keyFile: /etc/traefik/certs/key.pem

@@ -8,7 +8,8 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { performPasskeyRegistration, isApiError } from "@/api/auth"
+import { performPasskeyRegistration } from "@/api/auth"
+import { errorMessage } from "@/api/client"
 import { isRecoverySession, clearRecoveryToken, getRecoveryToken } from "@/lib/recoverySession"
 
 // Decode JWT email claim so we can pre-fill it for the WebAuthn call
@@ -56,7 +57,7 @@ const PasskeyRegisterPage = () => {
     } catch (err) {
       setPageState({
         status: "error",
-        message: isApiError(err) ? err.message : "Passkey registration failed",
+        message: errorMessage(err, "Passkey registration failed"),
       })
     }
   }

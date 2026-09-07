@@ -28,25 +28,28 @@ certs:
 	# stop, rather than leave `make dev` believing it has TLS material. Both
 	# halves of the pair are checked — a cert with a missing key is not a skip.
 	@set -e; \
-	  if [ -f $(CERT_DIR)/localhost.pem ] && [ -f $(CERT_DIR)/localhost-key.pem ]; then \
+	  if [ -f $(CERT_DIR)/dojo.localhost.pem ] && [ -f $(CERT_DIR)/dojo.localhost-key.pem ]; then \
 	    exit 0; \
 	  fi; \
 	  mkdir -p $(CERT_DIR); \
 	  if command -v mkcert >/dev/null 2>&1; then \
-	    mkcert -cert-file $(CERT_DIR)/localhost.pem \
-	           -key-file $(CERT_DIR)/localhost-key.pem localhost 127.0.0.1 ::1; \
+	    mkcert -cert-file $(CERT_DIR)/dojo.localhost.pem \
+	           -key-file $(CERT_DIR)/dojo.localhost-key.pem \
+	           dojo.localhost localhost 127.0.0.1 ::1; \
 	  elif command -v openssl >/dev/null 2>&1; then \
 	    openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
-	      -subj '/CN=localhost' \
-	      -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
-	      -keyout $(CERT_DIR)/localhost-key.pem \
-	      -out $(CERT_DIR)/localhost.pem; \
+	      -subj '/CN=dojo.localhost' \
+	      -addext 'subjectAltName=DNS:dojo.localhost,DNS:localhost,IP:127.0.0.1' \
+	      -keyout $(CERT_DIR)/dojo.localhost-key.pem \
+	      -out $(CERT_DIR)/dojo.localhost.pem; \
 	    echo 'mkcert not on PATH - generated a self-signed certificate. Passkey ceremonies may misbehave until you install a local CA (mkcert -install).'; \
 	  else \
-	    echo 'neither mkcert nor openssl on PATH - skipped the dev certificate.'; \
-	    exit 0; \
+	    echo 'neither mkcert nor openssl on PATH - cannot generate the dev certificate.'; \
+	    echo 'The dev stack serves https://dojo.localhost:8443 and .env.dev sets COOKIE_SECURE=true,'; \
+	    echo 'so without TLS there is no origin that can hold a session. Install mkcert or openssl.'; \
+	    exit 1; \
 	  fi; \
-	  chmod 600 $(CERT_DIR)/localhost-key.pem
+	  chmod 600 $(CERT_DIR)/dojo.localhost-key.pem
 
 ## dev: Start the dev stack with hot-reload
 dev: certs

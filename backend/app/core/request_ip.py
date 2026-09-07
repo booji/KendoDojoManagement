@@ -3,8 +3,10 @@
 In UAT/PROD the app runs behind Traefik, so ``request.client.host`` is always
 the proxy's address. When ``TRUST_PROXY_XFF`` is enabled we instead read the
 client IP from ``X-Forwarded-For`` (leftmost entry = original client). The flag
-defaults to off so dev/test — where the app is directly reachable — stays
-spoof-proof, since an untrusted client could otherwise forge the header.
+defaults to off, and is only safe to turn on where every request arrives through
+a proxy that overwrites the header: the dev stack enables it because Traefik
+fronts it (#374), but the direct :8000 escape hatch there can still forge it,
+and the test stack has no proxy at all.
 """
 
 from fastapi import Request

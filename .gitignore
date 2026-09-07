@@ -238,3 +238,8 @@ Thumbs.db
 
 # Per-machine dev TLS material
 deploy/certs/
+# Per-host Traefik config for the quick self-host: carries the operator's real
+# domain and ACME email. The .example files next to them are the tracked ones,
+# so an upgrade cannot revert a live deployment's routing to dojo.example.com.
+deploy/traefik/selfhost/traefik.yml
+deploy/traefik/selfhost/dynamic/*.yml

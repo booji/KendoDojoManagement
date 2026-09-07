@@ -16,8 +16,6 @@ services:
     networks:
       - edge
       - backend
-    ports:
-      - "8000:8000"
     environment:
       TZ: ${TZ:-UTC}
       # This is the production stack, so production is the default rather than
@@ -46,11 +44,13 @@ services:
       # against PostgreSQL (real-path p99 16.8ms, worst observed 27.9ms) plus
       # headroom for slower storage — see docs/auth-timing-calibration.md.
       AUTH_BEGIN_MIN_DURATION_MS: ${AUTH_BEGIN_MIN_DURATION_MS:-100}
-      # Only set true when a trusted reverse proxy in front of this stack
-      # overwrites X-Forwarded-For; otherwise clients can spoof their IP and
-      # evade rate limiting and lockout. The published port below is direct,
-      # so the safe default is false.
-      TRUST_PROXY_XFF: ${TRUST_PROXY_XFF:-false}
+      # Safe by construction, and only because `app` publishes no host port:
+      # every request reaches it through the proxy below, and Traefik overwrites
+      # X-Forwarded-For with the address it observed rather than passing a
+      # client-supplied value through. Re-publishing the app's port and leaving
+      # this true would let a client spoof its IP past rate limiting and lockout
+      # — the two changes are one unit.
+      TRUST_PROXY_XFF: ${TRUST_PROXY_XFF:-true}
       # Upload targets, backed by the static_uploads volume below. Deliberately
       # not configurable via .env: the paths must match the volume mount, and
       # they live outside /app/static so they cannot shadow the built SPA.
@@ -61,6 +61,31 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # Traefik terminates TLS and is the only way into the app. Copy both
+  # deploy/traefik/selfhost/*.example files to their un-suffixed names and edit
+  # the Host() rule and the ACME email BEFORE `up` — the copies are gitignored
+  # so an upgrade cannot revert them, and the bind mounts below will otherwise
+  # create empty directories where Traefik expects its config.
+  proxy:
+    image: docker.io/library/traefik:v3.3
+    # Edge only — never the network the database is on, as in deploy/quadlet.
+    networks:
+      - edge
+    # Rootless Podman needs net.ipv4.ip_unprivileged_port_start=80 to bind
+    # these; see deploy/sysctl-99-kendo-rootless-ports.conf.
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/traefik/selfhost/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro
+      - traefik_acme:/acme
+      # No container runtime socket: the file provider needs none, and the
+      # label provider's socket mount is what deploy/quadlet deliberately
+      # avoids.
+    depends_on:
+      - app
 
   db:
     image: postgres:16-alpine
@@ -87,8 +112,8 @@ services:
 # this; whether it rejects the unknown option is untested here — drop these
 # lines if `docker compose up` errors at network-create time.
 networks:
-  # Reaches the outside world: `app` publishes 8000 here, and needs outbound for
-  # anything it fetches. A reverse proxy in front of the stack joins this one.
+  # Reaches the outside world: `proxy` publishes 80/443 here and forwards to
+  # `app`, which itself publishes nothing.
   edge:
     driver_opts:
       isolate: "true"
@@ -106,6 +131,9 @@ networks:
 
 volumes:
   postgres_data:
+  # Let's Encrypt account key and issued certificates. Without it every restart
+  # re-issues and walks into the ACME rate limit.
+  traefik_acme:
   # Uploaded logos and backgrounds. Without this they land on the container
   # filesystem and are lost on every restart or image rebuild.
   static_uploads:

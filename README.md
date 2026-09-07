@@ -40,7 +40,7 @@ Two supported ways to run this in production — pick one:
 
 | Path | Files | Use when |
 |------|-------|----------|
-| **Compose** | `docker-compose.yml` + `.env` | You want a single host up quickly. HTTP on port 8000; put your own TLS in front. See [Quick start](#quick-start-production) below. |
+| **Compose** | `docker-compose.yml` + `.env` | You want a single host up quickly. Traefik terminates TLS on 80/443 with a Let's Encrypt certificate over the HTTP challenge. See [Quick start](#quick-start-production) below. |
 | **Quadlet** | `deploy/quadlet` | You want the hardened deployment: rootless systemd units, Traefik with automatic TLS, network segmentation, Podman secrets, automated backups. See **[docs/deployment.md](docs/deployment.md)**. |
 
 ## Quick start (production)
@@ -57,14 +57,12 @@ cp .env.example .env
 ```
 
 Passkeys are bound to the origin the browser uses, so also set `WEBAUTHN_RP_ID`
-(bare host), `WEBAUTHN_ORIGIN` (full origin) and `CORS_ORIGINS` to match how you
-reach the app. For a localhost trial the defaults below work:
+(bare host), `WEBAUTHN_ORIGIN` (full origin) and `CORS_ORIGINS` to your domain:
 
 ```
-WEBAUTHN_RP_ID=localhost
-WEBAUTHN_ORIGIN=http://localhost:8000
-CORS_ORIGINS=http://localhost:8000
-COOKIE_SECURE=false   # localhost is not HTTPS, so Secure cookies won't be sent
+WEBAUTHN_RP_ID=dojo.example.com
+WEBAUTHN_ORIGIN=https://dojo.example.com
+CORS_ORIGINS=https://dojo.example.com
 ```
 
 Generate a JWT secret:
@@ -72,14 +70,40 @@ Generate a JWT secret:
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-**2. Start the stack:**
+**2. Point Traefik at the same domain:**
+
+```bash
+cd deploy/traefik/selfhost
+cp traefik.yml.example traefik.yml                 # then edit the ACME email
+cp dynamic/kendo.yml.example dynamic/kendo.yml     # then edit Host(`dojo.example.com`)
+```
+
+Both copies are gitignored, so upgrading with `git pull` cannot revert your
+domain or your email to the shipped placeholders.
+
+Certificates are issued over the HTTP challenge, so the host needs inbound port
+80 and public DNS — no DNS-provider account. If you cannot have that, or you
+already hold a certificate, use
+`deploy/traefik/selfhost/dynamic/byo-cert.yml.example`.
+
+Rootless Podman needs `net.ipv4.ip_unprivileged_port_start=80` to bind 80/443 —
+see `deploy/sysctl-99-kendo-rootless-ports.conf`.
+
+**3. Start the stack:**
 
 ```bash
 make build   # build the production image
 podman-compose up -d
 ```
 
-The app runs on port 8000. Alembic migrations run automatically on startup via the entrypoint.
+Traefik serves the app on 443 and redirects 80 to it. The `app` service
+publishes no host port of its own: every request arrives through the proxy,
+which is what makes `TRUST_PROXY_XFF` (on by default here) safe — Traefik
+overwrites `X-Forwarded-For` with the address it observed, so rate limiting and
+account lockout see a client IP the client cannot choose. If you re-publish the
+app's port, set `TRUST_PROXY_XFF=false` in the same edit.
+
+Alembic migrations run automatically on startup via the entrypoint.
 Uploaded logos and backgrounds persist in the `static_uploads` named volume, and
 the database in `postgres_data` — both survive `down`/`up` and image rebuilds.
 
@@ -107,14 +131,29 @@ make dev
 ```
 
 This starts:
+- `proxy` — Traefik, on host ports **8443** (HTTPS) and **8080** (redirect to 8443)
 - `backend` — FastAPI with hot-reload on file changes, on host port 8000
 - `frontend` — Vite dev server with HMR, on host port 5173
 - `db` — PostgreSQL 16, published on host port **5433**
 
-The frontend proxies `/api` to the backend without rewriting it — the backend
-serves its routers under `/api` too, so development and production use the same
-URLs (see `docs/adr/0001-single-origin-api-under-api-prefix.md`). Everything is
-available at `http://localhost:5173`.
+**Open <https://dojo.localhost:8443>.** Browsers resolve `*.localhost` to
+loopback, so no `/etc/hosts` entry is needed, and treat it as a secure context.
+Traefik routes `/api`, `/health` and `/static` to the backend and everything
+else to Vite, so the browser sits on one origin for both the UI and the API —
+the same shape production has (see
+`docs/adr/0001-single-origin-api-under-api-prefix.md`).
+
+The proxy is not decoration. `.env.dev` sets `COOKIE_SECURE=true`,
+`TRUST_PROXY_XFF=true` and a real `WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN`, so
+`Secure` cookies, passkey ceremonies and the `X-Forwarded-For` path that rate
+limiting and lockout depend on are exercised here rather than for the first
+time in production — the reasoning is in
+`docs/adr/0002-traefik-in-the-dev-stack.md`.
+
+`http://localhost:5173` and `http://localhost:8000` stay published as an escape
+hatch for when a certificate is missing or HMR misbehaves through the proxy. On
+those, cookies are not sent (they are `Secure`) and `X-Forwarded-For` is
+whatever the caller claims — so do not test login or rate limiting there.
 
 #### Network layout
 
@@ -123,7 +162,7 @@ Two networks, mirroring the Quadlet production deployment in `deploy/quadlet`
 
 | Network | Members | Purpose |
 |---------|---------|---------|
-| `edge` | `frontend`, `backend` | Vite proxies `/api` through to the backend; carries the published host ports |
+| `edge` | `proxy`, `frontend`, `backend` | Traefik fronts both; carries the published host ports |
 | `backend` | `backend`, `db` | The only path to PostgreSQL |
 
 `frontend` is **not** on the `backend` network. It runs arbitrary npm
@@ -132,10 +171,10 @@ stack — so it cannot reach the database at all.
 
 Nothing uses `network_mode: host` any more. Host-networked containers join no
 Compose network, so there was nothing to segment, and the database ended up
-binding host port 5432 directly (see below). Host ports are published 1:1
-(`5173:5173`, `8000:8000`), so every `localhost` URL is unchanged: the browser
-runs on the host and never joins a Compose network, so browser reachability
-depends only on published ports.
+binding host port 5432 directly (see below). The browser runs on the host and
+never joins a Compose network, so browser reachability depends only on
+published ports: `8443`/`8080` for the proxy, and the 1:1 `5173:5173` and
+`8000:8000` escape hatches behind it.
 
 Two runtime quirks are worth knowing, both verified on podman 5.6.0:
 
@@ -165,6 +204,10 @@ entirely.
 
 To run two checkouts of this repo side by side, set a different `POSTGRES_PORT`
 in `.env.dev` and change the port in `DATABASE_URL` in the same file to match.
+The other four host ports are fixed and will collide: 8443 and 8080 (proxy),
+5173 (Vite) and 8000 (uvicorn). Only one checkout's dev stack can be up at a
+time unless you edit them — and 8443 also appears in `WEBAUTHN_ORIGIN`,
+`CORS_ORIGINS`, the dev routing file and `server.hmr.clientPort`.
 The frontend port must stay mapped 1:1 (`5173:5173`): Vite's HMR client infers
 the websocket port from the browser's location, so publishing it on a different
 host port needs `server.hmr.clientPort` set in `frontend/vite.config.ts`.
@@ -196,7 +239,7 @@ problem, the port is.
 | `make build` | Build the production image |
 | `make down` | Stop the stacks this checkout starts — dev and test |
 | `make down-selfhost` | Stop the quick self-host stack — **takes the dojo offline** |
-| `make certs` | Generate the dev TLS certificate (run for you by `make dev`) |
+| `make certs` | Generate the `dojo.localhost` dev TLS certificate (run for you by `make dev`) |
 | `make logs` | Tail dev service logs |
 | `make migrate` | Run `alembic upgrade head` in the running dev container |
 | `make help` | List all targets |
@@ -208,8 +251,8 @@ actually serving a dojo, stopping it must be a deliberate act, so it has its own
 target. The same reasoning already governs `make clean` refusing to remove the
 production database volume.
 
-`make dev` generates a per-machine TLS certificate under `deploy/certs/`
-(gitignored) if one is not already there. With `mkcert` on your PATH it is
+`make dev` generates a per-machine `dojo.localhost` certificate under
+`deploy/certs/` (gitignored) if one is not already there. With `mkcert` on your PATH it is
 issued by your local CA; without it you get a self-signed certificate and a
 note that passkey ceremonies may misbehave until you run `mkcert -install`.
 

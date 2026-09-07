@@ -385,3 +385,190 @@ def test_dev_compose_db_port_is_bound_to_loopback():
             "dev db port must be bound to 127.0.0.1, not every interface. "
             f"Got: {mapping}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Traefik in the dev stack and the quick self-host (Issue #374)
+#
+# The proxy exists so that Secure cookies, the WebAuthn origin/RP ID and the
+# X-Forwarded-For path are exercised in development instead of for the first
+# time in production. These assertions pin the contract the runtime reads —
+# services, ports, mounts, routing rules and the security-relevant env values.
+# ---------------------------------------------------------------------------
+
+DEV_TRAEFIK_STATIC = ROOT / "deploy" / "traefik" / "dev" / "traefik.yml"
+DEV_TRAEFIK_DYNAMIC = ROOT / "deploy" / "traefik" / "dev" / "dynamic" / "kendo.yml"
+# The live copies are gitignored (they carry the operator's domain and ACME
+# email); the tracked .example files next to them are what this repository ships.
+SELFHOST_TRAEFIK_STATIC = (
+    ROOT / "deploy" / "traefik" / "selfhost" / "traefik.yml.example"
+)
+SELFHOST_TRAEFIK_DYNAMIC = (
+    ROOT / "deploy" / "traefik" / "selfhost" / "dynamic" / "kendo.yml.example"
+)
+TEST_COMPOSE_FILE = ROOT / "docker-compose.test.yml"
+ENV_DEV = ROOT / ".env.dev"
+
+DEV_HOST = "dojo.localhost"
+DEV_ORIGIN = "https://dojo.localhost:8443"
+
+
+def _env_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def test_dev_compose_has_a_proxy_on_the_edge_network_only():
+    proxy = load_dev_compose()["services"].get("proxy")
+    assert proxy, "docker-compose.dev.yml must define a 'proxy' service (Traefik)"
+    assert _networks_of(proxy) == ["edge"], (
+        "the dev proxy must be on the edge network only — it must never be able "
+        f"to reach PostgreSQL. Got: {_networks_of(proxy)}"
+    )
+
+
+def test_dev_proxy_publishes_unprivileged_ports():
+    """8443/8080 rather than 443/80, so rootless needs no sysctl change."""
+    ports = [str(p) for p in load_dev_compose()["services"]["proxy"].get("ports", [])]
+    assert any(p.startswith("8443:") for p in ports), f"expected 8443 in {ports}"
+    assert any(p.startswith("8080:") for p in ports), f"expected 8080 in {ports}"
+    for mapping in ports:
+        host_port = int(mapping.split(":")[0])
+        assert host_port >= 1024, f"dev proxy must bind unprivileged ports: {mapping}"
+
+
+def test_dev_proxy_mounts_its_config_and_no_container_runtime_socket():
+    volumes = [str(v) for v in load_dev_compose()["services"]["proxy"]["volumes"]]
+    assert any("/etc/traefik/dynamic" in v for v in volumes), (
+        f"the dev proxy must mount the dynamic config directory. Got: {volumes}"
+    )
+    for v in volumes:
+        assert "docker.sock" not in v and "podman.sock" not in v, (
+            "the dev proxy must not mount the container runtime socket — the "
+            f"hardened deployment deliberately does not either. Got: {v}"
+        )
+
+
+def test_dev_proxy_declares_no_depends_on():
+    """A depends_on here reorders podman-compose's startup, and the backend then
+    attaches to the edge network first. Its resolv.conf lists the edge resolver
+    first, a `db` lookup there is NXDOMAIN, and glibc does not fall through to
+    the next nameserver — so the backend cannot reach PostgreSQL at all.
+    Observed on podman 5.6.0 / podman-compose 1.5.0.
+    """
+    proxy = load_dev_compose()["services"]["proxy"]
+    assert "depends_on" not in proxy, (
+        "the dev proxy must not declare depends_on — it breaks service-name DNS "
+        "for the backend, and Traefik retries its upstreams anyway"
+    )
+
+
+def test_dev_proxy_routes_the_api_and_the_spa_to_the_right_services():
+    config = yaml.safe_load(DEV_TRAEFIK_DYNAMIC.read_text())
+    routers = config["http"]["routers"]
+    services = config["http"]["services"]
+
+    def backend_url(router: dict) -> str:
+        service = services[router["service"]]
+        return service["loadBalancer"]["servers"][0]["url"]
+
+    api_routers = [r for r in routers.values() if "/api" in r["rule"]]
+    assert api_routers, f"no router matches /api in {DEV_TRAEFIK_DYNAMIC}"
+    assert "backend:8000" in backend_url(api_routers[0])
+
+    spa_routers = [r for r in routers.values() if "/api" not in r["rule"]]
+    assert spa_routers, f"no catch-all SPA router in {DEV_TRAEFIK_DYNAMIC}"
+    assert "frontend:5173" in backend_url(spa_routers[0])
+
+    for router in routers.values():
+        assert DEV_HOST in router["rule"], (
+            f"every dev router must be bound to {DEV_HOST}, so the origin the "
+            f"browser uses is the one passkeys are registered against: {router['rule']}"
+        )
+
+
+def test_dev_traefik_uses_the_file_provider_and_not_the_socket_provider():
+    config = yaml.safe_load(DEV_TRAEFIK_STATIC.read_text())
+    assert "file" in config["providers"], "the dev proxy must use the file provider"
+    assert "docker" not in config["providers"], (
+        "the label provider needs the runtime socket mounted, which the hardened "
+        "deployment deliberately avoids"
+    )
+
+
+DEV_ENV_EXPECTATIONS = {
+    # A cookie-attribute mistake must surface locally, not at cutover.
+    "COOKIE_SECURE": "true",
+    # Rate limiting and lockout take the client IP from X-Forwarded-For in
+    # production; dev must exercise the same path.
+    "TRUST_PROXY_XFF": "true",
+    "WEBAUTHN_RP_ID": DEV_HOST,
+    "WEBAUTHN_ORIGIN": DEV_ORIGIN,
+    "CORS_ORIGINS": DEV_ORIGIN,
+    # Still development: the production-only WEBAUTHN_* default checks must not
+    # fire against the dev values.
+    "APP_ENV": "development",
+}
+
+
+@pytest.mark.parametrize("key,expected", sorted(DEV_ENV_EXPECTATIONS.items()))
+def test_env_dev_matches_the_proxied_origin(key: str, expected: str):
+    assert _env_values(ENV_DEV).get(key) == expected
+
+
+def test_dev_backend_and_frontend_keep_their_direct_ports():
+    """The escape hatch: a missing certificate must never block development."""
+    services = load_dev_compose()["services"]
+    backend_ports = [str(p) for p in services["backend"].get("ports", [])]
+    frontend_ports = [str(p) for p in services["frontend"].get("ports", [])]
+    assert "8000:8000" in backend_ports, backend_ports
+    assert "5173:5173" in frontend_ports, frontend_ports
+
+
+def test_selfhost_app_publishes_no_port_and_trusts_the_forwarded_header():
+    """One unit: XFF is only safe because there is no unproxied route left."""
+    app = load_compose()["services"]["app"]
+    assert not app.get("ports"), (
+        "the quick self-host's app must not publish a port once the proxy fronts "
+        f"it — an unproxied route makes TRUST_PROXY_XFF spoofable. Got: {app.get('ports')}"
+    )
+    assert app["environment"]["TRUST_PROXY_XFF"] == "${TRUST_PROXY_XFF:-true}"
+
+
+def test_selfhost_has_a_proxy_on_the_edge_network_only():
+    proxy = load_compose()["services"].get("proxy")
+    assert proxy, "docker-compose.yml must define a 'proxy' service (Traefik)"
+    assert _networks_of(proxy) == ["edge"], _networks_of(proxy)
+    for v in [str(v) for v in proxy["volumes"]]:
+        assert "docker.sock" not in v and "podman.sock" not in v, v
+
+
+def test_selfhost_traefik_issues_certificates_over_the_http_challenge():
+    """The quick path needs an inbound port, not a DNS-provider credential."""
+    acme = yaml.safe_load(SELFHOST_TRAEFIK_STATIC.read_text())["certificatesResolvers"][
+        "letsencrypt"
+    ]["acme"]
+    assert "httpChallenge" in acme, acme
+    assert "dnsChallenge" not in acme, "the DNS challenge belongs to deploy/quadlet"
+
+
+def test_selfhost_router_targets_the_app_service():
+    config = yaml.safe_load(SELFHOST_TRAEFIK_DYNAMIC.read_text())
+    urls = [
+        s["loadBalancer"]["servers"][0]["url"]
+        for s in config["http"]["services"].values()
+    ]
+    assert any("app:8000" in url for url in urls), urls
+
+
+def test_test_stack_defines_no_proxy():
+    """An ~11 minute e2e suite does not grow a hop for fidelity it does not test."""
+    with TEST_COMPOSE_FILE.open() as f:
+        services = yaml.safe_load(f).get("services", {})
+    assert "proxy" not in services and "traefik" not in services, list(services)

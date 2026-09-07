@@ -16,6 +16,25 @@ export const isApiError = (e: unknown): e is ApiError =>
   typeof e === "object" && e !== null && "status" in e && "message" in e
 
 /**
+ * The message to show a user for anything thrown by an API call or a browser
+ * ceremony, falling back only when the value carries none.
+ *
+ * `isApiError` narrows the backend's own errors, but a WebAuthn ceremony
+ * rejects with a DOMException, which fails that guard — so a generic fallback
+ * used to swallow the one line naming the cause ("The relying party ID is not
+ * a registrable domain suffix of ... the current domain" when WEBAUTHN_RP_ID
+ * does not match the origin the browser is on). Prefer whatever message the
+ * thrown value actually has.
+ */
+export const errorMessage = (e: unknown, fallback: string): string => {
+  const message =
+    typeof e === "object" && e !== null
+      ? (e as { message?: unknown }).message
+      : undefined
+  return typeof message === "string" && message !== "" ? message : fallback
+}
+
+/**
  * Read the backend's error message out of a failed response.
  *
  * FastAPI puts a plain string in `detail` for raised HTTPExceptions, but a
