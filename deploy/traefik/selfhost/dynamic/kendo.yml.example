@@ -1,0 +1,37 @@
+# Traefik DYNAMIC config for the QUICK SELF-HOST stack: route the dojo domain
+# to the `app` service over the edge network. Copy to kendo.yml (gitignored, so
+# an upgrade never reverts it) and edit the Host() rule to your real domain —
+# it must match WEBAUTHN_RP_ID in .env.
+http:
+  routers:
+    kendo:
+      rule: "Host(`dojo.example.com`)" # <-- EDIT (match WEBAUTHN_RP_ID)
+      entryPoints:
+        - websecure
+      service: kendo
+      middlewares:
+        - security-headers
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    kendo:
+      loadBalancer:
+        # The app listens on 8000 inside the container and publishes no host
+        # port, so this is the only route in.
+        servers:
+          - url: "http://app:8000"
+        passHostHeader: true
+        # TRUST_PROXY_XFF safety: Traefik sets X-Forwarded-For to the observed
+        # remote address and ignores any client-supplied value unless that
+        # client IP is listed in an entryPoint's forwardedHeaders.trustedIPs —
+        # which is not set. Do not enable forwardedHeaders.insecure.
+
+  middlewares:
+    security-headers:
+      headers:
+        # Transport-level HSTS at the edge only; the app's
+        # SecurityHeadersMiddleware still sets the rest.
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true

@@ -1,0 +1,44 @@
+# Traefik STATIC config for the QUICK SELF-HOST stack (docker-compose.yml).
+# Copy to traefik.yml (gitignored, so `git pull` never reverts your ACME email)
+# and edit. Mounted read-only. The hardened deployment's own copy is
+# deploy/traefik/traefik.yml — this one differs in exactly one way: it issues
+# certificates over the HTTP challenge, so the quick path needs an inbound port
+# 80 and nothing else, rather than a DNS-provider API token.
+#
+# Binding 80/443 rootless needs net.ipv4.ip_unprivileged_port_start=80 — see
+# deploy/sysctl-99-kendo-rootless-ports.conf.
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+
+providers:
+  # File provider only: no container runtime socket is mounted into Traefik, so
+  # its blast radius stays as small as it is in deploy/quadlet.
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: you@example.com # <-- EDIT
+      storage: /acme/acme.json
+      # HTTP-01: the host must be publicly reachable on port 80. Behind a
+      # firewall, or without public DNS, use the DNS challenge as
+      # deploy/traefik/traefik.yml does, or bring your own certificate
+      # (dynamic/byo-cert.yml.example).
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: false
+log:
+  level: INFO

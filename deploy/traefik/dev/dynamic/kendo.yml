@@ -1,0 +1,47 @@
+# Traefik DYNAMIC config for the DEVELOPMENT stack.
+#
+# One origin, two backends: the browser sees https://dojo.localhost:8443 for
+# both the SPA and the API, so cookie scope matches production exactly. The
+# `/api` router wins over the catch-all because Traefik orders routers by rule
+# length, and this rule is longer.
+#
+# `dojo.localhost` needs no /etc/hosts entry — browsers resolve *.localhost to
+# loopback and treat it as a secure context.
+http:
+  routers:
+    api:
+      # /health and /static are served by the backend too (ADR-0001).
+      rule: "Host(`dojo.localhost`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/static`))"
+      entryPoints:
+        - websecure
+      service: backend
+      tls: {}
+    spa:
+      rule: "Host(`dojo.localhost`)"
+      entryPoints:
+        - websecure
+      service: frontend
+      tls: {}
+
+  services:
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8000"
+        passHostHeader: true
+    frontend:
+      loadBalancer:
+        # Vite's HMR websocket rides this route; Traefik forwards the upgrade.
+        servers:
+          - url: "http://frontend:5173"
+        passHostHeader: true
+
+# The per-machine certificate `make certs` writes into deploy/certs (gitignored).
+# mkcert issues one your browser trusts; without mkcert it is self-signed and
+# passkey ceremonies may misbehave until you run `mkcert -install`.
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/dojo.localhost.pem
+        keyFile: /etc/traefik/certs/dojo.localhost-key.pem

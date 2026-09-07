@@ -43,6 +43,38 @@ services:
       db:
         condition: service_healthy
 
+  # Traefik, the same proxy the hardened deployment runs, in front of the same
+  # app: https://dojo.localhost:8443 serves both the SPA and the API from one
+  # origin. It exists so that Secure cookies, the WebAuthn origin/RP ID and the
+  # X-Forwarded-For path used by rate limiting are exercised here rather than
+  # for the first time in production — see
+  # docs/adr/0002-traefik-in-the-dev-stack.md.
+  proxy:
+    image: docker.io/library/traefik:v3.3
+    networks:
+      # Edge only. Like kendo-traefik in deploy/quadlet, it never joins the
+      # network the database is on.
+      - edge
+    # 8443/8080, not 443/80: privileged ports rootless would need the
+    # net.ipv4.ip_unprivileged_port_start sysctl, and `make dev` must not.
+    # The port is part of WEBAUTHN_ORIGIN but not of WEBAUTHN_RP_ID.
+    ports:
+      - "8443:8443"
+      - "8080:8080"
+    volumes:
+      - ./deploy/traefik/dev/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./deploy/traefik/dev/dynamic:/etc/traefik/dynamic:ro
+      # Written by `make certs` (gitignored, per-machine).
+      - ./deploy/certs:/etc/traefik/certs:ro
+      # No container runtime socket: the file provider needs none, and mounting
+      # one is what the hardened deployment deliberately avoids.
+    # Deliberately NO depends_on. Adding one reorders podman-compose's startup
+    # so `backend` attaches to the edge network before the backend network, and
+    # its resolv.conf then lists the edge resolver first — a `db` lookup there
+    # is NXDOMAIN, which glibc does not retry against the next nameserver, so
+    # the backend never reaches PostgreSQL. Traefik needs no ordering anyway: it
+    # retries its upstreams and the file provider watches for changes.
+
   frontend:
     build:
       context: .
@@ -63,6 +95,9 @@ services:
       # Not localhost: inside this container that is this container, where
       # nothing listens on 8000. vite.config.ts already reads BACKEND_URL.
       BACKEND_URL: "http://backend:8000"
+      # Points Vite's HMR client at the proxy instead of its own origin. Unset
+      # anywhere without a proxy (the test container, a bare `npm run dev`).
+      DEV_PROXY_ORIGIN: "https://dojo.localhost:8443"
     command: npm run dev -- --host 0.0.0.0
 
   db:

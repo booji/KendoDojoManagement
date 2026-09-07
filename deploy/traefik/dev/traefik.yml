@@ -1,0 +1,33 @@
+# Traefik STATIC config for the DEVELOPMENT stack (docker-compose.dev.yml).
+# Mounted read-only; see docs/adr/0002-traefik-in-the-dev-stack.md for why a
+# dev stack has a proxy at all.
+#
+# Ports are 8080/8443, not 80/443: binding privileged ports rootless needs the
+# net.ipv4.ip_unprivileged_port_start sysctl, and starting a dev stack must not.
+entryPoints:
+  web:
+    address: ":8080"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          # Not permanent: a 301 is cached by the browser for the origin, and a
+          # dev origin gets reused by other things on the same machine.
+          permanent: false
+  websecure:
+    address: ":8443"
+
+providers:
+  # Same file provider as deploy/traefik/traefik.yml. The socket-based label
+  # provider was rejected there deliberately (no socket is mounted into
+  # Traefik); copying it into development would diverge exactly where the point
+  # is to match production.
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+api:
+  dashboard: false
+log:
+  level: INFO

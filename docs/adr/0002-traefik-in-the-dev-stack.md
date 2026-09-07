@@ -30,7 +30,10 @@ development would diverge exactly where the point is to match.
 
 The direct `:5173` and `:8000` ports stay published as an escape hatch when a
 certificate is missing or HMR misbehaves through the proxy, so the proxy is
-never the only way in. Vite needs `allowedHosts` and an explicit `wss` HMR
-client port to serve through it. The test stack deliberately does not get
+never the only way in. Vite needs an explicit `wss` HMR client port to serve
+through it, set from `DEV_PROXY_ORIGIN` so that the no-proxy runs (the test
+container, a bare `npm run dev`) keep dialling their own origin. `allowedHosts`
+turned out to be unnecessary: Vite allows `localhost` and any `*.localhost`
+host header before it consults that list. The test stack deliberately does not get
 Traefik: the e2e suite drives Vite and uvicorn in one container, and an ~11
 minute suite should not grow a proxy hop for fidelity it does not test.
