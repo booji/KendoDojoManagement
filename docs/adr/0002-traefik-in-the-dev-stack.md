@@ -28,6 +28,13 @@ development would diverge exactly where the point is to match.
 
 ## Consequences
 
+The dev certificate is now on the critical path for any authenticated work:
+with `COOKIE_SECURE=true` and browsers refusing WebAuthn on a page with a
+certificate error, an untrusted certificate presents as a healthy stack that
+cannot hold a session — so `make certs` reports what it issued and reissues a
+self-signed pair once mkcert appears, and the README carries the trust-store
+split a container cannot resolve on the developer's behalf (#379).
+
 The direct `:5173` and `:8000` ports stay published as an escape hatch when a
 certificate is missing or HMR misbehaves through the proxy, so the proxy is
 never the only way in. Vite needs an explicit `wss` HMR client port to serve
