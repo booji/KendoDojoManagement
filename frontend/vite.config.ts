@@ -3,6 +3,8 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+import { hmrOptions } from "./hmrOptions"
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -14,16 +16,12 @@ export default defineConfig({
     // Behind Traefik the HMR client would infer ws://dojo.localhost:5173 from
     // the page URL — neither the right scheme nor the right port. Set only
     // when the proxy is actually in front (docker-compose.dev.yml exports it),
-    // because the test container and the direct :5173 escape hatch have no
-    // proxy and must keep dialling their own origin.
+    // because runs with the variable unset — the test container, a bare
+    // `npm run dev` — must keep dialling their own origin. Note the dev stack
+    // exports it in the same container that publishes :5173, so the direct
+    // :5173 escape hatch still gets an HMR client pointed at the proxy.
     // See docs/adr/0002-traefik-in-the-dev-stack.md.
-    hmr: process.env.DEV_PROXY_ORIGIN
-      ? {
-          protocol: "wss",
-          host: new URL(process.env.DEV_PROXY_ORIGIN).hostname,
-          clientPort: Number(new URL(process.env.DEV_PROXY_ORIGIN).port),
-        }
-      : undefined,
+    ws: hmrOptions(process.env.DEV_PROXY_ORIGIN),
     proxy: {
       "/health": process.env.BACKEND_URL ?? "http://localhost:8000",
       "/static": process.env.BACKEND_URL ?? "http://localhost:8000",
