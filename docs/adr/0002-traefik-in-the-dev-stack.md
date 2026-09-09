@@ -42,8 +42,13 @@ through it, derived from `DEV_PROXY_ORIGIN` so that the no-proxy runs (the test
 container, a bare `npm run dev`) keep dialling their own origin. Host and
 scheme come from that origin; the client port is pinned only when the origin
 names one, so a portless origin behind a proxy on 443 leaves Vite to infer the
-port from the page and keeps its direct-websocket fallback (#380). `allowedHosts`
-turned out to be unnecessary: Vite allows `localhost` and any `*.localhost`
-host header before it consults that list. The test stack deliberately does not get
+port from the page and keeps its direct-websocket fallback (#380). `server.ws`
+is server-wide and Vite's direct-websocket fallback is skipped once a client
+port is pinned, so exactly one of the two published origins can have HMR:
+`DEV_PROXY_ORIGIN` is interpolated with the proxy origin as its default, and
+emptying it hands HMR to the `:5173` escape hatch — which matters when the
+reason for taking that hatch is HMR misbehaving through the proxy (#382).
+`allowedHosts` turned out to be unnecessary: Vite allows `localhost` and any
+`*.localhost` host header before it consults that list. The test stack deliberately does not get
 Traefik: the e2e suite drives Vite and uvicorn in one container, and an ~11
 minute suite should not grow a proxy hop for fidelity it does not test.

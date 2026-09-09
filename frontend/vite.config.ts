@@ -17,9 +17,9 @@ export default defineConfig({
     // the page URL — neither the right scheme nor the right port. Set only
     // when the proxy is actually in front (docker-compose.dev.yml exports it),
     // because runs with the variable unset — the test container, a bare
-    // `npm run dev` — must keep dialling their own origin. Note the dev stack
-    // exports it in the same container that publishes :5173, so the direct
-    // :5173 escape hatch still gets an HMR client pointed at the proxy.
+    // `npm run dev` — must keep dialling their own origin. This is server-wide,
+    // so only one of the dev stack's two published origins can have HMR:
+    // emptying DEV_PROXY_ORIGIN hands it to the direct :5173 escape hatch.
     // See docs/adr/0002-traefik-in-the-dev-stack.md.
     ws: hmrOptions(process.env.DEV_PROXY_ORIGIN),
     proxy: {

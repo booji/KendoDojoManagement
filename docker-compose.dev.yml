@@ -97,7 +97,11 @@ services:
       BACKEND_URL: "http://backend:8000"
       # Points Vite's HMR client at the proxy instead of its own origin. Unset
       # anywhere without a proxy (the test container, a bare `npm run dev`).
-      DEV_PROXY_ORIGIN: "https://dojo.localhost:8443"
+      # `server.ws` is server-wide, so exactly one of the two published origins
+      # gets working HMR: the proxy by default, or the direct :5173 escape
+      # hatch when this is emptied (`DEV_PROXY_ORIGIN= make dev`, or an empty
+      # entry in .env.dev). #382.
+      DEV_PROXY_ORIGIN: "${DEV_PROXY_ORIGIN-https://dojo.localhost:8443}"
     command: npm run dev -- --host 0.0.0.0
 
   db:
