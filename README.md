@@ -155,6 +155,18 @@ hatch for when a certificate is missing or HMR misbehaves through the proxy. On
 those, cookies are not sent (they are `Secure`) and `X-Forwarded-For` is
 whatever the caller claims — so do not test login or rate limiting there.
 
+Vite's websocket setting is server-wide, so exactly one of the two origins gets
+working HMR — the proxy by default. To hand it to `:5173` instead, start the
+stack with the proxy origin emptied:
+
+```bash
+DEV_PROXY_ORIGIN= make dev
+```
+
+Then `:5173` live-reloads and `https://dojo.localhost:8443` does not (the page
+still works; changes need a refresh). Put `DEV_PROXY_ORIGIN=` in `.env.dev` to
+make it stick across runs.
+
 #### The dev TLS certificate
 
 The certificate is on the critical path: `.env.dev` sets `COOKIE_SECURE=true`,
@@ -210,7 +222,8 @@ When it goes wrong:
 | The old warning persists after reissuing | Traefik still serving the startup certificate | `make down && make dev` |
 
 If you need to get in without a certificate at all, `http://localhost:5173` is
-still published — but cookies and passkeys do not work there.
+still published — but cookies and passkeys do not work there, and HMR only
+reaches it if the stack was started with `DEV_PROXY_ORIGIN=` (above).
 
 #### Network layout
 

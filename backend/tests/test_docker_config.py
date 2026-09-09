@@ -572,3 +572,14 @@ def test_test_stack_defines_no_proxy():
     with TEST_COMPOSE_FILE.open() as f:
         services = yaml.safe_load(f).get("services", {})
     assert "proxy" not in services and "traefik" not in services, list(services)
+
+
+def test_dev_frontend_proxy_origin_can_be_emptied_for_the_escape_hatch():
+    """Vite's `server.ws` is server-wide, so one dev server cannot serve HMR to
+    both origins. Pinning DEV_PROXY_ORIGIN in the compose file left the :5173
+    escape hatch with an HMR client dialling the proxy it exists to bypass
+    (#382); an interpolated default lets `DEV_PROXY_ORIGIN=` swap which origin
+    gets working HMR.
+    """
+    env = load_dev_compose()["services"]["frontend"]["environment"]
+    assert env["DEV_PROXY_ORIGIN"] == f"${{DEV_PROXY_ORIGIN-{DEV_ORIGIN}}}", env
