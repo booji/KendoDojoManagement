@@ -19,7 +19,10 @@ Network=kendo-backend.network
 EnvironmentFile=%h/kendo/kendo-app.env
 # Persists uploaded logos/backgrounds (STATIC_DIR, STATIC_BACKGROUNDS_DIR in the
 # EnvironmentFile point inside here). Without it they die with the container.
-Volume=kendo-app-uploads.volume:/app/uploads
+# `:U` chowns the volume to the container's non-root user on every start, so an
+# upgrade from a root-running image does not leave the uploads directory
+# unwritable (#385).
+Volume=kendo-app-uploads.volume:/app/uploads:U
 Secret=kendo_database_url,type=env,target=DATABASE_URL
 Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
 

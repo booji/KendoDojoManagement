@@ -53,6 +53,21 @@ COPY --from=frontend-build /frontend/dist ./static
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# Run unprivileged. Rootless Podman already maps container-root to an
+# unprivileged host user, but inside the container root can rewrite the app's
+# own code and site-packages, so a compromise survives a restart (#385).
+#
+# /app/uploads must exist and belong to `kendo` here: it is a volume mount
+# point that nothing else creates (main.py mkdirs the leaf directories at
+# import, i.e. after the mount), and Podman takes a fresh named volume's
+# ownership from the image directory it shadows. A volume left over from a
+# root-running image keeps its old ownership — deploy/quadlet handles that with
+# `:U` on the mount; the Compose path needs the one-off chown in docs/deployment.md.
+RUN useradd --system --uid 1001 --create-home --shell /usr/sbin/nologin kendo && \
+    mkdir -p /app/uploads/logos /app/uploads/backgrounds && \
+    chown -R kendo:kendo /app/uploads
+USER kendo
+
 ENV DATABASE_URL=""
 EXPOSE 8000
 

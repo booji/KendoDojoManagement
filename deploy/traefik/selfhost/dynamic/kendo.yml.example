@@ -22,6 +22,14 @@ http:
         servers:
           - url: "http://app:8000"
         passHostHeader: true
+        # entrypoint.sh runs `alembic upgrade head` before uvicorn binds :8000,
+        # so every restart has a window where nothing is listening. Without this
+        # Traefik reports the refused connection as 502 Bad Gateway; with it the
+        # server is marked down and callers get the truthful 503 (#385).
+        healthCheck:
+          path: /health
+          interval: 5s
+          timeout: 2s
         # TRUST_PROXY_XFF safety: Traefik sets X-Forwarded-For to the observed
         # remote address and ignores any client-supplied value unless that
         # client IP is listed in an entryPoint's forwardedHeaders.trustedIPs —

@@ -445,9 +445,9 @@ def test_dev_proxy_publishes_unprivileged_ports():
 
 def test_dev_proxy_mounts_its_config_and_no_container_runtime_socket():
     volumes = [str(v) for v in load_dev_compose()["services"]["proxy"]["volumes"]]
-    assert any("/etc/traefik/dynamic" in v for v in volumes), (
-        f"the dev proxy must mount the dynamic config directory. Got: {volumes}"
-    )
+    assert any(
+        "/etc/traefik/dynamic" in v for v in volumes
+    ), f"the dev proxy must mount the dynamic config directory. Got: {volumes}"
     for v in volumes:
         assert "docker.sock" not in v and "podman.sock" not in v, (
             "the dev proxy must not mount the container runtime socket — the "
@@ -583,3 +583,56 @@ def test_dev_frontend_proxy_origin_can_be_emptied_for_the_escape_hatch():
     """
     env = load_dev_compose()["services"]["frontend"]["environment"]
     assert env["DEV_PROXY_ORIGIN"] == f"${{DEV_PROXY_ORIGIN-{DEV_ORIGIN}}}", env
+
+
+# ---------------------------------------------------------------------------
+# Production image hardening and edge health checking (#385)
+# ---------------------------------------------------------------------------
+
+DOCKERFILE = ROOT / "Dockerfile"
+QUADLET_TRAEFIK_DYNAMIC = ROOT / "deploy" / "traefik" / "dynamic" / "kendo.yml"
+
+
+def _prod_stage() -> str:
+    """The final `FROM ... AS prod` stage of the Dockerfile, as text."""
+    text = DOCKERFILE.read_text()
+    marker = _re.search(r"^FROM .* AS prod$", text, _re.MULTILINE)
+    assert marker, "Dockerfile has no `FROM ... AS prod` stage"
+    return text[marker.start() :]
+
+
+def test_prod_image_runs_as_a_non_root_user():
+    """Rootless Podman maps container-root to the unprivileged host user, but
+    inside the container it is still root: writable image code, writable
+    site-packages. A USER line costs nothing and bounds that (#385)."""
+    user = _re.findall(r"^USER (.+)$", _prod_stage(), _re.MULTILINE)
+    assert user, "the prod stage must declare a USER"
+    assert user[-1].strip() not in ("root", "0"), user
+
+
+def test_prod_image_owns_the_upload_directories():
+    """`/app/uploads` does not otherwise exist in the image — main.py mkdirs it
+    at import, i.e. after the volume is mounted. Podman's copy-up takes a fresh
+    named volume's ownership from the image directory, so the directory must
+    exist and belong to the runtime user or the first upload hits EACCES."""
+    stage = _prod_stage()
+    assert "/app/uploads" in stage, stage
+    assert _re.search(
+        r"chown[^\n]*/app/uploads", stage
+    ), "the prod stage must chown /app/uploads to the runtime user"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [QUADLET_TRAEFIK_DYNAMIC, SELFHOST_TRAEFIK_DYNAMIC],
+    ids=["quadlet", "selfhost"],
+)
+def test_prod_traefik_health_checks_the_app(path: Path):
+    """entrypoint.sh runs `alembic upgrade head` before uvicorn binds :8000, so
+    every restart has a window where nothing listens. Without a health check
+    Traefik reports that as 502 Bad Gateway — a health check makes it the
+    truthful 503 Service Unavailable (#385)."""
+    services = yaml.safe_load(path.read_text())["http"]["services"]
+    health = services["kendo"]["loadBalancer"].get("healthCheck")
+    assert health, f"{path.name}: the kendo service needs a loadBalancer healthCheck"
+    assert health["path"] == "/health", health

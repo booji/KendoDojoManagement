@@ -16,7 +16,7 @@ one tokenless check-in link a session has (see test_checkin_link_api.py).
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest

@@ -200,9 +200,11 @@ So: open `https://<your-domain>/` and complete the passkey registration now,
 then confirm the window is shut.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://dojo.example.com/api/setup
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-domain>/api/setup
 # 404 -> setup is closed, an account exists.
 # 200 -> still claimable by anyone who loads the page.
+# anything else (000, 502, ...) -> the check never reached the app. That is not
+# a closed window; fix the request and re-run before you believe it.
 ```
 
 A UAT box on a private LAN is a milder version of this, not an exempt one.
@@ -338,7 +340,34 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 | Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-db` |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
-> **When a Quadlet unit or the env file changes upstream**, the Upgrade command above is not enough — it rebuilds the image but reuses the units already in `~/.config/containers/systemd/`, and it never touches `~/kendo/kendo-app.env`. See [§9.1](#91-refreshing-the-env-file-after-an-upgrade).
+> **When a Quadlet unit, the Traefik config or the env file changes upstream**,
+> the Upgrade command above is not enough — it rebuilds the image but reuses the
+> units already in `~/.config/containers/systemd/`, the Traefik config already in
+> `~/kendo/traefik/`, and it never touches `~/kendo/kendo-app.env`. Each is a
+> copy made once at install time; `git pull` updates the source, not the copy.
+>
+> ```bash
+> cd ~/src
+> # Units: re-run the copy from §4, then daemon-reload so Quadlet regenerates.
+> cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
+> cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
+> cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
+> systemctl --user daemon-reload
+>
+> # Traefik dynamic config — keep your Host() rule, take the rest. Traefik
+> # watches this directory, so no restart is needed once the file lands.
+> diff deploy/traefik/dynamic/kendo.yml ~/kendo/traefik/dynamic/kendo.yml
+>
+> systemctl --user restart kendo-app
+> ```
+>
+> The env file is per-host and needs comparing rather than copying — see
+> [§9.1](#91-refreshing-the-env-file-after-an-upgrade).
+>
+> **Hosts installed before #385 need the unit refresh now.** That change made
+> the app run unprivileged and mounts the uploads volume `:U`; both live in
+> `kendo-app.container`, so neither reaches an existing host until the copy
+> above. The edge health check lives in the Traefik dynamic config.
 
 ---
 
@@ -354,8 +383,8 @@ Compare **keys**, not lines. Values legitimately differ per host, so a plain
 `diff` is all noise; the keys are what drift:
 
 ```bash
-diff <(grep -oE '^[A-Z_]+' ~/kendo/kendo-app.env | sort) \
-     <(grep -oE '^[A-Z_]+' ~/src/deploy/env/kendo-app.env.example | sort)
+diff <(grep -oE '^[A-Z0-9_]+=' ~/kendo/kendo-app.env | tr -d = | sort) \
+     <(grep -oE '^[A-Z0-9_]+=' ~/src/deploy/env/kendo-app.env.example | tr -d = | sort)
 ```
 
 Empty output means nothing new upstream. A `>` line is a setting you are
@@ -365,8 +394,9 @@ missing — copy it across with its comment, then restart:
 systemctl --user restart kendo-app
 ```
 
-A changed `EnvironmentFile` needs only a restart; `daemon-reload` is for
-changed *unit* files (see the note under the table above).
+A changed `EnvironmentFile` needs only a restart; a changed *unit* file needs
+re-copying and a `daemon-reload` first — the note under the table above has
+that sequence.
 
 Then verify the app actually received it — a restart proves the unit started,
 not that the value arrived:
