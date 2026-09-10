@@ -85,5 +85,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        # img-src is widened deliberately: Admin Settings previews an upload
+        # from a `blob:` URL while the POST is in flight, and Vite inlines
+        # small assets as `data:` URIs in the built CSS. Neither is reachable
+        # under a bare default-src 'self'. Everything else stays same-origin,
+        # which means no inline <script> anywhere in the SPA — see
+        # test_spa_html_has_no_inline_script, and frontend/public/theme.js for
+        # where the pre-paint theme script went (#385). object-src and
+        # base-uri are pinned because neither falls back to default-src in a
+        # way worth relying on.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; img-src 'self' blob: data:; "
+            "object-src 'none'; base-uri 'self'"
+        )
         return response

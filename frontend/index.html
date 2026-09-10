@@ -5,19 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
-    <script>
-      (function () {
-        // The cookie is the server's copy of the preference (#324); on a client
-        // whose localStorage has never seen this user it is the only source
-        // available before first paint.
-        var m = document.cookie.match(/(?:^|;\s*)theme=(light|dark|system)/);
-        var saved = m ? m[1] : localStorage.getItem("theme") || "system";
-        var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (saved === "dark" || (saved === "system" && prefersDark)) {
-          document.documentElement.classList.add("dark");
-        }
-      })();
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

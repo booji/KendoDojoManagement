@@ -289,3 +289,49 @@ def test_docs_database_url_host_matches_db_container_name():
         f"('{docs_host}') must match ContainerName= in "
         f"deploy/quadlet/kendo-db.container ('{db_container_name}')"
     )
+
+
+# ---------------------------------------------------------------------------
+# 13 — the env file the Quadlet unit reads (#385)
+# ---------------------------------------------------------------------------
+# kendo-app.container passes exactly one EnvironmentFile plus two secrets, so
+# anything absent from deploy/env/kendo-app.env.example is absent from the
+# app's environment on a Quadlet host. APP_ENV was, which left
+# validate_startup_config() on its permissive development path: a placeholder
+# RP ID, an http:// origin, or an RP ID that does not match the origin host
+# all booted cleanly and failed later in the browser. docker-compose.yml
+# defaults APP_ENV to production and so was never affected — this is the file
+# that has to carry it for the Quadlet path.
+
+
+def _app_env_example() -> dict[str, str]:
+    """Parse deploy/env/kendo-app.env.example into {KEY: value}."""
+    path = ROOT / "deploy" / "env" / "kendo-app.env.example"
+    values: dict[str, str] = {}
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def test_app_env_file_is_the_only_environment_source():
+    """The premise of the test below: if a second EnvironmentFile or an
+    inline Environment= ever appears on kendo-app.container, checking the
+    example file alone stops being sufficient."""
+    app = load_units()["kendo-app.container"]["Container"]
+    assert app.get("EnvironmentFile") == ["%h/kendo/kendo-app.env"]
+    assert "Environment" not in app, (
+        "kendo-app.container now sets Environment= inline; the env-file "
+        "checks below no longer see the app's whole environment"
+    )
+
+
+def test_app_env_example_sets_production_app_env():
+    assert _app_env_example().get("APP_ENV") == "production", (
+        "deploy/env/kendo-app.env.example must set APP_ENV=production, or a "
+        "Quadlet deployment skips every production WebAuthn check in "
+        "validate_startup_config()"
+    )
