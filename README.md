@@ -107,6 +107,22 @@ Alembic migrations run automatically on startup via the entrypoint.
 Uploaded logos and backgrounds persist in the `static_uploads` named volume, and
 the database in `postgres_data` — both survive `down`/`up` and image rebuilds.
 
+> **Upgrading a Compose stack first started before #385:** the image now runs as
+> the unprivileged user `kendo` (uid 1001), but Podman only takes a volume's
+> ownership from the image when the volume is *empty*, so a `static_uploads`
+> created by the old root-running image stays root-owned and the first upload
+> after the upgrade fails with a permission error. Chown it once:
+>
+> ```bash
+> # Compose prefixes the volume with the project name — find it first:
+> vol=$(podman volume ls --format '{{.Name}}' | grep static_uploads)
+> podman unshare chown -R 1001:1001 \
+>   "$(podman volume inspect "$vol" --format '{{.Mountpoint}}')"
+> ```
+>
+> The Quadlet path needs no such step — `kendo-app.container` mounts the volume
+> with `:U`, which chowns it on every start. Fresh stacks need nothing either.
+
 ## Development
 
 ### Prerequisites

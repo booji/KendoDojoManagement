@@ -335,3 +335,16 @@ def test_app_env_example_sets_production_app_env():
         "Quadlet deployment skips every production WebAuthn check in "
         "validate_startup_config()"
     )
+
+
+def test_uploads_volume_is_chowned_to_the_container_user():
+    """The image runs as a non-root USER (#385). Podman only derives a volume's
+    ownership from the image directory when the volume is empty, so a volume
+    created by an earlier root-running image stays root-owned and uploads fail
+    with EACCES after the upgrade. `:U` chowns it to the container user on every
+    start, which keeps the upgrade path free of a manual `podman unshare chown`.
+    """
+    mounts = load_units()["kendo-app.container"]["Container"]["Volume"]
+    uploads = [m for m in mounts if "kendo-app-uploads" in m]
+    assert uploads, mounts
+    assert uploads[0].endswith(":U"), uploads
