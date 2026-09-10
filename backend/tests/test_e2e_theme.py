@@ -175,7 +175,7 @@ def test_selecting_theme_applies_dark_class_immediately(page: Page) -> None:
 def test_theme_preference_survives_page_refresh(page: Page) -> None:
     """AC4: Theme preference is saved to localStorage and restored after a refresh.
 
-    The blocking script in index.html reads localStorage before first paint, so
+    The blocking script (frontend/public/theme.js) reads localStorage before first paint, so
     the saved theme survives a reload without a flash.  ThemeProvider then
     reconciles against GET /users/me/preferences on mount.  This test covers the
     client-side persistence half of AC4.
@@ -206,7 +206,7 @@ def test_theme_preference_survives_page_refresh(page: Page) -> None:
 def test_theme_from_server_profile_applied_after_login(browser) -> None:
     """AC6: Fresh browser context defaults to system theme (matching server default).
 
-    With empty localStorage the pre-paint script in index.html falls back to the
+    With empty localStorage the pre-paint script (frontend/public/theme.js) falls back to the
     OS preference, so a fresh context starts on 'system'.  This test verifies
     that observable behaviour: OS=light → no 'dark' class on load.
     """
