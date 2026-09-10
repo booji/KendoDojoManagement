@@ -177,6 +177,36 @@ podman logs -f kendo-traefik   # look for successful ACME / certificate obtained
 
 Migrations run automatically on app startup (`entrypoint.sh` → `alembic upgrade head`).
 
+### Claim the admin account immediately (before anything else)
+
+The instance is now reachable, and until the first passkey is registered
+**anyone who reaches the domain can claim admin**. `/api/setup` and the two
+`/api/setup/passkey/*` endpoints are unauthenticated by design — that is how
+the first account gets created — and the completing user is promoted to admin
+outright.
+
+That window does not close on its own. The guard behind those endpoints counts
+*passkey credentials*, not users: an abandoned registration ceremony leaves a
+user row with no credential and deliberately does **not** count, so an operator
+whose browser died mid-ceremony is never locked out. Only a completed ceremony
+closes it.
+
+Nor is the hostname obscure on a public host. Traefik's Let's Encrypt
+certificate is published to certificate transparency logs the moment it is
+issued, so the domain is discoverable within minutes of the step above — likely
+before you have finished reading this paragraph.
+
+So: open `https://<your-domain>/` and complete the passkey registration now,
+then confirm the window is shut.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://dojo.example.com/api/setup
+# 404 -> setup is closed, an account exists.
+# 200 -> still claimable by anyone who loads the page.
+```
+
+A UAT box on a private LAN is a milder version of this, not an exempt one.
+
 ### Upgrading a deployment created before the Alembic baseline (issue #264)
 
 As of issue #264, the Alembic chain has a baseline migration (`000000000000`)
@@ -308,7 +338,50 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 | Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-db` |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
-> **When a Quadlet unit or the env file changes upstream**, the Upgrade command above is not enough — it rebuilds the image but reuses the units already in `~/.config/containers/systemd/`. Re-run the copy from [§4](#4-install-and-start-the-quadlet-units-as-kendo), refresh `~/kendo/kendo-app.env` against [`deploy/env/kendo-app.env.example`](../deploy/env/kendo-app.env.example), then `systemctl --user daemon-reload && systemctl --user restart kendo-app`.
+> **When a Quadlet unit or the env file changes upstream**, the Upgrade command above is not enough — it rebuilds the image but reuses the units already in `~/.config/containers/systemd/`, and it never touches `~/kendo/kendo-app.env`. See [§9.1](#91-refreshing-the-env-file-after-an-upgrade).
+
+---
+
+### 9.1 Refreshing the env file after an upgrade
+
+`git pull` updates `deploy/env/kendo-app.env.example` in `~/src`. It does not
+update `~/kendo/kendo-app.env` — that file is yours, per host, and nothing
+overwrites it. When an upgrade adds a setting, the app silently runs without
+it: the Quadlet unit passes this one `EnvironmentFile` and nothing else, so a
+key absent from it is absent from the app's environment.
+
+Compare **keys**, not lines. Values legitimately differ per host, so a plain
+`diff` is all noise; the keys are what drift:
+
+```bash
+diff <(grep -oE '^[A-Z_]+' ~/kendo/kendo-app.env | sort) \
+     <(grep -oE '^[A-Z_]+' ~/src/deploy/env/kendo-app.env.example | sort)
+```
+
+Empty output means nothing new upstream. A `>` line is a setting you are
+missing — copy it across with its comment, then restart:
+
+```bash
+systemctl --user restart kendo-app
+```
+
+A changed `EnvironmentFile` needs only a restart; `daemon-reload` is for
+changed *unit* files (see the note under the table above).
+
+Then verify the app actually received it — a restart proves the unit started,
+not that the value arrived:
+
+```bash
+podman exec kendo-app printenv APP_ENV JWT_EXPIRE_MINUTES
+# APP_ENV=production
+# JWT_EXPIRE_MINUTES=480
+```
+
+> **Hosts deployed before #386 need this now.** That change added
+> `APP_ENV=production` (without it the app takes its development path and skips
+> every production WebAuthn check at startup) and raised
+> `JWT_EXPIRE_MINUTES` to 480. Both live in the env file, so neither reaches an
+> existing host until you copy them across.
 
 ---
 
