@@ -31,7 +31,6 @@ from app.auth.dependencies import (
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
-from tests.fake_repositories import InMemorySessionInstanceRepository
 
 # ---------------------------------------------------------------------------
 # Stubs
