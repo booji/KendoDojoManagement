@@ -8,6 +8,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app import config
+from app.auth.session_cookie import set_session_cookie
 
 # The passkey "begin" endpoints answer for any email, registered or not. Their
 # real path (known/authorized email) does strictly more work than their decoy
@@ -77,6 +78,35 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
                     elapsed * 1000,
                     config.AUTH_BEGIN_MIN_DURATION_MS,
                 )
+
+
+class SessionRenewalMiddleware(BaseHTTPMiddleware):
+    """Attach a re-issued session cookie to whatever response comes back.
+
+    The guard decides the slide (see app/auth/guards.py, #387) but must not set
+    the cookie itself: FastAPI merges a dependency's response headers only on
+    the branch that serializes a return value (routing.py, `raw_response` is
+    taken whole otherwise), so every route that returns a Response directly --
+    the bare 204s, the CSV StreamingResponses -- would silently drop it, as
+    would every HTTPException, whose response the exception handler builds
+    fresh. The admin whose afternoon is exports and attendance edits would
+    then never be renewed at all. Out here there is exactly one response
+    object and nothing to merge.
+
+    Known gap: a guarded request already in flight when the user logs out can
+    land after the logout response and re-set the cookie, leaving the session
+    live server-side until it expires even though the SPA shows a signed-out
+    app. Closing it needs revocation — server-side session state this project
+    deliberately does not keep (#387) — so the window is accepted rather than
+    papered over.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        response = await call_next(request)
+        token = getattr(request.state, "renewed_token", None)
+        if token is not None:
+            set_session_cookie(response, token)
+        return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

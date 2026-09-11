@@ -31,6 +31,13 @@ APP_ENV: str = os.getenv("APP_ENV", "development").strip().lower()
 JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
+# The ceiling on a single session, however continuously it is used. Sliding
+# renewal (#387) keeps an active session alive by re-issuing the cookie, which
+# would mean "signed in forever" without this cap. A re-issued token's own
+# expiry is clamped to the ceiling too, so this is the real maximum, not the
+# maximum plus one more JWT_EXPIRE_MINUTES. Past it the user signs in again —
+# one passkey touch.
+SESSION_MAX_MINUTES: int = int(os.getenv("SESSION_MAX_MINUTES", str(60 * 24 * 7)))
 COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
 # Trust X-Forwarded-For for client IP (rate limiting, lockout). Enable ONLY when

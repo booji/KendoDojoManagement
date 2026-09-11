@@ -13,7 +13,7 @@ No DB, no app — the guard is called as a plain callable.
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_role
 from app.auth.models import UserClaims
@@ -32,7 +32,18 @@ _INACTIVE = UserClaims(
 
 async def _call(guard, claims: UserClaims | None) -> UserClaims:
     token = encode_token(claims) if claims is not None else None
-    return await guard(access_token=token)
+    return await _invoke(guard, token)
+
+
+async def _invoke(guard, token: str | None) -> UserClaims:
+    """Call the guard the way FastAPI would.
+
+    The request and unit of work are the sliding-renewal seam (#387); a fresh
+    token is never due for renewal, so neither is touched by these tests. See
+    test_session_renewal.py for the renewal path itself.
+    """
+    request = Request({"type": "http", "headers": [], "method": "GET", "path": "/"})
+    return await guard(request=request, uow=None, access_token=token)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +100,7 @@ async def test_missing_cookie_returns_401(guard) -> None:
 @pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
 async def test_undecodable_token_returns_401(guard) -> None:
     with pytest.raises(HTTPException) as exc:
-        await guard(access_token="not-a-jwt")
+        await _invoke(guard, "not-a-jwt")
 
     assert exc.value.status_code == 401
 
@@ -109,7 +120,7 @@ async def test_recovery_session_token_returns_403(guard) -> None:
     token = encode_recovery_token("member-uuid", "member@dojo.test")
 
     with pytest.raises(HTTPException) as exc:
-        await guard(access_token=token)
+        await _invoke(guard, token)
 
     assert exc.value.status_code == 403
 

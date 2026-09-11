@@ -14,16 +14,68 @@ def _key() -> OctKey:
     return OctKey.import_key(config.JWT_SECRET.encode())
 
 
-def encode_token(claims: UserClaims) -> str:
-    expire = datetime.now(UTC) + timedelta(minutes=config.JWT_EXPIRE_MINUTES)
+def encode_token(claims: UserClaims, session_started_at: int | None = None) -> str:
+    """Mint an access token for ``claims``.
+
+    ``sst`` is when the *session* began, as opposed to ``iat``, when this
+    particular token was minted. Sliding renewal re-issues a token repeatedly
+    and each re-issue carries the original ``sst`` forward, so the session has
+    a hard ceiling (``SESSION_MAX_MINUTES``) no amount of activity can slide
+    past. Omit ``session_started_at`` and a new session starts here — that is
+    what every login ceremony wants.
+    """
+    now = int(datetime.now(UTC).timestamp())
+    started = session_started_at if session_started_at is not None else now
+    # Never past the session ceiling: a token minted just before it would
+    # otherwise carry a full lifetime beyond it, making the documented maximum
+    # session silently JWT_EXPIRE_MINUTES longer than it says.
+    expire = min(
+        int(
+            (
+                datetime.now(UTC) + timedelta(minutes=config.JWT_EXPIRE_MINUTES)
+            ).timestamp()
+        ),
+        started + 60 * config.SESSION_MAX_MINUTES,
+    )
     payload = {
         "sub": claims.sub,
         "email": claims.email,
         "role": claims.role,
         "is_active": claims.is_active,
-        "exp": int(expire.timestamp()),
+        "iat": now,
+        "sst": started,
+        "exp": expire,
     }
     return jwt.encode({"alg": "HS256"}, payload, _key())
+
+
+def renewal_due(token: str) -> int | None:
+    """The session start to carry forward, if ``token`` should be re-issued now.
+
+    Returns ``None`` when the token is still in the first half of its life
+    (re-issuing on every request would be pure churn) or when the session has
+    reached its hard ceiling — there the token is left to expire, which sends
+    the user back through a login ceremony as intended.
+
+    ``token`` must already have passed :func:`decode_token`; this only reads
+    the timestamps back out of it.
+    """
+    try:
+        payload = jwt.decode(token, _key(), algorithms=["HS256"]).claims
+        exp = int(payload["exp"])
+        # Tokens minted before #387 carry neither claim. Derive both from the
+        # configured lifetime so an in-flight session survives the deploy.
+        issued = int(payload.get("iat", exp - 60 * config.JWT_EXPIRE_MINUTES))
+        started = int(payload.get("sst", issued))
+    except (JoseError, ValueError, KeyError):
+        return None
+
+    now = int(datetime.now(UTC).timestamp())
+    if now < issued + (exp - issued) // 2:
+        return None
+    if now >= started + 60 * config.SESSION_MAX_MINUTES:
+        return None
+    return started
 
 
 def decode_token(token: str) -> UserClaims:

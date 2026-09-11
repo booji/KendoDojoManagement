@@ -97,6 +97,55 @@ export type RequestOptions = Omit<RequestInit, "body"> & {
 }
 
 /**
+ * Endpoints where a 401 answers the request rather than reporting that the
+ * session has gone: the pre-auth ceremonies, recovery-code redemption (a wrong
+ * code is a 401), and `/auth/me`, whose caller distinguishes "not signed in"
+ * from "this instance has never been set up" and routes to /setup accordingly.
+ * Everywhere else a 401 means the cookie expired or was revoked.
+ */
+const PRE_AUTH_PATHS = [
+  "/api/auth/me",
+  "/api/auth/login/",
+  "/api/auth/register/",
+  "/api/auth/recovery/redeem",
+  "/api/auth/invites/redeem/",
+  "/api/setup",
+]
+
+/**
+ * Whether a signed-in session has been observed in this page load.
+ *
+ * Public pages make authenticated calls that legitimately 401 — the theme
+ * preference and the dojo settings load on /login and /setup too — so a 401
+ * alone does not mean "your session ended". Only a 401 *after* the app has
+ * seen a session is an expiry. Reset by any full page load, which is also
+ * what a redirect to /login causes.
+ */
+let sessionEstablished = false
+
+/** Called once the authenticated layout has a user (see App.tsx). */
+export const markSessionEstablished = (): void => {
+  sessionEstablished = true
+}
+
+/**
+ * Send an expired session back to the login page.
+ *
+ * A full navigation rather than a router push: this is reachable from any
+ * component and from outside the router, and throwing the SPA's state away is
+ * the point — the alternative is a signed-out app still rendering a sidebar
+ * and a members list. The session-expiry cliff (#387) used to surface as
+ * "Not authorized" toasts from every action with no way back but a reload.
+ */
+const redirectToLogin = (path: string): void => {
+  if (!sessionEstablished) return
+  const { pathname } = new URL(path, window.location.origin)
+  if (PRE_AUTH_PATHS.some((p) => pathname.startsWith(p))) return
+  if (window.location.pathname === "/login") return
+  window.location.assign("/login")
+}
+
+/**
  * Send a request the way every api module should, and hand back the raw
  * `Response` without inspecting it.
  *
@@ -105,13 +154,16 @@ export type RequestOptions = Omit<RequestInit, "body"> & {
  * 403 detail, a 404 that means "not found" rather than "error" — and would
  * otherwise reach for `fetch` directly and lose the credentials and encoding
  * rules along with it.
+ *
+ * A 401 that is not one of the pre-auth cases sends the user to /login, so an
+ * expired session reads as a sign-out rather than as a broken app (#387).
  */
 export const apiFetch = async (
   path: string,
   { body, headers, ...init }: Omit<RequestOptions, "errorMessage"> = {},
 ): Promise<Response> => {
   const isFormData = body instanceof FormData
-  return fetch(path, {
+  const response = await fetch(path, {
     credentials: "include",
     ...init,
     headers:
@@ -124,6 +176,9 @@ export const apiFetch = async (
         ? undefined
         : JSON.stringify(body),
   })
+
+  if (response.status === 401) redirectToLogin(path)
+  return response
 }
 
 export const request = async <T>(

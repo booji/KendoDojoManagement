@@ -412,6 +412,10 @@ podman exec kendo-app printenv APP_ENV JWT_EXPIRE_MINUTES
 > every production WebAuthn check at startup) and raised
 > `JWT_EXPIRE_MINUTES` to 480. Both live in the env file, so neither reaches an
 > existing host until you copy them across.
+>
+> #387 adds `SESSION_MAX_MINUTES` (default 10080 — 7 days), the ceiling on a
+> session that sliding renewal keeps alive. It defaults in `app/config.py`, so
+> an existing host needs it in the env file only to override that default.
 
 ---
 
