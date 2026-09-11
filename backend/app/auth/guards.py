@@ -1,10 +1,46 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
+from app.auth.db_models import User
 from app.auth.models import UserClaims
-from app.auth.token import decode_token
+from app.auth.token import decode_token, encode_token, renewal_due
+from app.db.unit_of_work import AbstractUnitOfWork
+from app.dependencies import get_uow
+
+
+async def _renew(
+    request: Request,
+    uow: AbstractUnitOfWork,
+    claims: UserClaims,
+    session_started_at: int,
+) -> UserClaims:
+    """Mint the slid token and hand back the claims it now carries.
+
+    Role and ``is_active`` live in the token, so between logins the app is
+    reading a snapshot of the user row. Renewal is the one moment that snapshot
+    can be refreshed for free — the row is re-read here, so a demotion bites on
+    this request rather than waiting out the token.
+
+    A user who has been deleted or deactivated has no session left to slide:
+    that is a 401, not a 403, so the SPA reads it as a sign-out and routes to
+    the login page rather than papering the app in "Not authorized" toasts.
+
+    The cookie is left to ``SessionRenewalMiddleware`` — see the reason there.
+    """
+    user = await uow.session.get(User, claims.sub)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    fresh = UserClaims(
+        sub=claims.sub,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+    )
+    request.state.renewed_token = encode_token(fresh, session_started_at)
+    return fresh
 
 
 @lru_cache(maxsize=8)
@@ -17,6 +53,8 @@ def require_role(
     """
 
     async def _guard(
+        request: Request,
+        uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
         access_token: Annotated[str | None, Cookie()] = None,
     ) -> UserClaims:
         if access_token is None:
@@ -25,9 +63,16 @@ def require_role(
             claims = decode_token(access_token)
         except ValueError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-        if not claims.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         if claims.recovery_session:
+            # Deliberately short-lived and scoped to the recovery endpoints —
+            # never slid forward.
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+        session_started_at = renewal_due(access_token)
+        if session_started_at is not None:
+            claims = await _renew(request, uow, claims, session_started_at)
+
+        if not claims.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         if role == "admin" and claims.role != "admin":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

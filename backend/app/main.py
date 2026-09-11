@@ -27,7 +27,11 @@ from app.attendance.router import router as attendance_router
 from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import API_PREFIX, CORS_ORIGINS, validate_startup_config
-from app.core.middleware import ConstantTimeAuthMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    ConstantTimeAuthMiddleware,
+    SecurityHeadersMiddleware,
+    SessionRenewalMiddleware,
+)
 from app.db.bootstrap import prepare_database
 from app.db.engine import engine
 from app.federations.router import router as federations_router
@@ -84,6 +88,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SessionRenewalMiddleware)
 # Added after SlowAPI so it sits *outside* it: the constant-time floor must
 # cover rate-limit rejections and unit-of-work teardown too, not just the
 # handler body, or the passkey begin endpoints leak which emails are

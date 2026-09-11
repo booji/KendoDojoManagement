@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletContext } from "react-router-dom"
 import { getMe } from "@/api/auth"
+import { markSessionEstablished } from "@/api/client"
 import type { UserClaims } from "@/api/auth"
 import { checkSetupAvailable } from "@/api/setup"
 import { getMyMember } from "@/api/users"
@@ -40,6 +41,9 @@ const AuthenticatedLayout = () => {
   useEffect(() => {
     getMe()
       .then((me) => {
+        // From here a 401 means the session ended rather than "never signed
+        // in", which is what lets apiFetch route it to /login (#387).
+        markSessionEstablished()
         setUser(me)
         refresh()
       })
