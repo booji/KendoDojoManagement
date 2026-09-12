@@ -106,12 +106,17 @@ async def test_undecodable_token_returns_401(guard) -> None:
 
 
 @pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
-async def test_inactive_user_returns_403(guard) -> None:
-    """Deactivating a member must lock them out before their token expires."""
+async def test_inactive_user_returns_401(guard) -> None:
+    """Deactivating a member must lock them out before their token expires.
+
+    401 rather than 403, matching the renewal path (#396): a deactivated user
+    has no session either way, so the SPA reads it as a sign-out and routes to
+    the login page instead of leaving the app rendered behind a toast.
+    """
     with pytest.raises(HTTPException) as exc:
         await _call(guard, _INACTIVE)
 
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 401
 
 
 @pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
