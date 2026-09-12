@@ -103,7 +103,8 @@ overwrites `X-Forwarded-For` with the address it observed, so rate limiting and
 account lockout see a client IP the client cannot choose. If you re-publish the
 app's port, set `TRUST_PROXY_XFF=false` in the same edit.
 
-Alembic migrations run automatically on startup via the entrypoint.
+Alembic migrations run in the `migrate` service, which runs `alembic upgrade
+head` and exits; `app` starts only once it has succeeded.
 Uploaded logos and backgrounds persist in the `static_uploads` named volume, and
 the database in `postgres_data` — both survive `down`/`up` and image rebuilds.
 

@@ -90,6 +90,11 @@ SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
     python -m app.db.scratch hold &
 DB_HOLD_PID=$!
 
+# Migrate the fresh per-run database. uvicorn's lifespan no longer does this
+# (#391) — the app does not own `alembic upgrade head` any more — so the
+# harness has to, before uvicorn or pytest touches the schema.
+python -m app.db.bootstrap
+
 # Start backend API server. Deliberately outside the BACKEND_ONLY guard: not
 # every non-e2e test is server-free — tests/test_auth_begin_calibration.py
 # drives http://localhost:8000 directly — so the backend half of the harness

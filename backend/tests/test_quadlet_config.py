@@ -348,3 +348,51 @@ def test_uploads_volume_is_chowned_to_the_container_user():
     uploads = [m for m in mounts if "kendo-app-uploads" in m]
     assert uploads, mounts
     assert uploads[0].endswith(":U"), uploads
+
+
+# ---------------------------------------------------------------------------
+# 14 — migrations are their own oneshot unit (#391)
+# ---------------------------------------------------------------------------
+# entrypoint.sh no longer runs `alembic upgrade head`: kendo-migrate owns it.
+# A failed migration then fails as its own unit instead of as an app container
+# that exits, and the app never binds :8000 against a half-migrated schema.
+
+
+def test_app_requires_and_waits_for_the_migration_unit():
+    unit_section = load_units()["kendo-app.container"].get("Unit", {})
+    for key in ("Requires", "After"):
+        assert "kendo-migrate.service" in unit_section.get(key, []), (
+            f"kendo-app.container must declare {key}=kendo-migrate.service — "
+            "otherwise the app can start against an unmigrated schema (#391)"
+        )
+
+
+def test_migrate_unit_is_a_oneshot_that_waits_for_db():
+    migrate = load_units()["kendo-migrate.container"]
+    assert migrate.get("Service", {}).get("Type") == ["oneshot"], (
+        "kendo-migrate.container must set Type=oneshot in [Service]; a default "
+        "Type=notify unit never reaches 'active' and blocks kendo-app forever"
+    )
+    assert "kendo-db.service" in migrate.get("Unit", {}).get("After", [])
+
+
+def test_every_unit_dependency_resolves_to_a_container_file():
+    """Requires=/After= naming a *.service must have a matching .container.
+
+    Network= and Volume= references are checked above; without this, adding
+    Requires=kendo-migrate.service while forgetting to `git add` the unit
+    file leaves every operator with an app systemd refuses to start
+    ("Unit kendo-migrate.service not found").
+    """
+    units = load_units()
+    known = {name.removesuffix(".container") + ".service" for name in units}
+    for cname in _all_container_files():
+        unit_section = units[cname].get("Unit", {})
+        refs = unit_section.get("Requires", []) + unit_section.get("After", [])
+        for ref in refs:
+            if not ref.endswith(".service"):
+                continue
+            assert ref in known, (
+                f"{cname} references {ref}, but deploy/quadlet/ has no unit "
+                f"file for it. Known: {sorted(known)}"
+            )

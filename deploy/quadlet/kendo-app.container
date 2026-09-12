@@ -10,6 +10,9 @@
 Description=Kendo App
 Requires=kendo-db.service
 After=kendo-db.service
+# Schema first: kendo-migrate runs `alembic upgrade head` and exits (#391).
+Requires=kendo-migrate.service
+After=kendo-migrate.service
 
 [Container]
 ContainerName=kendo-app

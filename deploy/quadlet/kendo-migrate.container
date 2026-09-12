@@ -1,0 +1,31 @@
+# `alembic upgrade head`, as its own oneshot unit rather than a step inside the
+# app container (#391). kendo-app is ordered After= this, so it never serves
+# against a half-migrated schema, and a failed migration fails visibly as
+# kendo-migrate.service instead of as an app container that exited.
+#
+# Same image and env file as kendo-app; backend network only (it talks to the
+# db and nothing else). Downtime during a long migration is unchanged — closing
+# that window needs two app instances and an advisory lock in
+# app/db/bootstrap.py, which single-dojo self-hosting does not warrant.
+[Unit]
+Description=Kendo schema migration
+Requires=kendo-db.service
+After=kendo-db.service
+
+[Container]
+ContainerName=kendo-migrate
+Image=localhost/kendodojo:latest
+Network=kendo-backend.network
+EnvironmentFile=%h/kendo/kendo-app.env
+Secret=kendo_database_url,type=env,target=DATABASE_URL
+Entrypoint=python
+Exec=-m app.db.bootstrap
+# The image has no HEALTHCHECK and this container exits; without this Quadlet's
+# default Type=notify would wait for a readiness notification that never comes.
+Notify=no
+
+[Service]
+Type=oneshot
+# Keeps the unit "active (exited)" after success, so kendo-app's Requires= is
+# satisfied instead of being pulled back into a restart loop.
+RemainAfterExit=yes
