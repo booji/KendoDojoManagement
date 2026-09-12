@@ -23,6 +23,7 @@ from app import config
 from app.auth import token as token_module
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
+from app.auth.session_cookie import set_session_cookie
 from app.auth.token import decode_token, encode_token, renewal_due
 from app.core.middleware import SessionRenewalMiddleware
 from app.main import app
@@ -259,3 +260,19 @@ async def test_the_cookie_is_set_on_an_error_response() -> None:
 def test_the_app_installs_the_renewal_middleware() -> None:
     """The guard's slide is inert without it."""
     assert any(m.cls is SessionRenewalMiddleware for m in app.user_middleware)
+
+
+def test_the_cookie_never_outlives_the_token_it_carries() -> None:
+    """Near the session ceiling the token's exp is clamped, so Max-Age must be
+    too (#397) — otherwise the browser keeps sending a dead token and holds the
+    stale cookie all the way to /login."""
+    started = int(time.time()) - (60 * config.SESSION_MAX_MINUTES - 120)
+    token = encode_token(_MEMBER, started)
+    response = Response()
+
+    set_session_cookie(response, token)
+
+    max_age = int(
+        response.headers["set-cookie"].split("Max-Age=")[1].split(";")[0].strip()
+    )
+    assert max_age <= 120, "Max-Age must follow the clamped exp, not the full lifetime"
