@@ -159,10 +159,10 @@ def pg_engine():
 def _setup_schema():
     """Verify the schema is already migrated — conftest no longer builds it.
 
-    run_tests.sh creates a fresh per-run database and starts uvicorn against
-    it before pytest ever runs; uvicorn's own lifespan runs `alembic upgrade
-    head` via app.db.bootstrap.prepare_database(), which is the sole schema
-    owner (see the module docstring in test_conftest_schema_ownership.py for
+    run_tests.sh creates a fresh per-run database, runs `alembic upgrade
+    head` against it via `python -m app.db.bootstrap`, and only then starts
+    uvicorn — the script is the sole schema owner here (the app process
+    stopped migrating in #391) (see the module docstring in test_conftest_schema_ownership.py for
     why two builders/teardowns racing each other was the actual bug in
     #316). By the time this fixture runs, the schema must already exist —
     all this does is check that and fail loudly, with one clear diagnostic,

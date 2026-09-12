@@ -163,7 +163,7 @@ systemctl --user daemon-reload
 systemctl --user start kendo-traefik.service   # pulls in app -> db via Requires=
 
 # Check status
-systemctl --user status kendo-db kendo-app kendo-traefik --no-pager
+systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager
 podman ps
 ```
 
@@ -175,7 +175,11 @@ Watch the first cert issuance:
 podman logs -f kendo-traefik   # look for successful ACME / certificate obtained
 ```
 
-Migrations run automatically on app startup (`entrypoint.sh` → `alembic upgrade head`).
+Migrations run as their own unit: `kendo-migrate.service` runs `alembic
+upgrade head` and exits, and `kendo-app` is ordered after it, so the app
+never serves against a half-migrated schema and a failed migration shows up
+as a failed `kendo-migrate.service` rather than as an app crash (#391).
+`systemctl --user status kendo-migrate --no-pager` shows the last run.
 
 ### Claim the admin account immediately (before anything else)
 
@@ -336,8 +340,8 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 | Status | `systemctl --user status kendo-app --no-pager` |
 | Logs | `podman logs -f kendo-app` |
 | Restart app | `systemctl --user restart kendo-app` |
-| **Upgrade** | `cd ~/src && git pull && podman build -t localhost/kendodojo:latest . && systemctl --user restart kendo-app` |
-| Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-db` |
+| **Upgrade** | `cd ~/src && git pull && podman build -t localhost/kendodojo:latest . && systemctl --user restart kendo-migrate kendo-app` |
+| Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db` |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
 > **When a Quadlet unit, the Traefik config or the env file changes upstream**,
@@ -358,7 +362,7 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 > # watches this directory, so no restart is needed once the file lands.
 > diff deploy/traefik/dynamic/kendo.yml ~/kendo/traefik/dynamic/kendo.yml
 >
-> systemctl --user restart kendo-app
+> systemctl --user restart kendo-migrate kendo-app
 > ```
 >
 > The env file is per-host and needs comparing rather than copying — see

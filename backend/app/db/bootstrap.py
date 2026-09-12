@@ -1,20 +1,24 @@
 """Bring a database from whatever state it's in up to the current schema.
 
-Run before the app starts (see the repo-root `entrypoint.sh`). Schema
-creation flows exclusively through the Alembic migration chain now that the
-chain has a baseline migration (`000000000000_baseline_schema.py`) as its
-revision zero: `alembic upgrade head` replays cleanly from a genuinely empty
-database, so there is no need to special-case "fresh" databases with
+Run before the app starts, as its own unit rather than a step inside the app
+container: the `migrate` service in docker-compose.yml, kendo-migrate.service
+under Quadlet, and run_tests.sh in the test harness. The app process itself
+no longer runs this (#391), so a failed migration fails as itself instead of
+as an app that crashed on boot.
+
+Schema creation flows exclusively through the Alembic migration chain now
+that the chain has a baseline migration (`000000000000_baseline_schema.py`)
+as its revision zero: `alembic upgrade head` replays cleanly from a genuinely
+empty database, so there is no need to special-case "fresh" databases with
 `Base.metadata.create_all` + `alembic stamp head` — that branch (and the
 drift risk of maintaining two schema sources) is gone. `prepare_database`
-now does one thing: wait for the database to become reachable, then run
-`alembic upgrade head` unconditionally, whatever state the database is
-already in (empty, mid-migration, or already at head).
+does one thing: wait for the database to become reachable, then run `alembic
+upgrade head` unconditionally, whatever state the database is already in
+(empty, mid-migration, or already at head).
 
 Assumes one process bootstraps a given database at a time — true of the
-single-app-container compose stack this project ships. Scaling the app
-service to more than one replica racing against the same empty volume would
-need an advisory lock here first.
+single migration unit this project ships. Running two of them concurrently
+against the same empty volume would need an advisory lock here first.
 """
 
 import asyncio

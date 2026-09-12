@@ -21,8 +21,9 @@ http:
         servers:
           - url: "http://kendo-app:8000"
         passHostHeader: true
-        # entrypoint.sh runs `alembic upgrade head` before uvicorn binds :8000,
-        # so every restart has a window where nothing is listening. Without this
+        # kendo-migrate runs `alembic upgrade head` to completion before the
+        # app starts (#391), so every restart has a window where nothing is
+        # listening on :8000. Without this
         # Traefik reports the refused connection as 502 Bad Gateway; with it the
         # server is marked down and callers get the truthful 503 (#385).
         healthCheck:

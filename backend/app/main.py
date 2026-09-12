@@ -32,7 +32,6 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     SessionRenewalMiddleware,
 )
-from app.db.bootstrap import prepare_database
 from app.db.engine import engine
 from app.federations.router import router as federations_router
 from app.grades.router import router as grades_router
@@ -62,15 +61,15 @@ def _rate_limit_exceeded_handler(
 
 
 async def _init_db() -> None:
-    """Bring the schema to head via Alembic, then seed default session types.
+    """Seed default session types. Does NOT migrate.
 
-    Schema creation flows exclusively through the Alembic migration chain
-    (see app.db.bootstrap) — this no longer calls Base.metadata.create_all.
-    prepare_database() already retries with backoff while the database is
-    unreachable, so no separate retry loop is needed here; seeding runs once
-    the schema is guaranteed to exist.
+    `alembic upgrade head` runs in its own unit before this process starts —
+    the `migrate` service in docker-compose.yml, kendo-migrate.service under
+    Quadlet, and `python -m app.db.bootstrap` in run_tests.sh — so that a
+    failed migration fails as itself rather than as an app that crashed, and
+    two app instances could never race each other up the chain (#391). This
+    therefore assumes the schema is already at head.
     """
-    await prepare_database()
     async with engine.begin() as conn:
         await seed_session_types(conn)
 

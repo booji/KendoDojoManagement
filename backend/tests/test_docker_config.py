@@ -636,3 +636,37 @@ def test_prod_traefik_health_checks_the_app(path: Path):
     health = services["kendo"]["loadBalancer"].get("healthCheck")
     assert health, f"{path.name}: the kendo service needs a loadBalancer healthCheck"
     assert health["path"] == "/health", health
+
+
+# ---------------------------------------------------------------------------
+# docker-compose.yml — migrations run before the app, not inside it (#391)
+# ---------------------------------------------------------------------------
+
+
+def test_compose_app_waits_for_migrate_to_complete():
+    compose = load_compose()
+    app_deps = compose["services"]["app"].get("depends_on", {})
+    assert app_deps.get("migrate", {}).get("condition") == (
+        "service_completed_successfully"
+    ), "app must start only after the migrate service exits 0 (#391)"
+    migrate_deps = compose["services"]["migrate"].get("depends_on", {})
+    assert migrate_deps.get("db", {}).get("condition") == "service_healthy"
+
+
+def test_app_container_does_not_run_migrations():
+    """One owner for `alembic upgrade head`: the migrate service/unit.
+
+    Both halves matter. entrypoint.sh is the obvious one; app/main.py's
+    lifespan is the one that made #391's first attempt a no-op — the
+    entrypoint had stopped migrating while `_init_db()` still called
+    prepare_database() on every start, so a failed migration still took the
+    app container down with it.
+    """
+    entrypoint = (ROOT / "entrypoint.sh").read_text()
+    assert "app.db.bootstrap" not in entrypoint, entrypoint
+
+    main = (ROOT / "backend" / "app" / "main.py").read_text()
+    assert "prepare_database" not in main, (
+        "app/main.py must not run migrations: the app is ordered after the "
+        "migrate unit, which owns `alembic upgrade head` (#391)"
+    )
