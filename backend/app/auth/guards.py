@@ -72,8 +72,14 @@ def require_role(
         if session_started_at is not None:
             claims = await _renew(request, uow, claims, session_started_at)
 
+        # 401, not 403, and for the same reason as in ``_renew``: a deactivated
+        # user has no session, so the SPA must route to /login rather than leave
+        # the app rendered behind a "Not authorized" toast. Renewal only runs
+        # past the halfway mark of a token's life, so splitting these two would
+        # make the status code depend on how old the token happens to be.
         if not claims.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        # The role check stays a 403: the session is valid, this route is not.
         if role == "admin" and claims.role != "admin":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         return claims
