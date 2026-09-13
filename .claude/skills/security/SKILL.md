@@ -21,7 +21,9 @@ description: Security reviewer for KendoDojoManagement. Checks OWASP top 10 issu
 - [ ] JWT signature validated on every protected route
 - [ ] JWT expiry (`exp`) checked
 - [ ] Passkey ceremonies use the `webauthn` library correctly — no hand-rolled crypto
-- [ ] Passwords hashed with `passlib[bcrypt]` — no MD5/SHA1/plaintext
+- [ ] No password login exists (#155) — don't add one; passkeys are the only login path
+- [ ] Recovery codes and admin recovery tokens hashed with `bcrypt` — no MD5/SHA1/plaintext
+- [ ] First-admin claim requires `SETUP_TOKEN`, compared with `secrets.compare_digest` (ADR-0003)
 
 ### Input validation
 - [ ] All external input goes through a Pydantic model before reaching the DB

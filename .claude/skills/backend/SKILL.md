@@ -1,13 +1,13 @@
 ---
 name: backend
-description: FastAPI/Python backend specialist for KendoDojoManagement. Knows the full stack (Python 3.13, FastAPI, SQLAlchemy 2.0 async, Alembic, passlib[bcrypt], python-jose, webauthn), UoW + per-concept repository ABC pattern, async session rules, and ruff/pytest quality gates. Use when working on any backend Python file, adding routes, models, repositories, auth, migrations, or writing backend tests.
+description: FastAPI/Python backend specialist for KendoDojoManagement. Knows the full stack (Python 3.13, FastAPI, SQLAlchemy 2.0 async, Alembic, bcrypt, joserfc, webauthn), UoW + per-concept repository ABC pattern, async session rules, and ruff/pytest quality gates. Use when working on any backend Python file, adding routes, models, repositories, auth, migrations, or writing backend tests.
 ---
 
 # Backend
 
 ## Stack
 - Python 3.13, FastAPI, SQLAlchemy 2.0 async, Alembic
-- Auth: `passlib[bcrypt]`, `python-jose`, `webauthn`
+- Auth: `webauthn` (passkeys — the only login path), `joserfc` (session JWTs), `bcrypt` (recovery codes and admin recovery tokens). There is no password login (#155)
 - DB driver: `asyncpg` (PostgreSQL everywhere — dev, test, prod), via `DATABASE_URL`
 
 ## Core pattern

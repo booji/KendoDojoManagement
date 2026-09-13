@@ -11,7 +11,7 @@ KendoDojoManagement — manages sessions and members of a kendo dojo. Open sourc
 - **Backend:** Python + FastAPI
 - **Frontend:** React + Vite + shadcn/ui
 - **Database:** PostgreSQL (dev, test, prod) via SQLAlchemy
-- **Auth:** Passkeys/WebAuthn (`py_webauthn`) primary; email/password fallback
+- **Auth:** Passkeys/WebAuthn (`py_webauthn`) only — there is no password login (removed in #155). Break-glass is bcrypt-hashed recovery codes and admin recovery tokens (`app/cli.py create-recovery-token`); the first admin account is claimed with a pre-provisioned `SETUP_TOKEN` (ADR-0003)
 - **API:** REST
 - **Deployment:** rootless Podman — Quadlet units (`deploy/quadlet`) for the hardened deployment, Compose (app + PostgreSQL containers) for a quick self-host
 - **Primary keys:** UUID
