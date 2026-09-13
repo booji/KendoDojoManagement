@@ -102,6 +102,7 @@ def test_compose_has_named_postgres_volume():
 REQUIRED_APP_ENV_VARS = [
     "DATABASE_URL",
     "JWT_SECRET",
+    "SETUP_TOKEN",
     "JWT_EXPIRE_MINUTES",
     "COOKIE_SECURE",
     "SESSION_MAX_MINUTES",
@@ -149,6 +150,7 @@ def test_compose_db_service_env_includes(var_name: str):
 REQUIRED_ENV_EXAMPLE_VARS = [
     "DATABASE_URL",
     "JWT_SECRET",
+    "SETUP_TOKEN",
     "JWT_EXPIRE_MINUTES",
     "COOKIE_SECURE",
     "POSTGRES_USER",
@@ -185,6 +187,7 @@ _SENSITIVE_KEYS = {
     "POSTGRES_PASSWORD",
     "POSTGRES_USER",
     "JWT_SECRET",
+    "SETUP_TOKEN",
 }
 
 # Patterns that indicate a real literal credential rather than an interpolated ref.

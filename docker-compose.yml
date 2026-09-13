@@ -26,6 +26,9 @@ services:
       APP_ENV: ${APP_ENV:-production}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
+      # Gates claiming the first admin account (ADR-0003). Required whether or
+      # not the instance is already claimed.
+      SETUP_TOKEN: ${SETUP_TOKEN}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
       SESSION_MAX_MINUTES: ${SESSION_MAX_MINUTES:-10080}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}

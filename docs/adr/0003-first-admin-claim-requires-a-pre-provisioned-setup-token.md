@@ -4,9 +4,10 @@ The operator provisions a `SETUP_TOKEN` before first boot — a podman secret
 injected as env under Quadlet, a value in the env file for the Compose
 self-host — and `POST /api/setup/passkey/complete` requires it. The app reads
 it from config like any other secret, compares it in constant time, and
-refuses to start without it. `GET /api/setup` and `/api/setup/passkey/begin`
-are unchanged, and the existing `_has_registered_user()` guard still runs
-first, so a claimed instance stays 404 regardless of what token is presented.
+refuses to start without it. `/api/setup/passkey/begin` requires it too (see
+the amendment under Consequences); `GET /api/setup` is unchanged, and the existing
+`_has_registered_user()` guard still runs first, so a claimed instance stays
+404 regardless of what token is presented.
 
 ## Context
 
@@ -124,10 +125,28 @@ is a second gate in front of that guard, never a replacement for it — and an
 instance whose token leaks after it is claimed is not thereby claimable.
 
 **No migration and no new state.** The token is a config value compared with
-`secrets.compare_digest` at `complete`. `begin` stays open: it creates only the
-phantom user rows it creates today, and gating it would add a second place to
-get the check wrong without closing anything `complete` does not already close.
-`GET /setup` stays open so the SPA can decide whether to render the setup page.
+`secrets.compare_digest` at `complete`. `GET /setup` stays open so the SPA can
+decide whether to render the setup page.
+
+> **Amended during implementation (#402).** `begin` is gated too. This ADR
+> originally left it open on the grounds that it closes nothing `complete` does
+> not already close. That is true of the claim itself, but not of the side
+> effects: `begin` on an unclaimed instance runs the bootstrap branch of
+> `_get_or_create_user`, which writes a user row with `role="admin"` for any
+> email a stranger submits. Leaving it open lets an unauthenticated scanner
+> accumulate admin-roled credential-less rows. Both endpoints now call one
+> shared `_require_setup_token()` — one place to get the check wrong, not two —
+> after `_has_registered_user()`, so 404 still wins on a claimed instance.
+>
+> The same amendment closes the route the original decision missed entirely.
+> `POST /api/auth/register/passkey/begin` is unauthenticated and reaches the
+> same bootstrap branch, so gating only `/setup/*` would have left the claim
+> open to anyone who read the OpenAPI schema. The branch is therefore gated
+> where every caller routes through it — `register_passkey_begin` and
+> `register_passkey_complete` take `allow_bootstrap`, which only the setup
+> router passes, and only after the token check. On an unclaimed instance the
+> ordinary registration route now answers with the same decoy it gives an
+> unknown email on a claimed one.
 
 **Lockout is a rotation, not a rebuild.** An operator who loses the token
 recreates the secret and restarts; nothing in the database has to change. The

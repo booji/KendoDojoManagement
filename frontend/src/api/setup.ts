@@ -1,4 +1,4 @@
-import { apiFetch } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 import type { UserClaims, ApiError } from "@/api/auth"
 
@@ -50,12 +50,21 @@ export const checkSetupAvailable = async (): Promise<boolean> => {
 /**
  * Runs the full passkey registration ceremony against /api/setup/passkey/begin
  * and /api/setup/passkey/complete, returning UserClaims for the new admin.
+ *
+ * Both calls carry the setup token the operator provisioned before first boot
+ * (ADR-0003); without it the backend answers 401 "Invalid setup token", which
+ * is surfaced to the user rather than replaced with a generic message.
  */
-export const performSetupPasskeyRegistration = async (email: string): Promise<UserClaims> => {
+export const performSetupPasskeyRegistration = async (
+  email: string,
+  setupToken: string,
+): Promise<UserClaims> => {
+  const headers = { "X-Setup-Token": setupToken }
+
   // Begin
-  const beginRes = await apiFetch("/api/setup/passkey/begin", { method: "POST", body: { email } })
+  const beginRes = await apiFetch("/api/setup/passkey/begin", { method: "POST", body: { email }, headers })
   if (!beginRes.ok) {
-    throw { status: beginRes.status, message: "Failed to begin setup passkey registration" } satisfies ApiError
+    await throwApiError(beginRes, "Failed to begin setup passkey registration")
   }
   const beginData = (await beginRes.json()) as { publicKey: PasskeyCreationOptions }
   const options = beginData.publicKey
@@ -102,9 +111,9 @@ export const performSetupPasskeyRegistration = async (email: string): Promise<Us
   }
 
   // Complete
-  const completeRes = await apiFetch("/api/setup/passkey/complete", { method: "POST", body: { email, credential: credentialData } })
+  const completeRes = await apiFetch("/api/setup/passkey/complete", { method: "POST", body: { email, credential: credentialData }, headers })
   if (!completeRes.ok) {
-    throw { status: completeRes.status, message: "Setup passkey registration failed" } satisfies ApiError
+    await throwApiError(completeRes, "Setup passkey registration failed")
   }
   return completeRes.json() as Promise<UserClaims>
 }

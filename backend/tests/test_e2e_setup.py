@@ -25,6 +25,10 @@ API_URL = "http://localhost:8000/api"
 # so browser-facing code uses /api/setup, but direct backend checks use /setup.
 _SETUP_HEALTH_URL = f"{API_URL}/setup"
 
+# The claim gate (ADR-0003, #402). Read from the environment the server itself
+# was started with — docker-compose.test.yml sets it — never hardcoded here.
+SETUP_TOKEN = os.environ["SETUP_TOKEN"]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -143,6 +147,7 @@ def test_setup_page_shows_passkey_registration_ui(page: Page, fresh_db: None) ->
     # CardTitle renders as <div data-slot="card-title">, not a semantic heading
     expect(page.get_by_text("Welcome to Kendo Dojo")).to_be_visible()
     expect(page.get_by_label("Email")).to_be_visible()
+    expect(page.get_by_label("Setup token")).to_be_visible()
     expect(page.get_by_role("button", name="Create admin passkey")).to_be_visible()
 
 
@@ -205,6 +210,7 @@ def test_setup_registration_redirects_to_dashboard_as_admin(
     page.goto(f"{BASE_URL}/setup")
     expect(page.get_by_label("Email")).to_be_visible()
     page.get_by_label("Email").fill("admin@dojo.test")
+    page.get_by_label("Setup token").fill(SETUP_TOKEN)
     page.get_by_role("button", name="Create admin passkey").click()
     # The ceremony will fail without an authenticator; we cannot assert the redirect.
     expect(page).to_have_url(f"{BASE_URL}/")

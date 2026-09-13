@@ -20,6 +20,7 @@ const SetupPage = () => {
   const navigate = useNavigate()
   const [step, setStep] = useState<SetupStep>("passkey")
   const [email, setEmail] = useState("")
+  const [setupToken, setSetupToken] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
@@ -55,7 +56,7 @@ const SetupPage = () => {
 
     setLoading(true)
     try {
-      await performSetupPasskeyRegistration(email)
+      await performSetupPasskeyRegistration(email, setupToken)
       setStep("recovery")
     } catch (err) {
       setError(errorMessage(err, "An unexpected error occurred"))
@@ -150,7 +151,8 @@ const SetupPage = () => {
         <CardHeader>
           <CardTitle>Welcome to Kendo Dojo</CardTitle>
           <CardDescription>
-            No accounts exist yet. Create your admin passkey to get started.
+            No accounts exist yet. Enter the setup token this instance was
+            deployed with and create your admin passkey.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -166,6 +168,21 @@ const SetupPage = () => {
                 required
                 autoComplete="email"
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="setup-token">Setup token</Label>
+              <Input
+                id="setup-token"
+                type="password"
+                value={setupToken}
+                onChange={(e) => setSetupToken(e.target.value)}
+                required
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                The SETUP_TOKEN secret provisioned before this instance first
+                started.
+              </p>
             </div>
             {error !== null && (
               <p className="text-sm text-destructive" role="alert">
