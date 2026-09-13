@@ -897,3 +897,48 @@ def test_validate_startup_config_raises_when_app_env_is_not_a_string(
         config.validate_startup_config()
 
     assert "APP_ENV" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# SETUP_TOKEN — must be set, non-blank (ADR-0003, #402)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_value", ["", "   ", "\t\n", None])
+def test_validate_startup_config_raises_when_setup_token_missing(
+    monkeypatch: pytest.MonkeyPatch, bad_value: str | None
+) -> None:
+    """Unconditional: an instance without a claim token refuses to start,
+    claimed or not, so a restore or a wipe cannot reopen the claim."""
+    monkeypatch.setattr(config, "JWT_SECRET", "a-real-non-empty-secret-value")
+    monkeypatch.setattr(
+        config, "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/kendo"
+    )
+    monkeypatch.setattr(config, "SETUP_TOKEN", bad_value)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "SETUP_TOKEN" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("name", ["JWT_SECRET", "SETUP_TOKEN"])
+def test_validate_startup_config_rejects_template_placeholder_secrets(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """A production deploy that copies .env.example and misses a secret boots
+    with a value published in this repo — for SETUP_TOKEN, the claim gate."""
+    monkeypatch.setattr(config, "JWT_SECRET", "a-real-non-empty-secret-value")
+    monkeypatch.setattr(config, "SETUP_TOKEN", "a-real-non-empty-setup-token")
+    monkeypatch.setattr(
+        config, "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/kendo"
+    )
+    monkeypatch.setattr(config, "APP_ENV", "production")
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "dojo.example.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
+    monkeypatch.setattr(config, name, f"<your-{name.lower()}>")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert name in str(exc_info.value)

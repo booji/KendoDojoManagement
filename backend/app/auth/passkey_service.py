@@ -71,8 +71,17 @@ async def register_passkey_begin(
     email: str,
     uow: AbstractUnitOfWork,
     member_directory: MemberDirectory | None = None,
+    *,
+    allow_bootstrap: bool = False,
 ) -> dict:
     """Begin a registration ceremony, whether or not `email` is authorized.
+
+    `allow_bootstrap` is the first-admin claim gate (ADR-0003): only the setup
+    router passes it, and only after checking the pre-provisioned SETUP_TOKEN.
+    Without it the bootstrap branch below is unreachable, so the ordinary
+    registration route cannot be used to claim admin on an unclaimed instance —
+    it sees an email with no Member row and answers with the decoy, exactly as
+    it does on a claimed one.
 
     The Member gate (#239) decides only whether there is a `Subject`;
     app.auth.webauthn_ceremony decides what the response looks like in either
@@ -84,7 +93,7 @@ async def register_passkey_begin(
     """
     directory = member_directory or member_directory_for(uow)
 
-    is_bootstrap = await _is_bootstrap(uow)
+    is_bootstrap = allow_bootstrap and await _is_bootstrap(uow)
     if not is_bootstrap and not await directory.has_member(email):
         return register_begin(email, subject=None).response
 
@@ -101,8 +110,19 @@ async def register_passkey_begin(
 
 
 async def register_passkey_complete(
-    payload: PasskeyRegisterCompleteRequest, uow: AbstractUnitOfWork
+    payload: PasskeyRegisterCompleteRequest,
+    uow: AbstractUnitOfWork,
+    *,
+    allow_bootstrap: bool = False,
 ) -> PasskeyRegisterCompleteResponse:
+    # The other half of the claim gate (ADR-0003). A phantom admin row left by
+    # setup's begin would otherwise be completable through the ordinary
+    # registration route, which presents no token. Indistinguishable from every
+    # other failure here, for the same enumeration reason.
+    if not allow_bootstrap and await _is_bootstrap(uow):
+        log_security_event("passkey_registered", "failure")
+        raise _AUTH_FAILED
+
     result = await uow.session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if user is None:

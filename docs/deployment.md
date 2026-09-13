@@ -117,7 +117,7 @@ Now **edit the placeholders**:
 
 ## 3. Create the secrets (as `kendo`)
 
-Three sensitive values never touch a plaintext env file — they are Podman secrets. Generate strong values and pipe them in (avoid leaving them in shell history — note the leading space or use `read`):
+These sensitive values never touch a plaintext env file — they are Podman secrets. Generate strong values and pipe them in (avoid leaving them in shell history — note the leading space or use `read`):
 
 ```bash
 # 1. Postgres password
@@ -131,7 +131,13 @@ python3 -c "import secrets; print(secrets.token_hex(32))" | tr -d '\n' \
 printf '%s' 'postgresql+asyncpg://kendo:REPLACE-with-strong-db-password@kendo-db:5432/kendo' \
   | podman secret create kendo_database_url -
 
-# 4. Cloudflare API token (DNS-01). Scope it to Zone:DNS:Edit on ONE zone only.
+# 4. Setup token — gates claiming the first admin account (ADR-0003). Create it
+#    BEFORE first boot: the app refuses to start without it, and whoever holds
+#    it is who can claim admin.
+openssl rand -base64 32 | tr -d '\n' \
+  | podman secret create kendo_setup_token -
+
+# 5. Cloudflare API token (DNS-01). Scope it to Zone:DNS:Edit on ONE zone only.
 printf '%s' 'REPLACE-with-cloudflare-token' | podman secret create kendo_cf_dns_token -
 ```
 
@@ -181,37 +187,66 @@ never serves against a half-migrated schema and a failed migration shows up
 as a failed `kendo-migrate.service` rather than as an app crash (#391).
 `systemctl --user status kendo-migrate --no-pager` shows the last run.
 
-### Claim the admin account immediately (before anything else)
+### Claim the admin account (the setup token gates it)
 
-The instance is now reachable, and until the first passkey is registered
-**anyone who reaches the domain can claim admin**. `/api/setup` and the two
-`/api/setup/passkey/*` endpoints are unauthenticated by design — that is how
-the first account gets created — and the completing user is promoted to admin
-outright.
+The instance is now reachable. Claiming the first admin account requires the
+`kendo_setup_token` secret created in step 3 — the setup endpoints answer
+`401 {"detail": "Invalid setup token"}` without it (ADR-0003). Nothing to race:
+an opportunistic scanner that finds the host minutes after Traefik's Let's
+Encrypt certificate hits the certificate transparency logs cannot claim
+anything without that value.
 
-That window does not close on its own. The guard behind those endpoints counts
-*passkey credentials*, not users: an abandoned registration ceremony leaves a
-user row with no credential and deliberately does **not** count, so an operator
-whose browser died mid-ceremony is never locked out. Only a completed ceremony
-closes it.
+The token is required whether or not the instance is already claimed: the app
+refuses to start without it, so do not delete the secret after claiming. A
+database restore or wipe would otherwise boot an unclaimed instance with no
+gate in front of it.
 
-Nor is the hostname obscure on a public host. Traefik's Let's Encrypt
-certificate is published to certificate transparency logs the moment it is
-issued, so the domain is discoverable within minutes of the step above — likely
-before you have finished reading this paragraph.
+**The browser is the way you do this.** Open `https://<your-domain>/`: the
+setup page asks for the admin email and the setup token. Paste the token into
+the "Setup token" field and complete the passkey registration. The page sends
+it as an `X-Setup-Token` header on `/api/setup/passkey/begin` and
+`/api/setup/passkey/complete`, and a wrong token comes back on the form as
+"Invalid setup token". The value is never stored in the browser — reloading the
+page means pasting it again.
 
-So: open `https://<your-domain>/` and complete the passkey registration now,
-then confirm the window is shut.
+No shell access is needed to claim the account, so the URL and the token can go
+to whoever is becoming the admin. The `curl` below is for debugging a claim
+that is not working, not a step:
+
+```bash
+curl -sS -X POST https://<your-domain>/api/setup/passkey/begin \
+  -H 'Content-Type: application/json' \
+  -H "X-Setup-Token: $SETUP_TOKEN" \
+  -d '{"email":"admin@your-dojo"}'
+# 401 {"detail":"Invalid setup token"} -> wrong or missing token.
+# 404 {"detail":"Setup already completed"} -> claimed; the token is irrelevant.
+```
+
+Then confirm the window is shut.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://<your-domain>/api/setup
 # 404 -> setup is closed, an account exists.
-# 200 -> still claimable by anyone who loads the page.
+# 200 -> still unclaimed (the token is still required to claim it).
 # anything else (000, 502, ...) -> the check never reached the app. That is not
 # a closed window; fix the request and re-run before you believe it.
 ```
 
-A UAT box on a private LAN is a milder version of this, not an exempt one.
+The claimed guard counts *passkey credentials*, not users: an abandoned
+ceremony leaves a user row with no credential and deliberately does **not**
+count, so an operator whose browser died mid-ceremony is never locked out.
+
+**Lost the token?** Rotate it — nothing in the database has to change:
+
+```bash
+podman secret rm kendo_setup_token
+openssl rand -base64 32 | tr -d '\n' | podman secret create kendo_setup_token -
+systemctl --user restart kendo-app
+```
+
+`app/cli.py create-recovery-token` does **not** cover a never-claimed instance:
+it resolves a `User` row by email, and an unclaimed instance has none. Rotation
+is the only path there, and it costs seconds.
 
 ### Upgrading a deployment created before the Alembic baseline (issue #264)
 

@@ -33,6 +33,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, insert, select
 
+import app.config as config
 from app.auth.db_models import (
     AdminRecoveryToken,
     Invite,
@@ -51,6 +52,15 @@ from app.members.db_models import Member
 def clear_overrides():
     yield
     app.dependency_overrides.clear()
+
+
+# The bootstrap branch lives behind the setup token now (ADR-0003, #402).
+_SETUP_HEADERS = {"X-Setup-Token": "test-setup-token"}
+
+
+@pytest.fixture(autouse=True)
+def _setup_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(config, "SETUP_TOKEN", _SETUP_HEADERS["X-Setup-Token"])
 
 
 async def _seed_user(session, email: str, role: str = "member") -> str:
@@ -255,9 +265,15 @@ async def test_register_begin_links_member_user_id(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> None:
-    """On a fresh instance with zero Users, register-begin succeeds for any
-    email (no Member required) and the created User gets role 'admin'. If a
-    Member row happens to match, it is still linked."""
+    """On a fresh instance with zero Users, the token-gated setup route succeeds
+    for any email (no Member required) and the created User gets role 'admin'.
+    If a Member row happens to match, it is still linked.
+
+    The bootstrap branch is reachable only from /setup/passkey/begin, which
+    requires the pre-provisioned SETUP_TOKEN (ADR-0003): the ordinary
+    registration route below it would otherwise hand admin to any stranger who
+    reached an unclaimed instance.
+    """
     session = db_client
     await _reset_to_fresh_instance(session)
     assert await _user_count(session) == 0
@@ -267,8 +283,9 @@ async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> N
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/auth/register/passkey/begin",
+            "/setup/passkey/begin",
             json={"email": "first-ever@dojo.test"},
+            headers=_SETUP_HEADERS,
         )
 
     assert response.status_code == 200
@@ -307,8 +324,9 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         retry = await c.post(
-            "/auth/register/passkey/begin",
+            "/setup/passkey/begin",
             json={"email": "first-ever@dojo.test"},
+            headers=_SETUP_HEADERS,
         )
 
     assert retry.status_code == 200
@@ -995,6 +1013,11 @@ async def test_login_completes_end_to_end_without_allow_credentials(
     """
     session = db_client
     await _reset_to_fresh_instance(session)
+    # A claimed instance with the test email on the roll: the ordinary
+    # registration route is the second-and-later user's path now that the
+    # bootstrap branch belongs to the token-gated setup route (ADR-0003).
+    await _seed_user(session, "claimed@dojo.test", role="admin")
+    await _seed_member(session, "e2e-flow@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -1125,6 +1148,8 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
     """
     session = db_client
     await _reset_to_fresh_instance(session)
+    await _seed_user(session, "claimed@dojo.test", role="admin")
+    await _seed_member(session, "uv-flow@dojo.test")
 
     credential_id_bytes = b"uv-flow-credential-id"
     credential_id_b64 = "dXYtZmxvdy1jcmVkZW50aWFsLWlk"
@@ -1192,6 +1217,6 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
                 },
             )
         assert login_complete.status_code == 200
-        assert (
-            auth_spy.call_args.kwargs.get("require_user_verification") is True
-        ), "login_passkey_complete does not enforce user verification"
+        assert auth_spy.call_args.kwargs.get("require_user_verification") is True, (
+            "login_passkey_complete does not enforce user verification"
+        )

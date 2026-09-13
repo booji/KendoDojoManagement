@@ -29,6 +29,13 @@ DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
 APP_ENV: str = os.getenv("APP_ENV", "development").strip().lower()
 
 JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
+
+# Pre-provisioned secret that gates claiming the first admin account
+# (ADR-0003). Required unconditionally, claimed or not: making it conditional
+# on unclaimed state needs a DB query in lifespan() and invites an operator to
+# delete the secret after claiming — which boots fine until the database is
+# restored or wiped, and then reopens the claim to whoever finds it first.
+SETUP_TOKEN: str = os.getenv("SETUP_TOKEN") or ""
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 # The ceiling on a single session, however continuously it is used. Sliding
@@ -164,7 +171,7 @@ CORS_ORIGINS: list[str] = (
 # future required secrets to this tuple — validate_startup_config() reads
 # each by name from this module's globals at call time, so no other wiring
 # is needed.
-_REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET", "DATABASE_URL")
+_REQUIRED_STARTUP_VARS: tuple[str, ...] = ("JWT_SECRET", "DATABASE_URL", "SETUP_TOKEN")
 
 # Below, "production-shaped" validation for WEBAUTHN_RP_ID/WEBAUTHN_ORIGIN is
 # done by *shape*, not by comparing against the literal dev defaults
@@ -378,6 +385,15 @@ def validate_startup_config() -> None:
         # must both be usable without failing startup.
         rp_id = (globals().get("WEBAUTHN_RP_ID") or "").strip().lower()
         origin = (globals().get("WEBAUTHN_ORIGIN") or "").strip()
+
+        # Both secrets ship as angle-bracket placeholders in .env.example /
+        # .env.prod.example, and a non-blank placeholder clears the
+        # required-vars check above. A production deploy that copies the
+        # template and misses one would otherwise boot with a value published
+        # in this repo — for SETUP_TOKEN that is the claim gate handed to
+        # anyone who reads it (ADR-0003).
+        _reject_template_placeholder("JWT_SECRET", globals().get("JWT_SECRET") or "")
+        _reject_template_placeholder("SETUP_TOKEN", globals().get("SETUP_TOKEN") or "")
 
         _reject_template_placeholder("WEBAUTHN_RP_ID", rp_id)
         _reject_template_placeholder("WEBAUTHN_ORIGIN", origin)

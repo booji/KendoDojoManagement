@@ -14,6 +14,50 @@ from sqlalchemy import insert, select
 
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
+from app.members.db_models import Member
+
+
+async def _claimed_instance_with_member(session, email: str) -> None:
+    """Seed the state the ordinary registration route now requires: an already
+    claimed instance (one PasskeyCredential row) and a Member for `email`.
+
+    The bootstrap branch — no credentials, any email, role="admin" — moved
+    behind the setup token (ADR-0003, #402), so /auth/register/passkey/* is the
+    second-and-later user's path and nothing else.
+    """
+    seed_user_id = str(uuid.uuid4())
+    await session.execute(
+        insert(User).values(
+            id=seed_user_id,
+            email=f"claimed-{seed_user_id}@dojo.test",
+            role="admin",
+            is_active=True,
+        )
+    )
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=seed_user_id,
+            credential_id=uuid.uuid4().bytes,
+            public_key=b"seeded-public-key",
+            sign_count=0,
+            created_at=datetime.now(UTC),
+        )
+    )
+    await session.execute(
+        insert(Member).values(
+            id=str(uuid.uuid4()),
+            email=email,
+            first_name="Test",
+            surname="Member",
+            join_date="2024-01-01",
+            membership_status="active",
+            is_coach=False,
+            is_first_aider=False,
+        )
+    )
+    await session.flush()
+
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +93,7 @@ async def test_register_passkey_begin_returns_options(db_client) -> None:
 async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> None:
     """Calling begin for a new email creates a User row in the DB."""
     session = db_client
+    await _claimed_instance_with_member(session, "musashi@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -70,6 +115,7 @@ async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> N
 async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
     """If the user already exists (password-registered), begin returns 200 without duplicate."""
     session = db_client
+    await _claimed_instance_with_member(session, "existing@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -101,6 +147,7 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
 async def test_register_passkey_complete_stores_credential(db_client) -> None:
     """POST /auth/register/passkey/complete verifies credential and returns UserClaims (201)."""
     session = db_client
+    await _claimed_instance_with_member(session, "complete@dojo.test")
 
     # Seed a user with a pending challenge
     user_id = str(uuid.uuid4())
