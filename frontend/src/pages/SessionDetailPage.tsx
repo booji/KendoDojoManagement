@@ -183,7 +183,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
       start_time: s.start_time,
       duration_minutes: s.duration_minutes,
       title: s.title,
-      note: s.note,
       type_ids: [...s.type_ids],
     })),
   )
@@ -609,9 +608,6 @@ const SessionDetailPage = () => {
                       </div>
                       {segment.title && (
                         <p className="font-medium">{segment.title}</p>
-                      )}
-                      {segment.note && (
-                        <p className="text-muted-foreground">{segment.note}</p>
                       )}
                     </li>
                   )
