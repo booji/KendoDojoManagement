@@ -34,7 +34,6 @@ class SessionTypeUpdate(BaseModel):
 # Public per-segment free-text length caps. Keep the calendar description
 # readable and bound the field against abuse with huge text.
 _TITLE_MAX_LENGTH = 100
-_NOTE_MAX_LENGTH = 280
 
 
 def _normalize_public_text(
@@ -57,18 +56,12 @@ class SegmentCreate(BaseModel):
     start_time: str  # "HH:MM"
     duration_minutes: int
     title: str | None = None  # public, optional
-    note: str | None = None  # public, optional
     type_ids: list[str]
 
     @field_validator("title")
     @classmethod
     def normalize_title(cls, v: str | None) -> str | None:
         return _normalize_public_text(v, _TITLE_MAX_LENGTH, "title")
-
-    @field_validator("note")
-    @classmethod
-    def normalize_note(cls, v: str | None) -> str | None:
-        return _normalize_public_text(v, _NOTE_MAX_LENGTH, "note")
 
     @field_validator("start_time")
     @classmethod
@@ -103,7 +96,6 @@ class SegmentRead(BaseModel):
     start_time: str
     duration_minutes: int
     title: str | None = None
-    note: str | None = None
     type_ids: list[str] = []
 
 

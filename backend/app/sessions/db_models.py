@@ -48,7 +48,6 @@ class SessionTemplateSegment(UUIDBase):
     start_time: Mapped[str] = mapped_column(String(5), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    note: Mapped[str | None] = mapped_column(String(280), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     template: Mapped[SessionTemplate] = relationship(back_populates="segments")
@@ -113,7 +112,6 @@ class SessionInstanceSegment(UUIDBase):
     start_time: Mapped[str] = mapped_column(String(5), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    note: Mapped[str | None] = mapped_column(String(280), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     instance: Mapped[SessionInstance] = relationship(back_populates="segments")

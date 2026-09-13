@@ -23,10 +23,11 @@ _PUBLIC_FIELDS = frozenset(
     }
 )
 
-# Per-segment fields allowed into the public breakdown. title and note are
-# public and included.
+# Per-segment fields allowed into the public breakdown. title is public and
+# included; the per-segment note was removed in #406, and this allow-list is
+# what keeps a row written before that from reaching the feed.
 _PUBLIC_SEGMENT_FIELDS = frozenset(
-    {"start_time", "duration_minutes", "type_names", "title", "note"}
+    {"start_time", "duration_minutes", "type_names", "title"}
 )
 
 
@@ -53,17 +54,14 @@ def _segment_breakdown_line(segment: dict[str, Any]) -> str:
     end_hour, end_minute = divmod(end_minutes, 60)
     end = f"{end_hour:02d}:{end_minute:02d}"
     types = ", ".join(segment.get("type_names") or [])
-    # " - "-joined [time-range, types, title?, note?]. Time-range and types are
-    # always present (a segment requires at least one type); title and note are
-    # only included when present, so a bare segment never renders a dangling
-    # separator. RFC 5545 escaping (applied later) handles any commas/dashes.
+    # " - "-joined [time-range, types, title?]. Time-range and types are always
+    # present (a segment requires at least one type); title is only included
+    # when present, so a bare segment never renders a dangling separator.
+    # RFC 5545 escaping (applied later) handles any commas/dashes.
     parts = [f"{start}-{end}", types]
     title = segment.get("title")
     if title:
         parts.append(title)
-    note = segment.get("note")
-    if note:
-        parts.append(note)
     return " - ".join(parts)
 
 

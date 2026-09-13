@@ -308,14 +308,19 @@ describe("issue #190 — no per-segment coach notes", () => {
   })
 })
 
-// ── Issue #182 — public title & note fields ──────────────────────────────────
+// ── Issue #182 — public title field (note removed in #406) ───────────────────
 
-describe("public title & note (issue #182)", () => {
-  it("renders always-visible Title and Note inputs", () => {
+describe("public title (issue #182)", () => {
+  it("renders an always-visible Title input", () => {
     renderEditor([BLANK_SEGMENT])
 
     expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^note$/i)).toBeInTheDocument()
+  })
+
+  it("offers no Note input — the field was removed in #406", () => {
+    renderEditor([BLANK_SEGMENT])
+
+    expect(screen.queryByLabelText(/^note$/i)).not.toBeInTheDocument()
   })
 
   it("typing in Title flows through onChange", async () => {
@@ -329,16 +334,6 @@ describe("public title & note (issue #182)", () => {
     expect(lastCall[0].title).toBe("Footwork drills")
   })
 
-  it("typing in Note flows through onChange", async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
-    renderEditor([BLANK_SEGMENT], onChange)
-
-    await user.type(screen.getByLabelText(/^note$/i), "today focus nuki-do")
-
-    const lastCall: SegmentInput[] = onChange.mock.lastCall![0]
-    expect(lastCall[0].note).toBe("today focus nuki-do")
-  })
 })
 
 // ── Multi-segment rendering ────────────────────────────────────────────────────

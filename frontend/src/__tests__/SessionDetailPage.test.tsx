@@ -170,10 +170,10 @@ describe("AC2 — member view", () => {
   })
 })
 
-// ── Issue #182 — per-segment public title & note in the breakdown ─────────────
+// ── Issue #182 — per-segment public title in the breakdown (note gone, #406) ──
 
-describe("issue #182 — segment title & note", () => {
-  const SESSION_WITH_TITLE_NOTE = {
+describe("issue #182 — segment title", () => {
+  const SESSION_WITH_TITLE = {
     ...BASE_SESSION,
     segments: [
       {
@@ -182,15 +182,14 @@ describe("issue #182 — segment title & note", () => {
         duration_minutes: 30,
         coach_notes: null,
         title: "Footwork drills",
-        note: "today focus nuki-do",
         type_ids: [TYPE_ID],
       },
     ],
   }
 
-  it("renders the segment title and note in the breakdown", async () => {
+  it("renders the segment title in the breakdown", async () => {
     mockFetch({
-      [`/sessions/${SESSION_ID}`]: { status: 200, body: SESSION_WITH_TITLE_NOTE },
+      [`/sessions/${SESSION_ID}`]: { status: 200, body: SESSION_WITH_TITLE },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
       [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
     })
@@ -200,10 +199,30 @@ describe("issue #182 — segment title & note", () => {
     await waitFor(() => {
       expect(screen.getByText("Footwork drills")).toBeInTheDocument()
     })
-    expect(screen.getByText("today focus nuki-do")).toBeInTheDocument()
   })
 
-  it("renders a segment cleanly when title and note are absent", async () => {
+  it("never renders a lingering note from a pre-#406 row", async () => {
+    mockFetch({
+      [`/sessions/${SESSION_ID}`]: {
+        status: 200,
+        body: {
+          ...SESSION_WITH_TITLE,
+          segments: [{ ...SESSION_WITH_TITLE.segments[0], note: "stale text" }],
+        },
+      },
+      [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+    })
+
+    renderDetailPage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Footwork drills")).toBeInTheDocument()
+    })
+    expect(screen.queryByText("stale text")).not.toBeInTheDocument()
+  })
+
+  it("renders a segment cleanly when the title is absent", async () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
@@ -215,8 +234,8 @@ describe("issue #182 — segment title & note", () => {
     await waitFor(() => {
       expect(screen.getAllByText(/19:00/).length).toBeGreaterThan(0)
     })
-    // No empty paragraphs / dangling separators when title & note are absent.
-    expect(screen.queryByText("today focus nuki-do")).not.toBeInTheDocument()
+    // No empty paragraphs / dangling separators when the title is absent.
+    expect(screen.queryByText("Footwork drills")).not.toBeInTheDocument()
   })
 })
 

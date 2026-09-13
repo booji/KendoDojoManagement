@@ -11,7 +11,6 @@ export type Segment = {
   start_time: string // "HH:MM"
   duration_minutes: number
   title: string | null // public, optional
-  note: string | null // public, optional
   type_ids: string[]
 }
 
@@ -19,7 +18,6 @@ export type SegmentInput = {
   start_time: string // "HH:MM"
   duration_minutes: number
   title?: string | null // public, optional
-  note?: string | null // public, optional
   type_ids: string[]
 }
 

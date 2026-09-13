@@ -97,7 +97,6 @@ def _segment_to_dict(
         "start_time": obj.start_time,
         "duration_minutes": obj.duration_minutes,
         "title": obj.title,
-        "note": obj.note,
         "type_ids": [link.session_type_id for link in obj.type_links],
     }
 
@@ -182,7 +181,6 @@ def _build_template_segments(
             start_time=seg["start_time"],
             duration_minutes=seg["duration_minutes"],
             title=seg.get("title"),
-            note=seg.get("note"),
             position=position,
         )
         segment.type_links = [
@@ -202,7 +200,6 @@ def _build_instance_segments(
             start_time=seg["start_time"],
             duration_minutes=seg["duration_minutes"],
             title=seg.get("title"),
-            note=seg.get("note"),
             position=position,
         )
         segment.type_links = [

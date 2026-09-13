@@ -405,8 +405,8 @@ async def test_member_cannot_create_session_with_segments(
 # Issue #190 — per-segment `coach_notes` removed entirely (unit tests, no DB)
 #
 # `coach_notes` remains a SESSION-level field (template/instance); only the
-# per-SEGMENT `coach_notes` is being removed. `title` and `note` on segments
-# are unaffected.
+# per-SEGMENT `coach_notes` is being removed. Segment `title` is unaffected
+# (segment `note` was later removed in its own right — see #406 below).
 # ---------------------------------------------------------------------------
 
 
@@ -419,7 +419,6 @@ def test_segment_read_model_dump_has_no_coach_notes() -> None:
         start_time="19:00",
         duration_minutes=60,
         title="Warm-up",
-        note="Bring your own bokuto",
         type_ids=["type-1"],
     )
     dumped = segment.model_dump()
@@ -473,9 +472,9 @@ def test_segment_create_ignores_extra_coach_notes_key() -> None:
     assert "coach_notes" not in segment.model_dump()
 
 
-def test_segment_create_title_and_note_still_present_and_normalized() -> None:
-    """Segment `title`/`note` are unaffected by the coach_notes removal —
-    still present, still whitespace-trimmed/None-coerced as before."""
+def test_segment_create_title_still_present_and_normalized() -> None:
+    """Segment `title` is unaffected by the coach_notes removal — still
+    present, still whitespace-trimmed/None-coerced as before."""
     from app.sessions.models import SegmentCreate
 
     segment = SegmentCreate(
@@ -483,27 +482,22 @@ def test_segment_create_title_and_note_still_present_and_normalized() -> None:
         duration_minutes=60,
         type_ids=["type-1"],
         title="  Warm-up  ",
-        note="   ",
     )
     assert segment.title == "Warm-up"
-    assert segment.note is None
 
 
-def test_segment_read_title_and_note_still_present() -> None:
-    """Segment `title`/`note` remain on SegmentRead."""
+def test_segment_read_title_still_present() -> None:
+    """Segment `title` remains on SegmentRead."""
     from app.sessions.models import SegmentRead
 
     assert "title" in SegmentRead.model_fields
-    assert "note" in SegmentRead.model_fields
     segment = SegmentRead(
         start_time="19:00",
         duration_minutes=60,
         type_ids=["type-1"],
         title="Warm-up",
-        note="Bring your own bokuto",
     )
     assert segment.title == "Warm-up"
-    assert segment.note == "Bring your own bokuto"
 
 
 def test_session_template_segment_db_model_has_no_coach_notes_column() -> None:
@@ -596,3 +590,54 @@ def test_session_instance_update_coach_notes_still_present() -> None:
     assert "coach_notes" in SessionInstanceUpdate.model_fields
     update = SessionInstanceUpdate(coach_notes="Updated note")
     assert update.coach_notes == "Updated note"
+
+
+# ---------------------------------------------------------------------------
+# Issue #406 — per-segment `note` removed entirely (unit tests, no DB)
+#
+# Session-level `info` is where prose about a session lives. Segment `title`
+# stays; segment `note` is gone from the schemas and from both DB models.
+# ---------------------------------------------------------------------------
+
+
+def test_segment_create_has_no_note_field() -> None:
+    from app.sessions.models import SegmentCreate
+
+    assert "note" not in SegmentCreate.model_fields
+
+
+def test_segment_read_has_no_note_field() -> None:
+    from app.sessions.models import SegmentRead
+
+    assert "note" not in SegmentRead.model_fields
+
+
+def test_segment_models_ignore_a_stray_note_key() -> None:
+    """An un-reloaded SPA posting `note` is discarded, not rejected: the
+    models keep Pydantic's default extra='ignore'."""
+    from app.sessions.models import SegmentCreate, SegmentRead
+
+    created = SegmentCreate(
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        note="Bring your own bokuto",
+    )
+    read = SegmentRead(
+        start_time="19:00",
+        duration_minutes=60,
+        type_ids=["type-1"],
+        note="Bring your own bokuto",
+    )
+    assert not hasattr(created, "note")
+    assert "note" not in created.model_dump()
+    assert not hasattr(read, "note")
+    assert "note" not in read.model_dump()
+
+
+def test_segment_db_models_have_no_note_column() -> None:
+    from app.sessions.db_models import SessionInstanceSegment, SessionTemplateSegment
+
+    for model in (SessionTemplateSegment, SessionInstanceSegment):
+        assert not hasattr(model, "note")
+        assert "note" not in model.__table__.columns
