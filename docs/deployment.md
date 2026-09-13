@@ -201,11 +201,17 @@ refuses to start without it, so do not delete the secret after claiming. A
 database restore or wipe would otherwise boot an unclaimed instance with no
 gate in front of it.
 
-Open `https://<your-domain>/`, enter the setup token and the admin email, and
-complete the passkey registration. The browser sends the token as an
-`X-Setup-Token` header on both `/api/setup/passkey/begin` and
-`/api/setup/passkey/complete` — the same shape if you ever drive those
-endpoints by hand:
+**The browser is the way you do this.** Open `https://<your-domain>/`: the
+setup page asks for the admin email and the setup token. Paste the token into
+the "Setup token" field and complete the passkey registration. The page sends
+it as an `X-Setup-Token` header on `/api/setup/passkey/begin` and
+`/api/setup/passkey/complete`, and a wrong token comes back on the form as
+"Invalid setup token". The value is never stored in the browser — reloading the
+page means pasting it again.
+
+No shell access is needed to claim the account, so the URL and the token can go
+to whoever is becoming the admin. The `curl` below is for debugging a claim
+that is not working, not a step:
 
 ```bash
 curl -sS -X POST https://<your-domain>/api/setup/passkey/begin \
