@@ -49,6 +49,24 @@ def encode_token(claims: UserClaims, session_started_at: int | None = None) -> s
     return jwt.encode({"alg": "HS256"}, payload, _key())
 
 
+def seconds_until_expiry(token: str) -> int:
+    """How long ``token`` has left, for a cookie that must not outlive it.
+
+    ``encode_token`` clamps ``exp`` to the session ceiling, so the last token of
+    a session is short of a full lifetime. A cookie given the full lifetime
+    anyway survives the token inside it: the browser keeps sending something
+    already dead, and the stale cookie rides along to /login (#397).
+
+    ``token`` must have been minted by :func:`encode_token`; a token that is
+    unreadable or already expired has nothing left, which is 0.
+    """
+    try:
+        exp = int(jwt.decode(token, _key(), algorithms=["HS256"]).claims["exp"])
+    except (JoseError, ValueError, KeyError):
+        return 0
+    return max(0, exp - int(datetime.now(UTC).timestamp()))
+
+
 def renewal_due(token: str) -> int | None:
     """The session start to carry forward, if ``token`` should be re-issued now.
 
