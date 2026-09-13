@@ -202,7 +202,21 @@ database restore or wipe would otherwise boot an unclaimed instance with no
 gate in front of it.
 
 Open `https://<your-domain>/`, enter the setup token and the admin email, and
-complete the passkey registration. Then confirm the window is shut.
+complete the passkey registration. The browser sends the token as an
+`X-Setup-Token` header on both `/api/setup/passkey/begin` and
+`/api/setup/passkey/complete` — the same shape if you ever drive those
+endpoints by hand:
+
+```bash
+curl -sS -X POST https://<your-domain>/api/setup/passkey/begin \
+  -H 'Content-Type: application/json' \
+  -H "X-Setup-Token: $SETUP_TOKEN" \
+  -d '{"email":"admin@your-dojo"}'
+# 401 {"detail":"Invalid setup token"} -> wrong or missing token.
+# 404 {"detail":"Setup already completed"} -> claimed; the token is irrelevant.
+```
+
+Then confirm the window is shut.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://<your-domain>/api/setup

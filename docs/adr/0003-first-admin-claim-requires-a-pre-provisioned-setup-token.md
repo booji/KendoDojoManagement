@@ -125,7 +125,10 @@ is a second gate in front of that guard, never a replacement for it — and an
 instance whose token leaks after it is claimed is not thereby claimable.
 
 **No migration and no new state.** The token is a config value compared with
-`secrets.compare_digest` at `complete`. `GET /setup` stays open so the SPA can
+`secrets.compare_digest` at `complete`. It travels as an `X-Setup-Token`
+header rather than a body field: the request models are shared with the
+ordinary registration route, and a header keeps the secret out of them and out
+of anything that logs a request body. `GET /setup` stays open so the SPA can
 decide whether to render the setup page.
 
 > **Amended during implementation (#402).** `begin` is gated too. This ADR
