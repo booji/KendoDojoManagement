@@ -96,6 +96,8 @@ stacks, so they are pinned here.
 | --- | --- | --- |
 | **Hardened deployment** | The rootless Podman + Quadlet stack in `deploy/quadlet`: Traefik terminating TLS, `kendo-app`, and `kendo-db` across the `kendo-edge` and `kendo-backend` networks. This is what **production** means when unqualified | The Quadlet thing, systemd deploy |
 | **Quick self-host** | The Compose stack in `docker-compose.yml`: the same app and database images with a simpler single-file setup, for an operator who does not want Quadlet | Prod compose, docker prod |
+| **Release image** | The published application container, `ghcr.io/booji/kendodojomanagement`, pinned by its **major** tag (`:1`). The app and nothing else — it holds no operator config | The container, the GHCR image, the build |
+| **Deployment bundle** | The config a host needs alongside the **Release Image**: `docker-compose.yml`, `.env.example`, the Traefik `.example` files, the Quadlet units, the backup scripts and `setup.sh`. Extracted from the image (`podman run --rm <image> init`), so it is always on the same version as the image it configures | The repo files, the deploy directory, the checkout |
 
 ## Example dialogue
 
