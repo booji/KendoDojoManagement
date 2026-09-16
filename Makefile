@@ -51,7 +51,10 @@ build:
 	# Both tags float to the latest patch upstream, but a build reuses whatever
 	# digest is already in local storage, so without this a machine keeps
 	# building on the base it first pulled — silently, for as long as it lives.
-	$(COMPOSE_PROD) build --pull
+	# Tagged localhost/kendodojo:latest rather than built through the compose
+	# file: the prod services reference the published image now (ADR-0004), so a
+	# contributor points KENDO_IMAGE at this build to run it.
+	$(RUNTIME) build --pull -t localhost/kendodojo:latest .
 
 ## down: Stop the stacks this checkout starts (dev and test)
 down:

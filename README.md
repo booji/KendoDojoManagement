@@ -49,7 +49,17 @@ Two supported ways to run this in production — pick one:
 > instead — full runbook in **[docs/deployment.md](docs/deployment.md)**.
 > The steps below are a minimal single-host HTTP trial only.
 
-**1. Copy and fill in the environment file:**
+**1. Get the deployment files and fill in the environment file:**
+
+The release image carries the files a deployment needs — this compose file, the
+`.example` config, the Quadlet units and the backup scripts — so there is no
+clone and no build (ADR-0004):
+
+```bash
+podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+```
+
+(Working from a checkout instead? Skip that — the files are already here.)
 
 ```bash
 cp .env.example .env
@@ -92,9 +102,17 @@ see `deploy/sysctl-99-kendo-rootless-ports.conf`.
 **3. Start the stack:**
 
 ```bash
-make build   # build the production image
-podman-compose up -d
+podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:1
 ```
+
+`KENDO_IMAGE` in `.env` is the pin. The documented default is the **major** tag
+`:1`: fixes and features, but no migration that needs a restore from backup to
+undo, so `podman-compose pull && podman-compose up -d` upgrades unattended.
+Moving to `:2` is a deliberate edit, made after reading the release notes.
+
+Contributors still build from source — `make build` produces
+`localhost/kendodojo:latest`; set `KENDO_IMAGE=localhost/kendodojo:latest` to
+run it.
 
 Traefik serves the app on 443 and redirects 80 to it. The `app` service
 publishes no host port of its own: every request arrives through the proxy,
@@ -323,7 +341,7 @@ problem, the port is.
 | `make` | List the targets (starts nothing) |
 | `make dev` | Start the hot-reload dev stack |
 | `make test` | Start the test watcher (re-runs pytest on every save) |
-| `make build` | Build the production image |
+| `make build` | Build the production image as `localhost/kendodojo:latest` (releases run the published image — see [ADR-0004](docs/adr/0004-published-images-pinned-by-major-tag.md)) |
 | `make down` | Stop the stacks this checkout starts — dev and test |
 | `make down-selfhost` | Stop the quick self-host stack — **takes the dojo offline** |
 | `make certs` | Issue the `dojo.localhost` dev TLS certificate if it is missing or untrusted (run for you by `make dev`) |

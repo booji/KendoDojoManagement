@@ -1,0 +1,6 @@
+# Dev-only material that must never reach a build context, because the `prod`
+# stage copies deploy/ wholesale into the published bundle (/bundle, ADR-0004)
+# and a layer keeps what a later `rm` deletes — anything here would stay
+# extractable from the pushed image.
+deploy/certs
+deploy/traefik/dev

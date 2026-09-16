@@ -674,3 +674,63 @@ def test_app_container_does_not_run_migrations():
         "app/main.py must not run migrations: the app is ordered after the "
         "migrate unit, which owns `alembic upgrade head` (#391)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Deployments run the published image, and it carries its own bundle (#410,
+# ADR-0004)
+# ---------------------------------------------------------------------------
+
+PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
+MAJOR_PIN = f"{PUBLISHED_IMAGE}:1"
+QUADLET_UNITS = [
+    ROOT / "deploy" / "quadlet" / "kendo-app.container",
+    ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
+]
+
+
+@pytest.mark.parametrize("service", ["app", "migrate"])
+def test_compose_runs_the_published_image_and_never_builds(service: str):
+    """An operator pulls; they do not build. `build:` alongside `image:` would
+    quietly rebuild from a context they no longer have."""
+    spec = load_compose()["services"][service]
+    assert "build" not in spec, spec
+    assert spec["image"] == f"${{KENDO_IMAGE:-{MAJOR_PIN}}}", spec["image"]
+
+
+def test_env_example_pins_the_same_image_as_the_compose_default():
+    assert f"\nKENDO_IMAGE={MAJOR_PIN}\n" in ENV_EXAMPLE.read_text()
+
+
+@pytest.mark.parametrize("unit", QUADLET_UNITS, ids=lambda p: p.name)
+def test_quadlet_units_run_the_published_image(unit: Path):
+    """Both units, always the same tag: the migration chain and the code that
+    runs against it have to come from one artefact."""
+    text = unit.read_text()
+    assert f"\nImage={MAJOR_PIN}\n" in text, text
+    assert "Image=localhost/kendodojo" not in text, text
+
+
+def test_entrypoint_hands_over_the_bundle_before_starting_uvicorn():
+    """`init` is the only argument entrypoint.sh interprets: a tar of /bundle
+    to stdout, so an operator gets the compose file and config without a clone.
+    It must short-circuit — reaching uvicorn would start the app instead."""
+    entrypoint = (ROOT / "entrypoint.sh").read_text()
+    assert 'if [ "$1" = "init" ]' in entrypoint, entrypoint
+    assert entrypoint.index("tar -C /bundle") < entrypoint.index("exec uvicorn")
+
+
+def test_bundle_ships_the_deployment_files_without_the_dev_only_ones():
+    """Everything under /bundle is published to operators at that tag, and
+    deploy/certs and deploy/traefik/dev are per-machine dev material.
+
+    They must be excluded from the build context, not deleted after the COPY:
+    a layer keeps what a later `rm` removes, so a dev machine's TLS private
+    keys would stay extractable from the pushed image.
+    """
+    stage = _prod_stage()
+    assert "COPY docker-compose.yml .env.example /bundle/" in stage, stage
+    assert "COPY deploy/ /bundle/deploy/" in stage, stage
+    ignored = (ROOT / ".dockerignore").read_text().splitlines()
+    assert "deploy/certs" in ignored, ignored
+    assert "deploy/traefik/dev" in ignored, ignored
