@@ -1,0 +1,55 @@
+name: Release image
+
+# Tagged releases publish the `prod` stage to GHCR so an operator never builds
+# (ADR-0004). The image carries its own deployment bundle — `podman run --rm
+# <image> init | tar -x` — so the config and the app it configures ship on one
+# version axis.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Least privilege: read the tree, write the package. Nothing else.
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push ghcr.io/booji/kendodojomanagement
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Release candidates (v1.0.0-rc1) are prereleases: they get their exact
+      # tag so the clean-VPS rehearsal has something to pull, but never the
+      # moving 1 / 1.0 / latest tags an operator is pinned to.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/booji/kendodojomanagement
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

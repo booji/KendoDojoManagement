@@ -93,10 +93,11 @@ Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**
 ## 2. Lay down the application files (as `kendo`)
 
 ```bash
-# Build the image from source (build-on-host model).
-git clone https://github.com/booji/KendoDojoManagement.git ~/src
-cd ~/src
-podman build -t localhost/kendodojo:latest .
+# Extract the deployment bundle from the release image — no clone, no build.
+# The bundle ships inside the image it configures, so the units below and the
+# app they start are one artefact (ADR-0004).
+mkdir -p ~/src && cd ~/src
+podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 
 # Config tree the Quadlet units expect at ~/kendo/
 mkdir -p ~/kendo/traefik/dynamic ~/backups ~/.local/bin
@@ -375,18 +376,27 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 | Status | `systemctl --user status kendo-app --no-pager` |
 | Logs | `podman logs -f kendo-app` |
 | Restart app | `systemctl --user restart kendo-app` |
-| **Upgrade** | `cd ~/src && git pull && podman build -t localhost/kendodojo:latest . && systemctl --user restart kendo-migrate kendo-app` |
+| **Upgrade** | `podman pull ghcr.io/booji/kendodojomanagement:1 && systemctl --user restart kendo-migrate kendo-app` |
 | Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db` |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
+> The pin is the `Image=` line in the two Quadlet units, and the documented
+> value is the **major** tag `:1` — fixes and features, but no migration that
+> needs a restore from backup to undo. Moving to `:2` is a deliberate edit made
+> after reading the release notes. Building from source still works
+> (`podman build -t localhost/kendodojo:latest .`); point `Image=` at it.
+>
 > **When a Quadlet unit, the Traefik config or the env file changes upstream**,
-> the Upgrade command above is not enough — it rebuilds the image but reuses the
+> the Upgrade command above is not enough — it pulls the image but reuses the
 > units already in `~/.config/containers/systemd/`, the Traefik config already in
 > `~/kendo/traefik/`, and it never touches `~/kendo/kendo-app.env`. Each is a
-> copy made once at install time; `git pull` updates the source, not the copy.
+> copy made once at install time; pulling a new image updates neither.
 >
 > ```bash
-> cd ~/src
+> # Re-extract the bundle from the tag you are pinned to — it ships inside the
+> # image, so the units below match the app they start.
+> cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+>
 > # Units: re-run the copy from §4, then daemon-reload so Quadlet regenerates.
 > cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
 > cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
@@ -412,9 +422,9 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 
 ### 9.1 Refreshing the env file after an upgrade
 
-`git pull` updates `deploy/env/kendo-app.env.example` in `~/src`. It does not
-update `~/kendo/kendo-app.env` — that file is yours, per host, and nothing
-overwrites it. When an upgrade adds a setting, the app silently runs without
+Re-extracting the bundle updates `deploy/env/kendo-app.env.example` in
+`~/src`. It does not update `~/kendo/kendo-app.env` — that file is yours, per
+host, and nothing overwrites it. When an upgrade adds a setting, the app silently runs without
 it: the Quadlet unit passes this one `EnvironmentFile` and nothing else, so a
 key absent from it is absent from the app's environment.
 

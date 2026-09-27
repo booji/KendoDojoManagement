@@ -12,7 +12,11 @@ name: kendodojo
 # cannot call home.
 services:
   app:
-    build: .
+    # Published release image, pinned by major tag (ADR-0004): `:1` means fixes
+    # and features but no migration that needs a restore to undo. Override
+    # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
+    # built yourself (`make build` produces localhost/kendodojo:latest).
+    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:1}
     networks:
       - edge
       - backend
@@ -77,7 +81,9 @@ services:
   # docker compose. The migration window itself is unchanged; removing it would
   # need two app instances plus an advisory lock in app/db/bootstrap.py.
   migrate:
-    build: .
+    # Same image as `app` — the migration chain and the code that runs against
+    # it must come from one artefact.
+    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:1}
     networks:
       - backend
     environment:

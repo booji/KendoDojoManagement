@@ -53,6 +53,17 @@ COPY --from=frontend-build /frontend/dist ./static
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# The deployment bundle the image hands over with `init` (ADR-0004): everything
+# an operator needs around the app, shipped on the same version axis as the app
+# itself so config from the tip never drives a pinned image.
+#
+# The dev-only paths under deploy/ (certs, traefik/dev) are kept out by
+# .dockerignore rather than deleted after the COPY: a layer keeps what a later
+# `rm` removes, so a dev machine's TLS keys would still be extractable from the
+# pushed image. setup.sh joins the first COPY when it exists (#411).
+COPY docker-compose.yml .env.example /bundle/
+COPY deploy/ /bundle/deploy/
+
 # Run unprivileged. Rootless Podman already maps container-root to an
 # unprivileged host user, but inside the container root can rewrite the app's
 # own code and site-packages, so a compromise survives a restart (#385).
