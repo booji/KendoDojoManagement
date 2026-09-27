@@ -46,10 +46,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The pin setup.sh writes into .env: the MAJOR tag for a release, since
+      # that is what upgrades unattended (ADR-0004), but the exact tag for a
+      # prerelease — an rc rehearsal must stay on the image it is rehearsing.
+      - id: pin
+        run: |
+          v='${{ steps.meta.outputs.version }}'
+          case "$v" in *-*) tag="$v" ;; *) tag="${v%%.*}" ;; esac
+          echo "ref=ghcr.io/booji/kendodojomanagement:$tag" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           target: prod
           push: true
+          build-args: |
+            KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

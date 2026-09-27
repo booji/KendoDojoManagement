@@ -729,8 +729,23 @@ def test_bundle_ships_the_deployment_files_without_the_dev_only_ones():
     keys would stay extractable from the pushed image.
     """
     stage = _prod_stage()
-    assert "COPY docker-compose.yml .env.example /bundle/" in stage, stage
+    assert "COPY setup.sh docker-compose.yml .env.example /bundle/" in stage, stage
     assert "COPY deploy/ /bundle/deploy/" in stage, stage
     ignored = (ROOT / ".dockerignore").read_text().splitlines()
     assert "deploy/certs" in ignored, ignored
     assert "deploy/traefik/dev" in ignored, ignored
+
+
+def test_bundle_carries_the_tag_it_was_extracted_from():
+    """setup.sh writes the image pin into .env rather than prompting for it, so
+    the bundle has to know which tag it came out of (#411, ADR-0004). The build
+    arg is unset for a contributor's `make build`, and setup.sh then falls back
+    to .env.example's own default rather than pinning localhost/kendodojo.
+    """
+    stage = _prod_stage()
+    assert 'ARG KENDO_IMAGE_REF=""' in stage, stage
+    assert "/bundle/.image-tag" in stage, stage
+
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "KENDO_IMAGE_REF=" in release, release
+    assert "${v%%.*}" in release, "a release must stamp the major tag it documents"

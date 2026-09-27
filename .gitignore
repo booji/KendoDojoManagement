@@ -243,3 +243,10 @@ deploy/certs/
 # so an upgrade cannot revert a live deployment's routing to dojo.example.com.
 deploy/traefik/selfhost/traefik.yml
 deploy/traefik/selfhost/dynamic/*.yml
+
+# setup.sh (#411) keeps one backup when it rewrites a filled-in file, and the
+# release bundle carries the tag it was extracted from.
+.env.bak
+deploy/traefik/selfhost/*.bak
+deploy/traefik/selfhost/dynamic/*.bak
+.image-tag

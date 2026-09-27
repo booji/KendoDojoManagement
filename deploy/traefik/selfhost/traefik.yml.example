@@ -1,6 +1,7 @@
 # Traefik STATIC config for the QUICK SELF-HOST stack (docker-compose.yml).
-# Copy to traefik.yml (gitignored, so `git pull` never reverts your ACME email)
-# and edit. Mounted read-only. The hardened deployment's own copy is
+# ./setup.sh writes it for you; by hand, copy to traefik.yml (gitignored, so
+# `git pull` never reverts your ACME email) and edit. Mounted read-only.
+# The hardened deployment's own copy is
 # deploy/traefik/traefik.yml — this one differs in exactly one way: it issues
 # certificates over the HTTP challenge, so the quick path needs an inbound port
 # 80 and nothing else, rather than a DNS-provider API token.
@@ -31,10 +32,13 @@ certificatesResolvers:
     acme:
       email: you@example.com # <-- EDIT
       storage: /acme/acme.json
+      # ACME CHALLENGE — setup.sh (#411) reads THIS file and replaces this line
+      # and everything below it in this block. Editing traefik.yml by hand
+      # instead is fine, but a later ./setup.sh run regenerates it from here and
+      # keeps your version as traefik.yml.bak; keep the marker in this .example.
       # HTTP-01: the host must be publicly reachable on port 80. Behind a
-      # firewall, or without public DNS, use the DNS challenge as
-      # deploy/traefik/traefik.yml does, or bring your own certificate
-      # (dynamic/byo-cert.yml.example).
+      # firewall use TLS-ALPN-01 (inbound 443 only) or DNS-01 (no inbound
+      # ports), or bring your own certificate (dynamic/byo-cert.yml.example).
       httpChallenge:
         entryPoint: web
 
