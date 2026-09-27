@@ -41,13 +41,15 @@ Two supported ways to run this in production — pick one:
 | Path | Files | Use when |
 |------|-------|----------|
 | **Compose** | `docker-compose.yml` + `.env` | You want a single host up quickly. Traefik terminates TLS on 80/443 with a Let's Encrypt certificate over the HTTP challenge. See [Quick start](#quick-start-production) below. |
-| **Quadlet** | `deploy/quadlet` | You want the hardened deployment: rootless systemd units, Traefik with automatic TLS, network segmentation, Podman secrets, automated backups. See **[docs/deployment.md](docs/deployment.md)**. |
+| **Quadlet** | `deploy/quadlet` | You want the hardened deployment: rootless systemd units, Traefik with automatic TLS, network segmentation, Podman secrets, automated backups. `./setup.sh --quadlet` lays it all down; full runbook in **[docs/deployment.md](docs/deployment.md)**. |
 
 ## Quick start (production)
 
 > **Deploying to a real UAT/PROD host with HTTPS?** Use the Quadlet path
-> instead — full runbook in **[docs/deployment.md](docs/deployment.md)**.
-> The steps below are a minimal single-host HTTP trial only.
+> instead: the same `setup.sh`, run as `./setup.sh --quadlet`, creates the
+> Podman secrets, the `~/kendo/` config tree and the systemd units — full
+> runbook in **[docs/deployment.md](docs/deployment.md)**. The steps below are
+> a minimal single-host HTTP trial only.
 
 **1. Get the deployment files:**
 

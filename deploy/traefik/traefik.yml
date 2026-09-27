@@ -1,4 +1,5 @@
-# Traefik STATIC config. Copy to ~kendo/kendo/traefik/traefik.yml and edit the
+# Traefik STATIC config for the hardened deployment. `setup.sh --quadlet` writes
+# ~/kendo/traefik/traefik.yml from this file; by hand, copy it there and edit the
 # ACME email. Mounted read-only into the container.
 
 entryPoints:
@@ -27,18 +28,17 @@ certificatesResolvers:
     acme:
       email: you@example.com            # <-- EDIT
       storage: /acme/acme.json
-      # ── ACTIVE: DNS-01 via Cloudflare (works behind a firewall / no inbound 80).
-      #    Token supplied as CF_DNS_API_TOKEN_FILE (podman secret). Scope the
-      #    token to Zone:DNS:Edit on the single zone only.
-      dnsChallenge:
-        provider: cloudflare
-        resolvers:
-          - "1.1.1.1:53"
-          - "1.0.0.1:53"
-      # ── ALTERNATIVE: HTTP-01 (public host with inbound port 80). Comment out
-      #    the dnsChallenge block above and uncomment this instead:
-      # httpChallenge:
-      #   entryPoint: web
+      # ACME CHALLENGE — setup.sh --quadlet (#412) reads THIS file and replaces
+      # this line and everything below it in this block. Editing your own
+      # ~/kendo/traefik/traefik.yml by hand is fine; a later run regenerates it
+      # from here and keeps your version as traefik.yml.bak. Keep the marker.
+      #
+      # HTTP-01: the host must be publicly reachable on port 80. Behind a
+      # firewall use TLS-ALPN-01 (inbound 443 only, `tlsChallenge: {}`) or
+      # DNS-01 — which also needs the provider's credentials as a drop-in on
+      # kendo-traefik.container, see deploy/quadlet/kendo-traefik.container.
+      httpChallenge:
+        entryPoint: web
 
 api:
   dashboard: false          # never expose the dashboard

@@ -90,7 +90,7 @@ Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**
 
 ---
 
-## 2. Lay down the application files (as `kendo`)
+## 2-4. Lay it all down (as `kendo`)
 
 ```bash
 # Extract the deployment bundle from the release image — no clone, no build.
@@ -99,6 +99,45 @@ Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**
 mkdir -p ~/src && cd ~/src
 podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 
+./setup.sh --quadlet
+```
+
+`setup.sh --quadlet` asks for the domain, the TLS option and the ACME
+challenge, then does every mechanical step that used to be three sections of
+transcription here:
+
+- **the five secrets** — `kendo_postgres_password`, `kendo_jwt_secret`,
+  `kendo_database_url`, `kendo_setup_token`, and the DNS-provider token when
+  DNS-01 is chosen. `kendo_database_url` has to embed the same password as
+  `kendo_postgres_password`; one script generating both cannot mismatch them.
+  A re-run keeps every existing secret rather than rotating it.
+- **the `~/kendo/` tree** — `kendo-app.env` with your domain in all three
+  passkey-bound settings, `traefik/traefik.yml` with your ACME email and the
+  challenge you picked, `traefik/dynamic/kendo.yml` with your `Host()` rule.
+  Plus `~/backups` and the backup/restore scripts in `~/.local/bin`.
+- **the Quadlet units** — copied into `~/.config/containers/systemd/`, pinned
+  to the tag the bundle was extracted from, then `systemctl --user
+  daemon-reload`.
+
+It never escalates: the host prerequisites from section 1 are detected and the
+exact `sudo` command printed for you to run.
+
+**The setup token is printed once.** A podman secret cannot be read back, so
+the value that claims the first admin account (ADR-0003) is shown at the end of
+the run and nowhere else. Lost means rotate (below), not recover.
+
+Then start the stack:
+
+```bash
+systemctl --user start kendo-traefik.service   # Requires= pulls in app -> migrate -> db
+systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager
+podman ps
+```
+
+<details>
+<summary>By hand, without <code>setup.sh</code></summary>
+
+```bash
 # Config tree the Quadlet units expect at ~/kendo/
 mkdir -p ~/kendo/traefik/dynamic ~/backups ~/.local/bin
 cp deploy/traefik/traefik.yml            ~/kendo/traefik/traefik.yml
@@ -108,17 +147,15 @@ cp deploy/bin/kendo-backup.sh            ~/.local/bin/ && chmod +x ~/.local/bin/
 cp deploy/bin/kendo-restore.sh           ~/.local/bin/ && chmod +x ~/.local/bin/kendo-restore.sh
 ```
 
-Now **edit the placeholders**:
+Then edit the placeholders:
 
 - `~/kendo/kendo-app.env` — set `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS` to your real domain. Leave `TRUST_PROXY_XFF=true` (required behind Traefik — see §7).
-- `~/kendo/traefik/traefik.yml` — set the ACME `email`.
+- `~/kendo/traefik/traefik.yml` — set the ACME `email`, and swap the challenge if HTTP-01 does not suit (§5).
 - `~/kendo/traefik/dynamic/kendo.yml` — set the `Host(...)` rule to your domain.
 
----
-
-## 3. Create the secrets (as `kendo`)
-
-These sensitive values never touch a plaintext env file — they are Podman secrets. Generate strong values and pipe them in (avoid leaving them in shell history — note the leading space or use `read`):
+The secrets. These never touch a plaintext env file. Generate strong values and
+pipe them in (avoid leaving them in shell history — note the leading space or
+use `read`):
 
 ```bash
 # 1. Postgres password
@@ -137,10 +174,23 @@ printf '%s' 'postgresql+asyncpg://kendo:REPLACE-with-strong-db-password@kendo-db
 #    it is who can claim admin.
 openssl rand -base64 32 | tr -d '\n' \
   | podman secret create kendo_setup_token -
-
-# 5. Cloudflare API token (DNS-01). Scope it to Zone:DNS:Edit on ONE zone only.
-printf '%s' 'REPLACE-with-cloudflare-token' | podman secret create kendo_cf_dns_token -
 ```
+
+A fifth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
+
+Then the units:
+
+```bash
+mkdir -p ~/.config/containers/systemd
+cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
+cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
+cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
+
+# Quadlet generates systemd units from these files on daemon-reload.
+systemctl --user daemon-reload
+```
+
+</details>
 
 > The DB host in `DATABASE_URL` is `kendo-db` — the container name, resolved by Podman's DNS on the `kendo-backend` network.
 >
@@ -152,27 +202,6 @@ printf '%s' 'REPLACE-with-cloudflare-token' | podman secret create kendo_cf_dns_
 > name resolution.
 
 To rotate a secret later: `podman secret rm <name>` then recreate, and `systemctl --user restart` the affected unit.
-
----
-
-## 4. Install and start the Quadlet units (as `kendo`)
-
-```bash
-mkdir -p ~/.config/containers/systemd
-cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
-cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
-cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
-
-# Quadlet generates systemd units from these files on daemon-reload.
-systemctl --user daemon-reload
-
-# Networks/volumes come up as dependencies of the containers. Start the stack:
-systemctl --user start kendo-traefik.service   # pulls in app -> db via Requires=
-
-# Check status
-systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager
-podman ps
-```
 
 Because the user has **linger** enabled and the units declare `WantedBy=default.target`, the stack now starts automatically on boot. No `enable` step is needed for `.container` units generated by Quadlet — the `[Install]` section handles it after `daemon-reload`.
 
@@ -191,7 +220,7 @@ as a failed `kendo-migrate.service` rather than as an app crash (#391).
 ### Claim the admin account (the setup token gates it)
 
 The instance is now reachable. Claiming the first admin account requires the
-`kendo_setup_token` secret created in step 3 — the setup endpoints answer
+`kendo_setup_token` secret from section 2-4 — the setup endpoints answer
 `401 {"detail": "Invalid setup token"}` without it (ADR-0003). Nothing to race:
 an opportunistic scanner that finds the host minutes after Traefik's Let's
 Encrypt certificate hits the certificate transparency logs cannot claim
@@ -240,9 +269,13 @@ count, so an operator whose browser died mid-ceremony is never locked out.
 **Lost the token?** Rotate it — nothing in the database has to change:
 
 ```bash
+# Keep the value: a podman secret cannot be read back, so piping straight into
+# `secret create` leaves you with a token nobody knows.
+token=$(openssl rand -base64 32 | tr -d '\n')
 podman secret rm kendo_setup_token
-openssl rand -base64 32 | tr -d '\n' | podman secret create kendo_setup_token -
+printf '%s' "$token" | podman secret create kendo_setup_token -
 systemctl --user restart kendo-app
+echo "$token"   # hand it over out of band, then clear your scrollback
 ```
 
 `app/cli.py create-recovery-token` does **not** cover a never-claimed instance:
@@ -308,11 +341,22 @@ instance that was already deployed and running:
 
 ## 5. TLS options
 
-The shipped config uses **Let's Encrypt via Cloudflare DNS-01** — works even with no inbound port 80 (e.g. UAT on a local network). It only needs port 443 reachable (LAN for UAT, internet for PROD).
+`setup.sh --quadlet` asks this question and writes the answer; this section is
+what it writes, for a deployment configured by hand or changed later.
 
-- **DNS-01 / Cloudflare (default, active).** Requires the `kendo_cf_dns_token` secret. Nothing else to do.
-- **HTTP-01 (public host with inbound port 80).** In `traefik.yml`, comment out the `dnsChallenge` block and uncomment `httpChallenge`. Drop the Cloudflare secret if unused.
-- **Bring-your-own cert (internal CA / purchased wildcard).** For hosts that can't use Let's Encrypt. See [`deploy/traefik/dynamic/byo-cert.yml.example`](../deploy/traefik/dynamic/byo-cert.yml.example) — it documents the `certs/` bind mount (with the required `:Z` SELinux label) and the router change.
+- **HTTP-01 (default).** Needs inbound port 80. Nothing beyond the `httpChallenge` block already in `traefik.yml`.
+- **TLS-ALPN-01.** Inbound 443 only — the answer when an ISP blocks 80. Replace the `httpChallenge` block with `tlsChallenge: {}`.
+- **DNS-01.** No inbound ports at all (e.g. UAT on a local network). Replace the `httpChallenge` block with a `dnsChallenge` naming your [lego provider](https://go-acme.github.io/lego/dns/), and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives re-copying the unit on upgrade:
+
+  ```bash
+  printf '%s' 'REPLACE-with-provider-token' | podman secret create kendo_dns_token -
+  d=~/.config/containers/systemd/kendo-traefik.container.d && mkdir -p "$d"
+  printf '[Container]\nEnvironment=CF_DNS_API_TOKEN_FILE=/run/secrets/dns_token\nSecret=kendo_dns_token,type=mount,target=dns_token\n' > "$d/10-dns-01.conf"
+  systemctl --user daemon-reload && systemctl --user restart kendo-traefik
+  ```
+
+  `CF_DNS_API_TOKEN` is Cloudflare's variable (scope the token to `Zone:DNS:Edit` on one zone); use whichever your provider documents. A provider that needs several variables needs one `Environment=`/`Secret=` pair each.
+- **Bring-your-own cert (internal CA / purchased wildcard).** For hosts that can't use Let's Encrypt. See [`deploy/traefik/dynamic/byo-cert.yml.example`](../deploy/traefik/dynamic/byo-cert.yml.example) — it documents the `certs/` bind mount (with the required `:Z` SELinux label) and the router change. `setup.sh --quadlet` writes both, the mount as a `20-byo-cert.conf` drop-in; the cert and key are yours to drop in `~/kendo/traefik/certs/`.
 
 ---
 
@@ -397,7 +441,7 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 > # image, so the units below match the app they start.
 > cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 >
-> # Units: re-run the copy from §4, then daemon-reload so Quadlet regenerates.
+> # Units: re-run the copy from §2-4, then daemon-reload so Quadlet regenerates.
 > cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
 > cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
 > cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
@@ -413,6 +457,13 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 > The env file is per-host and needs comparing rather than copying — see
 > [§9.1](#91-refreshing-the-env-file-after-an-upgrade).
 >
+> **A host installed before #412 that uses DNS-01 needs the drop-in before its
+> next unit refresh.** `kendo-traefik.container` used to hardcode
+> `CF_DNS_API_TOKEN_FILE` and the `kendo_cf_dns_token` secret; it no longer
+> does, so re-copying it leaves Traefik with no DNS credentials and ACME
+> renewal fails. Write the drop-in from [§5](#5-tls-options) first — pointing
+> `Secret=` at your existing `kendo_cf_dns_token` is fine, no new secret needed.
+>
 > **Hosts installed before #385 need the unit refresh now.** That change made
 > the app run unprivileged and mounts the uploads volume `:U`; both live in
 > `kendo-app.container`, so neither reaches an existing host until the copy
@@ -424,7 +475,11 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 
 Re-extracting the bundle updates `deploy/env/kendo-app.env.example` in
 `~/src`. It does not update `~/kendo/kendo-app.env` — that file is yours, per
-host, and nothing overwrites it. When an upgrade adds a setting, the app silently runs without
+host, and nothing overwrites it except a deliberate re-run of `./setup.sh
+--quadlet`, which rewrites it from the example (keeping the previous one as
+`kendo-app.env.bak`). That is the quickest way to pick up new keys, and it
+discards any local edit beyond the three domain values, so compare the two
+afterwards if you have any. When an upgrade adds a setting, the app silently runs without
 it: the Quadlet unit passes this one `EnvironmentFile` and nothing else, so a
 key absent from it is absent from the app's environment.
 

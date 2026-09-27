@@ -54,10 +54,10 @@ def run(home: Path, *answers: str) -> subprocess.CompletedProcess:
     return result
 
 
-def env_of(home: Path) -> dict[str, str]:
+def env_of(home: Path, name: str = ".env") -> dict[str, str]:
     return dict(
         line.split("=", 1)
-        for line in (home / ".env").read_text().splitlines()
+        for line in (home / name).read_text().splitlines()
         if line and not line.startswith("#")
     )
 
@@ -281,3 +281,273 @@ def test_a_hand_copied_env_example_is_filled_in_not_carried_forward(tmp_path):
     run(home, "dojo.example.com", "1", "1", "admin@example.com")
 
     assert not any(p in (home / ".env").read_text() for p in PLACEHOLDERS)
+
+
+# --------------------------------------------------------------- --quadlet ---
+# The hardened path (#412): podman secrets, the ~/kendo/ config tree and the
+# Quadlet units, instead of .env and the Compose stack. Neither podman nor a
+# systemd user session exists in the test container, so both are stubbed on
+# PATH — what is asserted is what the script asks them to do.
+
+PODMAN_STUB = """#!/bin/sh
+echo "$*" >> "$PODMAN_LOG"
+case "$1 $2" in
+  "secret inspect") [ -f "$PODMAN_STATE/$3" ] ;;
+  "secret create") cat > "$PODMAN_STATE/$3" ;;
+  *) exit 0 ;;
+esac
+"""
+
+SYSTEMCTL_STUB = """#!/bin/sh
+echo "$*" >> "$SYSTEMCTL_LOG"
+"""
+
+
+class Host:
+    """A bundle in ~/src, a fake HOME, and stubbed podman/systemctl."""
+
+    def __init__(self, tmp_path: Path):
+        self.src = bundle(tmp_path)
+        for sub in ("quadlet", "env", "bin"):
+            shutil.copytree(ROOT / "deploy" / sub, self.src / "deploy" / sub)
+        (self.src / "deploy/traefik/dynamic").mkdir()
+        shutil.copy(ROOT / "deploy/traefik/traefik.yml", self.src / "deploy/traefik")
+        for f in (ROOT / "deploy/traefik/dynamic").iterdir():
+            shutil.copy(f, self.src / "deploy/traefik/dynamic")
+
+        self.home = tmp_path / "home"
+        self.home.mkdir()
+        self.state = tmp_path / "secrets"
+        self.state.mkdir()
+        stubs = tmp_path / "bin"
+        stubs.mkdir()
+        for name, body in (("podman", PODMAN_STUB), ("systemctl", SYSTEMCTL_STUB)):
+            (stubs / name).write_text(body)
+            (stubs / name).chmod(0o755)
+        self.podman_log = tmp_path / "podman.log"
+        self.systemctl_log = tmp_path / "systemctl.log"
+        self.env = {
+            **os.environ,
+            "HOME": str(self.home),
+            "PATH": f"{stubs}:{os.environ['PATH']}",
+            "PODMAN_STATE": str(self.state),
+            "PODMAN_LOG": str(self.podman_log),
+            "SYSTEMCTL_LOG": str(self.systemctl_log),
+        }
+
+    def run(self, *answers: str, expect: int = 0) -> subprocess.CompletedProcess:
+        result = subprocess.run(
+            ["bash", str(self.src / "setup.sh"), "--quadlet"],
+            input="".join(f"{a}\n" for a in answers),
+            capture_output=True,
+            text=True,
+            cwd=self.src,
+            env=self.env,
+            check=False,
+        )
+        assert result.returncode == expect, result.stdout + result.stderr
+        return result
+
+    def secret(self, name: str) -> str:
+        return (self.state / name).read_text()
+
+    def units(self) -> Path:
+        return self.home / ".config/containers/systemd"
+
+
+def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
+    # The whole reason one script owns both: DATABASE_URL and the postgres
+    # password are generated together, so the trap cannot be walked into.
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    password = host.secret("kendo_postgres_password")
+    assert re.fullmatch(r"[0-9a-f]{40,}", password)
+    assert (
+        host.secret("kendo_database_url")
+        == f"postgresql+asyncpg://kendo:{password}@kendo-db:5432/kendo"
+    )
+    for name in ("kendo_jwt_secret", "kendo_setup_token"):
+        assert re.fullmatch(r"[0-9a-f]{40,}", host.secret(name)), name
+    assert not (host.state / "kendo_dns_token").exists()
+
+
+def test_quadlet_lays_down_the_config_tree_the_units_expect(tmp_path):
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    kendo = host.home / "kendo"
+    env = env_of(kendo, "kendo-app.env")
+    assert env["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env["WEBAUTHN_ORIGIN"] == "https://dojo.example.com"
+    assert env["CORS_ORIGINS"] == "https://dojo.example.com"
+    assert env["TRUST_PROXY_XFF"] == "true"
+
+    static = (kendo / "traefik/traefik.yml").read_text()
+    assert "email: admin@example.com" in static
+    assert "httpChallenge:\n        entryPoint: web" in static
+    assert (
+        "Host(`dojo.example.com`)" in (kendo / "traefik/dynamic/kendo.yml").read_text()
+    )
+
+    assert (host.home / "backups").is_dir()
+    for script in ("kendo-backup.sh", "kendo-restore.sh"):
+        assert os.access(host.home / ".local/bin" / script, os.X_OK)
+
+
+def test_quadlet_installs_the_units_and_reloads(tmp_path):
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    quadlet = ROOT / "deploy/quadlet"
+    shipped = {
+        p.name
+        for glob in ("kendo-*.network", "kendo-*.volume", "kendo-*.container")
+        for p in quadlet.glob(glob)
+    }
+    assert shipped, "no units found to install"
+    assert shipped <= {p.name for p in host.units().iterdir() if p.is_file()}
+    assert "--user daemon-reload" in host.systemctl_log.read_text()
+    assert "systemctl --user start kendo-traefik" in out.stdout
+
+
+def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
+    # A drop-in, not an edit to the unit: docs/deployment.md tells an operator to
+    # re-copy the units on upgrade, which would revert an edit made here.
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "3", "hetzner", "admin@example.com", "tok-123")
+
+    assert host.secret("kendo_dns_token") == "tok-123"
+    dropin = (host.units() / "kendo-traefik.container.d/10-dns-01.conf").read_text()
+    assert "Environment=HETZNER_API_KEY_FILE=/run/secrets/dns_token" in dropin
+    assert "Secret=kendo_dns_token,type=mount,target=dns_token" in dropin
+    assert "provider: hetzner" in (host.home / "kendo/traefik/traefik.yml").read_text()
+    # The base unit stays provider-neutral, so HTTP-01 needs no DNS secret at all.
+    assert "cf_dns_token" not in (host.units() / "kendo-traefik.container").read_text()
+
+
+def test_quadlet_leaves_a_multi_variable_dns_provider_to_the_operator(tmp_path):
+    # route53 wants three variables; guessing one secret for it would be wrong.
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "1", "3", "route53", "admin@example.com")
+
+    assert not (host.state / "kendo_dns_token").exists()
+    assert not (host.units() / "kendo-traefik.container.d/10-dns-01.conf").exists()
+    assert "AWS_ACCESS_KEY_ID" in out.stdout
+    assert "10-dns-01.conf" in out.stdout
+
+
+def test_quadlet_switching_away_from_dns_01_removes_the_drop_in(tmp_path):
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "3", "cloudflare", "admin@example.com", "tok")
+    host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    assert not (host.units() / "kendo-traefik.container.d/10-dns-01.conf").exists()
+
+
+def test_quadlet_bring_your_own_cert_mounts_the_directory_it_asks_for(tmp_path):
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "3")
+
+    kendo = host.home / "kendo"
+    assert "tls: {}" in (kendo / "traefik/dynamic/kendo.yml").read_text()
+    assert (kendo / "traefik/dynamic/byo-cert.yml").exists()
+    assert (kendo / "traefik/certs").is_dir()
+    assert (
+        "Volume=%h/kendo/traefik/certs:/etc/traefik/certs:ro,Z"
+        in (host.units() / "kendo-traefik.container.d/20-byo-cert.conf").read_text()
+    )
+    assert str(kendo / "traefik/certs") in out.stdout
+
+
+def test_quadlet_prints_the_setup_token_once_because_a_secret_is_write_only(tmp_path):
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "4")
+
+    assert host.secret("kendo_setup_token") in out.stdout
+    # Second run: the secret is kept, so there is no value to show.
+    again = host.run("dojo.example.com", "4")
+    assert host.secret("kendo_setup_token") not in again.stdout
+    assert "kept existing secret kendo_setup_token" in again.stdout
+
+
+def test_quadlet_rerunning_changes_the_domain_without_rotating_the_secrets(tmp_path):
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "4")
+    before = {n.name: n.read_text() for n in host.state.iterdir()}
+
+    host.run("shinkendo.example.org", "4")
+
+    assert {n.name: n.read_text() for n in host.state.iterdir()} == before
+    assert "shinkendo.example.org" in (host.home / "kendo/kendo-app.env").read_text()
+    assert (host.home / "kendo/kendo-app.env.bak").exists()
+
+
+def test_quadlet_refuses_a_half_present_database_url_pair(tmp_path):
+    # The password and the URL embedding it must match, and podman will not read
+    # a secret back — so completing the pair would be a guess.
+    host = Host(tmp_path)
+    (host.state / "kendo_postgres_password").write_text("set-by-hand")
+
+    result = host.run("dojo.example.com", "4", expect=1)
+
+    assert (
+        "podman secret rm kendo_postgres_password kendo_database_url" in result.stderr
+    )
+    assert not (host.state / "kendo_database_url").exists()
+
+
+def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
+    host = Host(tmp_path)
+    (host.src / ".image-tag").write_text(
+        "ghcr.io/booji/kendodojomanagement:1.0.0-rc1\n"
+    )
+    host.run("dojo.example.com", "4")
+
+    for unit in ("kendo-app.container", "kendo-migrate.container"):
+        assert (
+            "Image=ghcr.io/booji/kendodojomanagement:1.0.0-rc1"
+            in (host.units() / unit).read_text()
+        ), unit
+
+
+def test_quadlet_without_podman_prints_every_prerequisite_and_writes_nothing(tmp_path):
+    # Detection stays "detect and print, never escalate" (#412) even on the one
+    # path that cannot continue: the operator is owed the whole list, not just
+    # the prerequisite that stopped the run.
+    host = Host(tmp_path)
+    (tmp_path / "bin/podman").unlink()
+
+    result = host.run("dojo.example.com", "4", expect=1)
+
+    assert "Podman is not installed." in result.stdout
+    assert "Linger is off" in result.stdout
+    assert "never escalates" in result.stdout
+    assert not (host.home / "kendo").exists()
+    assert not any(host.state.iterdir())
+
+
+def test_quadlet_re_asks_for_an_empty_dns_token(tmp_path):
+    # podman refuses an empty secret, and the failure would land after the other
+    # four secrets already exist — exactly the half-configured state the
+    # password/URL pair is careful to avoid.
+    host = Host(tmp_path)
+    out = host.run(
+        "dojo.example.com", "1", "3", "cloudflare", "admin@example.com", "", "tok"
+    )
+
+    assert "Empty — podman will not store an empty secret" in out.stdout
+    assert host.secret("kendo_dns_token") == "tok"
+
+
+def test_quadlet_never_seeds_its_secrets_from_a_compose_env(tmp_path):
+    # `./setup.sh` then `./setup.sh --quadlet` in the same directory: the whole
+    # point of the hardened path is that these values are not in a plaintext file.
+    host = Host(tmp_path)
+    run(host.src, "dojo.example.com", "4")
+    compose = env_of(host.src)
+
+    host.run("dojo.example.com", "4")
+
+    assert host.secret("kendo_jwt_secret") != compose["JWT_SECRET"]
+    assert host.secret("kendo_postgres_password") != compose["POSTGRES_PASSWORD"]
