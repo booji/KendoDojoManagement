@@ -1,6 +1,11 @@
 # Traefik edge proxy: terminates TLS, redirects 80->443, routes to kendo-app.
 # The ONLY container that publishes host ports. Edge network only (never touches
-# the db). Cloudflare DNS-01 token comes from a podman secret via _FILE.
+# the db).
+#
+# Provider-neutral: ACME DNS-01 credentials are NOT here. They differ per DNS
+# provider, and only a DNS-01 deployment has any, so they arrive as a drop-in at
+# kendo-traefik.container.d/10-dns-01.conf — which `setup.sh --quadlet` writes
+# and which survives re-copying this unit on upgrade (#412).
 #
 # Binding 80/443 as a rootless user requires:
 #   net.ipv4.ip_unprivileged_port_start=80   (see deploy/sysctl — Q9 option 1)
@@ -18,8 +23,6 @@ PublishPort=443:443
 Volume=kendo-traefik-acme.volume:/acme
 Volume=%h/kendo/traefik/traefik.yml:/etc/traefik/traefik.yml:ro,Z
 Volume=%h/kendo/traefik/dynamic:/etc/traefik/dynamic:ro,Z
-Environment=CF_DNS_API_TOKEN_FILE=/run/secrets/cf_dns_token
-Secret=kendo_cf_dns_token,type=mount,target=cf_dns_token
 
 [Service]
 Restart=always

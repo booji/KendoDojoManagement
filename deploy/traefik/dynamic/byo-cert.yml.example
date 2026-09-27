@@ -1,11 +1,16 @@
 # Bring-your-own-cert (internal CA / purchased wildcard) — for users who can't
 # use Let's Encrypt (e.g. UAT on an isolated network with no public DNS).
 #
-# To use: rename to byo-cert.yml, drop cert/key into ~kendo/kendo/traefik/certs/,
-# add this bind mount to kendo-traefik.container:
+# `setup.sh --quadlet` (TLS option 3) does all of this; by hand: rename to
+# byo-cert.yml, drop cert/key into ~/kendo/traefik/certs/, add this bind mount
+# as a drop-in at
+# ~/.config/containers/systemd/kendo-traefik.container.d/20-byo-cert.conf —
+#     [Container]
 #     Volume=%h/kendo/traefik/certs:/etc/traefik/certs:ro,Z
-# and in dynamic/kendo.yml replace the router's `tls: {certResolver: letsencrypt}`
-# with just `tls: {}` (Traefik serves the default cert defined below).
+# a drop-in rather than an edit to the unit, so re-copying the units on upgrade
+# does not revert it — and in dynamic/kendo.yml replace the router's
+# `tls: {certResolver: letsencrypt}` with just `tls: {}` (Traefik serves the
+# default cert defined below).
 #
 # The :Z label is REQUIRED here because this is a bind mount under enforcing
 # SELinux (named volumes are auto-labeled; host bind mounts are not).
