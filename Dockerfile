@@ -60,9 +60,15 @@ RUN chmod +x ./entrypoint.sh
 # The dev-only paths under deploy/ (certs, traefik/dev) are kept out by
 # .dockerignore rather than deleted after the COPY: a layer keeps what a later
 # `rm` removes, so a dev machine's TLS keys would still be extractable from the
-# pushed image. setup.sh joins the first COPY when it exists (#411).
-COPY docker-compose.yml .env.example /bundle/
+# pushed image.
+COPY setup.sh docker-compose.yml .env.example /bundle/
 COPY deploy/ /bundle/deploy/
+
+# The tag the bundle was extracted from, so setup.sh writes a real pin into
+# .env instead of prompting or defaulting blind (ADR-0004). Unset on a
+# contributor's `make build`: setup.sh then keeps .env.example's own default.
+ARG KENDO_IMAGE_REF=""
+RUN if [ -n "$KENDO_IMAGE_REF" ]; then printf '%s\n' "$KENDO_IMAGE_REF" > /bundle/.image-tag; fi
 
 # Run unprivileged. Rootless Podman already maps container-root to an
 # unprivileged host user, but inside the container root can rewrite the app's

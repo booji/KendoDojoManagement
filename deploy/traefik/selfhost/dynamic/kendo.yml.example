@@ -1,7 +1,7 @@
 # Traefik DYNAMIC config for the QUICK SELF-HOST stack: route the dojo domain
-# to the `app` service over the edge network. Copy to kendo.yml (gitignored, so
-# an upgrade never reverts it) and edit the Host() rule to your real domain —
-# it must match WEBAUTHN_RP_ID in .env.
+# to the `app` service over the edge network. ./setup.sh writes it for you; by
+# hand, copy to kendo.yml (gitignored, so an upgrade never reverts it) and edit
+# the Host() rule to your real domain — it must match WEBAUTHN_RP_ID in .env.
 http:
   routers:
     kendo:

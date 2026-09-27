@@ -49,11 +49,11 @@ Two supported ways to run this in production — pick one:
 > instead — full runbook in **[docs/deployment.md](docs/deployment.md)**.
 > The steps below are a minimal single-host HTTP trial only.
 
-**1. Get the deployment files and fill in the environment file:**
+**1. Get the deployment files:**
 
 The release image carries the files a deployment needs — this compose file, the
-`.example` config, the Quadlet units and the backup scripts — so there is no
-clone and no build (ADR-0004):
+`.example` config, the Quadlet units, the backup scripts and `setup.sh` — so
+there is no clone and no build (ADR-0004):
 
 ```bash
 podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
@@ -61,43 +61,38 @@ podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 
 (Working from a checkout instead? Skip that — the files are already here.)
 
-```bash
-cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD and JWT_SECRET at minimum
-```
-
-Passkeys are bound to the origin the browser uses, so also set `WEBAUTHN_RP_ID`
-(bare host), `WEBAUTHN_ORIGIN` (full origin) and `CORS_ORIGINS` to your domain:
-
-```
-WEBAUTHN_RP_ID=dojo.example.com
-WEBAUTHN_ORIGIN=https://dojo.example.com
-CORS_ORIGINS=https://dojo.example.com
-```
-
-Generate a JWT secret:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-**2. Point Traefik at the same domain:**
+**2. Configure it:**
 
 ```bash
-cd deploy/traefik/selfhost
-cp traefik.yml.example traefik.yml                 # then edit the ACME email
-cp dynamic/kendo.yml.example dynamic/kendo.yml     # then edit Host(`dojo.example.com`)
+./setup.sh
 ```
 
-Both copies are gitignored, so upgrading with `git pull` cannot revert your
-domain or your email to the shipped placeholders.
+It asks for your domain and an ACME email, generates `POSTGRES_PASSWORD`,
+`JWT_SECRET` and `SETUP_TOKEN`, and writes `.env` plus
+`deploy/traefik/selfhost/traefik.yml` and `dynamic/kendo.yml` from their
+`.example` files. One domain answer reaches all three passkey-bound settings
+(`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS`) and the Traefik `Host()`
+rule — an `RP_ID` typo is the whole "passkeys silently don't work" failure
+class, so it is worth not typing four times.
 
-Certificates are issued over the HTTP challenge, so the host needs inbound port
-80 and public DNS — no DNS-provider account. If you cannot have that, or you
-already hold a certificate, use
-`deploy/traefik/selfhost/dynamic/byo-cert.yml.example`.
+TLS is one question with four answers: Let's Encrypt production, Let's Encrypt
+staging (rehearse a new domain without burning the production rate limit),
+bring your own certificate, or skip. Orthogonally, the ACME challenge is
+HTTP-01 (default, needs inbound 80), TLS-ALPN-01 (needs inbound 443 only — the
+answer when an ISP blocks 80) or DNS-01 (no inbound ports; it prompts for your
+lego provider slug and prints the credentials that provider wants).
 
-Rootless Podman needs `net.ipv4.ip_unprivileged_port_start=80` to bind 80/443 —
-see `deploy/sysctl-99-kendo-rootless-ports.conf`.
+Re-running is safe: existing secrets are carried forward rather than
+regenerated, and any file it rewrites is kept as `.bak`. The written files are
+gitignored, so upgrading cannot revert your domain or email to the shipped
+placeholders. Prefer doing it by hand? Every file it writes has a documented
+`.example` next to it.
+
+The script also checks the five host prerequisites — Podman, the
+`net.ipv4.ip_unprivileged_port_start=80` sysctl rootless Podman needs to bind
+80/443, the firewall, the `kendo` user and `loginctl enable-linger` — and
+prints the exact `sudo` command for each one that is missing. It never
+escalates itself; you run those.
 
 **3. Start the stack:**
 
