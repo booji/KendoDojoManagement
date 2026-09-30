@@ -1,0 +1,16 @@
+# Day-2 operations
+
+| Task | Command (as `kendo` via `machinectl shell kendo@`) |
+|------|----|
+| Status | `systemctl --user status kendo-app --no-pager` |
+| Logs | `podman logs -f kendo-app` |
+| Restart app | `systemctl --user restart kendo-app` |
+| **Upgrade** — the full procedure is [Upgrading](../install/upgrading.md#hardened-deployment-quadlet) | `podman pull ghcr.io/booji/kendodojomanagement:1 && systemctl --user restart kendo-migrate kendo-app` |
+| Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db` |
+| Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
+
+> The pin is the `Image=` line in the two Quadlet units, and the documented
+> value is the **major** tag `:1` — fixes and features, but no migration that
+> needs a restore from backup to undo. Moving to `:2` is a deliberate edit made
+> after reading the release notes. Building from source still works
+> (`podman build -t localhost/kendodojo:latest .`); point `Image=` at it.

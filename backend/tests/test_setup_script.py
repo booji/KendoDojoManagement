@@ -412,8 +412,8 @@ def test_quadlet_installs_the_units_and_reloads(tmp_path):
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
-    # A drop-in, not an edit to the unit: docs/deployment.md tells an operator to
-    # re-copy the units on upgrade, which would revert an edit made here.
+    # A drop-in, not an edit to the unit: docs/install/upgrading.md tells an
+    # operator to re-copy the units on upgrade, which would revert an edit made here.
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "3", "hetzner", "admin@example.com", "tok-123")
 

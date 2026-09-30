@@ -12,7 +12,7 @@
 #
 # Installing the CA into the browser's trust store is deliberately NOT done
 # here — the browser may be on another OS entirely (WSL2, a VM, a remote box)
-# and this script cannot know. The README carries that table.
+# and this script cannot know. docs/contributing/dev-stack.md carries that table.
 set -euo pipefail
 
 host="${CERT_HOST:-dojo.localhost}"
@@ -55,7 +55,7 @@ if [ -z "$reason" ]; then
   else
     echo "certs: $cert is SELF-SIGNED. Browsers will warn, and passkey ceremonies"
     echo "       will fail on https://$host:8443. Install mkcert and re-run"
-    echo "       \`make certs\` — it will reissue. See the README's dev TLS section."
+    echo "       \`make certs\` — it will reissue. See docs/contributing/dev-stack.md."
   fi
   exit 0
 fi
@@ -66,7 +66,7 @@ if have mkcert; then
   echo "certs: issued $cert with mkcert ($reason)."
   echo "       Trusted only where your mkcert CA is installed. If your browser runs"
   echo "       on a different OS than this stack (WSL2, a VM, a remote box), install"
-  echo "       the CA there too — see the README's dev TLS section."
+  echo "       the CA there too — see docs/contributing/dev-stack.md."
 elif have openssl; then
   openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
     -subj "/CN=$host" \
