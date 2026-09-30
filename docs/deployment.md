@@ -122,13 +122,24 @@ transcription here:
 It never escalates: the host prerequisites from section 1 are detected and the
 exact `sudo` command printed for you to run.
 
+`./setup.sh check --quadlet` is the preflight, and is safe to run at any time —
+after an upgrade, after a domain change, or pasted into a bug report. It checks
+what the app cannot see from inside its container: placeholders left in
+`~/kendo/`, the `Host()` rule against `WEBAUTHN_RP_ID`, the certificate the TLS
+option needs, the podman secrets, DNS for the domain, whether 80/443 are
+already taken, and the section 1 prerequisites. Every `FAIL` names its fix and
+makes it exit non-zero; a `warn` (DNS resolving to a router's public address
+behind NAT, say) is informational. It changes nothing and gates nothing — the
+app still guards its own configuration at startup.
+
 **The setup token is printed once.** A podman secret cannot be read back, so
 the value that claims the first admin account (ADR-0003) is shown at the end of
 the run and nowhere else. Lost means rotate (below), not recover.
 
-Then start the stack:
+Then check, and start the stack:
 
 ```bash
+./setup.sh check --quadlet                     # green? then:
 systemctl --user start kendo-traefik.service   # Requires= pulls in app -> migrate -> db
 systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager
 podman ps
