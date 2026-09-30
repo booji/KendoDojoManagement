@@ -7,7 +7,7 @@ Self-hosted web application for managing the members, sessions, and attendance o
 ## Container runtime
 
 **Podman is the supported runtime.** It is what the project is developed and
-tested against, and what the production deployment (`deploy/quadlet`) targets:
+tested against, and what both deployment paths target:
 rootless, daemonless, systemd-native.
 
 **Docker is best-effort and unverified.** The Compose files use no
