@@ -551,3 +551,322 @@ def test_quadlet_never_seeds_its_secrets_from_a_compose_env(tmp_path):
 
     assert host.secret("kendo_jwt_secret") != compose["JWT_SECRET"]
     assert host.secret("kendo_postgres_password") != compose["POSTGRES_PASSWORD"]
+
+
+# ------------------------------------------------------------------ check ---
+# `./setup.sh check` (#413): advisory, re-runnable, exit non-zero on any FAIL.
+# Every host probe it makes is stubbed on PATH as a healthy host, so each test
+# breaks exactly one thing and the verdicts do not depend on the machine
+# running the suite.
+
+DOMAIN = "dojo.shinbukan.org"
+ANSWERS = (DOMAIN, "1", "1", "admin@shinbukan.org")
+
+GREEN_HOST = {
+    "podman": 'case "$1 $2" in "secret inspect") [ -f "$PODMAN_STATE/$3" ] ;; esac',
+    "sysctl": "echo 80",
+    "firewall-cmd": "echo ssh http https",
+    "id": '[ "$1" = -un ] && echo kendo; exit 0',
+    "loginctl": "echo Linger=yes",
+    "getent": 'echo "203.0.113.7     STREAM $2"',
+    "hostname": "echo 192.168.1.5 203.0.113.7",
+    "ss": "exit 0",
+}
+
+
+def host_env(tmp_path: Path, **stubs: str | None) -> dict[str, str]:
+    """A healthy host, with any probe overridden by keyword (`ss=...`), or
+    left unstubbed with None."""
+    bindir = tmp_path / "check-bin"
+    bindir.mkdir(exist_ok=True)
+    overrides = {name.replace("_", "-"): body for name, body in stubs.items()}
+    for name, body in {**GREEN_HOST, **overrides}.items():
+        if body is None:
+            continue
+        path = bindir / name
+        path.write_text(f"#!/bin/sh\n{body}\n")
+        path.chmod(0o755)
+    state = tmp_path / "secrets"
+    state.mkdir(exist_ok=True)
+    return {
+        **os.environ,
+        "HOME": str(tmp_path / "home"),
+        "PATH": f"{bindir}:{os.environ['PATH']}",
+        "PODMAN_STATE": str(state),
+    }
+
+
+def check(home: Path, env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(home / "setup.sh"), "check", *args],
+        capture_output=True,
+        text=True,
+        cwd=home,
+        env=env,
+        check=False,
+    )
+
+
+def test_check_passes_what_setup_just_wrote_on_a_healthy_host(tmp_path):
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "FAIL" not in out.stdout
+    assert "podman-compose up -d" in out.stdout
+
+
+def test_check_before_setup_says_to_run_setup_first(tmp_path):
+    home = bundle(tmp_path)
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 1
+    assert "FAIL  .env is missing — run ./setup.sh first" in out.stdout
+
+
+def test_check_names_every_placeholder_a_hand_copied_config_still_has(tmp_path):
+    home = bundle(tmp_path)
+    shutil.copy(home / ".env.example", home / ".env")
+    shutil.copy(
+        home / SELFHOST / "traefik.yml.example", home / SELFHOST / "traefik.yml"
+    )
+    shutil.copy(
+        home / SELFHOST / "dynamic/kendo.yml.example",
+        home / SELFHOST / "dynamic/kendo.yml",
+    )
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 1
+    for placeholder in (
+        "<your-domain.com>",
+        "<your-jwt-secret>",
+        "dojo.example.com",
+        "you@example.com",
+    ):
+        assert placeholder in out.stdout, placeholder
+
+
+def test_check_fails_while_tls_is_still_skipped(tmp_path):
+    # The skip option deliberately leaves the stack unfinished (#411); Traefik
+    # would serve its self-signed default and the browser would say so.
+    home = bundle(tmp_path)
+    run(home, DOMAIN, "4")
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 1
+    assert "No certificate is configured" in out.stdout
+
+
+def test_check_follows_a_byo_certificate_to_its_files_and_mount(tmp_path):
+    home = bundle(tmp_path)
+    shutil.copy(ROOT / "docker-compose.yml", home)
+    run(home, DOMAIN, "3")
+    env = host_env(tmp_path)
+
+    assert "deploy/certs/cert.pem" in check(home, env).stdout
+
+    (home / "deploy/certs").mkdir()
+    for pem in ("cert.pem", "key.pem"):
+        (home / "deploy/certs" / pem).touch()
+    unmounted = check(home, env)
+    assert unmounted.returncode == 1
+    assert "docker-compose.yml does not mount deploy/certs" in unmounted.stdout
+
+    compose = (home / "docker-compose.yml").read_text()
+    (home / "docker-compose.yml").write_text(
+        compose.replace(
+            "      - traefik_acme:/acme\n",
+            "      - traefik_acme:/acme\n      - ./deploy/certs:/etc/traefik/certs:ro\n",
+        )
+    )
+    assert check(home, env).returncode == 0
+
+
+def test_check_warns_that_a_staging_certificate_is_untrusted(tmp_path):
+    home = bundle(tmp_path)
+    run(home, DOMAIN, "2", "1", "admin@shinbukan.org")
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 0
+    assert "warn  Let's Encrypt staging" in out.stdout
+
+
+def test_check_catches_a_domain_changed_in_only_one_place(tmp_path):
+    # A hand edit of .env after a domain change, the router left behind.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    env = (home / ".env").read_text().replace(DOMAIN, "kendo.shinbukan.org")
+    (home / ".env").write_text(env)
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 1
+    assert f"routes {DOMAIN}" in out.stdout
+    assert "WEBAUTHN_RP_ID is kendo.shinbukan.org" in out.stdout
+
+
+def test_check_catches_a_blank_secret_and_a_password_the_url_no_longer_embeds(
+    tmp_path,
+):
+    # Rotating POSTGRES_PASSWORD by hand without DATABASE_URL: the app then
+    # fails at its first query with an auth error, not at startup.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    before = env_of(home)
+    env = (
+        (home / ".env")
+        .read_text()
+        .replace(
+            f"POSTGRES_PASSWORD={before['POSTGRES_PASSWORD']}",
+            "POSTGRES_PASSWORD=rotated-by-hand",
+        )
+        .replace(f"JWT_SECRET={before['JWT_SECRET']}", "JWT_SECRET=")
+    )
+    (home / ".env").write_text(env)
+
+    out = check(home, host_env(tmp_path))
+
+    assert out.returncode == 1
+    assert "JWT_SECRET is blank" in out.stdout
+    assert "DATABASE_URL does not embed POSTGRES_PASSWORD" in out.stdout
+
+
+def test_check_quadlet_passes_its_own_setup_and_names_a_missing_secret(tmp_path):
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    env = host_env(tmp_path)
+
+    green = check(host.src, env, "--quadlet")
+    assert green.returncode == 0, green.stdout
+    assert "systemctl --user start kendo-traefik" in green.stdout
+
+    (host.state / "kendo_jwt_secret").unlink()
+    out = check(host.src, env, "--quadlet")
+    assert out.returncode == 1
+    assert "podman secret missing: kendo_jwt_secret" in out.stdout
+
+
+def test_check_fails_a_domain_that_does_not_resolve(tmp_path):
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, getent="exit 2"))
+
+    assert out.returncode == 1
+    assert f"{DOMAIN} does not resolve" in out.stdout
+
+
+def test_check_only_warns_when_dns_points_off_this_host(tmp_path):
+    # Behind NAT the record holds the router's public address, which is never an
+    # address on this box — right for a home server, wrong everywhere else, and
+    # nothing here can tell which.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, hostname="echo 192.168.1.5"))
+
+    assert out.returncode == 0, out.stdout
+    assert f"warn  {DOMAIN} resolves to 203.0.113.7" in out.stdout
+    assert "NAT" in out.stdout
+
+
+def listening_on_80(process: str) -> str:
+    return (
+        'case "$*" in *":80"*) echo "LISTEN 0 511 0.0.0.0:80 0.0.0.0:* '
+        f'users:((\\"{process}\\",pid=812,fd=6))" ;; esac'
+    )
+
+
+def test_check_names_whatever_already_holds_port_80(tmp_path):
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, ss=listening_on_80("nginx")))
+
+    assert out.returncode == 1
+    assert "FAIL  :80 is taken by nginx" in out.stdout
+    assert "ok    :443 is free" in out.stdout
+
+
+def test_check_accepts_the_ports_held_by_the_running_stack(tmp_path):
+    # Re-run after an upgrade, stack up: rootless Podman's forwarder owns 80/443.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, ss=listening_on_80("pasta.avx2")))
+
+    assert out.returncode == 0, out.stdout
+    assert ":80 is held by rootless Podman" in out.stdout
+
+
+def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
+    tmp_path,
+):
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, loginctl="echo Linger=no"))
+
+    assert out.returncode == 1
+    assert "FAIL  Linger is off for kendo" in out.stdout
+    assert "sudo loginctl enable-linger kendo" in out.stdout
+
+
+def test_check_only_warns_about_a_firewall_it_cannot_see(tmp_path):
+    # No firewalld or ufw: a cloud security group or the router may well be
+    # doing the job, so this cannot be a FAIL that no operator can clear.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, firewall_cmd=None))
+
+    assert out.returncode == 0, out.stdout
+    assert "warn  No firewalld or ufw found" in out.stdout
+
+
+def test_check_quadlet_wants_the_secrets_a_hand_written_drop_in_names(tmp_path):
+    # route53 needs several variables, so the drop-in is the operator's own,
+    # with secret names of their choosing (and a pre-#412 host keeps its
+    # kendo_cf_dns_token): the names come from the units, not from a list here.
+    host = Host(tmp_path)
+    host.run(DOMAIN, "1", "3", "route53", "admin@shinbukan.org")
+    dropin = host.units() / "kendo-traefik.container.d/10-dns-01.conf"
+    dropin.write_text(
+        "[Container]\n"
+        "Secret=kendo_aws_key,type=env,target=AWS_ACCESS_KEY_ID\n"
+        "Secret=kendo_aws_secret,type=env,target=AWS_SECRET_ACCESS_KEY\n"
+    )
+    (host.state / "kendo_aws_key").write_text("AKIA")
+    env = host_env(tmp_path)
+
+    out = check(host.src, env, "--quadlet")
+    assert out.returncode == 1
+    assert "podman secret missing: kendo_aws_secret" in out.stdout
+
+    (host.state / "kendo_aws_secret").write_text("s3cret")
+    assert check(host.src, env, "--quadlet").returncode == 0
+
+
+def test_check_only_warns_when_ufw_will_not_report_without_root(tmp_path):
+    # `ufw status` needs root; run as the stack's owner it refuses, which says
+    # nothing about whether 80/443 are open.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(
+        home,
+        host_env(
+            tmp_path,
+            firewall_cmd=None,
+            ufw='echo "ERROR: You need to be root to run this script" >&2; exit 1',
+        ),
+    )
+
+    assert out.returncode == 0, out.stdout
+    assert "sudo ufw status" in out.stdout

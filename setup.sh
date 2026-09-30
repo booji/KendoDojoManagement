@@ -4,6 +4,7 @@
 #   podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 #   ./setup.sh              # quick self-host: Compose + .env
 #   ./setup.sh --quadlet    # hardened: podman secrets + ~/kendo + Quadlet units
+#   ./setup.sh check [--quadlet]   # advisory preflight, any time (#413)
 #
 # Both modes ask the same questions and derive WEBAUTHN_RP_ID /
 # WEBAUTHN_ORIGIN / CORS_ORIGINS from one domain answer — an RP_ID typo is the
@@ -16,10 +17,13 @@
 set -euo pipefail
 
 mode=compose
+action=setup
 case "${1-}${2+ $2}" in
   '') ;;
   --quadlet) mode=quadlet ;;
-  *) echo "Usage: $0 [--quadlet]" >&2; exit 2 ;;
+  check) action=check ;;
+  'check --quadlet') action=check mode=quadlet ;;
+  *) echo "Usage: $0 [check] [--quadlet]" >&2; exit 2 ;;
 esac
 
 cd "$(dirname "$0")"
@@ -37,6 +41,7 @@ if [ "$mode" = quadlet ]; then
 else
   required=(.env.example "$selfhost/traefik.yml.example" "$selfhost/dynamic/kendo.yml.example")
 fi
+[ "$action" = setup ] || required=()
 for f in "${required[@]}"; do
   [ -f "$f" ] || { echo "Missing $f — run this from the deployment bundle or a checkout." >&2; exit 1; }
 done
@@ -64,6 +69,223 @@ ask_secret() { # ask_secret VAR PROMPT — no echo; the value becomes a podman s
 rand() { od -An -vtx1 -N"$1" /dev/urandom | tr -d ' \n'; }
 
 backup() { [ -e "$1" ] && { mv -- "$1" "$1.bak"; echo "  kept previous $1 as $1.bak"; }; return 0; }
+
+# ----------------------------------------------------------- prerequisites ----
+# Detect, never escalate. Functions because --quadlet can be unable to do
+# anything at all (no podman), and the operator is owed the whole list then, not
+# just the one prerequisite that stopped the run — and because `check` reports
+# the same list as FAIL/warn lines.
+#
+# outstanding: each a problem plus, indented below it, the command that fixes it.
+# unverified:  what cannot be decided from this host at all.
+detect_prerequisites() {
+  outstanding=() unverified=()
+  need() { outstanding+=("$1"$'\n      '"$2"); }
+
+  command -v podman >/dev/null || need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
+
+  port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
+  [ "$port_start" -le 80 ] 2>/dev/null || need \
+    "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
+    "sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
+
+  if command -v firewall-cmd >/dev/null; then
+    firewall-cmd --list-services 2>/dev/null | grep -qw https || need \
+      "firewalld is not allowing http/https." \
+      "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+  elif command -v ufw >/dev/null; then
+    # `ufw status` refuses anyone but root, which says nothing about the rules.
+    if ! ufw_status=$(ufw status 2>/dev/null); then
+      unverified+=("ufw reports its rules only to root — check that \`sudo ufw status\` allows 80/443.")
+    else
+      case $ufw_status in
+        *inactive*|*443*|*Https*|*https*) ;;
+        *) need "ufw is not allowing 80/443." "sudo ufw allow 80/tcp && sudo ufw allow 443/tcp" ;;
+      esac
+    fi
+  else
+    unverified+=("No firewalld or ufw found — check whatever fronts this host allows inbound 80/443.")
+  fi
+
+  # The dedicated account is what docs/deployment.md builds the hardened path on,
+  # and the account this stack should be owned by even on the quick path. Compose
+  # runs as whoever invokes it, though, so linger is checked for the user that
+  # will actually own the containers rather than always for `kendo`.
+  owner=$(id -un)
+  if id kendo >/dev/null 2>&1; then
+    owner=kendo
+  else
+    need "No dedicated \`kendo\` user to own the containers — until there is one, they belong to $owner." \
+      "sudo useradd --create-home --shell /usr/sbin/nologin kendo   # then re-run this from its home"
+  fi
+
+  [ "$(loginctl show-user "$owner" --property=Linger 2>/dev/null)" = "Linger=yes" ] || need \
+    "Linger is off for $owner — the stack will not survive logout or reboot." \
+    "sudo loginctl enable-linger $owner"
+}
+
+report_prerequisites() {
+  detect_prerequisites
+  echo
+  if [ $(( ${#outstanding[@]} + ${#unverified[@]} )) -eq 0 ]; then
+    echo "Host prerequisites: all five satisfied."
+  else
+    echo "Host prerequisites — run these yourself (this script never escalates):"
+    for item in "${outstanding[@]}" "${unverified[@]}"; do echo "  - $item"; done
+  fi
+}
+
+have_secret() { podman secret inspect "$1" >/dev/null 2>&1; }
+
+# ------------------------------------------------------------------ check -----
+# Advisory (#413): it reports and changes nothing, and nothing gates on it. The
+# app already refuses to start on a blank secret or a localhost RP_ID
+# (validate_startup_config); this covers what the app cannot see from inside its
+# container — Traefik's files, DNS, the ports, the host — which otherwise surface
+# as a browser error or a certificate that never arrives. Any FAIL exits 1 so it
+# composes; `warn` is for what cannot be decided from here, and does not.
+failures=0
+ok()   { printf '  ok    %s\n' "$1"; }
+warn() { printf '  warn  %s\n' "$1"; }
+fail() { printf '  FAIL  %s\n' "$1"; failures=$((failures + 1)); }
+
+# The <your-...> slots of the .example files and the RFC 2606 example domains,
+# on non-comment lines: nobody can get a certificate for dojo.example.com.
+placeholders() {
+  sed 's/#.*//' "$1" | grep -oE '<your-[^>]*>|[a-z0-9.@-]*example\.(com|org|net)' | sort -u | tr '\n' ' ' || true
+}
+
+env_value() { sed -n "s/^$2=//p" "$1" | tail -1; } # env_value FILE KEY
+
+run_check() {
+  local env_file traefik_dir certs rerun
+  if [ "$mode" = quadlet ]; then
+    env_file=$kendo/kendo-app.env traefik_dir=$kendo/traefik certs=$kendo/traefik/certs
+    rerun="./setup.sh --quadlet"
+  else
+    env_file=.env traefik_dir=$selfhost certs=deploy/certs rerun=./setup.sh
+  fi
+  local static=$traefik_dir/traefik.yml router=$traefik_dir/dynamic/kendo.yml
+  echo "KendoDojoManagement — check ($([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host"))"
+  echo
+
+  local f p configured=1
+  for f in "$env_file" "$static" "$router"; do
+    [ -f "$f" ] || { fail "$f is missing — run $rerun first"; configured=""; }
+  done
+  if [ -n "$configured" ]; then
+    for f in "$env_file" "$router"; do
+      p=$(placeholders "$f")
+      if [ -z "$p" ]; then ok "$f has no placeholders"; else fail "$f still has placeholders: ${p% }"; fi
+    done
+    # A domain changed by hand in one file and not the other: every passkey
+    # ceremony fails, and nothing in either container logs why.
+    local host rp
+    host=$(sed -n 's/.*Host(`\([^`]*\)`).*/\1/p' "$router" | head -1)
+    rp=$(env_value "$env_file" WEBAUTHN_RP_ID)
+    if [ "$host" = "$rp" ]; then ok "Traefik routes $host, the WEBAUTHN_RP_ID"
+    else fail "Traefik routes ${host:-nothing} but WEBAUTHN_RP_ID is ${rp:-unset} — passkeys only work on that one host. Re-run $rerun."; fi
+
+    # The ACME email only matters while the router asks Let's Encrypt; with a
+    # bring-your-own certificate it is never sent anywhere.
+    if grep -q certResolver "$router"; then
+      p=$(placeholders "$static")
+      if [ -z "$p" ]; then ok "$static has a real ACME email"
+      else fail "$static still has placeholders: ${p% } — Let's Encrypt will not issue to them"; fi
+      ! grep -q acme-staging "$static" || warn "Let's Encrypt staging: browsers will not trust the certificate. Re-run $rerun with choice 1, then delete the acme volume."
+    elif [ -f "$traefik_dir/dynamic/byo-cert.yml" ]; then
+      if [ -f "$certs/cert.pem" ] && [ -f "$certs/key.pem" ]; then ok "Bring-your-own certificate is in $certs/"
+      else fail "byo-cert.yml serves $certs/cert.pem and $certs/key.pem, which are not there yet."; fi
+      # The one BYO step setup.sh cannot do on Compose: docker-compose.yml is
+      # the operator's to edit (--quadlet writes a drop-in instead).
+      [ "$mode" = quadlet ] || grep -q '^[^#]*/etc/traefik/certs' docker-compose.yml 2>/dev/null ||
+        fail "docker-compose.yml does not mount deploy/certs into the proxy — add \`- ./deploy/certs:/etc/traefik/certs:ro\` to its volumes."
+    else
+      fail "No certificate is configured (TLS was skipped), so Traefik serves its self-signed default. Re-run $rerun and pick 1-3."
+    fi
+  fi
+
+  # Placeholder secrets are caught above; what is left is a blank one, and a
+  # password rotated by hand in one place — the app starts, then every query is
+  # refused. Podman will not read a secret back, so --quadlet can only check
+  # that each one the installed units and drop-ins name exists — names read
+  # from them, because a multi-variable DNS provider's drop-in is the
+  # operator's own, secret names and all.
+  local s absent="" names
+  if [ "$mode" = quadlet ]; then
+    names=$(cat "$units"/kendo-*.container "$units"/kendo-*.container.d/*.conf 2>/dev/null |
+            sed -n 's/^Secret=\([^,]*\).*/\1/p' | sort -u || true)
+    if [ -n "$names" ] && command -v podman >/dev/null; then
+      for s in $names; do have_secret "$s" || absent+=" $s"; done
+      if [ -z "$absent" ]; then ok "Every podman secret the units name exists"
+      else fail "podman secret missing:$absent — re-run $rerun, or create it for your own drop-in"; fi
+    fi
+  elif [ -f "$env_file" ]; then
+    for s in POSTGRES_PASSWORD JWT_SECRET SETUP_TOKEN; do
+      [ -n "$(env_value "$env_file" "$s")" ] || absent+=" $s"
+    done
+    if [ -z "$absent" ]; then ok "POSTGRES_PASSWORD, JWT_SECRET and SETUP_TOKEN are set"
+    else for s in $absent; do fail "$s is blank in $env_file"; done; fi
+    case $(env_value "$env_file" DATABASE_URL) in
+      *":$(env_value "$env_file" POSTGRES_PASSWORD)@"*) ok "DATABASE_URL embeds POSTGRES_PASSWORD" ;;
+      *) fail "DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the app." ;;
+    esac
+  fi
+
+  # The origin's host, resolved the way this box resolves it (so /etc/hosts and
+  # an internal resolver count). Off-box is only a warning: behind NAT the
+  # record rightly holds the router's address, and nothing here can tell.
+  local domain="" addrs a here=""
+  [ ! -f "$env_file" ] || domain=$(env_value "$env_file" WEBAUTHN_ORIGIN)
+  domain=${domain#https://}
+  case $domain in
+    ''|*'<'*) ;;
+    *)
+      addrs=$(getent ahosts "$domain" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ' || true)
+      for a in $addrs; do
+        if hostname -I 2>/dev/null | tr ' ' '\n' | grep -qxF "$a"; then here=$a; fi
+      done
+      if [ -z "$addrs" ]; then fail "$domain does not resolve — give it an A/AAAA record pointing at this host."
+      elif [ -n "$here" ]; then ok "$domain resolves to $here, an address on this host"
+      else warn "$domain resolves to ${addrs% }, not an address on this host — right behind NAT if the router forwards 80/443 here, otherwise DNS points somewhere else."; fi ;;
+  esac
+
+  # Permission to bind is the sysctl prerequisite below; this is the other half,
+  # something already listening. After an upgrade the stack itself holds both
+  # ports, through rootless Podman's port forwarder.
+  local port holder
+  if command -v ss >/dev/null; then
+    for port in 80 443; do
+      holder=$(ss -ltnpH "sport = :$port" 2>/dev/null || true)
+      case $holder in
+        '') ok ":$port is free" ;;
+        *rootlessport*|*pasta*|*slirp4netns*) ok ":$port is held by rootless Podman — this stack, if it is up" ;;
+        *) holder=$(printf '%s\n' "$holder" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -1)
+           [ -n "$holder" ] || holder="a process this user cannot see (run check as the stack owner)"
+           fail ":$port is taken by $holder — Traefik cannot bind it." ;;
+      esac
+    done
+  else
+    warn "No \`ss\` here to tell whether 80/443 are already taken."
+  fi
+
+  detect_prerequisites
+  for item in "${outstanding[@]}"; do fail "$item"; done
+  for item in "${unverified[@]}"; do warn "$item"; done
+  [ ${#outstanding[@]} -gt 0 ] || ok "Host prerequisites satisfied."
+
+  echo
+  if [ "$failures" -gt 0 ]; then
+    echo "$failures check(s) failed. Advisory only — nothing was changed."
+    return 1
+  fi
+  if [ "$mode" = quadlet ]; then
+    echo "Green. Next: systemctl --user start kendo-traefik.service"
+  else
+    echo "Green. Next: podman-compose up -d"
+  fi
+}
+[ "$action" = setup ] || { run_check; exit; }
 
 echo "KendoDojoManagement — $([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host") setup"
 echo
@@ -237,67 +459,12 @@ copy_byo() { # copy_byo SRC DST — only when the operator brings their own cert
   echo "  wrote $2"
 }
 
-# ----------------------------------------------------------- prerequisites ----
-# Detect and print, never escalate. A function because --quadlet can be unable
-# to do anything at all (no podman), and the operator is owed the whole list
-# then, not just the one prerequisite that stopped the run.
-report_prerequisites() {
-  outstanding=()
-  need() { outstanding+=("$1"$'\n      '"$2"); }
-
-  command -v podman >/dev/null || need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
-
-  port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
-  [ "$port_start" -le 80 ] 2>/dev/null || need \
-    "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
-    "sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
-
-  if command -v firewall-cmd >/dev/null; then
-    firewall-cmd --list-services 2>/dev/null | grep -qw https || need \
-      "firewalld is not allowing http/https." \
-      "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
-  elif command -v ufw >/dev/null; then
-    ufw status 2>/dev/null | grep -q '443\|Https\|https' || need \
-      "ufw is not allowing 80/443." \
-      "sudo ufw allow 80/tcp && sudo ufw allow 443/tcp"
-  else
-    need "No firewalld or ufw found — check whatever fronts this host allows inbound 80/443." "(nothing to run here)"
-  fi
-
-  # The dedicated account is what docs/deployment.md builds the hardened path on,
-  # and the account this stack should be owned by even on the quick path. Compose
-  # runs as whoever invokes it, though, so linger is checked for the user that
-  # will actually own the containers rather than always for `kendo`.
-  owner=$(id -un)
-  if id kendo >/dev/null 2>&1; then
-    owner=kendo
-  else
-    need "No dedicated \`kendo\` user to own the containers — until there is one, they belong to $owner." \
-      "sudo useradd --create-home --shell /usr/sbin/nologin kendo   # then re-run this from its home"
-  fi
-
-  [ "$(loginctl show-user "$owner" --property=Linger 2>/dev/null)" = "Linger=yes" ] || need \
-    "Linger is off for $owner — the stack will not survive logout or reboot." \
-    "sudo loginctl enable-linger $owner"
-
-  echo
-  if [ ${#outstanding[@]} -eq 0 ]; then
-    echo "Host prerequisites: all five satisfied."
-  else
-    echo "Host prerequisites — run these yourself (this script never escalates):"
-    for item in "${outstanding[@]}"; do echo "  - $item"; done
-  fi
-
-}
-
 # ---------------------------------------------------------------- quadlet -----
 # Sections 2-4 of docs/deployment.md are pure transcription — the five podman
 # secrets, the ~/kendo/ tree the units mount, the units themselves — and that is
 # exactly what an operator gets wrong at 11pm (#412). DATABASE_URL embeds the
 # postgres password, so one script owning both is what makes them impossible to
 # mismatch.
-
-have_secret() { podman secret inspect "$1" >/dev/null 2>&1; }
 
 put_secret() { # put_secret NAME VALUE
   printf '%s' "$2" | podman secret create "$1" - >/dev/null
@@ -461,7 +628,8 @@ if [ "$mode" = quadlet ]; then
   yet. Run it from a \`machinectl shell kendo@\` session — \`su - kendo\` leaves
   systemctl --user broken — before anything below will work.
 "
-  echo "Next: systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
+  echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
+  echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
   echo "      already running? systemctl --user restart kendo-traefik kendo-app   (a reload alone"
   echo "      regenerates the units; the containers keep their old config until they restart)"
   echo "      systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager"
@@ -474,6 +642,7 @@ if [ "$mode" = quadlet ]; then
     echo "  $new_setup_token"
   fi
 else
-  echo "Next: podman-compose up -d   (then open https://$domain)"
+  echo "Next: ./setup.sh check   (every FAIL names its fix; green means ready)"
+  echo "      podman-compose up -d   (then open https://$domain)"
   echo "The SETUP_TOKEN in .env claims the first admin account — hand it over out of band."
 fi

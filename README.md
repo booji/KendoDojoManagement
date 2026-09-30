@@ -96,11 +96,23 @@ The script also checks the five host prerequisites — Podman, the
 prints the exact `sudo` command for each one that is missing. It never
 escalates itself; you run those.
 
-**3. Start the stack:**
+**3. Check, then start the stack:**
 
 ```bash
+./setup.sh check       # green? then:
 podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:1
 ```
+
+`check` looks at what the app cannot see from inside its container, the things
+that otherwise surface as a browser error or a certificate that never arrives:
+placeholder domains, emails or secrets left in `.env` or the Traefik files, a
+Traefik `Host()` rule that no longer matches `WEBAUTHN_RP_ID`, TLS skipped or a
+bring-your-own certificate not in place, the domain not resolving to this host,
+something else already on 80/443, and the five host prerequisites. Each `FAIL`
+names its fix; it changes nothing and exits non-zero on any `FAIL`. A `warn`
+is something it cannot decide from here — DNS pointing at a router's public
+address is right behind NAT — and does not fail it. Run it any time: after an
+upgrade, after a domain change, or paste its output into a bug report.
 
 `KENDO_IMAGE` in `.env` is the pin. The documented default is the **major** tag
 `:1`: fixes and features, but no migration that needs a restore from backup to
