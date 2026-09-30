@@ -5,6 +5,7 @@
 #   ./setup.sh              # quick self-host: Compose + .env
 #   ./setup.sh --quadlet    # hardened: podman secrets + ~/kendo + Quadlet units
 #   ./setup.sh check [--quadlet]   # advisory preflight, any time (#413)
+#   ./setup.sh upgrade              # quick self-host: back up, pull, migrate (#414)
 #
 # Both modes ask the same questions and derive WEBAUTHN_RP_ID /
 # WEBAUTHN_ORIGIN / CORS_ORIGINS from one domain answer — an RP_ID typo is the
@@ -23,7 +24,8 @@ case "${1-}${2+ $2}" in
   --quadlet) mode=quadlet ;;
   check) action=check ;;
   'check --quadlet') action=check mode=quadlet ;;
-  *) echo "Usage: $0 [check] [--quadlet]" >&2; exit 2 ;;
+  upgrade) action=upgrade ;;
+  *) echo "Usage: $0 [check] [--quadlet]  |  $0 upgrade" >&2; exit 2 ;;
 esac
 
 cd "$(dirname "$0")"
@@ -285,7 +287,149 @@ run_check() {
     echo "Green. Next: podman-compose up -d"
   fi
 }
-[ "$action" = setup ] || { run_check; exit; }
+
+# ---------------------------------------------------------------- upgrade -----
+# Quick self-host only (#414). `pull && up` runs `alembic upgrade head` against
+# the live database unprompted, so this puts a backup in front of it and the
+# exact restore behind it. It never refuses to go ahead without a backup of its
+# own making: that would block the first upgrade and train people into --force.
+#
+# The stack is the Compose project `kendodojo` (docker-compose.yml's `name:`);
+# both podman-compose and docker compose label its containers with it.
+project=kendodojo
+compose_container() { # compose_container SERVICE — its container's name
+  podman ps -a --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=$1" --format '{{.Names}}' | head -1
+}
+
+# Take the bundle out of the image about to run, so config and image stay on
+# one version axis (ADR-0004): a stale compose file must not drive a new app.
+# PREV is the bundle the pinned image carried before the pull, which is what
+# tells a file this release changed from an edit of the operator's (a BYO
+# certificate's mount in docker-compose.yml, say). An edited file the release
+# also changed is never overwritten: its new version lands next to it as .new
+# and the upgrade stops before anything is recreated. The bundle carries only
+# shipped files — never .env or the filled-in Traefik config — but a
+# contributor's own build could, so those are skipped by name.
+refresh_bundle() { # refresh_bundle PREV NEXT
+  local prev=$1 next=$2 f changed="" merge=""
+  while IFS= read -r f; do
+    case $f in .env|"$selfhost"/traefik.yml|"$selfhost"/dynamic/*.yml) continue ;; esac
+    if cmp -s "$next/$f" "$f"; then
+      rm -f -- "$f.new"                     # current, or merged into exactly this
+    elif [ ! -e "$f" ] || cmp -s "$prev/$f" "$f"; then
+      [ ! -e "$f" ] || mv -- "$f" "$f.bak"  # untouched since the last release
+      mkdir -p "$(dirname "$f")"
+      # A rename, not a copy: setup.sh replaces itself here, and bash reads a
+      # script as it runs — this run carries on reading setup.sh.bak.
+      mv -- "$next/$f" "$f"
+      changed+="  $f"$'\n'
+    elif cmp -s "$f.new" "$next/$f"; then
+      # Merged by hand after the last run stopped. Checked first: that run's
+      # pull already moved the tag, so PREV is this release by now.
+      rm -f -- "$f.new"
+    elif cmp -s "$prev/$f" "$next/$f"; then
+      :                                     # edited, and the release left it alone
+    else
+      mv -- "$next/$f" "$f.new"
+      merge+="  $f.new"$'\n'
+    fi
+  done < <(cd "$next" && find . -type f | sed 's|^\./||' | sort)
+
+  if [ -n "$changed" ]; then
+    echo "Deployment bundle files that changed in this release (previous copies kept as .bak):"
+    printf '%s' "$changed"
+    case $changed in *"  .env.example"$'\n'*)
+      echo "  .env.example changed: compare it with your .env for new settings." ;;
+    esac
+  elif [ -z "$merge" ]; then
+    echo "Deployment bundle unchanged in this release."
+  fi
+  if [ -n "$merge" ]; then
+    {
+      echo
+      echo "These carry edits of yours and also changed in this release; its version is"
+      echo "next to each as .new:"
+      printf '%s' "$merge"
+      echo "Merge each into yours (or take it whole), then re-run ./setup.sh upgrade."
+      echo "Nothing has been recreated: the stack still runs the previous image."
+    } >&2
+    exit 1
+  fi
+}
+
+run_upgrade() {
+  [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
+  command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
+
+  # The backup needs the database up; `up -d db` is a no-op when it already is.
+  podman-compose up -d db >/dev/null
+  local db
+  db=$(compose_container db)
+  [ -n "$db" ] || { echo "No db container in the Compose project \`$project\` — run this where the stack runs." >&2; exit 1; }
+  podman wait --condition=healthy "$db" >/dev/null
+
+  echo "Backing up before anything changes:"
+  # Compose volumes are project-scoped: `static_uploads` is kendodojo_static_uploads.
+  local names="KENDO_DB_CONTAINER=$db KENDO_UPLOADS_VOLUME=${project}_static_uploads" out
+  out=$(env $names bash deploy/bin/kendo-backup.sh) ||
+    { echo "Backup failed — nothing was upgraded." >&2; exit 1; }
+  printf '%s\n' "$out" | sed 's/^/  /'
+  local dump uploads
+  dump=$(printf '%s\n' "$out" | sed -n 's/^written: \(.*\.dump\) (.*/\1/p')
+  uploads=$(printf '%s\n' "$out" | sed -n 's/^written: \(.*\.tar\) (.*/\1/p')
+
+  # The digest of what is running now, before a pull moves the tag: restoring
+  # the data is only half a rollback, as the new image would migrate it again.
+  local image previous
+  image=$(env_value .env KENDO_IMAGE)
+  image=${image:-ghcr.io/booji/kendodojomanagement:1}
+  previous=$(podman image inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true)
+
+  # Global, not local: the EXIT trap runs after this function has returned.
+  # Inside this directory so refresh_bundle's `mv`s are renames.
+  tmp=$(mktemp -d .upgrade.XXXXXX)
+  trap 'rm -rf -- "$tmp"' EXIT
+  mkdir "$tmp/prev" "$tmp/next"
+  # Before the pull moves the tag. Missing (an image removed by hand) only
+  # makes refresh_bundle treat every differing file as edited: it stops, never
+  # overwrites.
+  podman run --rm "$image" init 2>/dev/null | tar -x -C "$tmp/prev" 2>/dev/null || true
+
+  podman-compose pull || { echo "Pull failed — nothing past the backup was changed." >&2; exit 1; }
+  podman run --rm "$image" init | tar -x -C "$tmp/next" ||
+    { echo "Could not extract the bundle from $image — nothing past the backup was changed." >&2; exit 1; }
+  refresh_bundle "$tmp/prev" "$tmp/next"
+
+  # --force-recreate: podman-compose recreates a container only when the YAML
+  # changed, and a new image under the same :1 tag is not a YAML change. And
+  # it treats service_completed_successfully as merely "stopped", so a failed
+  # migration does not fail `up` — migrate's exit code is read here instead.
+  local code=""
+  if podman-compose up -d --force-recreate; then
+    code=$(podman wait "$(compose_container migrate)" 2>/dev/null || true)
+  fi
+  if [ "$code" != 0 ]; then
+    {
+      echo
+      echo "Upgrade failed${code:+ (migrate exited $code)}. \`podman-compose logs migrate app\` says why."
+      echo "To roll back to the backup taken above:"
+      echo "  podman-compose stop app"
+      echo "  $names bash deploy/bin/kendo-restore.sh $(printf '%q' "$dump")${uploads:+ $(printf '%q' "$uploads")}"
+      [ -z "$previous" ] || echo "  then set KENDO_IMAGE=$previous in .env — the image that was running —"
+      echo "  and: podman-compose up -d --force-recreate"
+    } >&2
+    exit 1
+  fi
+  echo
+  echo "Upgraded: migrations applied and the stack recreated on $image."
+  echo "The backup stays in $(dirname "$dump"). \`./setup.sh check\` confirms the rest."
+}
+
+case $action in
+  check) run_check; exit ;;
+  upgrade) run_upgrade; exit ;;
+esac
 
 echo "KendoDojoManagement — $([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host") setup"
 echo

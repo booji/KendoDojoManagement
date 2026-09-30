@@ -10,10 +10,16 @@
 #   Tune via env in the .service unit:
 #     KENDO_BACKUP_DIR  (default: $HOME/backups)
 #     KENDO_BACKUP_KEEP (default: 14)
+#   The container and volume names default to the Quadlet ones; the Compose
+#   stack's are project-scoped, and `setup.sh upgrade` passes those:
+#     KENDO_DB_CONTAINER   (default: kendo-db)
+#     KENDO_UPLOADS_VOLUME (default: kendo-app-uploads)
 set -euo pipefail
 
 BACKUP_DIR="${KENDO_BACKUP_DIR:-$HOME/backups}"
 KEEP="${KENDO_BACKUP_KEEP:-14}"
+DB="${KENDO_DB_CONTAINER:-kendo-db}"
+UPLOADS_VOLUME="${KENDO_UPLOADS_VOLUME:-kendo-app-uploads}"
 
 mkdir -p "$BACKUP_DIR"
 # Clear any .partial left by a previous run that died mid-write (see
@@ -35,12 +41,12 @@ write_artefact() {
 
 # -Fc = custom format (compressed, restorable with pg_restore). Password is read
 # from POSTGRES_PASSWORD_FILE inside the container, so no secret on the CLI.
-write_artefact "$out" podman exec kendo-db pg_dump -U kendo -d kendo -Fc
+write_artefact "$out" podman exec "$DB" pg_dump -U kendo -d kendo -Fc
 
 # Uploaded logos and login backgrounds live only in this volume — they are not
 # in the database, so the pg_dump above does not cover them.
 uploads="$BACKUP_DIR/kendo-uploads-${stamp}.tar"
-write_artefact "$uploads" podman volume export kendo-app-uploads
+write_artefact "$uploads" podman volume export "$UPLOADS_VOLUME"
 
 # Prune each artefact type independently: keep the newest $KEEP, delete the rest.
 # The .dump glob does not match kendo-uploads-*.tar, so the two do not interfere.
