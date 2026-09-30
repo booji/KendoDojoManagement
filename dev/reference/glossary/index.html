@@ -1240,6 +1240,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0005-session-templates-and-instances-stay-separate-tables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session Templates and Sessions stay separate tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0006-accounts-and-members-stay-separate-tables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accounts and Members stay separate tables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1611,13 +1667,13 @@
 <tbody>
 <tr>
 <td><strong>Admin</strong></td>
-<td>A user with full management rights over members, sessions, and configuration</td>
+<td>A <strong>Member</strong> whose <strong>Account</strong> has full management rights over members, sessions, and configuration</td>
 <td>Sensei, manager, owner</td>
 </tr>
 <tr>
 <td><strong>Member</strong></td>
-<td>A registered person who trains at the dojo; has both a <strong>User</strong> identity and a <strong>Member Profile</strong></td>
-<td>Student, practitioner, kendoka</td>
+<td>A person on the dojo's roster: personal details, grade and membership data. Holds the person's one email address, used both to contact them and to sign in. Has at most one <strong>Account</strong> — none until they register, and none again after erasure</td>
+<td>Student, practitioner, kendoka, Member Profile, profile</td>
 </tr>
 <tr>
 <td><strong>Visitor</strong></td>
@@ -1647,13 +1703,13 @@
 </thead>
 <tbody>
 <tr>
-<td><strong>User</strong></td>
-<td>The authentication identity in the system; holds credentials, email, and a <strong>Role</strong></td>
-<td>Login, account</td>
+<td><strong>Account</strong></td>
+<td>A <strong>Member's</strong> means of signing in: their <strong>Passkeys</strong>, recovery codes and <strong>Role</strong>. Not a person — it always belongs to exactly one <strong>Member</strong>, and signs in with that Member's email. The code still calls it <code>User</code> / <code>users</code> until the rename lands (#436)</td>
+<td>User, login</td>
 </tr>
 <tr>
 <td><strong>Role</strong></td>
-<td>The permission level of a user: either <code>admin</code> or <code>member</code></td>
+<td>The permission level of an <strong>Account</strong>: either <code>admin</code> or <code>member</code></td>
 <td>Permission, access level</td>
 </tr>
 <tr>
@@ -1662,13 +1718,8 @@
 <td>Biometric login, FIDO key</td>
 </tr>
 <tr>
-<td><strong>Member Profile</strong></td>
-<td>The dojo-domain record linked to a <strong>User</strong>; holds personal details, grade, and membership data</td>
-<td>Profile, account, user record</td>
-</tr>
-<tr>
 <td><strong>First-registered Admin</strong></td>
-<td>The first <strong>User</strong> to register on a fresh instance, automatically assigned the <code>admin</code> <strong>Role</strong></td>
+<td>The first <strong>Member</strong> to register on a fresh instance: their <strong>Member</strong> and <strong>Account</strong> are created together when they claim it, with the <code>admin</code> <strong>Role</strong></td>
 <td>Superuser, root user</td>
 </tr>
 </tbody>
@@ -1783,6 +1834,11 @@
 <td>Recurring session, schedule</td>
 </tr>
 <tr>
+<td><strong>Segment</strong></td>
+<td>A timed block within a <strong>Session</strong> — start time and duration — carrying one or more <strong>Session Types</strong></td>
+<td>Part, block, section</td>
+</tr>
+<tr>
 <td><strong>Ad-hoc Session</strong></td>
 <td>A one-off session created directly, not from a template</td>
 <td>Extra session, special session</td>
@@ -1820,9 +1876,9 @@
 <td>Sign-in, mark attendance</td>
 </tr>
 <tr>
-<td><strong>Check-in Token</strong></td>
-<td>A short-lived, session-scoped URL token an admin shares so members can check in remotely</td>
-<td>Check-in link, sign-in code</td>
+<td><strong>Check-in Link</strong></td>
+<td>The one public link a <strong>Session</strong> has for checking in. Stable and tokenless: it grants nothing by itself — the member still signs in, and the check-in window still applies</td>
+<td>Check-in token, sign-in code</td>
 </tr>
 <tr>
 <td><strong>Admin Override</strong></td>
@@ -1848,7 +1904,7 @@
 </tr>
 <tr>
 <td><strong>Personal Details</strong></td>
-<td>The subset of <strong>Member Profile</strong> fields a user can edit themselves: name, DOB, emergency contact, federation number</td>
+<td>The subset of <strong>Member</strong> fields a Member can edit themselves: name, DOB, emergency contact, federation number</td>
 <td>Profile settings</td>
 </tr>
 <tr>
@@ -1858,7 +1914,7 @@
 </tr>
 <tr>
 <td><strong>Theme</strong></td>
-<td>A user's preferred colour scheme: <code>light</code>, <code>dark</code>, or <code>system</code> (follows device preference)</td>
+<td>A Member's preferred colour scheme: <code>light</code>, <code>dark</code>, or <code>system</code> (follows device preference)</td>
 <td>Dark mode, colour scheme</td>
 </tr>
 <tr>
@@ -1870,16 +1926,17 @@
 </table>
 <h2 id="relationships">Relationships<a class="headerlink" href="#relationships" title="Permanent link">&para;</a></h2>
 <ul>
-<li>A <strong>User</strong> is linked to at most one <strong>Member Profile</strong>; a <strong>User</strong> without a linked profile can self-onboard via <strong>Personal Details</strong> in <strong>User Settings</strong>.</li>
-<li>A <strong>User</strong> has exactly one <strong>Role</strong>: <code>admin</code> or <code>member</code>.</li>
+<li>Every <strong>Account</strong> belongs to exactly one <strong>Member</strong>; a <strong>Member</strong> has at most one <strong>Account</strong>. There is no sign-in without a kendoka behind it.</li>
+<li>An <strong>Account</strong> has exactly one <strong>Role</strong>: <code>admin</code> or <code>member</code>.</li>
+<li>Only an <strong>Admin</strong> can change a <strong>Member's</strong> email: the app sends no mail, so a self-service change could not be verified.</li>
 <li>A <strong>Member</strong> holds exactly one current <strong>Grade</strong> and accumulates a <strong>Grade History</strong> over time.</li>
 <li>A <strong>Grade</strong> progresses in strict order: Mukyū → 6-kyū → 5-kyū → 4-kyū → 3-kyū → 2-kyū → 1-kyū → 1-dan → 2-dan → 3-dan → 4-dan → 5-dan → 6-dan → 7-dan → 8-dan.</li>
 <li>A <strong>Session</strong> is either generated from a <strong>Session Template</strong> or created as an <strong>Ad-hoc Session</strong>.</li>
-<li>A <strong>Session</strong> has exactly one <strong>Session Type</strong>.</li>
+<li>A <strong>Session</strong> has one or more <strong>Segments</strong>, and each <strong>Segment</strong> carries one or more <strong>Session Types</strong> — so a single evening keiko can be both Kihon and Keiko.</li>
 <li><strong>Attendance</strong> at a <strong>Session</strong> is a collection of <strong>Check-ins</strong> by <strong>Members</strong> and named <strong>Visitors</strong>.</li>
-<li>A <strong>Check-in Token</strong> is scoped to exactly one <strong>Session</strong> and expires after use or after the session ends.</li>
+<li>A <strong>Session</strong> has exactly one <strong>Check-in Link</strong>, and it never changes.</li>
 <li>A <strong>Minor</strong> requires a <strong>Parental Consent</strong> flag before being considered fully registered.</li>
-<li>A <strong>Deactivation</strong> sets <strong>Membership Status</strong> to <code>inactive</code>; it never removes the <strong>Member Profile</strong> or the <strong>User</strong>.</li>
+<li>A <strong>Deactivation</strong> sets <strong>Membership Status</strong> to <code>inactive</code>; it never removes the <strong>Member</strong> or their <strong>Account</strong>.</li>
 <li>A <strong>Member</strong> may hold a <strong>Federation Membership</strong> with each of several <strong>Federations</strong>; an <strong>Admin</strong> manages any member's, a <strong>Member</strong> manages their own, and both go through the same card.</li>
 </ul>
 <h2 id="deployment">Deployment<a class="headerlink" href="#deployment" title="Permanent link">&para;</a></h2>
@@ -1897,12 +1954,12 @@ stacks, so they are pinned here.</p>
 <tbody>
 <tr>
 <td><strong>Hardened deployment</strong></td>
-<td>The rootless Podman + Quadlet stack in <code>deploy/quadlet</code>: Traefik terminating TLS, <code>kendo-app</code>, and <code>kendo-db</code> across the <code>kendo-edge</code> and <code>kendo-backend</code> networks. This is what <strong>production</strong> means when unqualified</td>
+<td>The rootless Podman + Quadlet stack in <code>deploy/quadlet</code>: Traefik terminating TLS, <code>kendo-app</code>, and <code>kendo-db</code> across the <code>kendo-edge</code> and <code>kendo-backend</code> networks, Podman secrets and automated backups. What an operator graduates to from the <strong>quick self-host</strong></td>
 <td>The Quadlet thing, systemd deploy</td>
 </tr>
 <tr>
 <td><strong>Quick self-host</strong></td>
-<td>The Compose stack in <code>docker-compose.yml</code>: the same app and database images with a simpler single-file setup, for an operator who does not want Quadlet</td>
+<td>The Compose stack in <code>docker-compose.yml</code>: the same app and database images with a simpler single-file setup. A supported production path for a single dojo, and the one the install docs lead with</td>
 <td>Prod compose, docker prod</td>
 </tr>
 <tr>
@@ -1920,9 +1977,9 @@ stacks, so they are pinned here.</p>
 <h2 id="example-dialogue">Example dialogue<a class="headerlink" href="#example-dialogue" title="Permanent link">&para;</a></h2>
 <blockquote>
 <p><strong>Dev:</strong> "When an admin 'deletes' a member, what happens to their account?"</p>
-<p><strong>Domain expert:</strong> "There is no deletion — the operation is a <strong>Deactivation</strong>. The <strong>Member Profile</strong> stays in the database with <strong>Membership Status</strong> set to <code>inactive</code>. The <strong>User</strong> identity is also retained so the person could be reactivated later."</p>
-<p><strong>Dev:</strong> "And what's the difference between the <strong>User</strong> and the <strong>Member Profile</strong>?"</p>
-<p><strong>Domain expert:</strong> "The <strong>User</strong> is just the login: email, credentials, <strong>Role</strong>. The <strong>Member Profile</strong> is the dojo record: grade, emergency contact, federation number. They're linked, but a <strong>User</strong> can exist before a <strong>Member Profile</strong> is created — for example, the first <strong>Admin</strong> registered before any profiles existed."</p>
+<p><strong>Domain expert:</strong> "There is no deletion — the operation is a <strong>Deactivation</strong>. The <strong>Member</strong> stays in the database with <strong>Membership Status</strong> set to <code>inactive</code>. Their <strong>Account</strong> is also retained so they could be reactivated later."</p>
+<p><strong>Dev:</strong> "And what's the difference between the <strong>Account</strong> and the <strong>Member</strong>?"</p>
+<p><strong>Domain expert:</strong> "The <strong>Member</strong> is the kendoka: name, email, grade, emergency contact. The <strong>Account</strong> is just how they sign in: passkeys and a <strong>Role</strong>. Every <strong>Account</strong> belongs to a <strong>Member</strong>, but most <strong>Members</strong> on the roster never sign in, so they have none."</p>
 <p><strong>Dev:</strong> "If I'm building the settings page, should I call it 'User Settings' or just 'Settings'?"</p>
 <p><strong>Domain expert:</strong> "Call it <strong>User Settings</strong> whenever <strong>Dojo Settings</strong> might also be in scope. Unqualified 'settings' is ambiguous — <strong>User Settings</strong> covers personal details and appearance; <strong>Dojo Settings</strong> covers dojo-wide configuration like name and colours."</p>
 <p><strong>Dev:</strong> "What <strong>Theme</strong> does a new member see?"</p>
@@ -1932,14 +1989,14 @@ stacks, so they are pinned here.</p>
 </blockquote>
 <h2 id="flagged-ambiguities">Flagged ambiguities<a class="headerlink" href="#flagged-ambiguities" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>"User" vs "Member"</strong>: Throughout the codebase and conversation, "user" is sometimes used generically to mean any person using the app. It has a precise meaning here: <strong>User</strong> = auth identity. <strong>Member</strong> = dojo profile. A sentence like "the user's name" is ambiguous — use "the <strong>Member's</strong> name" or "the <strong>User's</strong> email" to be precise.</li>
+<li><strong>"User"</strong>: Retired as a domain term (#418) because it sounds like a person, and the person is always the <strong>Member</strong>. The sign-in is the <strong>Account</strong>. "The user's name" means "the <strong>Member's</strong> name"; there is no such thing as a user's email, only the <strong>Member's</strong>. The code keeps <code>User</code> until the rename lands (#436). <strong>User Settings</strong> stays as a page name.</li>
 <li><strong>"Settings"</strong>: Used unqualified for both per-user preferences and dojo-wide configuration. Always qualify: <strong>User Settings</strong> or <strong>Dojo Settings</strong>.</li>
 <li><strong>"Delete" vs "Deactivate"</strong>: The API endpoint <code>DELETE /members/{id}</code> performs a <strong>Deactivation</strong>, not a deletion. The word "delete" must not be used for this operation in any user-facing text, documentation, or domain discussion.</li>
-<li><strong>"Profile"</strong>: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is <strong>Member Profile</strong>. Avoid bare "profile".</li>
+<li><strong>"Profile"</strong>: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is <strong>Member</strong>. Avoid bare "profile" and the retired "Member Profile".</li>
 <li><strong>"Grading"</strong>: Used in two senses — the event type (a session where grades are awarded) and the act of awarding a grade. Use <strong>Session Type: Grading</strong> for the event and <strong>Promotion</strong> for the act.</li>
 <li><strong>"Guest"</strong> and <strong>"Visitor"</strong>: Used interchangeably in early discussion. The canonical term is <strong>Visitor</strong>.</li>
 <li><strong>"Rank"</strong> and <strong>"Grade"</strong>: The canonical term is <strong>Grade</strong>, to align with kendo federation terminology.</li>
-<li><strong>"Production"</strong>: Meant two different stacks — the Quadlet units in <code>deploy/quadlet</code> and the Compose file in <code>docker-compose.yml</code>. Unqualified <strong>production</strong> now means the <strong>hardened deployment</strong> (Quadlet); the Compose stack is the <strong>quick self-host</strong>.</li>
+<li><strong>"Production"</strong>: Meant two different stacks — the Quadlet units in <code>deploy/quadlet</code> and the Compose file in <code>docker-compose.yml</code>. Both are supported production paths, so never use "production" to tell them apart: say <strong>quick self-host</strong> or <strong>hardened deployment</strong>.</li>
 </ul>
 
 

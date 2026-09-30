@@ -37,6 +37,14 @@
          <lastmod>2026-09-30</lastmod>
     </url>
     <url>
+         <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0005-session-templates-and-instances-stay-separate-tables/</loc>
+         <lastmod>2026-09-30</lastmod>
+    </url>
+    <url>
+         <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0006-accounts-and-members-stay-separate-tables/</loc>
+         <lastmod>2026-09-30</lastmod>
+    </url>
+    <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/contributing/dev-stack/</loc>
          <lastmod>2026-09-30</lastmod>
     </url>
