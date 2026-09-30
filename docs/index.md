@@ -2,6 +2,9 @@
 
 Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployed with rootless Podman.
 
+![The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type](assets/session-calendar-light.png#only-light)
+![The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type](assets/session-calendar-dark.png#only-dark)
+
 --8<-- "README.md:features"
 
 ## Container runtime

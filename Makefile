@@ -17,7 +17,7 @@ COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml
 # keystroke started a foreground image build. It now lists the targets (#373).
 .DEFAULT_GOAL := help
 
-.PHONY: dev test build down down-selfhost clean logs migrate certs certs-force help
+.PHONY: dev test screenshots build down down-selfhost clean logs migrate certs certs-force help
 
 ## certs: Generate the dev TLS certificate if one is missing or untrusted
 certs:
@@ -44,6 +44,11 @@ test:
 	# cached image and masquerade as a collection error (see #221). Docker layer
 	# caching keeps this a no-op when nothing relevant changed.
 	$(COMPOSE_TEST) up --build
+
+## screenshots: Regenerate the session-calendar screenshots in docs/assets from made-up data
+screenshots:
+	$(COMPOSE_TEST) run --rm -v $(CURDIR)/docs/assets:/screenshots \
+	  -e PYTEST_TARGET=tests/docs_screenshots.py test
 
 ## build: Build the production image (re-resolving base images)
 build:
