@@ -1309,12 +1309,12 @@
 
 
 <h1 id="quick-self-host">Quick self-host<a class="headerlink" href="#quick-self-host" title="Permanent link">&para;</a></h1>
+<p>This is a supported production path for a single dojo: one host, Traefik
+terminating TLS with a Let's Encrypt certificate, three commands.</p>
 <blockquote>
-<p><strong>Deploying to a real UAT/PROD host with HTTPS?</strong> Use the Quadlet path
-instead: the same <code>setup.sh</code>, run as <code>./setup.sh --quadlet</code>, creates the
-Podman secrets, the <code>~/kendo/</code> config tree and the systemd units — full
-runbook in <strong><a href="../../deployment/">Hardened deployment</a></strong>. The steps below are
-the quick single-host path.</p>
+<p><strong>Outgrowing it?</strong> The <a href="../../deployment/">Hardened deployment</a> is what you
+graduate to — the same <code>setup.sh</code>, run as <code>./setup.sh --quadlet</code>, adds
+systemd units, Podman secrets, network segmentation and automated backups.</p>
 </blockquote>
 <p><strong>1. Get the deployment files:</strong></p>
 <p>The release image carries the files a deployment needs — this compose file, the

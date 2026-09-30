@@ -1414,6 +1414,10 @@
 
 <h1 id="kendodojomanagement">KendoDojoManagement<a class="headerlink" href="#kendodojomanagement" title="Permanent link">&para;</a></h1>
 <p>Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployed with rootless Podman.</p>
+<p><img alt="The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type" src="assets/session-calendar-light.png#only-light" />
+<img alt="The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type" src="assets/session-calendar-dark.png#only-dark" /></p>
+<p><img alt="The sessions page on a phone: upcoming sessions as cards, each with check-in and a shareable check-in link" src="assets/session-calendar-mobile-light.png#only-light" width="300" />
+<img alt="The sessions page on a phone: upcoming sessions as cards, each with check-in and a shareable check-in link" src="assets/session-calendar-mobile-dark.png#only-dark" width="300" /></p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Members</strong> — full profile management with grade history, coach/first-aider flags, and under-18 safeguarding fields</li>
@@ -1427,7 +1431,7 @@
 </ul>
 <h2 id="container-runtime">Container runtime<a class="headerlink" href="#container-runtime" title="Permanent link">&para;</a></h2>
 <p><strong>Podman is the supported runtime.</strong> It is what the project is developed and
-tested against, and what the production deployment (<code>deploy/quadlet</code>) targets:
+tested against, and what both deployment paths target:
 rootless, daemonless, systemd-native.</p>
 <p><strong>Docker is best-effort and unverified.</strong> The Compose files use no
 Podman-specific syntax and the Makefile auto-detects <code>docker compose</code>, so it is

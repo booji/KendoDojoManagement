@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#deploying-kendodojomanagement-to-uat-prod" class="md-skip">
+        <a href="#hardened-deployment" class="md-skip">
           Skip to content
         </a>
       
@@ -1607,8 +1607,8 @@
   
 
 
-<h1 id="deploying-kendodojomanagement-to-uat-prod">Deploying KendoDojoManagement to UAT / PROD<a class="headerlink" href="#deploying-kendodojomanagement-to-uat-prod" title="Permanent link">&para;</a></h1>
-<p>Production-grade, self-hosted deployment on <strong>rootless Podman + Quadlet</strong>, fronted by <strong>Traefik</strong> for automatic HTTPS. Primary target: <strong>AlmaLinux 10</strong> (Podman 5.x). A Debian/Ubuntu stub is at the end.</p>
+<h1 id="hardened-deployment">Hardened deployment<a class="headerlink" href="#hardened-deployment" title="Permanent link">&para;</a></h1>
+<p>What an operator graduates to from the <a href="../install/quick-self-host/">Quick self-host</a>: a hardened, self-hosted deployment on <strong>rootless Podman + Quadlet</strong>, fronted by <strong>Traefik</strong> for automatic HTTPS. Primary target: <strong>AlmaLinux 10</strong> (Podman 5.x). A Debian/Ubuntu stub is at the end.</p>
 <blockquote>
 <p><strong>Architecture at a glance.</strong> The app image serves both the built SPA and the <code>/api</code> from one FastAPI container on port 8000. Three containers run per host:</p>
 <div class="highlight"><pre><span></span><code>           :80/:443 (host)
