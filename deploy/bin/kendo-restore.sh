@@ -13,7 +13,14 @@
 #     systemctl --user stop kendo-app
 #     ./kendo-restore.sh <dump>
 #     systemctl --user start kendo-app
+#
+# KENDO_DB_CONTAINER / KENDO_UPLOADS_VOLUME name the Compose stack's
+# project-scoped container and volume instead of the Quadlet defaults, as in
+# kendo-backup.sh.
 set -euo pipefail
+
+DB="${KENDO_DB_CONTAINER:-kendo-db}"
+UPLOADS_VOLUME="${KENDO_UPLOADS_VOLUME:-kendo-app-uploads}"
 
 dump="${1:?usage: kendo-restore.sh <dump-file> [uploads-tar]}"
 uploads="${2:-}"
@@ -24,7 +31,7 @@ read -rp "This will DROP and recreate the 'kendo' database. Type 'yes' to procee
 [[ "$ok" == "yes" ]] || { echo "aborted"; exit 1; }
 
 # Recreate the database (terminate other connections first).
-podman exec -i kendo-db psql -U kendo -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+podman exec -i "$DB" psql -U kendo -d postgres -v ON_ERROR_STOP=1 <<'SQL'
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity
   WHERE datname = 'kendo' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS kendo;
@@ -32,7 +39,7 @@ CREATE DATABASE kendo OWNER kendo;
 SQL
 
 # Restore the custom-format dump.
-podman exec -i kendo-db pg_restore -U kendo -d kendo --no-owner <"$dump"
+podman exec -i "$DB" pg_restore -U kendo -d kendo --no-owner <"$dump"
 
 echo "restore complete from: $dump"
 
@@ -40,6 +47,6 @@ echo "restore complete from: $dump"
 # unpacks over the existing contents; it does not empty the volume first, so any
 # file added since the backup survives.
 if [[ -n "$uploads" ]]; then
-  podman volume import kendo-app-uploads "$uploads"
+  podman volume import "$UPLOADS_VOLUME" "$uploads"
   echo "uploads restored from: $uploads"
 fi

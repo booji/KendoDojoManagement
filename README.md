@@ -116,8 +116,37 @@ upgrade, after a domain change, or paste its output into a bug report.
 
 `KENDO_IMAGE` in `.env` is the pin. The documented default is the **major** tag
 `:1`: fixes and features, but no migration that needs a restore from backup to
-undo, so `podman-compose pull && podman-compose up -d` upgrades unattended.
-Moving to `:2` is a deliberate edit, made after reading the release notes.
+undo. Moving to `:2` is a deliberate edit, made after reading the release notes.
+
+**Upgrading:**
+
+```bash
+./setup.sh upgrade
+```
+
+An upgrade runs `alembic upgrade head` against your live database, so this
+takes a backup first: `deploy/bin/kendo-backup.sh` writes the database dump and
+the uploads tarball to `~/backups` and says where. Then it pulls, refreshes the
+deployment bundle from the image it just pulled, and recreates the stack. The
+bundle holds the compose file, the `.example` config and the Quadlet units, so
+they always match the app they run. Any of those files that changed is listed,
+and your previous copy is kept as `.bak`. `.env` and your filled-in Traefik
+files are never touched.
+
+A file you edited yourself (a BYO certificate's mount in `docker-compose.yml`,
+say) is never overwritten. If this release also changed it, the new version is
+written next to it as `.new` and the upgrade stops before anything is
+recreated. Merge the two, re-run `./setup.sh upgrade`, and it carries on.
+
+If the upgrade or the migration fails, it prints the exact
+`kendo-restore.sh` command for the backup it just took. It also prints the
+digest of the image that was running, to pin back to. Restoring the data alone
+is only half a rollback, because the new image would migrate it straight back
+up.
+
+A plain `podman-compose pull && podman-compose up -d` is not enough on Podman:
+podman-compose recreates a container only when the compose file changes, so a
+new image under the same `:1` tag never starts.
 
 Contributors still build from source — `make build` produces
 `localhost/kendodojo:latest`; set `KENDO_IMAGE=localhost/kendodojo:latest` to
