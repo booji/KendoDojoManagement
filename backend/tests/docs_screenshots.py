@@ -15,9 +15,15 @@ import datetime
 from pathlib import Path
 
 import requests
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Browser, expect
 
-from tests.e2e_support import API_URL, BASE_URL, authenticate
+from tests.e2e_support import (
+    API_URL,
+    BASE_URL,
+    complete_onboarding,
+    make_token,
+    set_cookie,
+)
 
 # `make screenshots` bind-mounts docs/assets here.
 OUT = Path("/screenshots")
@@ -69,35 +75,47 @@ def _seed(token: str) -> None:
             },
         )
 
-    today = datetime.date.today()
-    days_in_month = calendar.monthrange(today.year, today.month)[1]
-    sundays = 0
-    for n in range(1, days_in_month + 1):
-        day = today.replace(day=n)
-        weekday = day.weekday()
+    # This month and next: the month grid shows this one, and the mobile list
+    # only shows what is still upcoming.
+    first = datetime.date.today().replace(day=1)
+    for i in range(62):
+        day = first + datetime.timedelta(days=i)
+        weekday, week = day.weekday(), (day.day - 1) // 7
         if weekday in (calendar.TUESDAY, calendar.THURSDAY):
             session(day, "Evening keiko", "19:30", 90, "Kihon", "Keiko")
-        elif weekday == calendar.WEDNESDAY and (n - 1) // 7 in (1, 3):  # 2nd and 4th
+        elif weekday == calendar.WEDNESDAY and week in (1, 3):
             session(day, "Shiai practice", "19:30", 90, "Shiai practice")
         elif weekday == calendar.SATURDAY:
             session(day, "Kids class", "10:00", 60, "Kids class")
-        elif weekday == calendar.SUNDAY:
-            sundays += 1
-            if sundays == 3:
-                session(day, "Dojo grading", "13:00", 180, "Grading")
+        elif weekday == calendar.SUNDAY and week == 2:
+            session(day, "Dojo grading", "13:00", 180, "Grading")
 
 
-def test_session_calendar_screenshots(page: Page) -> None:
+# Mobile has no List/Calendar toggle: below md the page is always the list.
+VIEWS = {
+    "": {"viewport": {"width": 1280, "height": 640}},
+    "-mobile": {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2},
+}
+
+
+def test_session_calendar_screenshots(browser: Browser) -> None:
     assert (
         OUT.is_dir()
     ), "docs/assets is not mounted at /screenshots — run `make screenshots`"
-    token = authenticate(page, "admin", first_name="Aiko", surname="Tanaka")
+    token = make_token("admin")
+    complete_onboarding(token, first_name="Aiko", surname="Tanaka")
     _seed(token)
 
-    page.set_viewport_size({"width": 1280, "height": 640})
-    for scheme in ("light", "dark"):
-        page.emulate_media(color_scheme=scheme)
-        page.goto(f"{BASE_URL}/sessions")
-        page.get_by_role("button", name="Calendar").click()
-        expect(page.get_by_role("button", name="Evening keiko").first).to_be_visible()
-        page.screenshot(path=OUT / f"session-calendar-{scheme}.png")
+    for suffix, options in VIEWS.items():
+        for scheme in ("light", "dark"):
+            context = browser.new_context(color_scheme=scheme, **options)
+            page = context.new_page()
+            set_cookie(page, token)
+            page.goto(f"{BASE_URL}/sessions")
+            if not suffix:
+                page.get_by_role("button", name="Calendar").click()
+            expect(
+                page.locator("text=Evening keiko >> visible=true").first
+            ).to_be_visible()
+            page.screenshot(path=OUT / f"session-calendar{suffix}-{scheme}.png")
+            context.close()

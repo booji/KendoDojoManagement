@@ -5,7 +5,7 @@
 | `make` | List the targets (starts nothing) |
 | `make dev` | Start the hot-reload dev stack |
 | `make test` | Start the test watcher (re-runs pytest on every save) |
-| `make screenshots` | Regenerate the README / docs session-calendar screenshots (`docs/assets`, light and dark) from a made-up dojo — rerun after a UI change to the calendar |
+| `make screenshots` | Regenerate the README / docs sessions screenshots (`docs/assets`, desktop and mobile, light and dark) from a made-up dojo — rerun after a UI change to the calendar |
 | `make build` | Build the production image as `localhost/kendodojo:latest` (releases run the published image — see [ADR-0004](../adr/0004-published-images-pinned-by-major-tag.md)) |
 | `make down` | Stop the stacks this checkout starts — dev and test |
 | `make down-selfhost` | Stop the quick self-host stack — **takes the dojo offline** |

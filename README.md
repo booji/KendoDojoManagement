@@ -7,6 +7,11 @@ Self-hosted web application for managing the members, sessions, and attendance o
   <img alt="The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type" src="docs/assets/session-calendar-light.png">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/session-calendar-mobile-dark.png">
+  <img width="300" alt="The sessions page on a phone: upcoming sessions as cards, each with check-in and a shareable check-in link" src="docs/assets/session-calendar-mobile-light.png">
+</picture>
+
 <!-- --8<-- [start:features] -->
 ## Features
 
