@@ -1,0 +1,100 @@
+# The docs site (#415): MkDocs Material, built by .github/workflows/docs.yml and
+# served on GitHub Pages, one version per major image tag via mike — an
+# operator on :1 reads the 1.x docs. The pages are the files in docs/, so docs
+# stay reviewable in the same PR as the code they describe.
+#
+#   pip install -r requirements-docs.txt
+#   mkdocs serve            # http://127.0.0.1:8000
+#   mkdocs build --strict   # what CI runs
+site_name: KendoDojoManagement
+site_description: Self-hosted member, session and attendance management for a kendo dojo.
+site_url: https://booji.github.io/KendoDojoManagement/
+repo_url: https://github.com/booji/KendoDojoManagement
+repo_name: booji/KendoDojoManagement
+edit_uri: edit/main/docs/
+
+# Grouped by task rather than by audience: an operator should not need to know
+# the word "contributor" to find Install.
+nav:
+  - Home: index.md
+  - Install:
+      - Quick self-host: install/quick-self-host.md
+      - Hardened deployment: deployment.md
+      - Upgrading: install/upgrading.md
+      - Backups: install/backups.md
+  - Operating:
+      - Claiming the admin account: operating/claim-admin.md
+      - Break-glass recovery: operating/break-glass.md
+      - Day-2 operations: operating/day-2.md
+  - Reference:
+      - Environment variables: reference/environment.md
+      - Container architecture: reference/container-architecture.md
+      - Database schema: schema.md
+      - Glossary: reference/glossary.md
+      - Auth timing calibration: auth-timing-calibration.md
+      - Decisions (ADRs):
+          - adr/0001-single-origin-api-under-api-prefix.md
+          - adr/0002-traefik-in-the-dev-stack.md
+          - adr/0003-first-admin-claim-requires-a-pre-provisioned-setup-token.md
+          - adr/0004-published-images-pinned-by-major-tag.md
+  - Contributing:
+      - Dev stack: contributing/dev-stack.md
+      - Make targets: contributing/make-targets.md
+      - Running tests: contributing/tests.md
+      - TDD workflow: contributing/tdd.md
+
+# Strict builds (CI) fail on a link to a missing page or heading, not only on
+# a missing page: a moved section is the common way docs rot.
+validation:
+  anchors: warn
+  unrecognized_links: warn
+
+# Instructions for coding agents, not documentation for people.
+exclude_docs: |
+  agents/
+
+# A dated review, linked from where it matters rather than listed.
+not_in_nav: |
+  architecture-review-2026-08.md
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  # The env templates, the glossary and CLAUDE.md's working agreements are
+  # included from where they live rather than copied, so there is one source.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true

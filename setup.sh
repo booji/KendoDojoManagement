@@ -693,8 +693,8 @@ quadlet_install() {
     "$units/kendo-app.container" "$units/kendo-migrate.container"
   echo "  installed the Quadlet units in $units"
 
-  # Drop-ins rather than edits to the units: docs/deployment.md tells an operator
-  # to re-copy the units on upgrade, which would silently revert an edit made
+  # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
+  # operator to re-copy the units on upgrade, which would silently revert an edit made
   # here and leave Traefik asking for a secret or a mount that is not there.
   local dropin=$units/kendo-traefik.container.d
   mkdir -p "$dropin"
@@ -778,7 +778,7 @@ if [ "$mode" = quadlet ]; then
   echo "      regenerates the units; the containers keep their old config until they restart)"
   echo "      systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager"
   echo "      then open https://$domain"
-  echo "Backups are not installed — see section 6 of docs/deployment.md for the timer."
+  echo "Backups are not installed — see docs/install/backups.md for the timer."
   if [ -n "$new_setup_token" ]; then
     echo
     echo "Setup token — claims the first admin account, shown once (a podman secret"

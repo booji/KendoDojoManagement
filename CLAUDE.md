@@ -36,6 +36,7 @@ of them anyway, migrate it.
 ### Button Ordering (macOS HIG)
 Action buttons are right-aligned (`justify-end`). Order left-to-right: most destructive → least destructive → primary/safe action. Example: `Cancel Series` | `Cancel Session` | `Edit`. The default/safe action always sits rightmost.
 
+<!-- --8<-- [start:tdd] -->
 ## Design Philosophy
 
 **Deep modules** (Ousterhout, *A Philosophy of Software Design*): favor small interfaces hiding large implementations. A caller should need to know as little as possible about what's underneath. New modules and abstractions should earn their existence by hiding meaningful complexity.
@@ -50,6 +51,7 @@ Follow red-green as **vertical slices**, not horizontal slicing:
 3. Refactor if needed, then move to the next test.
 
 Never write a full test suite first and then implement everything — that is horizontal slicing and is explicitly not the workflow here.
+<!-- --8<-- [end:tdd] -->
 
 ## Security
 

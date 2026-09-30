@@ -79,7 +79,7 @@ RUN if [ -n "$KENDO_IMAGE_REF" ]; then printf '%s\n' "$KENDO_IMAGE_REF" > /bundl
 # import, i.e. after the mount), and Podman takes a fresh named volume's
 # ownership from the image directory it shadows. A volume left over from a
 # root-running image keeps its old ownership — deploy/quadlet handles that with
-# `:U` on the mount; the Compose path needs the one-off chown in docs/deployment.md.
+# `:U` on the mount; the Compose path needs the one-off chown in docs/install/upgrading.md.
 RUN useradd --system --uid 1001 --create-home --shell /usr/sbin/nologin kendo && \
     mkdir -p /app/uploads/logos /app/uploads/backgrounds && \
     chown -R kendo:kendo /app/uploads
