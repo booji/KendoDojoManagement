@@ -6,6 +6,16 @@
 - Python 3.13 + a virtual environment (`python3 -m venv backend/.venv`)
 - Node 22
 
+## Get the code
+
+Operators do not need a clone — the release image carries its own deployment
+bundle ([Quick self-host](../install/quick-self-host.md)). Contributors do:
+
+```bash
+git clone https://github.com/booji/KendoDojoManagement.git
+cd KendoDojoManagement
+```
+
 ## Environment
 
 Copy the dev env file (safe to commit — contains no real secrets):

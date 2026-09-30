@@ -2,12 +2,18 @@
 
 Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployed with rootless Podman.
 
+![The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type](assets/session-calendar-light.png#only-light)
+![The session calendar: a month of keiko, kids classes, shiai practice and a grading, colour-coded by session type](assets/session-calendar-dark.png#only-dark)
+
+![The sessions page on a phone: upcoming sessions as cards, each with check-in and a shareable check-in link](assets/session-calendar-mobile-light.png#only-light){ width="300" }
+![The sessions page on a phone: upcoming sessions as cards, each with check-in and a shareable check-in link](assets/session-calendar-mobile-dark.png#only-dark){ width="300" }
+
 --8<-- "README.md:features"
 
 ## Container runtime
 
 **Podman is the supported runtime.** It is what the project is developed and
-tested against, and what the production deployment (`deploy/quadlet`) targets:
+tested against, and what both deployment paths target:
 rootless, daemonless, systemd-native.
 
 **Docker is best-effort and unverified.** The Compose files use no

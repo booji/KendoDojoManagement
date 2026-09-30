@@ -1,10 +1,11 @@
 # Quick self-host
 
-> **Deploying to a real UAT/PROD host with HTTPS?** Use the Quadlet path
-> instead: the same `setup.sh`, run as `./setup.sh --quadlet`, creates the
-> Podman secrets, the `~/kendo/` config tree and the systemd units — full
-> runbook in **[Hardened deployment](../deployment.md)**. The steps below are
-> the quick single-host path.
+This is a supported production path for a single dojo: one host, Traefik
+terminating TLS with a Let's Encrypt certificate, three commands.
+
+> **Outgrowing it?** The [Hardened deployment](../deployment.md) is what you
+> graduate to — the same `setup.sh`, run as `./setup.sh --quadlet`, adds
+> systemd units, Podman secrets, network segmentation and automated backups.
 
 **1. Get the deployment files:**
 
