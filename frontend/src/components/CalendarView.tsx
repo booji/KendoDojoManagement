@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom"
 import {
   format,
   startOfMonth,
-  endOfMonth,
   startOfWeek,
   endOfWeek,
   addDays,
@@ -443,12 +442,9 @@ const CalendarView = ({ isAdmin }: CalendarViewProps) => {
 
   const { from, to } = (() => {
     if (viewMode === "month") {
-      const ms = startOfMonth(anchor)
-      const me = endOfMonth(anchor)
-      return {
-        from: toYMD(startOfWeek(ms, { weekStartsOn: 1 })),
-        to: toYMD(endOfWeek(me, { weekStartsOn: 1 })),
-      }
+      // Fetch exactly the cells MonthGrid draws, so the two cannot drift (#427).
+      const cells = buildMonthGrid(anchor)
+      return { from: toYMD(cells[0]), to: toYMD(cells[cells.length - 1]) }
     } else {
       const ws = startOfWeek(anchor, { weekStartsOn: 1 })
       const we = endOfWeek(anchor, { weekStartsOn: 1 })
