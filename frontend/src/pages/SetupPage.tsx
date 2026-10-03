@@ -154,6 +154,7 @@ const SetupPage = () => {
     <div className="flex min-h-screen items-center justify-center px-4 py-8">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <img src="/logo.svg" alt="" className="size-16" />
           <CardTitle>Welcome to Kendo Dojo</CardTitle>
           <CardDescription>
             No accounts exist yet. Tell us who you are, enter the setup token

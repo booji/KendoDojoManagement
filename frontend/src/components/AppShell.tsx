@@ -41,10 +41,7 @@ const DojoLogo = () => {
           className="size-8 rounded-md object-cover shrink-0"
         />
       ) : (
-        <div
-          className="size-8 rounded-md bg-muted shrink-0"
-          aria-hidden="true"
-        />
+        <img src="/logo.svg" alt="" className="size-8 shrink-0" />
       )}
       <span className="font-semibold text-sm truncate">{dojoName}</span>
     </div>
