@@ -999,6 +999,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#re-measured-for-432-one-email-on-the-member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-measured for #432 — one email, on the Member
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1526,6 +1537,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#re-measured-for-432-one-email-on-the-member" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-measured for #432 — one email, on the Member
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1743,6 +1765,60 @@ the share of requests that would have breached the old default.</p>
 <p>Latency is dominated by queueing, not by the database: past ~4 simultaneous
 requests the single uvicorn worker's event loop is the bottleneck and every
 figure scales with concurrency.</p>
+<h3 id="re-measured-for-432-one-email-on-the-member">Re-measured for #432 — one email, on the Member<a class="headerlink" href="#re-measured-for-432-one-email-on-the-member" title="Permanent link">&para;</a></h3>
+<p><a href="https://github.com/booji/KendoDojoManagement/issues/432">#432</a> changed every
+query on these paths: <code>users.email</code> is gone, and an Account is found by joining
+its Member on <code>members.email</code>. Registration and invite redemption now create
+the Account from a Member id (invite redemption creates that Member first when
+there is none). Same command, same environment class, 2026-10-03:</p>
+<table>
+<thead>
+<tr>
+<th>endpoint</th>
+<th>p50</th>
+<th>p90</th>
+<th>p95</th>
+<th><strong>p99</strong></th>
+<th>max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>login/passkey/begin</code></td>
+<td>5.0</td>
+<td>5.7</td>
+<td>5.9</td>
+<td><strong>6.5</strong></td>
+<td>32.9</td>
+</tr>
+<tr>
+<td><code>register/passkey/begin</code></td>
+<td>5.3</td>
+<td>6.0</td>
+<td>6.3</td>
+<td><strong>6.8</strong></td>
+<td>11.0</td>
+</tr>
+<tr>
+<td><code>invites/redeem/begin</code></td>
+<td>7.8</td>
+<td>9.0</td>
+<td>9.4</td>
+<td><strong>10.5</strong></td>
+<td>20.7</td>
+</tr>
+</tbody>
+</table>
+<p>Server-side, sequential, n=1000 per row after 50 warmups. The join costs
+nothing measurable: every p99 is below the August figures, which says more
+about the workstation on the day than about the change. The worst single
+request, 32.9ms, is a third of the 100ms floor, so the default stands. The
+concurrency sweep kept its shape: queueing past ~4 requests in flight, as
+above.</p>
+<p>Parity between known and unknown emails is a separate check, and it is still
+the one that gates: <code>test_passkey_timing.py</code> and <code>test_timing_convergence.py</code>
+assert that the real and decoy paths converge, and both pass against the new
+queries.</p>
 <h2 id="conclusions">Conclusions<a class="headerlink" href="#conclusions" title="Permanent link">&para;</a></h2>
 <p><strong>The default is raised from 50ms to 100ms.</strong></p>
 <ul>

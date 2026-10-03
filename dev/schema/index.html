@@ -1450,7 +1450,7 @@ mermaid rendering of that, not a varchar.</p>
 <div class="highlight"><pre><span></span><code>erDiagram
     users {
         string id PK
-        string email UK
+        string member_id FK,UK
         string role
         bool is_active
         string theme
@@ -1517,7 +1517,6 @@ mermaid rendering of that, not a varchar.</p>
         bool is_first_aider
         string emergency_contact_name
         string emergency_contact_phone
-        string user_id
         timestamptz anonymised_at
         string anonymised_by
     }
@@ -1635,6 +1634,7 @@ mermaid rendering of that, not a varchar.</p>
     users ||--o{ admin_recovery_tokens : "issued to"
     users ||--o{ admin_recovery_tokens : "created by"
     users ||--o{ invites : "issued by"
+    members ||--o| users : "signs in as"
     members ||--o{ member_federations : "belongs to"
     federations ||--o{ member_federations : "has members"
     members ||--o{ attendance : "attends"
@@ -1655,11 +1655,17 @@ mermaid rendering of that, not a varchar.</p>
   <code>recovery_codes</code> and <code>admin_recovery_tokens</code> hold bcrypt hashes;
   <code>invites.token_hash</code> is a deterministic sha256 digest (it is looked up by
   value — see <code>app/auth/invite_service.py</code> for why that differs).</li>
-<li><strong>Not every id column is a foreign key.</strong> <code>attendance.session_id</code>/<code>member_id</code>
-  and <code>grade_history.member_id</code> are real FKs; <code>attendance.recorded_by</code>,
-  <code>grade_history.assigned_by</code>, <code>members.user_id</code> and <code>members.anonymised_by</code>
-  are unconstrained at DB level — they hold user ids but are deliberately not
-  FK-enforced, so a deleted user never cascades into attendance history.</li>
+<li><strong>Every Account belongs to exactly one Member</strong> (#432, ADR-0006).
+  <code>users.member_id</code> is a live link and is enforced: NOT NULL, UNIQUE, and a
+  foreign key to <code>members.id</code> with ON DELETE RESTRICT (Members are
+  deactivated or anonymised, never hard-deleted). Most Members have no
+  Account. The email lives once, on the Member — <code>members.email</code> is both the
+  contact address and the sign-in identifier; <code>users</code> has no email column.</li>
+<li><strong>Audit columns are not foreign keys.</strong> <code>attendance.recorded_by</code>,
+  <code>grade_history.assigned_by</code> and <code>members.anonymised_by</code> record which Account
+  acted. They are deliberately not FK-enforced, so the id outlives the
+  Account it names: erasing a member deletes their Account, and the history
+  that Account recorded must not cascade with it.</li>
 <li><strong>Constraints beyond keys</strong> (#431). The database, not just the app, refuses:</li>
 <li><code>uq_attendance_session_member</code> — UNIQUE <code>(session_id, member_id)</code> on
     <code>attendance</code>: a member is checked in at most once per session. NULLs are

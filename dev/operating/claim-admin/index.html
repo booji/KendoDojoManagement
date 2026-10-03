@@ -1381,8 +1381,11 @@ refuses to start without it, so do not delete the secret after claiming. A
 database restore or wipe would otherwise boot an unclaimed instance with no
 gate in front of it.</p>
 <p><strong>The browser is the way you do this.</strong> Open <code>https://&lt;your-domain&gt;/</code>: the
-setup page asks for the admin email and the setup token. Paste the token into
-the "Setup token" field and complete the passkey registration. The page sends
+setup page asks for the admin's first name, surname and email, and the setup
+token. The claim creates the admin's member record as well as their account —
+every account belongs to a member, the first admin included — and the email
+is the one they will sign in with. Paste the token into the "Setup token"
+field and complete the passkey registration. The page sends
 it as an <code>X-Setup-Token</code> header on <code>/api/setup/passkey/begin</code> and
 <code>/api/setup/passkey/complete</code>, and a wrong token comes back on the form as
 "Invalid setup token". The value is never stored in the browser — reloading the
@@ -1393,7 +1396,7 @@ that is not working, not a step:</p>
 <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://&lt;your-domain&gt;/api/setup/passkey/begin<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-H<span class="w"> </span><span class="s2">"X-Setup-Token: </span><span class="nv">$SETUP_TOKEN</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"email":"admin@your-dojo"}'</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"email":"admin@your-dojo","first_name":"Ai","surname":"Sato"}'</span>
 <span class="c1"># 401 {"detail":"Invalid setup token"} -&gt; wrong or missing token.</span>
 <span class="c1"># 404 {"detail":"Setup already completed"} -&gt; claimed; the token is irrelevant.</span>
 </code></pre></div>
