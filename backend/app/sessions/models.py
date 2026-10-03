@@ -194,6 +194,18 @@ class SessionTemplateExtend(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _validate_iso_date(v: str) -> str:
+    # Round-trip so only canonical YYYY-MM-DD passes: fromisoformat alone also
+    # accepts compact forms like "20260615", which the date columns never hold.
+    try:
+        canonical = date.fromisoformat(v).isoformat() == v
+    except ValueError:
+        canonical = False
+    if not canonical:
+        raise ValueError("date must be a real date in YYYY-MM-DD form")
+    return v
+
+
 class SessionInstanceCreate(BaseModel):
     title: str
     date: str  # "YYYY-MM-DD"
@@ -208,6 +220,11 @@ class SessionInstanceCreate(BaseModel):
     @classmethod
     def validate_segments_nonempty(cls, v: list[SegmentCreate]) -> list[SegmentCreate]:
         return _validate_segments_nonempty(v)
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: str) -> str:
+        return _validate_iso_date(v)
 
 
 class SessionInstanceRead(BaseModel):
@@ -253,6 +270,7 @@ def _validate_checkin_window_minutes(v: int | None) -> int | None:
 
 class SessionInstanceUpdate(BaseModel):
     title: str | None = None
+    date: str | None = None  # "YYYY-MM-DD"
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
@@ -273,3 +291,8 @@ class SessionInstanceUpdate(BaseModel):
     @classmethod
     def validate_checkin_window_minutes(cls, v: int | None) -> int | None:
         return _validate_checkin_window_minutes(v)
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: str | None) -> str | None:
+        return v if v is None else _validate_iso_date(v)

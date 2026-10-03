@@ -330,6 +330,21 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     assert body["date"] == "2026-06-15"
 
 
+@pytest.mark.parametrize("bad", ["2026-02-31", "not-a-date", "20260615"])
+async def test_create_adhoc_session_rejects_a_date_that_is_not_real(
+    type_repo, instance_repo, bad
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    type_id = (await type_repo.list())[0]["id"]
+    payload = {"title": "Keiko", "date": bad, "segments": [_one_segment(type_id)]}
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post("/sessions", json=payload)
+    assert response.status_code == 422
+    assert await instance_repo.list() == []
+
+
 async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> None:
     from app.auth.token import encode_token
 

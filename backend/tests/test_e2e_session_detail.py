@@ -220,3 +220,30 @@ def test_admin_action_buttons_are_right_aligned(page: Page) -> None:
     edit_x = edit_btn.bounding_box()["x"]
     cancel_x = cancel_btn.bounding_box()["x"]
     assert edit_x > cancel_x, "Edit button should be to the right of Cancel Session"
+
+
+# ---------------------------------------------------------------------------
+# Issue #429 — changing the Date in the edit form moves the session
+# ---------------------------------------------------------------------------
+
+
+def test_editing_the_date_moves_the_session_on_the_calendar(page: Page) -> None:
+    # Both dates in the current month, so the home calendar shows them unpaged.
+    today = datetime.now().date()
+    old_date, new_date = today.replace(day=10), today.replace(day=20)
+    admin_token = _make_token("admin")
+    session_id = _create_session(page, admin_token, date=old_date.isoformat())
+
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _set_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/sessions/{session_id}")
+    page.get_by_role("button", name="Edit").click()
+    page.locator("#edit-date").fill(new_date.isoformat())
+    page.get_by_role("button", name="Save").click()
+    expect(page.get_by_role("button", name="Edit")).to_be_visible()
+
+    page.goto(BASE_URL)
+    chip = page.locator(f'[data-session-id="{session_id}"]')
+    expect(chip).to_be_visible(timeout=10000)
+    # The chip's day cell leads with its day-of-month number.
+    expect(chip.locator("xpath=..").locator("span").first).to_have_text("20")

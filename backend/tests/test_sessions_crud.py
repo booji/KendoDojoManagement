@@ -232,6 +232,39 @@ async def test_put_session_instance_updates_target_only(
     assert sibling_after["segments"][0]["duration_minutes"] == 90
 
 
+async def test_put_session_instance_moves_it_to_a_new_date(instance_repo) -> None:
+    """Issue #429: a changed date was silently dropped by the update schema."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo, instance_date="2099-06-02")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(f"/sessions/{target['id']}", json={"date": "2099-06-05"})
+    assert response.status_code == 200
+    assert response.json()["date"] == "2099-06-05"
+    stored = await instance_repo.get(target["id"])
+    assert stored is not None
+    assert stored["date"] == "2099-06-05"
+
+
+@pytest.mark.parametrize("bad", ["2026-02-31", "not-a-date", "20990605"])
+async def test_put_session_instance_rejects_a_date_that_is_not_real(
+    instance_repo, bad
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo, instance_date="2099-06-02")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(f"/sessions/{target['id']}", json={"date": bad})
+    assert response.status_code == 422
+    stored = await instance_repo.get(target["id"])
+    assert stored is not None
+    assert stored["date"] == "2099-06-02"
+
+
 # ---------------------------------------------------------------------------
 # AC4 — PATCH /sessions/templates/{id}: delta-regenerates instances (issue #258
 # supersedes the old delete-all-future-and-regenerate behaviour: existing
