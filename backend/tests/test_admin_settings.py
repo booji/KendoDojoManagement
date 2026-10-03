@@ -3,13 +3,15 @@ Unit/integration tests for issue #45 — Admin Personal Settings parity.
 
 Uses StubRepository pattern — NO real DB.
 
-Acceptance criteria covered here (criteria 1-5):
+Acceptance criteria covered here:
   1. GET /users/me/member returns 200 for an admin user with a linked member record.
-  2. PUT /users/me/member creates a new Member record for an admin and returns it correctly.
   3. PUT /users/me/member updates an existing Member record for an admin.
-  4. The created Member record appears in GET /members (admin list endpoint).
   5. An admin cannot use PUT /users/me/member to set admin-only fields
      (e.g. is_coach, membership_status).
+
+Criteria 2 and 4 (an admin's PUT creating their Member, which then appears in
+GET /members) went with #432: the first Admin's Member is created at the setup
+claim, so there is no record left for onboarding to create.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
+from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
@@ -115,64 +117,6 @@ async def test_admin_get_my_member_returns_404_when_no_linked_record(
 
 
 # ---------------------------------------------------------------------------
-# AC2 — PUT /users/me/member creates a new Member record for an admin
-# ---------------------------------------------------------------------------
-
-
-async def test_admin_put_my_member_creates_record_when_none_exists(member_repo) -> None:
-    """PUT /users/me/member creates a Member record for an admin with no existing record."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.put(
-            "/users/me/member",
-            json={
-                "first_name": "New Admin",
-                "surname": "Member",
-                "dob": "1985-03-10",
-                "emergency_contact_name": "Admin Emergency",
-                "emergency_contact_phone": "+447700900002",
-            },
-        )
-
-    assert response.status_code in (200, 201)
-    body = response.json()
-    assert "id" in body
-    assert body["first_name"] == "New Admin"
-    assert body["surname"] == "Member"
-
-
-async def test_admin_put_my_member_created_record_is_retrievable(member_repo) -> None:
-    """A Member record created by an admin via PUT is immediately retrievable via GET."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        put_resp = await c.put(
-            "/users/me/member",
-            json={
-                "first_name": "Retrievable",
-                "surname": "Admin",
-                "dob": "1980-07-04",
-            },
-        )
-
-    assert put_resp.status_code in (200, 201)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        get_response = await c.get("/users/me/member")
-
-    assert get_response.status_code == 200
-    assert get_response.json()["first_name"] == "Retrievable"
-    assert get_response.json()["surname"] == "Admin"
-
-
-# ---------------------------------------------------------------------------
 # AC3 — PUT /users/me/member updates an existing Member record for an admin
 # ---------------------------------------------------------------------------
 
@@ -211,71 +155,6 @@ async def test_admin_put_my_member_update_persists_to_get(member_repo) -> None:
 
     assert get_response.status_code == 200
     assert get_response.json()["first_name"] == "Updated Admin"
-
-
-# ---------------------------------------------------------------------------
-# AC4 — Created Member record appears in GET /members (admin list endpoint)
-# ---------------------------------------------------------------------------
-
-
-async def test_admin_created_member_record_appears_in_members_list(member_repo) -> None:
-    """A Member record created via PUT /users/me/member appears in GET /members."""
-    # Set up both guards: admin can create their own member record AND list members
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        put_resp = await c.put(
-            "/users/me/member",
-            json={
-                "first_name": "Listed Admin",
-                "surname": "Member",
-                "dob": "1975-11-22",
-            },
-        )
-
-    assert put_resp.status_code in (200, 201)
-    created_id = put_resp.json()["id"]
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        list_resp = await c.get("/members")
-
-    assert list_resp.status_code == 200
-    member_ids = [m["id"] for m in list_resp.json()]
-    assert created_id in member_ids
-
-
-async def test_admin_member_record_email_matches_admin_email_in_list(
-    member_repo,
-) -> None:
-    """The admin's Member record in GET /members has the admin's email."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        await c.put(
-            "/users/me/member",
-            json={
-                "first_name": "Admin In",
-                "surname": "List",
-                "dob": "1970-01-15",
-            },
-        )
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        list_resp = await c.get("/members")
-
-    assert list_resp.status_code == 200
-    emails = [m["email"] for m in list_resp.json()]
-    assert "admin@dojo.test" in emails
 
 
 # ---------------------------------------------------------------------------

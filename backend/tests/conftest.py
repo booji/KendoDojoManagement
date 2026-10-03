@@ -282,3 +282,23 @@ async def db_session() -> AsyncSession:
             await trans.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def scratch_db() -> str:
+    """URL of a fresh, empty, throwaway database, dropped on teardown.
+
+    For tests that drive alembic themselves (see tests/migration_support.py):
+    migrating the shared test database would race the rest of the suite.
+    """
+    import uuid
+
+    from app.db.scratch import create_database, drop_database, url_parts
+
+    base_url, _ = url_parts(_DATABASE_URL)
+    name = f"kendo_test_mig_{uuid.uuid4().hex[:12]}"
+    url = await create_database(base_url, name)
+    try:
+        yield url
+    finally:
+        await drop_database(base_url, name)

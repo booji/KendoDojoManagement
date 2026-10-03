@@ -26,6 +26,12 @@ digest of the image that was running, to pin back to. Restoring the data alone
 is only half a rollback, because the new image would migrate it straight back
 up.
 
+Some migrations check your data before changing the schema, and stop if they
+find rows only you can decide about — for example an account that belongs to no
+member, or a member whose email differs from the account that signs in as them
+(#432). They stop before changing anything, name the rows, and say what to fix.
+Fix those rows, then run `./setup.sh upgrade` again.
+
 A plain `podman-compose pull && podman-compose up -d` is not enough on Podman:
 podman-compose recreates a container only when the compose file changes, so a
 new image under the same `:1` tag never starts.

@@ -5,9 +5,9 @@ storage is a deterministic sha256 digest, not a per-row-salted bcrypt hash,
 because redemption looks a row up by token alone with no scoping identity
 (user/email) known ahead of time.
 
-Redeeming an invite creates the Member row for that email if none exists, or
-links the existing one -- the same convergence point the #239 Member gate
-uses (see app.auth.member_directory.ensure_member_for_email). The redemption
+Redeeming an invite creates the Member row for that email if none exists,
+then the Account that belongs to it (#432) -- the same convergence point the
+#239 Member gate uses (see app.auth.member_directory.ensure_member). The redemption
 endpoints reuse existing mechanisms rather than inventing new ones: an invalid
 token (unknown, expired, revoked, or already-redeemed) must be
 indistinguishable from a valid one on both response shape and latency, so the
@@ -28,6 +28,7 @@ from sqlalchemy import select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
+from app.auth.accounts import account_for_email
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
@@ -94,8 +95,7 @@ def _is_usable(record: dict[str, Any]) -> bool:
 
 
 async def _email_has_user(email: str, uow: AbstractUnitOfWork) -> bool:
-    result = await uow.session.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none() is not None
+    return await account_for_email(uow.session, email) is not None
 
 
 async def mint_invite(
@@ -132,16 +132,22 @@ async def mint_invite(
     return {**record, "token": plaintext, "link": invite_link(plaintext)}
 
 
-async def _create_invited_user(email: str, uow: AbstractUnitOfWork) -> User | None:
-    """Create the invited account, or None if the email already has one.
+async def _create_invited_user(
+    record: dict[str, Any], uow: AbstractUnitOfWork
+) -> User | None:
+    """Create the invited Member's Account, or None if the email has one.
 
     An account can appear between minting and redemption, so refusing at mint
     time is not enough on its own. Returning None here makes the redemption
-    path treat it like any other unusable invite.
+    path treat it like any other unusable invite. Otherwise the Member is
+    found or created first, because every Account belongs to one (#432).
     """
-    if await _email_has_user(email, uow):
+    if await _email_has_user(record["email"], uow):
         return None
-    user = User(email=email, role="member", is_active=True)
+    member_id = await member_directory_for(uow).ensure_member(
+        record["email"], record["first_name"], record["surname"]
+    )
+    user = User(member_id=member_id, role="member", is_active=True)
     uow.session.add(user)
     await uow.session.flush()
     return user
@@ -165,14 +171,10 @@ async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
     repo = SqlInviteRepository(uow.session)
     record = await repo.get_by_token_hash(hash_invite_token(token))
     if record is not None and _is_usable(record):
-        user = await _create_invited_user(record["email"], uow)
+        user = await _create_invited_user(record, uow)
         if user is not None:
-            directory = member_directory_for(uow)
-            await directory.ensure_member_for_email(
-                record["email"], user.id, record["first_name"], record["surname"]
-            )
             ceremony = invite_begin(
-                token, Subject(user_id=user.id, user_name=user.email)
+                token, Subject(user_id=user.id, user_name=record["email"])
             )
             user.pending_challenge = ceremony.challenge
             user.challenge_issued_at = datetime.now(UTC)
@@ -191,10 +193,7 @@ async def invite_redeem_complete(
         log_security_event("invite_redeemed", "failure")
         raise _AUTH_FAILED
 
-    result = await uow.session.execute(
-        select(User).where(User.email == record["email"])
-    )
-    user = result.scalar_one_or_none()
+    user = await account_for_email(uow.session, record["email"])
     if user is None:
         log_security_event("invite_redeemed", "failure")
         raise _AUTH_FAILED
@@ -258,7 +257,7 @@ async def invite_redeem_complete(
     log_security_event("invite_redeemed", "success", user_id=user.id)
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
-        email=user.email,
+        email=record["email"],
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
         show_nudge=True,

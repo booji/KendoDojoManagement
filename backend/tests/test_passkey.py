@@ -15,6 +15,7 @@ from sqlalchemy import insert, select
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
 from app.members.db_models import Member
+from tests.account_support import seed_account
 
 
 async def _claimed_instance_with_member(session, email: str) -> None:
@@ -26,13 +27,12 @@ async def _claimed_instance_with_member(session, email: str) -> None:
     second-and-later user's path and nothing else.
     """
     seed_user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=seed_user_id,
-            email=f"claimed-{seed_user_id}@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session,
+        f"claimed-{seed_user_id}@dojo.test",
+        user_id=seed_user_id,
+        role="admin",
+        is_active=True,
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -105,7 +105,9 @@ async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> N
     assert response.status_code == 200
 
     result = await session.execute(
-        select(User).where(User.email == "musashi@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "musashi@dojo.test")
     )
     user = result.fetchone()
     assert user is not None
@@ -134,7 +136,9 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
 
     # Should still be exactly one user with that email
     result = await session.execute(
-        select(User).where(User.email == "existing@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "existing@dojo.test")
     )
     rows = result.fetchall()
     assert len(rows) == 1
@@ -151,15 +155,14 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
 
     # Seed a user with a pending challenge
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="complete@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",  # base64url "test-challenge"
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "complete@dojo.test",
+        user_id=user_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.flush()
 
@@ -213,13 +216,8 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     """
     session = db_client
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="loginbegin@dojo.test",
-            role="member",
-            is_active=True,
-        )
+    await seed_account(
+        session, "loginbegin@dojo.test", user_id=user_id, role="member", is_active=True
     )
     await session.flush()
 
@@ -274,15 +272,14 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
     credential_id_bytes = b"stored-credential-id"
     credential_id_b64 = "c3RvcmVkLWNyZWRlbnRpYWwtaWQ"  # base64url
 
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="logincomp@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1sb2dpbi1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "logincomp@dojo.test",
+        user_id=user_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1sb2dpbi1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.execute(
         insert(PasskeyCredential).values(

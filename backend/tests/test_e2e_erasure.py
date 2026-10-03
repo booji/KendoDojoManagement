@@ -27,6 +27,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -58,16 +59,13 @@ def _ensure_admin_profile(admin_token: str) -> None:
     """Give the admin a complete own-member record.
 
     RequireProfile (frontend App.tsx) redirects any authenticated user whose
-    own member record is missing/incomplete to /onboarding — including
-    admins. Synthetic admin tokens have no linked member record, so tests
-    that navigate to admin-gated pages must self-onboard first.
+    own member record is incomplete to /onboarding — including admins.
+    Synthetic admin tokens have no Account behind them, so tests that navigate
+    to admin-gated pages make one (with its Member) first.
     """
-    r = requests.put(
-        f"{API_BASE}/users/me/member",
-        cookies=_cookie_dict(admin_token),
-        json={"first_name": "Admin", "surname": "Test", "dob": "1980-01-01"},
+    complete_onboarding(
+        admin_token, first_name="Admin", surname="Test", dob="1980-01-01"
     )
-    r.raise_for_status()
 
 
 def _create_member_via_api(

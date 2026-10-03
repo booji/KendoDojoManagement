@@ -31,6 +31,7 @@ from app.cli import app as cli_app  # noqa: E402  # red — cli.py doesn't exist
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
+from tests.account_support import seed_account
 
 runner = CliRunner()
 
@@ -83,10 +84,8 @@ async def seeded_db(database_url: str):
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with AsyncSession(engine) as session:
-            await session.execute(
-                insert(User).values(
-                    id=user_id, email=email, role="admin", is_active=True
-                )
+            await seed_account(
+                session, email, user_id=user_id, role="admin", is_active=True
             )
             await session.commit()
 
@@ -108,14 +107,7 @@ async def seeded_db(database_url: str):
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role=role,
-                is_active=True,
-            )
-        )
+        await seed_account(conn, email, user_id=user_id, role=role, is_active=True)
 
 
 async def _seed_admin_token(

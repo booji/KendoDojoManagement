@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { putMyMember } from "@/api/users"
+import { getMyMember, putMyMember } from "@/api/users"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,30 @@ const OnboardingPage = () => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Every Account already has a Member (#432) — named at the setup claim or
+  // by the invite — so start from what it holds and ask for the rest.
+  useEffect(() => {
+    getMyMember()
+      .then((member) => {
+        if (member === null) return
+        // Every field, not just the name: submit sends them all, and a null
+        // clears what an admin may already have recorded.
+        setForm((prev) => ({
+          first_name: prev.first_name || member.first_name,
+          surname: prev.surname || member.surname,
+          dob: prev.dob || (member.dob ?? ""),
+          display_name: prev.display_name || (member.display_name ?? ""),
+          emergency_contact_name:
+            prev.emergency_contact_name || (member.emergency_contact_name ?? ""),
+          emergency_contact_phone:
+            prev.emergency_contact_phone || (member.emergency_contact_phone ?? ""),
+        }))
+      })
+      .catch(() => {
+        // Prefill is a convenience; the empty form still works.
+      })
+  }, [])
 
   const handleChange = <K extends keyof FormState>(key: K, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }))

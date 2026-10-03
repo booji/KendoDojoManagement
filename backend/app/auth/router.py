@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import User
 from app.auth.dependencies import (
@@ -24,6 +25,7 @@ from app.auth.invite_service import (
     invite_status,
     mint_invite,
 )
+from app.auth.member_directory import member_directory_for
 from app.auth.models import (
     InviteCreateRequest,
     InviteListItem,
@@ -279,8 +281,7 @@ async def redeem_recovery_code(
 ) -> dict[str, str]:
     ip = client_ip(request)
 
-    result = await uow.session.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
+    user = await account_for_email(uow.session, payload.email)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
@@ -301,7 +302,7 @@ async def redeem_recovery_code(
         await attempt_repo.log_attempt(user.id, ip, success=True)
         await uow.commit()
         log_security_event("recovery_redeem", "success", user_id=user.id)
-        token = encode_recovery_token(user_id=user.id, email=user.email)
+        token = encode_recovery_token(user_id=user.id, email=payload.email)
         return {"access_token": token, "token_type": "bearer"}
 
     # Try admin tokens
@@ -318,7 +319,7 @@ async def redeem_recovery_code(
         await attempt_repo.log_attempt(user.id, ip, success=True)
         await uow.commit()
         log_security_event("recovery_redeem", "success", user_id=user.id)
-        token = encode_recovery_token(user_id=user.id, email=user.email)
+        token = encode_recovery_token(user_id=user.id, email=payload.email)
         return {"access_token": token, "token_type": "bearer"}
 
     await attempt_repo.log_attempt(user.id, ip, success=False)
@@ -450,6 +451,11 @@ if _ALLOW_TEST_AUTH:
     class _TestLoginRequest(BaseModel):
         email: LenientEmail
         role: Literal["admin", "member"] = "admin"
+        # e2e helpers forge tokens before any row exists; passing the forged
+        # subject makes the Account it names real, so the two agree.
+        sub: str | None = None
+        first_name: str = "Test"
+        surname: str = "User"
 
     @router.post("/login/test", status_code=200)
     async def test_login(
@@ -457,20 +463,29 @@ if _ALLOW_TEST_AUTH:
         response: Response,
         uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     ) -> dict:
-        """Create-or-get a user and return a JWT cookie. Test builds only."""
-        result = await uow.session.execute(
-            select(User).where(User.email == payload.email)
-        )
-        user = result.scalar_one_or_none()
+        """Create-or-get a Member and its Account, and return a JWT cookie.
+
+        Test builds only. Every Account belongs to a Member (#432), so the
+        Member is created too when the email has none.
+        """
+        user = await account_for_email(uow.session, payload.email)
         if user is None:
-            user = User(email=payload.email, role=payload.role, is_active=True)
+            member_id = await member_directory_for(uow).ensure_member(
+                payload.email, payload.first_name, payload.surname
+            )
+            user = User(
+                id=payload.sub or str(uuid.uuid4()),
+                member_id=member_id,
+                role=payload.role,
+                is_active=True,
+            )
             uow.session.add(user)
             await uow.session.flush()
         await uow.commit()
         token = encode_token(
             UserClaims(
                 sub=user.id,
-                email=user.email,
+                email=payload.email,
                 role=user.role,
                 is_active=user.is_active,
             )

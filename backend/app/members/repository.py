@@ -5,6 +5,7 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.db_models import User
 from app.members.db_models import Member
 
 
@@ -29,7 +30,17 @@ class AbstractMemberRepository(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
-def _to_dict(obj: Member) -> dict[str, Any]:
+def _with_account():
+    """Members with the id of the Account that signs in as each, if any.
+
+    The link lives on the Account (users.member_id, #432); `user_id` in the
+    returned dict is that Account's id, kept under the name every caller
+    already reads.
+    """
+    return select(Member, User.id).outerjoin(User, User.member_id == Member.id)
+
+
+def _to_dict(obj: Member, user_id: str | None) -> dict[str, Any]:
     return {
         "id": obj.id,
         "email": obj.email,
@@ -43,7 +54,7 @@ def _to_dict(obj: Member) -> dict[str, Any]:
         "is_first_aider": obj.is_first_aider,
         "emergency_contact_name": obj.emergency_contact_name,
         "emergency_contact_phone": obj.emergency_contact_phone,
-        "user_id": obj.user_id,
+        "user_id": user_id,
         "anonymised_at": obj.anonymised_at,
         "anonymised_by": obj.anonymised_by,
     }
@@ -53,26 +64,20 @@ class SqlMemberRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def _one(self, condition: Any) -> dict[str, Any] | None:
+        row = (
+            await self._session.execute(_with_account().where(condition))
+        ).one_or_none()
+        return _to_dict(*row) if row else None
+
     async def get(self, member_id: str) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            select(Member).where(Member.id == member_id)
-        )
-        obj = result.scalar_one_or_none()
-        return _to_dict(obj) if obj else None
+        return await self._one(Member.id == member_id)
 
     async def get_by_email(self, email: str) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            select(Member).where(Member.email == email)
-        )
-        obj = result.scalar_one_or_none()
-        return _to_dict(obj) if obj else None
+        return await self._one(Member.email == email)
 
     async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            select(Member).where(Member.user_id == user_id)
-        )
-        obj = result.scalar_one_or_none()
-        return _to_dict(obj) if obj else None
+        return await self._one(User.id == user_id)
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
         existing = await self.get_by_email(data["email"])
@@ -87,7 +92,7 @@ class SqlMemberRepository:
         obj = Member(**row_data)
         self._session.add(obj)
         await self._session.flush()
-        return _to_dict(obj)
+        return _to_dict(obj, None)  # a new Member has no Account yet
 
     async def update(
         self, member_id: str, data: dict[str, Any]
@@ -104,14 +109,14 @@ class SqlMemberRepository:
                     value = value.isoformat()
                 setattr(obj, key, value)
         await self._session.flush()
-        return _to_dict(obj)
+        return await self.get(member_id)
 
     async def list(
         self,
         status: str | None = None,
         search: str | None = None,
     ) -> list[dict[str, Any]]:
-        stmt = select(Member)
+        stmt = _with_account()
         if status is not None:
             stmt = stmt.where(Member.membership_status == status)
         else:
@@ -119,7 +124,7 @@ class SqlMemberRepository:
             # only returned when explicitly requested via status="archived".
             stmt = stmt.where(Member.membership_status != "archived")
         result = await self._session.execute(stmt)
-        rows = [_to_dict(r) for r in result.scalars().all()]
+        rows = [_to_dict(*row) for row in result.all()]
         if search is not None:
             term = search.lower()
             rows = [

@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.account_support import seed_account
 from tests.fake_repositories import InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
@@ -118,7 +119,8 @@ class TestBuildErasurePlan:
         assert plan.scrub["dob"] is None
         assert plan.scrub["emergency_contact_name"] is None
         assert plan.scrub["emergency_contact_phone"] is None
-        assert plan.scrub["user_id"] is None
+        # No link to clear: it lives on the Account, which erasure deletes (#432).
+        assert "user_id" not in plan.scrub
 
     def test_scrub_does_not_alter_id(self) -> None:
         """The plan never touches the primary key — erasure anonymises in place."""
@@ -323,37 +325,29 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     session_id = str(uuid.uuid4())
     attendance_id = str(uuid.uuid4())
 
-    # --- seed: two admin-adjacent users (actor is a distinct admin) ---------
-    await db_session.execute(
-        text(
-            "INSERT INTO users (id, email, role, is_active, theme) "
-            "VALUES (:id, :email, 'admin', true, 'system')"
-        ),
-        {"id": actor_id, "email": f"actor-{actor_id}@dojo.test"},
-    )
-    await db_session.execute(
-        text(
-            "INSERT INTO users (id, email, role, is_active, theme) "
-            "VALUES (:id, :email, 'member', true, 'system')"
-        ),
-        {"id": member_user_id, "email": f"member-{member_user_id}@dojo.test"},
+    # --- seed: the acting admin, a distinct Member with their own Account ---
+    await seed_account(
+        db_session, f"actor-{actor_id}@dojo.test", user_id=actor_id, role="admin"
     )
 
-    # --- seed: the archived member to be erased -----------------------------
+    # --- seed: the archived member to be erased, and the Account that is theirs
     await db_session.execute(
         text(
             "INSERT INTO members (id, email, first_name, surname, display_name, "
             "dob, join_date, membership_status, is_coach, is_first_aider, "
-            "emergency_contact_name, emergency_contact_phone, user_id) "
+            "emergency_contact_name, emergency_contact_phone) "
             "VALUES (:id, :email, 'Taro', 'Yamada', 'Taro Y', '1990-01-01', "
             "'2020-01-01', 'archived', false, false, 'Hanako Yamada', "
-            "'+447700900000', :user_id)"
+            "'+447700900000')"
         ),
-        {
-            "id": member_id,
-            "email": f"member-{member_id}@dojo.test",
-            "user_id": member_user_id,
-        },
+        {"id": member_id, "email": f"member-{member_id}@dojo.test"},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO users (id, member_id, role, is_active, theme) "
+            "VALUES (:id, :member_id, 'member', true, 'system')"
+        ),
+        {"id": member_user_id, "member_id": member_id},
     )
 
     # --- seed: related records that must be DELETED -------------------------
@@ -471,7 +465,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
             await db_session.execute(
                 text(
                     "SELECT first_name, surname, email, display_name, dob, "
-                    "emergency_contact_name, emergency_contact_phone, user_id "
+                    "emergency_contact_name, emergency_contact_phone "
                     "FROM members WHERE id = :id"
                 ),
                 {"id": member_id},
@@ -487,7 +481,6 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     assert row["dob"] is None
     assert row["emergency_contact_name"] is None
     assert row["emergency_contact_phone"] is None
-    assert row["user_id"] is None
 
     # --- assert: related auth / recovery / grade / federation rows deleted --
     for table, column, value in [

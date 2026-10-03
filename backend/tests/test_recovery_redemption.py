@@ -36,6 +36,8 @@ from app.auth.models import UserClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
+from app.members.db_models import Member
+from tests.account_support import seed_account
 
 _TEST_EMAIL = "musashi@dojo.test"
 
@@ -63,7 +65,11 @@ async def _wipe_test_email(engine) -> None:
     that email hits a unique-constraint violation.
     """
     async with AsyncSession(engine) as session:
-        result = await session.execute(select(User.id).where(User.email == _TEST_EMAIL))
+        result = await session.execute(
+            select(User.id)
+            .join(Member, Member.id == User.member_id)
+            .where(Member.email == _TEST_EMAIL)
+        )
         user_ids = [row[0] for row in result.all()]
         if user_ids:
             await session.execute(
@@ -95,14 +101,7 @@ async def db_client(database_url: str):
 async def _seed_user(engine, email: str, user_id: str) -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role="member",
-                is_active=True,
-            )
-        )
+        await seed_account(conn, email, user_id=user_id, role="member", is_active=True)
 
 
 async def _seed_recovery_code(

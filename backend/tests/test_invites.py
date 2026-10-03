@@ -9,7 +9,7 @@ returns 404). This is the TDD red phase; implementation follows separately.
 Two design decisions were fixed by the user before this file was written and
 are NOT re-litigated here:
   - Redeeming an invite CREATES the Member row if none exists for that email
-    (or links the existing one), setting Member.user_id -- same convergence
+    (or reuses the existing one) and the Account that belongs to it -- same convergence
     point as the #239 Member gate.
   - Delivery is a copyable link only. No SMTP, no email sending.
 
@@ -61,6 +61,8 @@ from sqlalchemy import delete, insert, select
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
 from app.main import app
+from app.members.db_models import Member
+from tests.account_support import seed_account
 
 _ADMIN = UserClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
@@ -500,12 +502,10 @@ async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
 async def _seed_admin_user(session, email: str = "existing-admin@dojo.test") -> str:
     """Seed an existing User+PasskeyCredential so the instance is no longer
     in bootstrap mode, mirroring test_passkey_enumeration.py's `_seed_user`."""
-    from app.auth.db_models import PasskeyCredential, User
+    from app.auth.db_models import PasskeyCredential
 
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(id=user_id, email=email, role="admin", is_active=True)
-    )
+    await seed_account(session, email, user_id=user_id, role="admin", is_active=True)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -627,7 +627,9 @@ async def test_redeem_creates_user_for_invited_email(db_client) -> None:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-2"})
 
     result = await session.execute(
-        select(User).where(User.email == "createuser@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "createuser@dojo.test")
     )
     assert result.fetchone() is not None
 
@@ -672,7 +674,9 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-4"})
 
     user_result = await session.execute(
-        select(User).where(User.email == "existingmember@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "existingmember@dojo.test")
     )
     user_row = user_result.scalar_one_or_none()
     member_result = await session.execute(select(Member).where(Member.id == member_id))
@@ -680,7 +684,8 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
 
     assert user_row is not None
     assert member_row is not None
-    assert member_row.user_id == user_row.id
+    # The new Account belongs to the Member that already existed (#432).
+    assert user_row.member_id == member_row.id
 
 
 # ---------------------------------------------------------------------------
@@ -792,7 +797,9 @@ async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
 
     assert response.status_code == 200  # decoy shape, not an error
     result = await session.execute(
-        select(User).where(User.email == "expiredbegin@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "expiredbegin@dojo.test")
     )
     assert result.fetchone() is None
 
@@ -1129,7 +1136,9 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
 
     assert response.status_code == 200
     result = await session.execute(
-        select(User).where(User.email == "real-redeem-stability@dojo.test")
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "real-redeem-stability@dojo.test")
     )
     user_row = result.scalar_one()
 
@@ -1244,13 +1253,12 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
     admin_id = str(uuid.uuid4())
     invite_id = str(uuid.uuid4())
 
-    await db_session.execute(
-        insert(User).values(
-            id=admin_id,
-            email=f"issuer-{admin_id}@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        db_session,
+        f"issuer-{admin_id}@dojo.test",
+        user_id=admin_id,
+        role="admin",
+        is_active=True,
     )
     await db_session.execute(
         insert(Invite).values(

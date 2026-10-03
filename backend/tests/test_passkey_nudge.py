@@ -25,6 +25,7 @@ from httpx import ASGITransport, AsyncClient
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import UserClaims
 from app.main import app
+from tests.account_support import seed_account
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,7 +135,7 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
     """
     from sqlalchemy import insert
 
-    from app.auth.db_models import PasskeyCredential, User
+    from app.auth.db_models import PasskeyCredential
 
     session = db_client
 
@@ -144,14 +145,7 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
     # (ADR-0003, #402). This user still has none of its own, which is what
     # show_nudge is about.
     claimed_user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=claimed_user_id,
-            email=f"claimed-{claimed_user_id}@dojo.test",
-            role="admin",
-            is_active=True,
-        )
-    )
+    await seed_account(session, f"claimed-{claimed_user_id}@dojo.test", user_id=claimed_user_id, role="admin", is_active=True)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -165,16 +159,7 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
 
     # Seed a user with pending challenge and NO existing passkeys
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="firstpasskey@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
-    )
+    await seed_account(session, "firstpasskey@dojo.test", user_id=user_id, role="member", is_active=True, pending_challenge="dGVzdC1jaGFsbGVuZ2U", challenge_issued_at=datetime.now(UTC))
     await session.flush()
 
     mock_verified = MagicMock()
@@ -230,22 +215,13 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     """
     from sqlalchemy import insert
 
-    from app.auth.db_models import PasskeyCredential, User
+    from app.auth.db_models import PasskeyCredential
 
     session = db_client
 
     user_id = str(uuid.uuid4())
     # Seed a user with an existing passkey (count=1 before this registration)
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="secondpasskey@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
-    )
+    await seed_account(session, "secondpasskey@dojo.test", user_id=user_id, role="member", is_active=True, pending_challenge="dGVzdC1jaGFsbGVuZ2U", challenge_issued_at=datetime.now(UTC))
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),

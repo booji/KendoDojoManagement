@@ -160,10 +160,23 @@ async def _seed() -> tuple[list[str], list[str]]:
             # True every email takes the real path, which is not the asymmetry
             # under test.
             anchor_id = str(uuid.uuid4())
+            anchor_member_id = str(uuid.uuid4())
+            await session.execute(
+                insert(Member).values(
+                    id=anchor_member_id,
+                    email=f"{_TAG}-anchor-{uuid.uuid4().hex[:8]}@dojo.test",
+                    first_name="Bench",
+                    surname="Anchor",
+                    join_date="2024-01-01",
+                    membership_status="active",
+                    is_coach=False,
+                    is_first_aider=False,
+                )
+            )
             await session.execute(
                 insert(User).values(
                     id=anchor_id,
-                    email=f"{_TAG}-anchor-{uuid.uuid4().hex[:8]}@dojo.test",
+                    member_id=anchor_member_id,
                     role="admin",
                     is_active=True,
                 )
@@ -178,28 +191,18 @@ async def _seed() -> tuple[list[str], list[str]]:
                 )
             )
 
-            # login-begin's real path needs a User; register-begin's needs a
-            # Member with the same email (the #239 directory gate).
+            # register-begin's real path needs a Member with the email (the
+            # #239 directory gate); login-begin's needs that Member's Account,
+            # found by joining on members.email (#432).
             # Inserted as one executemany per table rather than a statement per
             # row: seeding is setup, not the thing being measured, and a few
             # thousand round trips is minutes of nothing.
-            await session.execute(
-                insert(User),
-                [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "email": email,
-                        "role": "member",
-                        "is_active": True,
-                    }
-                    for email in emails
-                ],
-            )
+            member_ids = [str(uuid.uuid4()) for _ in emails]
             await session.execute(
                 insert(Member),
                 [
                     {
-                        "id": str(uuid.uuid4()),
+                        "id": member_id,
                         "email": email,
                         "first_name": "Bench",
                         "surname": "Member",
@@ -209,7 +212,19 @@ async def _seed() -> tuple[list[str], list[str]]:
                         "is_coach": False,
                         "is_first_aider": False,
                     }
-                    for email in emails
+                    for member_id, email in zip(member_ids, emails, strict=True)
+                ],
+            )
+            await session.execute(
+                insert(User),
+                [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "member_id": member_id,
+                        "role": "member",
+                        "is_active": True,
+                    }
+                    for member_id in member_ids
                 ],
             )
 
@@ -248,20 +263,25 @@ async def _assert_real_paths_taken(email_count: int, invite_count: int) -> None:
     try:
         session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
         async with session_factory() as session:
-            challenged = await session.scalar(
+            accounts = (
                 select(func.count())
                 .select_from(User)
-                .where(User.email.like(f"{_TAG}-%"), User.pending_challenge.isnot(None))
+                .join(Member, Member.id == User.member_id)
             )
+            challenged = await session.scalar(
+                accounts.where(
+                    Member.email.like(f"{_TAG}-%"), User.pending_challenge.isnot(None)
+                )
+            )
+            # The anchor is an Account too, but no request created it.
             linked = await session.scalar(
-                select(func.count())
-                .select_from(Member)
-                .where(Member.email.like(f"{_TAG}-%"), Member.user_id.isnot(None))
+                accounts.where(
+                    Member.email.like(f"{_TAG}-%"),
+                    Member.email.notlike(f"{_TAG}-anchor-%"),
+                )
             )
             invited_users = await session.scalar(
-                select(func.count())
-                .select_from(User)
-                .where(User.email.like(f"{_TAG}-inv-%"))
+                accounts.where(Member.email.like(f"{_TAG}-inv-%"))
             )
     finally:
         await engine.dispose()
@@ -273,11 +293,11 @@ async def _assert_real_paths_taken(email_count: int, invite_count: int) -> None:
         "challenge: some requests took the decoy path, so the numbers below "
         "understate the real path"
     )
-    # Invite redemption creates its own Member row and links it, so the linked
-    # count covers the seeded members *and* the invited ones.
+    # Every Account belongs to a Member (#432), and invite redemption creates
+    # its own, so the count covers the seeded members *and* the invited ones.
     assert linked == email_count + invite_count, (
-        f"only {linked} of {email_count + invite_count} members were linked to "
-        "a user: register-begin took the decoy path"
+        f"only {linked} of {email_count + invite_count} members have an "
+        "account: register-begin or invite redemption took the decoy path"
     )
     assert invited_users == invite_count, (
         f"only {invited_users} of {invite_count} invited accounts exist: "
@@ -291,16 +311,23 @@ async def _teardown() -> None:
     try:
         session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
         async with session_factory() as session:
-            tagged = User.email.like(f"{_TAG}-%")
-            user_ids = (await session.execute(select(User.id).where(tagged))).scalars()
-            await session.execute(
-                delete(PasskeyCredential).where(
-                    PasskeyCredential.user_id.in_(list(user_ids))
-                )
+            tagged = Member.email.like(f"{_TAG}-%")
+            user_ids = list(
+                (
+                    await session.execute(
+                        select(User.id)
+                        .join(Member, Member.id == User.member_id)
+                        .where(tagged)
+                    )
+                ).scalars()
             )
-            await session.execute(delete(Member).where(Member.email.like(f"{_TAG}-%")))
+            await session.execute(
+                delete(PasskeyCredential).where(PasskeyCredential.user_id.in_(user_ids))
+            )
+            # Accounts before their Members: users.member_id is RESTRICT (#432).
+            await session.execute(delete(User).where(User.id.in_(user_ids)))
+            await session.execute(delete(Member).where(tagged))
             await session.execute(delete(Invite).where(Invite.email.like(f"{_TAG}-%")))
-            await session.execute(delete(User).where(tagged))
             await session.commit()
     finally:
         await engine.dispose()

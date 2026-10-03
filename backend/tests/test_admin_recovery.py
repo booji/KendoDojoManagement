@@ -27,12 +27,12 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import User
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import UserClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
+from tests.account_support import seed_account
 
 _ADMIN = UserClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
@@ -70,14 +70,7 @@ async def _seed_user(engine, user_id: str, *, role: str = "member") -> str:
     """Insert a user row into the test DB. Returns the email used."""
     email = f"{user_id}@dojo.test"
     async with engine.begin() as conn:
-        await conn.execute(
-            insert(User).values(
-                id=user_id,
-                email=email,
-                role=role,
-                is_active=True,
-            )
-        )
+        await seed_account(conn, email, user_id=user_id, role=role, is_active=True)
     return email
 
 

@@ -98,6 +98,32 @@ Latency is dominated by queueing, not by the database: past ~4 simultaneous
 requests the single uvicorn worker's event loop is the bottleneck and every
 figure scales with concurrency.
 
+### Re-measured for #432 — one email, on the Member
+
+[#432](https://github.com/booji/KendoDojoManagement/issues/432) changed every
+query on these paths: `users.email` is gone, and an Account is found by joining
+its Member on `members.email`. Registration and invite redemption now create
+the Account from a Member id (invite redemption creates that Member first when
+there is none). Same command, same environment class, 2026-10-03:
+
+| endpoint | p50 | p90 | p95 | **p99** | max |
+|---|---|---|---|---|---|
+| `login/passkey/begin` | 5.0 | 5.7 | 5.9 | **6.5** | 32.9 |
+| `register/passkey/begin` | 5.3 | 6.0 | 6.3 | **6.8** | 11.0 |
+| `invites/redeem/begin` | 7.8 | 9.0 | 9.4 | **10.5** | 20.7 |
+
+Server-side, sequential, n=1000 per row after 50 warmups. The join costs
+nothing measurable: every p99 is below the August figures, which says more
+about the workstation on the day than about the change. The worst single
+request, 32.9ms, is a third of the 100ms floor, so the default stands. The
+concurrency sweep kept its shape: queueing past ~4 requests in flight, as
+above.
+
+Parity between known and unknown emails is a separate check, and it is still
+the one that gates: `test_passkey_timing.py` and `test_timing_convergence.py`
+assert that the real and decoy paths converge, and both pass against the new
+queries.
+
 ## Conclusions
 
 **The default is raised from 50ms to 100ms.**
