@@ -445,6 +445,30 @@ def test_quadlet_switching_away_from_dns_01_removes_the_drop_in(tmp_path):
     assert not (host.units() / "kendo-traefik.container.d/10-dns-01.conf").exists()
 
 
+def test_quadlet_rerun_keeps_an_operator_written_multi_variable_drop_in(tmp_path):
+    # Re-running to change the domain must not strip Traefik of the route53
+    # credentials the operator wired up by hand (#423).
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "3", "route53", "admin@example.com")
+    dropin = host.units() / "kendo-traefik.container.d/10-dns-01.conf"
+    own = "[Container]\nSecret=kendo_aws_key,type=env,target=AWS_ACCESS_KEY_ID\n"
+    dropin.write_text(own)
+
+    out = host.run("new.example.com", "1", "3", "route53", "admin@example.com")
+
+    assert dropin.read_text() == own
+    assert "kept your" in out.stdout
+
+
+def test_quadlet_moving_to_a_multi_variable_provider_drops_its_own_drop_in(tmp_path):
+    # A drop-in setup.sh wrote for hetzner would hand route53 the wrong secret.
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "3", "hetzner", "admin@example.com", "tok")
+    host.run("dojo.example.com", "1", "3", "route53", "admin@example.com")
+
+    assert not (host.units() / "kendo-traefik.container.d/10-dns-01.conf").exists()
+
+
 def test_quadlet_bring_your_own_cert_mounts_the_directory_it_asks_for(tmp_path):
     host = Host(tmp_path)
     out = host.run("dojo.example.com", "3")
