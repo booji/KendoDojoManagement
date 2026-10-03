@@ -86,11 +86,7 @@ async def set_member_grade(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
 
-    awarded_at = (
-        body.awarded_at.isoformat()
-        if body.awarded_at
-        else datetime.now(UTC).isoformat()
-    )
+    awarded_at = (body.awarded_at or datetime.now(UTC)).astimezone(UTC).isoformat()
     record = await grade_repo.add_promotion(
         member_id=str(member_id),
         grade=body.grade.value,
@@ -149,11 +145,7 @@ async def propose_member_grade(
             detail="MUKYUU cannot be proposed",
         )
 
-    proposed_at = (
-        body.awarded_at.isoformat()
-        if body.awarded_at
-        else datetime.now(UTC).isoformat()
-    )
+    proposed_at = (body.awarded_at or datetime.now(UTC)).astimezone(UTC).isoformat()
     record = await grade_repo.add_promotion(
         member_id=str(member_id),
         grade=body.grade.value,

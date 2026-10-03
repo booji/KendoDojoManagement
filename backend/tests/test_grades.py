@@ -461,6 +461,37 @@ async def test_post_grades_creates_confirmed_entry(member_repo, grade_repo) -> N
     assert "id" in body
 
 
+async def test_awarded_at_is_stored_in_utc(member_repo, grade_repo) -> None:
+    """promoted_at is a timestamptz read back in UTC (#433); the write
+    response says the same, not the offset the client happened to send."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            f"/members/{_MEMBER_A_ID}/grades",
+            json={"grade": "SHODAN", "awarded_at": "2025-01-15T10:00:00+09:00"},
+        )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["awarded_at"] == "2025-01-15T01:00:00+00:00"
+
+
+async def test_awarded_at_without_an_offset_is_refused(member_repo, grade_repo) -> None:
+    """A naive timestamp names no instant; the #433 migration refuses those
+    too, so the API does not write new ones."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            f"/members/{_MEMBER_A_ID}/grades",
+            json={"grade": "SHODAN", "awarded_at": "2025-01-15T10:00:00"},
+        )
+
+    assert response.status_code == 422, response.text
+
+
 async def test_post_grades_non_admin_forbidden(
     member_repo, grade_repo, cookies_for
 ) -> None:

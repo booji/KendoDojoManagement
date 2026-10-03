@@ -33,7 +33,10 @@ SEED = [
 
 
 def attendance(
-    *, member: str | None = MEMBER, visitor: str | None = None, at: str = "t1"
+    *,
+    member: str | None = MEMBER,
+    visitor: str | None = None,
+    at: str = "2026-10-01T19:00:00+00:00",
 ) -> str:
     member_sql = f"'{member}'" if member else "NULL"
     visitor_sql = f"'{visitor}'" if visitor else "NULL"
@@ -145,7 +148,7 @@ async def test_upgrade_keeps_only_the_earliest_of_duplicate_check_ins(scratch_db
     rows = await sql(
         scratch_db, "SELECT checked_in_at FROM attendance WHERE member_id IS NOT NULL"
     )
-    assert [r[0] for r in rows] == ["2026-10-01T19:00:00+00:00"]
+    assert [r[0].isoformat() for r in rows] == ["2026-10-01T19:00:00+00:00"]
     visitors = await sql(
         scratch_db, "SELECT count(*) FROM attendance WHERE member_id IS NULL"
     )
@@ -157,7 +160,8 @@ def _bad_attendance() -> tuple[list[str], str]:
     return [
         f"""INSERT INTO attendance
             (id, session_id, member_id, visitor_name, checked_in_at, recorded_by)
-            VALUES ('{row}', '{SESSION}', NULL, NULL, 't', '{RECORDER}')"""
+            VALUES ('{row}', '{SESSION}', NULL, NULL,
+                    '2026-10-01T19:00:00+00:00', '{RECORDER}')"""
     ], row
 
 

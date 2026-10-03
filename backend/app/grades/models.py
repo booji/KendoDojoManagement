@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, field_validator
+from pydantic import AwareDatetime, BaseModel, field_validator
 
 _DISPLAY_NAMES: dict[str, str] = {
     "MUKYUU": "Mukyū",
@@ -58,7 +58,9 @@ class GradeHistoryEntry(BaseModel):
 
 class SetGradeRequest(BaseModel):
     grade: Grade
-    awarded_at: datetime | None = None
+    # An offset is required: promoted_at is a timestamptz (#433), and a naive
+    # value names no instant.
+    awarded_at: AwareDatetime | None = None
 
     @field_validator("awarded_at")
     @classmethod

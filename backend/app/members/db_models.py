@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import UUIDBase, UUIDType
+from app.db.base import IsoDate, UUIDBase, UUIDType
 
 
 class Member(UUIDBase):
@@ -17,8 +17,8 @@ class Member(UUIDBase):
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     surname: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    dob: Mapped[str | None] = mapped_column(String(10), nullable=True)  # "YYYY-MM-DD"
-    join_date: Mapped[str] = mapped_column(String(10), nullable=False)  # "YYYY-MM-DD"
+    dob: Mapped[str | None] = mapped_column(IsoDate(), nullable=True)
+    join_date: Mapped[str] = mapped_column(IsoDate(), nullable=False)
     membership_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active"
     )
