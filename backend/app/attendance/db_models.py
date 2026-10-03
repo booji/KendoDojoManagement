@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase, UUIDType
@@ -6,6 +6,17 @@ from app.db.base import UUIDBase, UUIDType
 
 class Attendance(UUIDBase):
     __tablename__ = "attendance"
+    __table_args__ = (
+        # Postgres treats NULLs as distinct, so visitor rows (member_id NULL)
+        # are unconstrained; a member is checked in at most once (#431).
+        UniqueConstraint(
+            "session_id", "member_id", name="uq_attendance_session_member"
+        ),
+        CheckConstraint(
+            "(member_id IS NULL) <> (visitor_name IS NULL)",
+            name="ck_attendance_member_xor_visitor",
+        ),
+    )
 
     session_id: Mapped[str] = mapped_column(
         UUIDType(), ForeignKey("session_instances.id"), nullable=False

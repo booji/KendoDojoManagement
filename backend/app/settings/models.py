@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase
@@ -8,6 +8,11 @@ from app.db.base import UUIDBase
 
 class DojoSettings(UUIDBase):
     __tablename__ = "dojo_settings"
+    # One row per instance, held by the database (#431): a unique index on a
+    # constant makes every row collide with every other.
+    __table_args__ = (
+        Index("uq_dojo_settings_single_row", text("(true)"), unique=True),
+    )
 
     dojo_name: Mapped[str] = mapped_column(
         String(255), nullable=False, default="My Dojo"

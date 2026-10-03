@@ -123,6 +123,8 @@ async def checkin_to_session(
                 "closes_at": window.closes_at.isoformat(),
             },
         )
+    # A concurrent check-in can pass the guard above too; the unique constraint
+    # then refuses this insert, and main's IntegrityError handler answers 409.
     record = await attendance_repo.check_in(
         str(session_id), member_id, current_user.sub
     )

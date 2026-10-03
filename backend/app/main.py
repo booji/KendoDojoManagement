@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse, Response
@@ -48,6 +49,29 @@ from app.users.router import router as users_router
 _log = logging.getLogger(__name__)
 
 
+# Constraint name -> the 409 detail a client gets when the database refuses a
+# write (#431). Application guards (e.g. check-in's "already checked in"
+# lookup) are check-then-insert; the constraint is what decides a race. Any
+# other integrity error is a bug and stays a 500.
+_CONSTRAINT_CONFLICTS = {
+    "uq_attendance_session_member": "Already checked in",
+    "uq_member_federations_member_federation": (
+        "This member already belongs to that federation"
+    ),
+    "uq_federations_name": "A federation with that name already exists",
+}
+
+
+async def _constraint_conflict_handler(
+    request: StarletteRequest, exc: IntegrityError
+) -> JSONResponse:
+    message = str(exc.orig)
+    for constraint, detail in _CONSTRAINT_CONFLICTS.items():
+        if constraint in message:
+            return JSONResponse({"detail": detail}, status_code=409)
+    raise exc
+
+
 def _rate_limit_exceeded_handler(
     request: StarletteRequest, exc: RateLimitExceeded
 ) -> JSONResponse:
@@ -85,6 +109,7 @@ app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(IntegrityError, _constraint_conflict_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SessionRenewalMiddleware)

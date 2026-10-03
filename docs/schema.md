@@ -93,7 +93,7 @@ erDiagram
     }
     federations {
         string id PK
-        string name
+        string name UK
         string abbreviation
         string iso_code
         string website
@@ -231,6 +231,19 @@ erDiagram
   `grade_history.assigned_by`, `members.user_id` and `members.anonymised_by`
   are unconstrained at DB level — they hold user ids but are deliberately not
   FK-enforced, so a deleted user never cascades into attendance history.
+- **Constraints beyond keys** (#431). The database, not just the app, refuses:
+  - `uq_attendance_session_member` — UNIQUE `(session_id, member_id)` on
+    `attendance`: a member is checked in at most once per session. NULLs are
+    distinct, so any number of visitor rows (`member_id` NULL) per session
+    stay legal. This, not the router's existence check, decides a concurrent
+    double check-in (the loser gets 409).
+  - `ck_attendance_member_xor_visitor` — CHECK on `attendance`: exactly one of
+    `member_id` / `visitor_name` is set.
+  - `uq_member_federations_member_federation` — UNIQUE
+    `(member_id, federation_id)`: one membership per member per federation.
+  - `uq_dojo_settings_single_row` — a unique index on the constant `(true)`:
+    `dojo_settings` holds one row.
+  - `uq_federations_name` — UNIQUE `federations.name`.
 - **Federation membership is a table, not a column.** `members` has no
   `federation_number`: a member can hold numbers with several federations, so
   it lives in `member_federations` (dropped from `members` in #297 — see

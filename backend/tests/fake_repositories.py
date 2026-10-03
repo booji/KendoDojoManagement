@@ -42,6 +42,8 @@ from typing import Any
 # Private imports on purpose: the fake must project a record the same way the
 # SQL implementation does, and importing the derivation is the only way to
 # guarantee that without a second copy of it drifting.
+from sqlalchemy.exc import IntegrityError
+
 from app.sessions.repository import _minutes_between, _segments_envelope
 
 # ---------------------------------------------------------------------------
@@ -465,9 +467,22 @@ class InMemoryAttendanceRepository:
 
     # -- interface ----------------------------------------------------------
 
+    def _refuse_duplicate(self, session_id: str, member_id: str) -> None:
+        # Mirrors uq_attendance_session_member (#431), as the database says it.
+        if any(
+            r["session_id"] == session_id and r["member_id"] == member_id
+            for r in self._store
+        ):
+            raise IntegrityError(
+                "INSERT INTO attendance",
+                {},
+                Exception('unique constraint "uq_attendance_session_member"'),
+            )
+
     async def check_in(
         self, session_id: str, member_id: str, recorded_by: str
     ) -> dict[str, Any]:
+        self._refuse_duplicate(session_id, member_id)
         return self._insert(
             {
                 "session_id": session_id,
@@ -494,6 +509,7 @@ class InMemoryAttendanceRepository:
     async def admin_mark_attended(
         self, session_id: str, member_id: str, recorded_by: str
     ) -> dict[str, Any]:
+        self._refuse_duplicate(session_id, member_id)
         record = self._insert(
             {
                 "session_id": session_id,
