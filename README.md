@@ -1,3 +1,5 @@
+<img src="frontend/public/logo.svg" width="96" alt="KendoDojoManagement logo: a nafudakake, the dojo board of wooden member name tags held by battens">
+
 # KendoDojoManagement
 
 Self-hosted web application for managing the members, sessions, and attendance of a kendo dojo. Single-dojo per instance, deployed with rootless Podman.
