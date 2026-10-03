@@ -30,7 +30,6 @@ export type SessionInstance = {
   location: string | null
   template_id: string | null
   cancelled: boolean
-  notes: string | null
   info: string | null
   coach_notes: string | null
   // The session's one check-in link: tokenless, stable, built by the backend.
@@ -46,7 +45,6 @@ export type SessionInstanceUpdate = {
   title: string
   date: string
   location: string | null
-  notes: string | null
   info: string | null
   coach_notes: string | null
   segments: SegmentInput[]

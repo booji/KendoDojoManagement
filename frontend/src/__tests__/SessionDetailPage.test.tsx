@@ -33,7 +33,6 @@ const BASE_SESSION = {
   date: "2026-04-20",
   start_time: "19:00",
   duration_minutes: 90,
-  notes: null,
   template_id: TEMPLATE_ID,
   cancelled: false,
   location: "Main dojo",
@@ -433,6 +432,8 @@ describe("AC7 — edit form", () => {
       // Form should be visible with pre-populated date value
       expect(screen.getByDisplayValue("2026-04-20")).toBeInTheDocument()
     })
+    // #430: info and coach notes cover both audiences; no third free-text field.
+    expect(screen.queryByLabelText(/^notes$/i)).not.toBeInTheDocument()
   })
 
   it("submits PUT /sessions/{id} when the edit form is saved", async () => {

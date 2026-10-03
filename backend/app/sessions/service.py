@@ -57,7 +57,6 @@ def generate_instances(
                         "title": template["title"],
                         "date": iso,
                         "template_id": template["id"],
-                        "notes": None,
                         "segments": _copy_segments(template),
                     }
                 )

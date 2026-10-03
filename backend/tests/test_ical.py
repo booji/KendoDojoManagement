@@ -359,7 +359,6 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
             "location": "Main Dojo",
             "info": "Bring your bogu",
             "coach_notes": "SECRET: session-level note",
-            "notes": "SECRET: internal scheduling note tok123",
             "cancelled": False,
         }
     )
@@ -487,7 +486,6 @@ def test_build_ical_strips_admin_only_fields() -> None:
             "location": "Dojo",
             "info": "Public info",
             "coach_notes": "SECRET coach guidance",
-            "notes": "SECRET internal scheduling note",
             "cancelled": False,
         }
     ]

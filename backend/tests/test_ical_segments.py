@@ -29,7 +29,6 @@ def _segmented_session(**overrides):
         "location": "Main Dojo",
         "info": "Bring your bogu",
         "cancelled": False,
-        "notes": "Internal scheduling note",
         "segments": [
             {
                 "start_time": "09:00",

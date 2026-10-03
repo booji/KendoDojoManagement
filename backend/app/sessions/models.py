@@ -209,7 +209,6 @@ def _validate_iso_date(v: str) -> str:
 class SessionInstanceCreate(BaseModel):
     title: str
     date: str  # "YYYY-MM-DD"
-    notes: str | None = None
     template_id: str | None = None
     location: str | None = None
     info: str | None = None
@@ -233,7 +232,6 @@ class SessionInstanceRead(BaseModel):
     date: str
     start_time: str  # derived envelope value
     duration_minutes: int  # derived envelope value
-    notes: str | None = None
     template_id: str | None = None
     cancelled: bool = False
     location: str | None = None

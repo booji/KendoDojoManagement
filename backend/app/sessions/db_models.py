@@ -79,7 +79,6 @@ class SessionInstance(UUIDBase):
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     date: Mapped[str] = mapped_column(String(10), nullable=False)
-    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     template_id: Mapped[str | None] = mapped_column(
         UUIDType(), ForeignKey("session_templates.id"), nullable=True
     )

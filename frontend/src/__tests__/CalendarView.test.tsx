@@ -27,7 +27,6 @@ const session = (date: string): SessionInstance => ({
   location: null,
   template_id: null,
   cancelled: false,
-  notes: null,
   info: null,
   coach_notes: null,
   checkin_link: "",

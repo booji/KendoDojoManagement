@@ -154,7 +154,7 @@ def test_cancelled_session_excluded_even_with_checkin_link() -> None:
 
 
 def test_admin_only_fields_still_stripped_when_checkin_link_present() -> None:
-    """coach_notes and notes must never leak into the output,
+    """coach_notes must never leak into the output,
     even alongside a public checkin_link."""
     url = "https://dojo.example.com/checkin/session/uid-secret"
     sessions = [
@@ -163,13 +163,11 @@ def test_admin_only_fields_still_stripped_when_checkin_link_present() -> None:
             title="Secret Night",
             checkin_link=url,
             coach_notes="SECRET coach guidance",
-            notes="Internal scheduling note",
         )
     ]
     result = build_ical(sessions)
     assert "SECRET" not in result
     assert "coach_notes" not in result.lower()
-    assert "Internal scheduling note" not in result
     # The public checkin_link itself is expected to appear.
     assert url in result
 
