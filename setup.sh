@@ -698,8 +698,17 @@ quadlet_install() {
   # here and leave Traefik asking for a secret or a mount that is not there.
   local dropin=$units/kendo-traefik.container.d
   mkdir -p "$dropin"
-  rm -f "$dropin/10-dns-01.conf" "$dropin/20-byo-cert.conf"
-  if [ -n "$dns_var" ]; then
+  rm -f "$dropin/20-byo-cert.conf"
+  # A multi-variable provider's 10-dns-01.conf is the operator's own (#423):
+  # keep it across a re-run that stays on DNS-01. Ours carry the header below.
+  if [ -z "$dns_var" ]; then
+    if [ "$challenge" = dns ] && [ -f "$dropin/10-dns-01.conf" ] &&
+       ! grep -q 'written by setup.sh --quadlet' "$dropin/10-dns-01.conf"; then
+      echo "  kept your $dropin/10-dns-01.conf"
+    else
+      rm -f "$dropin/10-dns-01.conf"
+    fi
+  else
     cat > "$dropin/10-dns-01.conf" <<DROPIN
 # DNS-01 credentials for $dns_provider, written by setup.sh --quadlet (#412).
 [Container]
