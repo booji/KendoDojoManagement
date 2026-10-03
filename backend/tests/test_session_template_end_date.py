@@ -652,14 +652,10 @@ def _versions_dir() -> Path:
 
 
 def _find_end_date_migration() -> Path | None:
-    versions_dir = _versions_dir()
-    if not versions_dir.is_dir():
-        return None
-    for path in versions_dir.glob("*.py"):
-        text = path.read_text()
-        if "session_templates" in text and "end_date" in text:
-            return path
-    return None
+    # Pinned by name: later migrations also touch session_templates.end_date
+    # (#433 changes its type), and glob order differs between filesystems.
+    path = _versions_dir() / "a4b5c6d7e8f9_add_end_date_to_session_templates.py"
+    return path if path.is_file() else None
 
 
 def test_migration_adds_end_date_to_session_templates() -> None:
