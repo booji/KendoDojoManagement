@@ -157,7 +157,6 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         # Keep raw fields for internal / admin use
         "date": obj.date,
         "cancelled": obj.cancelled,
-        "notes": obj.notes,
         "info": obj.info,
         "coach_notes": obj.coach_notes,
         "checkin_window_before_minutes": obj.checkin_window_before_minutes,

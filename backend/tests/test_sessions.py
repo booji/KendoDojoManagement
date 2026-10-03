@@ -317,7 +317,6 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     payload = {
         "title": "Summer Session",
         "date": "2026-06-15",
-        "notes": "Special summer session",
         "segments": [_one_segment(type_id, start_time="10:00", duration_minutes=60)],
     }
     async with AsyncClient(
@@ -328,6 +327,8 @@ async def test_admin_can_create_adhoc_session(type_repo, instance_repo) -> None:
     body = response.json()
     assert "id" in body
     assert body["date"] == "2026-06-15"
+    # #430: info / coach_notes cover both audiences; there is no third field.
+    assert "notes" not in body
 
 
 @pytest.mark.parametrize("bad", ["2026-02-31", "not-a-date", "20260615"])

@@ -187,7 +187,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
     })),
   )
   const [location, setLocation] = useState(session.location ?? "")
-  const [notes, setNotes] = useState(session.notes ?? "")
   const [info, setInfo] = useState(session.info ?? "")
   const [infoPreview, setInfoPreview] = useState(false)
   const [coachNotes, setCoachNotes] = useState(session.coach_notes ?? "")
@@ -263,7 +262,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
         title: title.trim(),
         date,
         location: location.trim() || null,
-        notes: notes.trim() || null,
         info: info.trim() || null,
         coach_notes: coachNotes.trim() || null,
         segments,
@@ -320,15 +318,6 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
           id="edit-location"
           value={location}
           onChange={(e) => setLocation(e.target.value)}
-          className="min-h-[44px]"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="edit-notes">Notes</Label>
-        <Input
-          id="edit-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
           className="min-h-[44px]"
         />
       </div>

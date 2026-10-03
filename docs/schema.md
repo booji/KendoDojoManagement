@@ -146,7 +146,6 @@ erDiagram
         string id PK
         string title
         string date
-        string notes
         string template_id FK
         bool cancelled
         string location
