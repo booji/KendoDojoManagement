@@ -393,6 +393,26 @@ async def test_admin_mark_attended_returns_201(
     assert body["recorded_by"] == _ADMIN.sub
 
 
+async def test_admin_marking_a_member_already_present_returns_409(
+    session_repo: _AttendanceSessionRepo,
+    attendance_repo: InMemoryAttendanceRepository,
+) -> None:
+    session = session_repo.seed(cancelled=False)
+    attendance_repo.seed(session_id=session["id"], member_id=_SOME_MEMBER_UUID)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            f"/sessions/{session['id']}/attendance",
+            json={"member_id": _SOME_MEMBER_UUID},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Already checked in"
+
+
 async def test_admin_mark_attended_nonexistent_session_returns_404(
     session_repo: _AttendanceSessionRepo,
     attendance_repo: InMemoryAttendanceRepository,
@@ -656,10 +676,11 @@ async def test_admin_can_get_any_member_attendance_history(
     # Admin bypasses the caller→member mapping entirely
     app.dependency_overrides[get_current_member_id] = lambda: None
 
-    # Seed attendance records for a member
-    session_id = str(uuid.uuid4())
-    await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
-    await attendance_repo.admin_mark_attended(session_id, _MEMBER.sub, "admin-uuid")
+    # Seed attendance records for a member, one per session (#431)
+    for _ in range(2):
+        await attendance_repo.admin_mark_attended(
+            str(uuid.uuid4()), _MEMBER.sub, "admin-uuid"
+        )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -815,3 +836,54 @@ async def test_summary_for_sessions_counts_and_flags_in_one_call() -> None:
     assert summary["s2"] == {"attendance_count": 1, "is_checked_in": False}
     assert summary["unknown"] == {"attendance_count": 0, "is_checked_in": False}
     assert "s3" not in summary, "only the requested sessions are summarised"
+
+
+# ---------------------------------------------------------------------------
+# #431 — two concurrent check-ins: the database refuses the second
+# ---------------------------------------------------------------------------
+
+
+async def test_a_check_in_that_loses_the_race_gets_409_not_500(
+    session_repo: _AttendanceSessionRepo,
+    settings_repo: StubDojoSettingsRepo,
+    db_client,
+    monkeypatch,
+) -> None:
+    from app.attendance.repository import SqlAttendanceRepository
+    from app.members.db_models import Member
+    from app.sessions.db_models import SessionInstance
+
+    session = session_repo.seed(cancelled=False)
+    db_client.add_all(
+        [
+            SessionInstance(id=session["id"], title="Keiko", date=session["date"]),
+            Member(
+                id=_MEMBER_RECORD_ID,
+                first_name="Ai",
+                surname="Sato",
+                join_date="2026-01-01",
+                membership_status="active",
+                is_coach=False,
+                is_first_aider=False,
+            ),
+        ]
+    )
+    await db_client.flush()
+    repo = SqlAttendanceRepository(db_client)
+    await repo.check_in(session["id"], _MEMBER_RECORD_ID, _MEMBER.sub)
+
+    # The other request inserted between this one's guard and its insert.
+    async def _guard_misses(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(repo, "get_by_session_member", _guard_misses)
+    app.dependency_overrides[get_attendance_repo] = lambda: repo
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(f"/sessions/{session['id']}/checkin")
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "Already checked in"
