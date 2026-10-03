@@ -1,7 +1,7 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import UUIDBase, UUIDType
+from app.db.base import IsoDate, IsoTime, UUIDBase, UUIDType
 
 
 class SessionType(UUIDBase):
@@ -15,8 +15,8 @@ class SessionTemplate(UUIDBase):
     __tablename__ = "session_templates"
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    start_date: Mapped[str] = mapped_column(String(10), nullable=False)
-    end_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    start_date: Mapped[str] = mapped_column(IsoDate(), nullable=False)
+    end_date: Mapped[str] = mapped_column(IsoDate(), nullable=False)
     recurrence: Mapped[str] = mapped_column(
         String(20), nullable=False, default="weekly"
     )
@@ -45,7 +45,7 @@ class SessionTemplateSegment(UUIDBase):
         ForeignKey("session_templates.id", ondelete="CASCADE"),
         nullable=False,
     )
-    start_time: Mapped[str] = mapped_column(String(5), nullable=False)
+    start_time: Mapped[str] = mapped_column(IsoTime(), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -78,7 +78,7 @@ class SessionInstance(UUIDBase):
     __tablename__ = "session_instances"
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    date: Mapped[str] = mapped_column(IsoDate(), nullable=False)
     template_id: Mapped[str | None] = mapped_column(
         UUIDType(), ForeignKey("session_templates.id"), nullable=True
     )
@@ -108,7 +108,7 @@ class SessionInstanceSegment(UUIDBase):
         ForeignKey("session_instances.id", ondelete="CASCADE"),
         nullable=False,
     )
-    start_time: Mapped[str] = mapped_column(String(5), nullable=False)
+    start_time: Mapped[str] = mapped_column(IsoTime(), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

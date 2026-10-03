@@ -1,7 +1,7 @@
 from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import UUIDBase, UUIDType
+from app.db.base import IsoTimestamp, UUIDBase, UUIDType
 
 
 class Attendance(UUIDBase):
@@ -28,5 +28,5 @@ class Attendance(UUIDBase):
         UUIDType(), ForeignKey("members.id"), nullable=True
     )
     visitor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    checked_in_at: Mapped[str] = mapped_column(String(50), nullable=False)
+    checked_in_at: Mapped[str] = mapped_column(IsoTimestamp(), nullable=False)
     recorded_by: Mapped[str] = mapped_column(UUIDType(), nullable=False)

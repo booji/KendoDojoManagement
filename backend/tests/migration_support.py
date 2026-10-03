@@ -8,21 +8,25 @@ and the database do, not what the app checks first.
 
 import asyncio
 import os
+from collections.abc import Callable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from alembic import command
+from alembic.config import Config
 from app.db.bootstrap import _alembic_config
 
 
-def _upgrade_blocking(url: str, revision: str) -> None:
+def _migrate_blocking(
+    url: str, migrate: Callable[[Config, str], None], revision: str
+) -> None:
     cfg = _alembic_config(url)
     previous = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
     try:
-        command.upgrade(cfg, revision)
+        migrate(cfg, revision)
     finally:
         if previous is None:
             os.environ.pop("DATABASE_URL", None)
@@ -32,7 +36,11 @@ def _upgrade_blocking(url: str, revision: str) -> None:
 
 async def upgrade(url: str, revision: str = "head") -> None:
     # env.py runs its own asyncio.run(), which cannot nest in the test's loop.
-    await asyncio.to_thread(_upgrade_blocking, url, revision)
+    await asyncio.to_thread(_migrate_blocking, url, command.upgrade, revision)
+
+
+async def downgrade(url: str, revision: str) -> None:
+    await asyncio.to_thread(_migrate_blocking, url, command.downgrade, revision)
 
 
 async def sql(url: str, *statements: str) -> list:
