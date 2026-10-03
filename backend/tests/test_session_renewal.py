@@ -66,12 +66,24 @@ def _stale(claims: UserClaims, session_started_at: int | None = None) -> str:
         return encode_token(claims, session_started_at)
 
 
+class _Scalar:
+    def __init__(self, value: object | None) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> object | None:
+        return self._value
+
+
 class _FakeSession:
     def __init__(self, user: object | None) -> None:
         self._user = user
 
     async def get(self, _model: type, _pk: str) -> object | None:
         return self._user
+
+    async def execute(self, _statement: object) -> _Scalar:
+        # Renewal's only query: the sign-in email, read from the Member (#432).
+        return _Scalar(getattr(self._user, "email", None))
 
 
 class _FakeUow:
@@ -80,7 +92,10 @@ class _FakeUow:
 
 
 class _UserRow:
+    """The Account row, plus the email its Member carries (#432)."""
+
     def __init__(self, email: str, role: str, is_active: bool = True) -> None:
+        self.id = "user-row-id"
         self.email = email
         self.role = role
         self.is_active = is_active

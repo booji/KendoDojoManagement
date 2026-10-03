@@ -27,8 +27,8 @@ from sqlalchemy import func, select
 from app import config
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.models import (
-    PasskeyBeginRequest,
     PasskeyRegisterCompleteRequest,
+    SetupBeginRequest,
     UserClaims,
 )
 from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
@@ -108,15 +108,18 @@ async def get_setup(
 
 @router.post("/passkey/begin")
 async def setup_passkey_begin(
-    payload: PasskeyBeginRequest,
+    payload: SetupBeginRequest,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     x_setup_token: SetupTokenHeader = None,
 ) -> dict:
-    """Begin passkey registration for the first admin user."""
+    """Begin passkey registration for the first admin, creating their Member
+    and Account in this one transaction (#432)."""
     if await _has_registered_user(uow):
         raise _ALREADY_DONE
     _require_setup_token(x_setup_token)
-    return await register_passkey_begin(payload.email, uow, allow_bootstrap=True)
+    return await register_passkey_begin(
+        payload.email, uow, bootstrap_names=(payload.first_name, payload.surname)
+    )
 
 
 @router.post("/passkey/complete", status_code=201)
@@ -133,9 +136,9 @@ async def setup_passkey_complete(
 
     claims = await register_passkey_complete(payload, uow, allow_bootstrap=True)
 
-    # Guarantee the setup user is admin in both DB and JWT.
-    # _get_or_create_user already sets role="admin" for the first user, but we
-    # explicitly enforce it here so the invariant holds even if that logic changes.
+    # The one place admin is granted: the claim has completed. Begin creates
+    # the Account as a member, so an abandoned claim leaves no admin account
+    # behind for the ordinary registration route to finish (#432).
     if claims.role != "admin":
         result = await uow.session.execute(select(User).where(User.id == claims.sub))
         user = result.scalar_one()

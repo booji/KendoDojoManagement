@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
+from app.auth.accounts import account_for_email, account_for_member
 from app.auth.db_models import PasskeyCredential, User
 from app.auth.member_directory import MemberDirectory, member_directory_for
 from app.auth.models import (
@@ -50,18 +51,21 @@ async def _is_bootstrap(uow: AbstractUnitOfWork) -> bool:
     return passkey_count.scalar_one() == 0
 
 
-async def _get_or_create_user(
-    email: str, uow: AbstractUnitOfWork, is_first_user: bool
-) -> User:
-    result = await uow.session.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
+async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> User:
+    """The Member's Account, created if it has none (#432: every Account
+    belongs to exactly one Member).
+
+    Always as a member, the first-admin claim included: admin is granted when
+    the claim *completes* (app/routers/setup.py), never when it begins. A
+    claim begun under one address and finished under another leaves the
+    first attempt's Member and Account behind with no passkey, and once the
+    instance is claimed the ordinary registration route can reach them. An
+    admin role on that leftover would be an admin account for whoever knew
+    the abandoned address.
+    """
+    user = await account_for_member(uow.session, member_id)
     if user is None:
-        role = "admin" if is_first_user else "member"
-        user = User(
-            email=email,
-            role=role,
-            is_active=True,
-        )
+        user = User(member_id=member_id, role="member", is_active=True)
         uow.session.add(user)
         await uow.session.flush()
     return user
@@ -72,16 +76,18 @@ async def register_passkey_begin(
     uow: AbstractUnitOfWork,
     member_directory: MemberDirectory | None = None,
     *,
-    allow_bootstrap: bool = False,
+    bootstrap_names: tuple[str, str] | None = None,
 ) -> dict:
     """Begin a registration ceremony, whether or not `email` is authorized.
 
-    `allow_bootstrap` is the first-admin claim gate (ADR-0003): only the setup
-    router passes it, and only after checking the pre-provisioned SETUP_TOKEN.
-    Without it the bootstrap branch below is unreachable, so the ordinary
-    registration route cannot be used to claim admin on an unclaimed instance —
-    it sees an email with no Member row and answers with the decoy, exactly as
-    it does on a claimed one.
+    `bootstrap_names` (first name, surname) is the first-admin claim gate
+    (ADR-0003): only the setup router passes it, and only after checking the
+    pre-provisioned SETUP_TOKEN. Without it the bootstrap branch below is
+    unreachable, so the ordinary registration route cannot be used to claim
+    admin on an unclaimed instance — it sees an email with no Member row and
+    answers with the decoy, exactly as it does on a claimed one. With it, the
+    claim creates the first Admin's Member as well as their Account (#432):
+    there is no sign-in without a kendoka, the first Admin included.
 
     The Member gate (#239) decides only whether there is a `Subject`;
     app.auth.webauthn_ceremony decides what the response looks like in either
@@ -93,14 +99,18 @@ async def register_passkey_begin(
     """
     directory = member_directory or member_directory_for(uow)
 
-    is_bootstrap = allow_bootstrap and await _is_bootstrap(uow)
-    if not is_bootstrap and not await directory.has_member(email):
-        return register_begin(email, subject=None).response
+    is_bootstrap = bootstrap_names is not None and await _is_bootstrap(uow)
+    if is_bootstrap:
+        assert bootstrap_names is not None  # narrowed by is_bootstrap
+        member_id = await directory.ensure_member(email, *bootstrap_names)
+    else:
+        member_id = await directory.member_id_for(email)
+        if member_id is None:
+            return register_begin(email, subject=None).response
 
-    user = await _get_or_create_user(email, uow, is_bootstrap)
-    await directory.link_user(email, user.id)
+    user = await _get_or_create_account(member_id, uow)
 
-    ceremony = register_begin(email, Subject(user_id=user.id, user_name=user.email))
+    ceremony = register_begin(email, Subject(user_id=user.id, user_name=email))
 
     user.pending_challenge = ceremony.challenge
     user.challenge_issued_at = datetime.now(UTC)
@@ -123,8 +133,7 @@ async def register_passkey_complete(
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
 
-    result = await uow.session.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
+    user = await account_for_email(uow.session, payload.email)
     if user is None:
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
@@ -186,7 +195,7 @@ async def register_passkey_complete(
     log_security_event("passkey_registered", "success", user_id=user.id)
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
-        email=user.email,
+        email=payload.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
         show_nudge=show_nudge,
@@ -201,8 +210,7 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
     challenge against. See app.auth.webauthn_ceremony for the shape rules and
     the three enumeration bugs behind them.
     """
-    result = await uow.session.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
+    user = await account_for_email(uow.session, email)
     ceremony = login_begin()
     if user is None:
         return ceremony.response
@@ -217,8 +225,7 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
 async def login_passkey_complete(
     payload: PasskeyLoginCompleteRequest, uow: AbstractUnitOfWork
 ) -> TokenResponse:
-    result = await uow.session.execute(select(User).where(User.email == payload.email))
-    user = result.scalar_one_or_none()
+    user = await account_for_email(uow.session, payload.email)
     if user is None:
         raise _AUTH_FAILED
 
@@ -283,7 +290,7 @@ async def login_passkey_complete(
 
     claims = UserClaims(
         sub=user.id,
-        email=user.email,
+        email=payload.email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
     )

@@ -47,8 +47,14 @@ async def _clear_users_async() -> None:
         await conn.execute("DELETE FROM admin_recovery_tokens")
         await conn.execute("DELETE FROM grade_history")
         await conn.execute("DELETE FROM attendance")
-        await conn.execute("DELETE FROM members WHERE user_id IS NOT NULL")
+        # Accounts before the Members they belong to (users.member_id is
+        # ON DELETE RESTRICT, #432); Members without an Account stay.
+        rows = await conn.fetch("SELECT member_id FROM users")
         await conn.execute("DELETE FROM users")
+        await conn.execute(
+            "DELETE FROM members WHERE id = ANY($1::uuid[])",
+            [r["member_id"] for r in rows],
+        )
     finally:
         await conn.close()
 
@@ -142,10 +148,13 @@ def test_fresh_instance_redirects_root_to_setup(page: Page, fresh_db: None) -> N
 
 
 def test_setup_page_shows_passkey_registration_ui(page: Page, fresh_db: None) -> None:
-    """The setup page presents an email field and a passkey registration button."""
+    """The setup page asks who is claiming (#432: the claim creates their
+    Member too), their email, and the setup token."""
     page.goto(f"{BASE_URL}/setup")
     # CardTitle renders as <div data-slot="card-title">, not a semantic heading
     expect(page.get_by_text("Welcome to Kendo Dojo")).to_be_visible()
+    expect(page.get_by_label("First name")).to_be_visible()
+    expect(page.get_by_label("Surname")).to_be_visible()
     expect(page.get_by_label("Email")).to_be_visible()
     expect(page.get_by_label("Setup token")).to_be_visible()
     expect(page.get_by_role("button", name="Create admin passkey")).to_be_visible()
@@ -209,6 +218,8 @@ def test_setup_registration_redirects_to_dashboard_as_admin(
     _clear_users_and_credentials()
     page.goto(f"{BASE_URL}/setup")
     expect(page.get_by_label("Email")).to_be_visible()
+    page.get_by_label("First name").fill("Ai")
+    page.get_by_label("Surname").fill("Sato")
     page.get_by_label("Email").fill("admin@dojo.test")
     page.get_by_label("Setup token").fill(SETUP_TOKEN)
     page.get_by_role("button", name="Create admin passkey").click()

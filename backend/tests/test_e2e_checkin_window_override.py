@@ -17,13 +17,10 @@ One test per acceptance criterion from issue #193:
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import json
 import os
 import uuid
 
-import asyncpg
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
@@ -34,6 +31,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -45,10 +43,9 @@ API_URL = "http://localhost:8000/api"
 
 
 def _make_user_with_complete_profile(role: str) -> str:
-    """Create a JWT for `role` and a matching complete member row (via
-    asyncpg, mirroring test_e2e_checkin_window.py) so the RequireProfile gate
-    does not redirect to /onboarding before the session detail / edit form can
-    render."""
+    """Create a JWT for `role` with a complete profile behind it (an Account
+    and its Member, #432) so the RequireProfile gate does not redirect to
+    /onboarding before the session detail / edit form can render."""
     claims = UserClaims(
         sub=str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
@@ -56,38 +53,9 @@ def _make_user_with_complete_profile(role: str) -> str:
         is_active=True,
     )
     token = encode_token(claims)
-
-    db_url = os.environ["DATABASE_URL"].replace(
-        "postgresql+asyncpg://", "postgresql://"
+    complete_onboarding(
+        token, first_name="Checkin", surname="Override", dob="1990-06-15"
     )
-
-    async def _insert() -> None:
-        conn = await asyncpg.connect(db_url)
-        try:
-            await conn.execute(
-                """
-                INSERT INTO members
-                    (id, email, first_name, surname, dob,
-                     join_date, membership_status,
-                     is_coach, is_first_aider, user_id)
-                VALUES
-                    ($1, $2, $3, $4, $5,
-                     '2024-01-01', 'active',
-                     FALSE, FALSE, $6)
-                """,
-                str(uuid.uuid4()),
-                claims.email,
-                "Checkin",
-                "Override",
-                "1990-06-15",
-                claims.sub,
-            )
-        finally:
-            await conn.close()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        pool.submit(lambda: asyncio.run(_insert())).result()
-
     return token
 
 

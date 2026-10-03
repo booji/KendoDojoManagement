@@ -18,7 +18,7 @@ import requests
 from playwright.sync_api import Page
 
 from app.auth.models import UserClaims
-from app.auth.token import encode_token
+from app.auth.token import decode_token, encode_token
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000/api"
@@ -61,29 +61,41 @@ def complete_onboarding(
     dob: str = "1990-01-01",
     **extra: Any,
 ) -> dict[str, Any]:
-    """Ensure the acting user has a Member record so RequireProfile lets them through.
+    """Ensure the acting user has a complete Member so RequireProfile lets them through.
 
-    Non-clobbering: if a profile already exists it is left untouched and returned,
-    so callers can seed the same user repeatedly (e.g. mint-token twice) without
-    overwriting a name deliberately set elsewhere. Only a missing profile is
-    created, via the same first-save endpoint the onboarding page posts to.
+    Tokens here are forged, so at first no Account stands behind them. Every
+    Account belongs to a Member (#432), so the test-login endpoint makes the
+    forged subject a real Account with a Member of this name; the date of
+    birth onboarding asks for is then filled in through the same endpoint the
+    onboarding page posts to.
+
+    Non-clobbering: a profile that is already complete is left untouched and
+    returned, so callers can seed the same user repeatedly (e.g. mint-token
+    twice) without overwriting a name deliberately set elsewhere.
     """
     existing = requests.get(
         f"{API_URL}/users/me/member",
         cookies={"access_token": token},
     )
-    if existing.status_code == 200:
+    if existing.status_code == 200 and existing.json().get("dob"):
         return existing.json()
 
-    payload: dict[str, Any] = {
-        "first_name": first_name,
-        "surname": surname,
-        "dob": dob,
-        **extra,
-    }
+    if existing.status_code == 404:
+        claims = decode_token(token)
+        requests.post(
+            f"{API_URL}/auth/login/test",
+            json={
+                "email": claims.email,
+                "role": claims.role,
+                "sub": claims.sub,
+                "first_name": first_name,
+                "surname": surname,
+            },
+        ).raise_for_status()
+
     resp = requests.put(
         f"{API_URL}/users/me/member",
-        json=payload,
+        json={"dob": dob, **extra},
         cookies={"access_token": token},
     )
     resp.raise_for_status()

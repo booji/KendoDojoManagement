@@ -11,8 +11,8 @@ The new design:
 - Registration is gated on an admin-created Member row matching the email.
   The zero-User bootstrap is preserved (first-ever registrant becomes admin
   regardless of Member rows).
-- A successful register-begin links the matching Member.user_id to the new
-  User's id.
+- A successful register-begin creates the Account for the matching Member
+  (users.member_id, #432).
 - Both begin endpoints return HTTP 200 with a well-formed decoy publicKey
   challenge for unauthorized/unknown emails, freshly random on every call
   just like the real path, and never touch the DB on that path.
@@ -44,6 +44,7 @@ from app.auth.db_models import (
 )
 from app.main import app
 from app.members.db_models import Member
+from tests.account_support import seed_account
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -72,14 +73,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     first-run ceremony cannot permanently brick setup.
     """
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email=email,
-            role=role,
-            is_active=True,
-        )
-    )
+    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -96,14 +90,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
 async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
     """Seed a User with NO credential -- an abandoned registration ceremony."""
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email=email,
-            role=role,
-            is_active=True,
-        )
-    )
+    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
     await session.flush()
     return user_id
 
@@ -155,7 +142,8 @@ async def _reset_to_fresh_instance(session) -> None:
     here. Everything deleted here is inside `db_session`'s savepoint, so it
     is rolled back on teardown and no other test observes the wipe.
 
-    Ordered children-first: all of these carry a FK to users.id.
+    Ordered children-first: the auth rows carry a FK to users.id, and users
+    one to members.id (#432).
     """
     for table in (
         PasskeyCredential.__table__,
@@ -163,8 +151,8 @@ async def _reset_to_fresh_instance(session) -> None:
         RecoveryAttempt.__table__,
         AdminRecoveryToken.__table__,
         Invite.__table__,
-        Member.__table__,
         User.__table__,
+        Member.__table__,
     ):
         await session.execute(delete(table))
     await session.flush()
@@ -199,7 +187,7 @@ async def test_register_begin_unauthorized_email_creates_no_user(db_client) -> N
     assert after == before
 
     result = await session.execute(
-        select(User).where(User.email == "unauthorized@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "unauthorized@dojo.test")
     )
     assert result.fetchone() is None
 
@@ -222,22 +210,21 @@ async def test_register_begin_authorized_email_creates_user(db_client) -> None:
 
     assert response.status_code == 200
     result = await session.execute(
-        select(User).where(User.email == "authorized@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "authorized@dojo.test")
     )
     user_row = result.scalar_one_or_none()
     member_result = await session.execute(select(Member).where(Member.id == member_id))
     member_row = member_result.scalar_one_or_none()
     assert user_row is not None
-    # A "real" (non-decoy) begin must also perform the Member->User link --
-    # today's implementation never sets Member.user_id at all.
+    # A "real" (non-decoy) begin creates the Account for that Member (#432).
     assert member_row is not None
-    assert member_row.user_id == user_row.id
+    assert user_row.member_id == member_row.id
 
 
 @pytest.mark.asyncio
 async def test_register_begin_links_member_user_id(db_client) -> None:
-    """After a successful register-begin, the matching Member's user_id
-    equals the newly-created User's id."""
+    """After a successful register-begin, the new Account belongs to the
+    matching Member (#432: users.member_id)."""
     session = db_client
     await _seed_user(session, "existing-admin@dojo.test", role="admin")
     member_id = await _seed_member(session, "linkme@dojo.test")
@@ -252,7 +239,7 @@ async def test_register_begin_links_member_user_id(db_client) -> None:
     assert response.status_code == 200
 
     user_result = await session.execute(
-        select(User).where(User.email == "linkme@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "linkme@dojo.test")
     )
     user_row = user_result.scalar_one_or_none()
     member_result = await session.execute(select(Member).where(Member.id == member_id))
@@ -260,14 +247,15 @@ async def test_register_begin_links_member_user_id(db_client) -> None:
 
     assert user_row is not None
     assert member_row is not None
-    assert member_row.user_id == user_row.id
+    assert user_row.member_id == member_row.id
 
 
 @pytest.mark.asyncio
 async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> None:
     """On a fresh instance with zero Users, the token-gated setup route succeeds
-    for any email (no Member required) and the created User gets role 'admin'.
-    If a Member row happens to match, it is still linked.
+    for any email (no Member required) and creates the claimant's Account,
+    which becomes admin when the claim completes. If a Member row happens to
+    match, that Member is the one the Account belongs to.
 
     The bootstrap branch is reachable only from /setup/passkey/begin, which
     requires the pre-provisioned SETUP_TOKEN (ADR-0003): the ordinary
@@ -284,23 +272,25 @@ async def test_register_begin_bootstrap_zero_users_creates_admin(db_client) -> N
     ) as c:
         response = await c.post(
             "/setup/passkey/begin",
-            json={"email": "first-ever@dojo.test"},
+            json={"email": "first-ever@dojo.test", "first_name": "Ai", "surname": "Sato"},
             headers=_SETUP_HEADERS,
         )
 
     assert response.status_code == 200
     result = await session.execute(
-        select(User).where(User.email == "first-ever@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "first-ever@dojo.test")
     )
     user_row = result.scalar_one_or_none()
     member_result = await session.execute(select(Member).where(Member.id == member_id))
     member_row = member_result.scalar_one_or_none()
     assert user_row is not None
-    assert user_row.role == "admin"
-    # Even during bootstrap, a matching Member must be linked -- today's
-    # implementation never sets Member.user_id at all.
+    # A member until the claim completes: admin is granted by setup's
+    # complete, never by a begin (#432 review).
+    assert user_row.role == "member"
+    # Even during bootstrap, a matching Member is the one the Account
+    # belongs to, rather than a second Member for the same address.
     assert member_row is not None
-    assert member_row.user_id == user_row.id
+    assert user_row.member_id == member_row.id
 
 
 @pytest.mark.asyncio
@@ -325,13 +315,13 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
     ) as c:
         retry = await c.post(
             "/setup/passkey/begin",
-            json={"email": "first-ever@dojo.test"},
+            json={"email": "first-ever@dojo.test", "first_name": "Ai", "surname": "Sato"},
             headers=_SETUP_HEADERS,
         )
 
     assert retry.status_code == 200
     result = await session.execute(
-        select(User).where(User.email == "first-ever@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "first-ever@dojo.test")
     )
     user_row = result.scalar_one_or_none()
     # Still reachable as a real registration, not a decoy: the retry must
@@ -460,7 +450,7 @@ async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) ->
     # A well-formed decoy must not be a *real* challenge -- no User row for
     # the unauthorized email may exist afterwards.
     result = await session.execute(
-        select(User).where(User.email == "unauthorized2@dojo.test")
+        select(User).join(Member, Member.id == User.member_id).where(Member.email == "unauthorized2@dojo.test")
     )
     assert result.fetchone() is None
 
@@ -1217,6 +1207,6 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
                 },
             )
         assert login_complete.status_code == 200
-        assert auth_spy.call_args.kwargs.get("require_user_verification") is True, (
-            "login_passkey_complete does not enforce user verification"
-        )
+        assert (
+            auth_spy.call_args.kwargs.get("require_user_verification") is True
+        ), "login_passkey_complete does not enforce user verification"

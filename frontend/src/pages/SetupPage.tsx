@@ -19,6 +19,8 @@ type SetupStep = "passkey" | "recovery"
 const SetupPage = () => {
   const navigate = useNavigate()
   const [step, setStep] = useState<SetupStep>("passkey")
+  const [firstName, setFirstName] = useState("")
+  const [surname, setSurname] = useState("")
   const [email, setEmail] = useState("")
   const [setupToken, setSetupToken] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +58,10 @@ const SetupPage = () => {
 
     setLoading(true)
     try {
-      await performSetupPasskeyRegistration(email, setupToken)
+      await performSetupPasskeyRegistration(
+        { email, first_name: firstName.trim(), surname: surname.trim() },
+        setupToken,
+      )
       setStep("recovery")
     } catch (err) {
       setError(errorMessage(err, "An unexpected error occurred"))
@@ -151,12 +156,36 @@ const SetupPage = () => {
         <CardHeader>
           <CardTitle>Welcome to Kendo Dojo</CardTitle>
           <CardDescription>
-            No accounts exist yet. Enter the setup token this instance was
-            deployed with and create your admin passkey.
+            No accounts exist yet. Tell us who you are, enter the setup token
+            this instance was deployed with, and create your admin passkey.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="first-name">First name</Label>
+                <Input
+                  id="first-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  maxLength={100}
+                  autoComplete="given-name"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="surname">Surname</Label>
+                <Input
+                  id="surname"
+                  value={surname}
+                  onChange={(e) => setSurname(e.target.value)}
+                  required
+                  maxLength={100}
+                  autoComplete="family-name"
+                />
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -7,10 +7,10 @@ import os
 import uuid
 
 import typer
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.auth.db_models import AdminRecoveryToken, User
+from app.auth.accounts import account_for_email
+from app.auth.db_models import AdminRecoveryToken
 from app.auth.recovery_service import (
     admin_token_expiry,
     generate_admin_token_plaintext,
@@ -41,8 +41,7 @@ def create_recovery_token(email: str) -> None:
     async def _run() -> None:
         factory = _make_session_factory(url)
         async with factory() as session:
-            result = await session.execute(select(User).where(User.email == email))
-            user = result.scalar_one_or_none()
+            user = await account_for_email(session, email)
 
         if user is None:
             typer.echo(f"Error: no user found with email '{email}'", err=True)

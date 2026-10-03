@@ -158,7 +158,12 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
           onChange={(e) => onChange("email", e.target.value)}
           required
           aria-required="true"
+          aria-describedby="edit_email_help"
         />
+        <p id="edit_email_help" className="text-xs text-muted-foreground">
+          Also the address this member signs in with, if they have an account.
+          Changing it changes their sign-in.
+        </p>
       </div>
 
       <div className="space-y-1">

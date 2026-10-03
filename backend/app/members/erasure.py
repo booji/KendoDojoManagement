@@ -51,7 +51,6 @@ def build_erasure_plan() -> ErasurePlan:
         "dob": None,
         "emergency_contact_name": None,
         "emergency_contact_phone": None,
-        "user_id": None,
     }
     return ErasurePlan(scrub=scrub, delete=_RELATED_RECORDS_TO_DELETE)
 

@@ -380,12 +380,15 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
 
 
 # ---------------------------------------------------------------------------
-# AC4 — PUT /users/me/member creates a new Member record if none exists
+# AC4 (#432) — PUT /users/me/member never creates a Member
+#
+# Every Account belongs to a Member, created before the Account is (the first
+# Admin's at the setup claim), so onboarding completes an existing record. An
+# Account with none is a broken invariant, not a first save.
 # ---------------------------------------------------------------------------
 
 
-async def test_put_my_member_creates_record_when_none_exists(member_repo) -> None:
-    """First-save onboarding: PUT creates a new Member linked to claims.sub."""
+async def test_put_my_member_without_a_linked_record_is_404(member_repo) -> None:
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
 
     async with AsyncClient(
@@ -393,46 +396,11 @@ async def test_put_my_member_creates_record_when_none_exists(member_repo) -> Non
     ) as c:
         response = await c.put(
             "/users/me/member",
-            json={
-                "first_name": "Brand",
-                "surname": "New",
-                "dob": "1995-08-22",
-                "emergency_contact_name": "Parent",
-                "emergency_contact_phone": "+447700900111",
-            },
+            json={"first_name": "Brand", "surname": "New", "dob": "1995-08-22"},
         )
 
-    assert response.status_code in (200, 201)
-    body = response.json()
-    assert "id" in body
-    assert body["first_name"] == "Brand"
-    assert body["surname"] == "New"
-
-
-async def test_put_my_member_created_record_is_retrievable(member_repo) -> None:
-    """A record created via PUT is immediately retrievable via GET."""
-    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        await c.put(
-            "/users/me/member",
-            json={
-                "first_name": "Onboarded",
-                "surname": "Member",
-                "dob": "1992-04-10",
-            },
-        )
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        get_response = await c.get("/users/me/member")
-
-    assert get_response.status_code == 200
-    assert get_response.json()["first_name"] == "Onboarded"
-    assert get_response.json()["surname"] == "Member"
+    assert response.status_code == 404
+    assert await member_repo.list() == []
 
 
 # ---------------------------------------------------------------------------

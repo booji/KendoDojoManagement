@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -65,7 +64,7 @@ async def get_my_member(
 
 
 # ---------------------------------------------------------------------------
-# PUT /users/me/member — partial update or first-save onboarding
+# PUT /users/me/member — partial update, including completing onboarding
 # ---------------------------------------------------------------------------
 
 
@@ -83,43 +82,13 @@ async def put_my_member(
     record = await repo.get_by_user_id(claims.sub)
 
     if record is None:
-        # First-save onboarding — all required fields must be present
-        missing: list[str] = []
-        if not data.get("first_name"):
-            missing.append("first_name")
-        if not data.get("surname"):
-            missing.append("surname")
-        if data.get("dob") is None:
-            missing.append("dob")
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Missing required fields for first save: {', '.join(missing)}",
-            )
-        # Create a new Member record
-        new_data: dict[str, Any] = {
-            "email": claims.email,
-            "first_name": data.get("first_name", ""),
-            "surname": data.get("surname", ""),
-            "display_name": data.get("display_name"),
-            "dob": data.get("dob"),
-            "join_date": date.today().isoformat(),
-            "membership_status": "active",
-            "is_coach": False,
-            "is_first_aider": False,
-            "emergency_contact_name": data.get("emergency_contact_name"),
-            "emergency_contact_phone": data.get("emergency_contact_phone"),
-            "user_id": claims.sub,
-        }
-        try:
-            record = await repo.add(new_data)
-            await uow.commit()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A member record is already linked to this account",
-            )
-        return _to_response(record)
+        # Every Account belongs to a Member (#432) -- the first Admin's is
+        # created at the setup claim, everyone else's before they register --
+        # so onboarding completes an existing record, never creates one.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No member record linked to this account",
+        )
 
     # The optional PII fields are nullable-by-design: an explicitly provided
     # None clears the stored value, so it must survive the generic not-None

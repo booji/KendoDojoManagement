@@ -1,6 +1,14 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import UUIDBase, UUIDType
@@ -8,8 +16,16 @@ from app.db.base import UUIDBase, UUIDType
 
 class User(UUIDBase):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("member_id", name="uq_users_member_id"),)
 
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # The Member this Account signs in as (#432, ADR-0006). Every Account has
+    # exactly one; the email it signs in with is that Member's. RESTRICT
+    # because Members are deactivated or anonymised, never hard-deleted.
+    member_id: Mapped[str] = mapped_column(
+        UUIDType(),
+        ForeignKey("members.id", name="fk_users_member_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")

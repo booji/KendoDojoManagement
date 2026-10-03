@@ -17,8 +17,11 @@ database restore or wipe would otherwise boot an unclaimed instance with no
 gate in front of it.
 
 **The browser is the way you do this.** Open `https://<your-domain>/`: the
-setup page asks for the admin email and the setup token. Paste the token into
-the "Setup token" field and complete the passkey registration. The page sends
+setup page asks for the admin's first name, surname and email, and the setup
+token. The claim creates the admin's member record as well as their account —
+every account belongs to a member, the first admin included — and the email
+is the one they will sign in with. Paste the token into the "Setup token"
+field and complete the passkey registration. The page sends
 it as an `X-Setup-Token` header on `/api/setup/passkey/begin` and
 `/api/setup/passkey/complete`, and a wrong token comes back on the form as
 "Invalid setup token". The value is never stored in the browser — reloading the
@@ -32,7 +35,7 @@ that is not working, not a step:
 curl -sS -X POST https://<your-domain>/api/setup/passkey/begin \
   -H 'Content-Type: application/json' \
   -H "X-Setup-Token: $SETUP_TOKEN" \
-  -d '{"email":"admin@your-dojo"}'
+  -d '{"email":"admin@your-dojo","first_name":"Ai","surname":"Sato"}'
 # 401 {"detail":"Invalid setup token"} -> wrong or missing token.
 # 404 {"detail":"Setup already completed"} -> claimed; the token is irrelevant.
 ```

@@ -30,7 +30,6 @@ class Member(UUIDBase):
     emergency_contact_phone: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )
-    user_id: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
     anonymised_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -51,18 +51,28 @@ export const checkSetupAvailable = async (): Promise<boolean> => {
  * Runs the full passkey registration ceremony against /api/setup/passkey/begin
  * and /api/setup/passkey/complete, returning UserClaims for the new admin.
  *
+ * The claim names the first admin as well as their email: it creates their
+ * Member and Account together (#432), so there is no sign-in without a kendoka.
+ *
  * Both calls carry the setup token the operator provisioned before first boot
  * (ADR-0003); without it the backend answers 401 "Invalid setup token", which
  * is surfaced to the user rather than replaced with a generic message.
  */
+export type SetupClaimant = {
+  email: string
+  first_name: string
+  surname: string
+}
+
 export const performSetupPasskeyRegistration = async (
-  email: string,
+  claimant: SetupClaimant,
   setupToken: string,
 ): Promise<UserClaims> => {
+  const { email } = claimant
   const headers = { "X-Setup-Token": setupToken }
 
   // Begin
-  const beginRes = await apiFetch("/api/setup/passkey/begin", { method: "POST", body: { email }, headers })
+  const beginRes = await apiFetch("/api/setup/passkey/begin", { method: "POST", body: claimant, headers })
   if (!beginRes.ok) {
     await throwApiError(beginRes, "Failed to begin setup passkey registration")
   }

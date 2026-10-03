@@ -16,10 +16,9 @@ One test per relevant acceptance criterion:
 Auth pattern follows test_e2e_attendance.py / test_e2e_admin_settings.py:
 JWT tokens are generated directly and injected as cookies. Tests that
 navigate to a profile-gated page (anything under RequireProfile in App.tsx —
-which includes /checkin/session/:id and /admin/settings) also insert a
-complete member row via asyncpg, following test_e2e_onboarding.py's
-_insert_complete_member pattern, so the RequireProfile gate doesn't redirect
-to /onboarding first.
+which includes /checkin/session/:id and /admin/settings) also complete the
+user's profile via tests.e2e_support.complete_onboarding, so the
+RequireProfile gate doesn't redirect to /onboarding first.
 
 Window math relies on the dojo-wide defaults seeded in
 app/settings/repository.py: checkin_window_before_minutes=60,
@@ -30,14 +29,11 @@ near the boundary.
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import json
 import os
 import uuid
 from datetime import datetime, timedelta
 
-import asyncpg
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
@@ -49,6 +45,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -76,10 +73,9 @@ def _set_cookie(page: Page, token: str) -> None:
 
 
 def _make_user_with_complete_profile(role: str) -> str:
-    """Create a JWT for `role` and a matching complete member row (via
-    asyncpg, mirroring test_e2e_onboarding.py's _insert_complete_member
-    helper) so the RequireProfile gate does not redirect to /onboarding
-    before the target page can render."""
+    """Create a JWT for `role` with a complete profile behind it (an Account
+    and its Member, #432) so the RequireProfile gate does not redirect to
+    /onboarding before the target page can render."""
     claims = UserClaims(
         sub=str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
@@ -87,38 +83,7 @@ def _make_user_with_complete_profile(role: str) -> str:
         is_active=True,
     )
     token = encode_token(claims)
-
-    db_url = os.environ["DATABASE_URL"].replace(
-        "postgresql+asyncpg://", "postgresql://"
-    )
-
-    async def _insert() -> None:
-        conn = await asyncpg.connect(db_url)
-        try:
-            await conn.execute(
-                """
-                INSERT INTO members
-                    (id, email, first_name, surname, dob,
-                     join_date, membership_status,
-                     is_coach, is_first_aider, user_id)
-                VALUES
-                    ($1, $2, $3, $4, $5,
-                     '2024-01-01', 'active',
-                     FALSE, FALSE, $6)
-                """,
-                str(uuid.uuid4()),
-                claims.email,
-                "Checkin",
-                "Window",
-                "1990-06-15",
-                claims.sub,
-            )
-        finally:
-            await conn.close()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        pool.submit(lambda: asyncio.run(_insert())).result()
-
+    complete_onboarding(token, first_name="Checkin", surname="Window", dob="1990-06-15")
     return token
 
 

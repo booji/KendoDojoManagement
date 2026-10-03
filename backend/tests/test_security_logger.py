@@ -677,19 +677,10 @@ async def test_recovery_redeem_failure_emits_log(
 ) -> None:
     """Failed recovery code redemption must emit a recovery_redeem/failure event."""
     # Seed a user with no codes — redemption will fail
-    from sqlalchemy import insert
-
-    from app.auth.db_models import User as DbUser
+    from tests.account_support import seed_account
 
     user_id = str(uuid.uuid4())
-    await db_client.execute(
-        insert(DbUser).values(
-            id=user_id,
-            email="redeem_fail@dojo.test",
-            role="member",
-            is_active=True,
-        )
-    )
+    await seed_account(db_client, "redeem_fail@dojo.test", user_id=user_id)
     await db_client.flush()
 
     with caplog.at_level(logging.INFO, logger="security_events"):
@@ -714,19 +705,10 @@ async def test_admin_token_generation_emits_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """POST /auth/recovery/admin-token must emit an admin_token_generated/success event."""
-    from sqlalchemy import insert
-
-    from app.auth.db_models import User as DbUser
+    from tests.account_support import seed_account
 
     target_user_id = str(uuid.uuid4())
-    await db_client.execute(
-        insert(DbUser).values(
-            id=target_user_id,
-            email="target@dojo.test",
-            role="member",
-            is_active=True,
-        )
-    )
+    await seed_account(db_client, "target@dojo.test", user_id=target_user_id)
     await db_client.flush()
 
     admin_claims = UserClaims(

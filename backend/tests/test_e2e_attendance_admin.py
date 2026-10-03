@@ -116,26 +116,16 @@ def _api_create_member(admin_token: str, full_name: str) -> dict:
 
 
 def _api_create_member_with_user_id(member_sub: str, full_name: str) -> dict:
-    """Create member via PUT /users/me/member with member's own JWT.
-
-    members.user_id has no FK constraint so member_sub need not be in users table.
-    The self-access check in GET /members/{id}/attendance uses
-    get_by_user_id(claims.sub) which will match this member's user_id.
-    """
-    parts = full_name.split(" ", 1)
-    member_token = _make_token("member", sub=member_sub)
-    r = requests.put(
-        f"{API_URL}/users/me/member",
-        cookies=_cookie_dict(member_token),
-        json={
-            "first_name": parts[0],
-            "surname": parts[1] if len(parts) > 1 else parts[0],
-            # dob is required on first save, else the endpoint returns 422.
-            "dob": "1990-01-01",
-        },
+    """A Member with an Account whose id is `member_sub` (#432: the Account,
+    and its Member, are created through the test-login endpoint), so the
+    self-access check in GET /members/{id}/attendance matches it."""
+    first, _, last = full_name.partition(" ")
+    return complete_onboarding(
+        _make_token("member", sub=member_sub),
+        first_name=first,
+        surname=last or first,
+        dob="1990-01-01",
     )
-    r.raise_for_status()
-    return r.json()
 
 
 def _api_mark_attended(admin_token: str, session_id: str, member_id: str) -> dict:

@@ -35,6 +35,14 @@ class PasskeyBeginRequest(BaseModel):
     email: LenientEmail
 
 
+class SetupBeginRequest(PasskeyBeginRequest):
+    """The first-admin claim names a kendoka, not just an address (#432):
+    the claim creates their Member and Account together."""
+
+    first_name: str = Field(..., min_length=1, max_length=100)
+    surname: str = Field(..., min_length=1, max_length=100)
+
+
 class PasskeyCredentialResponse(BaseModel):
     id: str
     rawId: str

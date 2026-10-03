@@ -34,9 +34,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert
 
 from app import config
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import PasskeyCredential
 from app.main import app
 from app.members.db_models import Member
+from tests.account_support import seed_account
 from tests.timing_support import assert_latency_converges_sampled
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -55,14 +56,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     see the note in test_passkey_enumeration.py.
     """
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email=email,
-            role=role,
-            is_active=True,
-        )
-    )
+    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),

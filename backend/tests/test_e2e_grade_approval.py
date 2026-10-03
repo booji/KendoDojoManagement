@@ -76,20 +76,11 @@ def _create_member_via_api(admin_token: str, full_name: str) -> str:
 
 
 def _create_linked_member_via_api(member_token: str, full_name: str) -> str:
-    """Create a member record linked to the member token's sub via PUT /users/me/member."""
-    parts = full_name.split(" ", 1)
-    r = requests.put(
-        f"{API_BASE}/users/me/member",
-        cookies=_cookie_dict(member_token),
-        json={
-            "first_name": parts[0],
-            "surname": parts[1] if len(parts) > 1 else parts[0],
-            # dob is required on first save, else the endpoint returns 422.
-            "dob": "1990-01-01",
-        },
-    )
-    r.raise_for_status()
-    return r.json()["id"]
+    """The id of the Member behind the member token's Account (#432)."""
+    first, _, last = full_name.partition(" ")
+    return complete_onboarding(
+        member_token, first_name=first, surname=last or first, dob="1990-01-01"
+    )["id"]
 
 
 def _propose_grade_via_api(

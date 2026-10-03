@@ -5,11 +5,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.auth.models import LenientEmail
+
 MembershipStatus = Literal["active", "inactive", "suspended", "archived"]
 
 
 class CreateMemberRequest(BaseModel):
-    email: str
+    # Normalised as sign-in normalises it: this address is the one the
+    # Member signs in with, matched exactly (#432).
+    email: LenientEmail
     first_name: str
     surname: str
     display_name: str | None = None
@@ -23,7 +27,7 @@ class CreateMemberRequest(BaseModel):
 
 
 class UpdateMemberRequest(BaseModel):
-    email: str | None = None
+    email: LenientEmail | None = None
     first_name: str | None = None
     surname: str | None = None
     display_name: str | None = None

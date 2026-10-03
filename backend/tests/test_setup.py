@@ -23,6 +23,8 @@ from sqlalchemy import insert, select
 import app.config as config
 from app.auth.db_models import PasskeyCredential, User
 from app.main import app
+from app.members.db_models import Member
+from tests.account_support import seed_account
 
 # The claim gate (ADR-0003, #402): begin and complete both require the
 # pre-provisioned SETUP_TOKEN, presented as X-Setup-Token.
@@ -62,13 +64,8 @@ async def test_get_setup_returns_404_when_passkey_credential_exists(db_client) -
     """GET /setup returns 404 when at least one PasskeyCredential row exists (AC7 issue #155)."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="existing@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session, "existing@dojo.test", user_id=user_id, role="admin", is_active=True
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -103,15 +100,14 @@ async def test_get_setup_returns_200_for_phantom_user_without_credential(
     It must NOT count as a registered user (AC12 issue #155).
     """
     session = db_client
-    await session.execute(
-        insert(User).values(
-            id=str(uuid.uuid4()),
-            email="phantom@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "phantom@dojo.test",
+        user_id=str(uuid.uuid4()),
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.flush()
 
@@ -132,13 +128,12 @@ async def test_get_setup_returns_200_for_user_without_credential(
     A user with no credential is a phantom/abandoned ceremony and must not block setup.
     """
     session = db_client
-    await session.execute(
-        insert(User).values(
-            id=str(uuid.uuid4()),
-            email="no-cred@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session,
+        "no-cred@dojo.test",
+        user_id=str(uuid.uuid4()),
+        role="admin",
+        is_active=True,
     )
     await session.flush()
 
@@ -170,13 +165,8 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
 
     # Simulate a completed passkey registration (user + credential row)
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="founder@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session, "founder@dojo.test", user_id=user_id, role="admin", is_active=True
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -210,7 +200,7 @@ async def test_setup_passkey_begin_returns_challenge_on_fresh_instance(
     ) as c:
         response = await c.post(
             "/setup/passkey/begin",
-            json={"email": "admin@dojo.test"},
+            json={"email": "admin@dojo.test", "first_name": "Ai", "surname": "Sato"},
             headers=SETUP_HEADERS,
         )
     assert response.status_code == 200
@@ -220,17 +210,61 @@ async def test_setup_passkey_begin_returns_challenge_on_fresh_instance(
 
 
 @pytest.mark.asyncio
+async def test_setup_claim_creates_the_first_admins_member_and_account(
+    db_client,
+) -> None:
+    """#432: there is no sign-in without a kendoka, the first Admin included."""
+    from app.members.db_models import Member
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/setup/passkey/begin",
+            json={"email": "sensei@dojo.test", "first_name": "Ai", "surname": "Sato"},
+            headers=SETUP_HEADERS,
+        )
+    assert response.status_code == 200
+
+    member = (
+        await db_client.execute(
+            select(Member).where(Member.email == "sensei@dojo.test")
+        )
+    ).scalar_one()
+    assert (member.first_name, member.surname) == ("Ai", "Sato")
+    account = (
+        await db_client.execute(select(User).where(User.member_id == member.id))
+    ).scalar_one()
+    # Admin is granted when the claim completes, not here (#432 review).
+    assert account.role == "member"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"email": "sensei@dojo.test"},
+        {"email": "sensei@dojo.test", "first_name": "", "surname": "Sato"},
+    ],
+    ids=["no-names", "blank-first-name"],
+)
+@pytest.mark.asyncio
+async def test_setup_claim_without_names_is_422(db_client, body) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/setup/passkey/begin", json=body, headers=SETUP_HEADERS
+        )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None:
     """POST /setup/passkey/begin returns 404 when instance already has a PasskeyCredential."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="alreadyhere@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session, "alreadyhere@dojo.test", user_id=user_id, role="admin", is_active=True
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -249,7 +283,7 @@ async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None
     ) as c:
         response = await c.post(
             "/setup/passkey/begin",
-            json={"email": "newcomer@dojo.test"},
+            json={"email": "newcomer@dojo.test", "first_name": "Ai", "surname": "Sato"},
             headers=SETUP_HEADERS,
         )
     assert response.status_code == 404
@@ -265,17 +299,17 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
     and sets the access_token cookie (AC5)."""
     session = db_client
 
-    # Seed a user row with pending_challenge (simulates what /setup/passkey/begin did)
+    # Seed what /setup/passkey/begin leaves: a member-role Account with a
+    # pending challenge. Completing the claim is what makes it admin (#432).
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id,
-            email="admin@dojo.test",
-            role="admin",  # setup flow must grant admin
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "admin@dojo.test",
+        user_id=user_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.flush()
 
@@ -310,6 +344,10 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
     assert body["email"] == "admin@dojo.test"
     assert body["role"] == "admin"
     assert "access_token" in response.cookies
+    stored = (
+        await session.execute(select(User).where(User.id == user_id))
+    ).scalar_one()
+    assert stored.role == "admin"
 
 
 @pytest.mark.asyncio
@@ -320,13 +358,8 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
 
     existing_id = str(uuid.uuid4())
     pending_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=existing_id,
-            email="original@dojo.test",
-            role="admin",
-            is_active=True,
-        )
+    await seed_account(
+        session, "original@dojo.test", user_id=existing_id, role="admin", is_active=True
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -338,15 +371,14 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
             created_at=datetime.now(UTC),
         )
     )
-    await session.execute(
-        insert(User).values(
-            id=pending_id,
-            email="newcomer@dojo.test",
-            role="member",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "newcomer@dojo.test",
+        user_id=pending_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.flush()
 
@@ -403,7 +435,10 @@ async def _post(path: str, json: dict, headers: dict | None = None):
 @pytest.mark.parametrize(
     "path,payload",
     [
-        ("/setup/passkey/begin", {"email": "admin@dojo.test"}),
+        (
+            "/setup/passkey/begin",
+            {"email": "admin@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        ),
         ("/setup/passkey/complete", _CREDENTIAL_PAYLOAD),
     ],
 )
@@ -432,7 +467,10 @@ async def test_setup_requires_setup_token(
 @pytest.mark.parametrize(
     "path,payload",
     [
-        ("/setup/passkey/begin", {"email": "admin@dojo.test"}),
+        (
+            "/setup/passkey/begin",
+            {"email": "admin@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        ),
         ("/setup/passkey/complete", _CREDENTIAL_PAYLOAD),
     ],
 )
@@ -453,7 +491,10 @@ async def test_setup_rejects_blank_configured_token(
 @pytest.mark.parametrize(
     "path,payload",
     [
-        ("/setup/passkey/begin", {"email": "newcomer@dojo.test"}),
+        (
+            "/setup/passkey/begin",
+            {"email": "newcomer@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        ),
         ("/setup/passkey/complete", _CREDENTIAL_PAYLOAD),
     ],
 )
@@ -469,10 +510,8 @@ async def test_claimed_instance_404s_whatever_token_is_presented(
     """The existing claimed guard still runs first: 404 beats any token."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await session.execute(
-        insert(User).values(
-            id=user_id, email="claimed@dojo.test", role="admin", is_active=True
-        )
+    await seed_account(
+        session, "claimed@dojo.test", user_id=user_id, role="admin", is_active=True
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -509,7 +548,11 @@ async def test_ordinary_register_begin_cannot_bootstrap_an_admin(db_client) -> N
         )
 
     assert response.status_code == 200  # decoy is indistinguishable by shape
-    rows = await session.execute(select(User).where(User.email == "stranger@dojo.test"))
+    rows = await session.execute(
+        select(User)
+        .join(Member, Member.id == User.member_id)
+        .where(Member.email == "stranger@dojo.test")
+    )
     assert rows.scalar_one_or_none() is None
 
 
@@ -520,15 +563,14 @@ async def test_ordinary_register_complete_rejected_on_unclaimed_instance(
     """A phantom admin row left by setup's begin must not be completable through
     the ordinary registration route, which carries no setup token."""
     session = db_client
-    await session.execute(
-        insert(User).values(
-            id=str(uuid.uuid4()),
-            email="admin@dojo.test",
-            role="admin",
-            is_active=True,
-            pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-            challenge_issued_at=datetime.now(UTC),
-        )
+    await seed_account(
+        session,
+        "admin@dojo.test",
+        user_id=str(uuid.uuid4()),
+        role="admin",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
     )
     await session.flush()
 
@@ -546,3 +588,50 @@ async def test_ordinary_register_complete_rejected_on_unclaimed_instance(
             )
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_an_abandoned_claim_leaves_no_admin_to_take_over(db_client) -> None:
+    """#432 review: a claim begun under one address and finished under another
+    leaves the first attempt's Member and Account behind, with no passkey.
+    Once the instance is claimed, the ordinary registration route can reach
+    that Account (its Member is on the roster), so it must not be an admin:
+    admin is granted when a claim completes, never when one begins."""
+    session = db_client
+    abandoned = await _post(
+        "/setup/passkey/begin",
+        {"email": "typo@dojo.tst", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert abandoned.status_code == 200
+
+    # The claim then completes under the right address; here, any passkey
+    # anywhere ends bootstrap.
+    claimant = await seed_account(session, "sensei@dojo.test", role="admin")
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=str(uuid.uuid4()),
+            user_id=claimant,
+            credential_id=b"claimant-cred",
+            public_key=b"claimant-key",
+            sign_count=0,
+            created_at=datetime.now(UTC),
+        )
+    )
+    await session.flush()
+
+    await _post("/auth/register/passkey/begin", {"email": "typo@dojo.tst"})
+    mock_verified = MagicMock(
+        credential_id=b"stranger-cred",
+        credential_public_key=b"stranger-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/auth/register/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "typo@dojo.tst"},
+        )
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["role"] == "member"

@@ -20,7 +20,7 @@ mermaid rendering of that, not a varchar.
 erDiagram
     users {
         string id PK
-        string email UK
+        string member_id FK,UK
         string role
         bool is_active
         string theme
@@ -87,7 +87,6 @@ erDiagram
         bool is_first_aider
         string emergency_contact_name
         string emergency_contact_phone
-        string user_id
         timestamptz anonymised_at
         string anonymised_by
     }
@@ -205,6 +204,7 @@ erDiagram
     users ||--o{ admin_recovery_tokens : "issued to"
     users ||--o{ admin_recovery_tokens : "created by"
     users ||--o{ invites : "issued by"
+    members ||--o| users : "signs in as"
     members ||--o{ member_federations : "belongs to"
     federations ||--o{ member_federations : "has members"
     members ||--o{ attendance : "attends"
@@ -226,11 +226,17 @@ erDiagram
   `recovery_codes` and `admin_recovery_tokens` hold bcrypt hashes;
   `invites.token_hash` is a deterministic sha256 digest (it is looked up by
   value — see `app/auth/invite_service.py` for why that differs).
-- **Not every id column is a foreign key.** `attendance.session_id`/`member_id`
-  and `grade_history.member_id` are real FKs; `attendance.recorded_by`,
-  `grade_history.assigned_by`, `members.user_id` and `members.anonymised_by`
-  are unconstrained at DB level — they hold user ids but are deliberately not
-  FK-enforced, so a deleted user never cascades into attendance history.
+- **Every Account belongs to exactly one Member** (#432, ADR-0006).
+  `users.member_id` is a live link and is enforced: NOT NULL, UNIQUE, and a
+  foreign key to `members.id` with ON DELETE RESTRICT (Members are
+  deactivated or anonymised, never hard-deleted). Most Members have no
+  Account. The email lives once, on the Member — `members.email` is both the
+  contact address and the sign-in identifier; `users` has no email column.
+- **Audit columns are not foreign keys.** `attendance.recorded_by`,
+  `grade_history.assigned_by` and `members.anonymised_by` record which Account
+  acted. They are deliberately not FK-enforced, so the id outlives the
+  Account it names: erasing a member deletes their Account, and the history
+  that Account recorded must not cascade with it.
 - **Constraints beyond keys** (#431). The database, not just the app, refuses:
   - `uq_attendance_session_member` — UNIQUE `(session_id, member_id)` on
     `attendance`: a member is checked in at most once per session. NULLs are

@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
+from app.auth.accounts import sign_in_email
 from app.auth.db_models import User
 from app.auth.models import UserClaims
 from app.auth.token import decode_token, encode_token, renewal_due
@@ -32,10 +33,14 @@ async def _renew(
     user = await uow.session.get(User, claims.sub)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    # The Member's address as of now: an admin may have changed it (#432).
+    email = await sign_in_email(uow.session, user.id)
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     fresh = UserClaims(
         sub=claims.sub,
-        email=user.email,
+        email=email,
         role=user.role,
         is_active=user.is_active,
     )

@@ -26,6 +26,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 from app import config as _config  # noqa: E402
 from app.auth.models import UserClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
+from tests.e2e_support import complete_onboarding  # noqa: E402
 
 _config.JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -60,17 +61,7 @@ def _set_cookie(page: Page, token: str) -> None:
 
 
 def _seed_profile(page: Page, token: str) -> None:
-    resp = page.request.put(
-        f"{API_URL}/users/me/member",
-        headers={**_api_headers(token), "Content-Type": "application/json"},
-        data=json.dumps(
-            {"first_name": "Test", "surname": "Admin", "dob": "1990-01-01"}
-        ),
-    )
-    assert resp.status in (
-        200,
-        201,
-    ), f"Profile seed failed: {resp.status} {resp.text()}"
+    complete_onboarding(token, first_name="Test", surname="Admin", dob="1990-01-01")
 
 
 def _create_session_type(page: Page, admin_token: str, name: str) -> dict:
