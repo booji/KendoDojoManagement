@@ -1523,7 +1523,7 @@ mermaid rendering of that, not a varchar.</p>
     }
     federations {
         string id PK
-        string name
+        string name UK
         string abbreviation
         string iso_code
         string website
@@ -1660,6 +1660,19 @@ mermaid rendering of that, not a varchar.</p>
   <code>grade_history.assigned_by</code>, <code>members.user_id</code> and <code>members.anonymised_by</code>
   are unconstrained at DB level — they hold user ids but are deliberately not
   FK-enforced, so a deleted user never cascades into attendance history.</li>
+<li><strong>Constraints beyond keys</strong> (#431). The database, not just the app, refuses:</li>
+<li><code>uq_attendance_session_member</code> — UNIQUE <code>(session_id, member_id)</code> on
+    <code>attendance</code>: a member is checked in at most once per session. NULLs are
+    distinct, so any number of visitor rows (<code>member_id</code> NULL) per session
+    stay legal. This, not the router's existence check, decides a concurrent
+    double check-in (the loser gets 409).</li>
+<li><code>ck_attendance_member_xor_visitor</code> — CHECK on <code>attendance</code>: exactly one of
+    <code>member_id</code> / <code>visitor_name</code> is set.</li>
+<li><code>uq_member_federations_member_federation</code> — UNIQUE
+    <code>(member_id, federation_id)</code>: one membership per member per federation.</li>
+<li><code>uq_dojo_settings_single_row</code> — a unique index on the constant <code>(true)</code>:
+    <code>dojo_settings</code> holds one row.</li>
+<li><code>uq_federations_name</code> — UNIQUE <code>federations.name</code>.</li>
 <li><strong>Federation membership is a table, not a column.</strong> <code>members</code> has no
   <code>federation_number</code>: a member can hold numbers with several federations, so
   it lives in <code>member_federations</code> (dropped from <code>members</code> in #297 — see
