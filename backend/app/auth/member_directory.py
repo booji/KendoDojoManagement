@@ -12,7 +12,7 @@ that repository behind the two questions auth actually asks, per the
 deep-modules convention in CLAUDE.md.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Protocol, runtime_checkable
 
 from sqlalchemy import select
@@ -27,7 +27,9 @@ from app.members.repository import SqlMemberRepository
 class MemberDirectory(Protocol):
     async def member_id_for(self, email: str) -> str | None: ...
 
-    async def ensure_member(self, email: str, first_name: str, surname: str) -> str: ...
+    async def ensure_member(
+        self, email: str, first_name: str, surname: str, *, claim: bool = False
+    ) -> str: ...
 
 
 class SqlMemberDirectory:
@@ -43,13 +45,18 @@ class SqlMemberDirectory:
         )
         return result.scalar_one_or_none()
 
-    async def ensure_member(self, email: str, first_name: str, surname: str) -> str:
+    async def ensure_member(
+        self, email: str, first_name: str, surname: str, *, claim: bool = False
+    ) -> str:
         """The Member for `email`, created with this name if there is none (#257).
 
         An explicit invite, or the first-admin claim, may name an email no
         Member has yet. An existing Member keeps whatever name it already
         has -- the register is the authority on someone already in it, not
         an invite raised later.
+
+        `claim` marks a Member this creates as a claim attempt's, so an
+        abandoned attempt can be told from the roster and removed (#446).
         """
         member_id = await self.member_id_for(email)
         if member_id is None:
@@ -59,6 +66,7 @@ class SqlMemberDirectory:
                     "first_name": first_name,
                     "surname": surname,
                     "join_date": date.today().isoformat(),
+                    **({"claim_attempted_at": datetime.now(UTC)} if claim else {}),
                 }
             )
             member_id = member["id"]

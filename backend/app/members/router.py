@@ -7,13 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete
 
-from app.auth.db_models import (
-    Account,
-    AdminRecoveryToken,
-    PasskeyCredential,
-    RecoveryAttempt,
-    RecoveryCode,
-)
+from app.auth.accounts import delete_account
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -222,24 +216,8 @@ async def erase_member(
     plan = build_erasure_plan()
     session = uow.session
 
-    # Children before parent: passkeys/recovery/tokens must go before the
-    # accounts row itself, to satisfy foreign key constraints.
     if target_user_id is not None:
-        await session.execute(
-            delete(PasskeyCredential).where(PasskeyCredential.user_id == target_user_id)
-        )
-        await session.execute(
-            delete(RecoveryCode).where(RecoveryCode.user_id == target_user_id)
-        )
-        await session.execute(
-            delete(RecoveryAttempt).where(RecoveryAttempt.user_id == target_user_id)
-        )
-        await session.execute(
-            delete(AdminRecoveryToken).where(
-                AdminRecoveryToken.user_id == target_user_id
-            )
-        )
-        await session.execute(delete(Account).where(Account.id == target_user_id))
+        await delete_account(session, target_user_id)
 
     await session.execute(
         delete(GradeHistory).where(GradeHistory.member_id == member_id)

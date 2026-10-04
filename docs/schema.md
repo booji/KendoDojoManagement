@@ -89,6 +89,7 @@ erDiagram
         string emergency_contact_phone
         timestamptz anonymised_at
         string anonymised_by
+        timestamptz claim_attempted_at
     }
     federations {
         string id PK
@@ -244,6 +245,15 @@ erDiagram
   deactivated or anonymised, never hard-deleted). Most Members have no
   Account. The email lives once, on the Member — `members.email` is both the
   contact address and the sign-in identifier; `accounts` has no email column.
+- **`members.claim_attempted_at` marks a claim attempt's Member** (#446). The
+  first-admin claim creates its Member and Account at begin; this is set on a
+  Member that claim created and cleared when it completes. Completing a claim
+  deletes every other marked Member with its Account, so an attempt abandoned
+  under a mistyped address leaves nothing behind. This is the one hard delete
+  of a Member, and it is safe only because such a Member was never a real
+  one: a Member already on the roster is never marked. Two cases are left for
+  an admin to archive by hand: a claim begun at the instant another completes,
+  and an attempt abandoned before this column existed.
 - **Audit columns are not foreign keys.** `attendance.recorded_by`,
   `grade_history.assigned_by` and `members.anonymised_by` record which Account
   acted. They are deliberately not FK-enforced, so the id outlives the

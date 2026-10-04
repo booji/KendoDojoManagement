@@ -34,3 +34,10 @@ class Member(UUIDBase):
         DateTime(timezone=True), nullable=True
     )
     anonymised_by: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)
+    # Set when the first-admin claim created this Member at begin, cleared
+    # when that claim completes. Any still set then belong to abandoned claim
+    # attempts and are removed (#446). A Member already on the roster is never
+    # marked, so a claim can never remove one.
+    claim_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

@@ -1,4 +1,5 @@
-"""Finding an Account by the address it signs in with (#432, ADR-0006).
+"""Finding an Account by the address it signs in with (#432, ADR-0006), and
+deleting one.
 
 The email lives once, on the Member. Every lookup here joins the Member for
 that one column and loads only the Account row: pre-authentication code must
@@ -6,10 +7,16 @@ never pull a Member into memory, with its date of birth and safeguarding
 fields, on behalf of someone who has not yet proved who they are.
 """
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import Account
+from app.auth.db_models import (
+    Account,
+    AdminRecoveryToken,
+    PasskeyCredential,
+    RecoveryAttempt,
+    RecoveryCode,
+)
 from app.members.db_models import Member
 
 
@@ -37,3 +44,15 @@ async def sign_in_email(session: AsyncSession, user_id: str) -> str | None:
         .where(Account.id == user_id)
     )
     return result.scalar_one_or_none()
+
+
+async def delete_account(session: AsyncSession, account_id: str) -> None:
+    """Delete an Account and everything that hangs off it.
+
+    Children first: each of these has a foreign key to accounts. Invites the
+    Account issued keep their row (`issued_by` is SET NULL), and audit columns
+    elsewhere are deliberately not foreign keys, so neither is touched.
+    """
+    for child in (PasskeyCredential, RecoveryCode, RecoveryAttempt, AdminRecoveryToken):
+        await session.execute(delete(child).where(child.user_id == account_id))
+    await session.execute(delete(Account).where(Account.id == account_id))
