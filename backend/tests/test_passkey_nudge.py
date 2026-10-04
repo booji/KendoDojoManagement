@@ -3,7 +3,8 @@
 Backend concerns:
   1. POST /auth/register/passkey/complete response includes show_nudge: bool.
      - show_nudge=True when the user's passkey count went from 0→1.
-     - show_nudge=False when the user already had ≥1 passkeys.
+     - show_nudge=False when the user already had ≥1 passkeys (added through
+       POST /auth/passkeys/register/complete, #443).
   2. GET /auth/security-status returns passkey_count so the frontend can
      show/hide the "You have 1 passkey — consider adding a backup" banner
      in Settings > Security.
@@ -24,6 +25,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.auth.token import encode_token
 from app.main import app
 from tests.account_support import seed_account
 
@@ -222,10 +224,13 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
 async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent_passkey(
     passkey_repo, db_client
 ) -> None:
-    """POST /auth/register/passkey/complete includes show_nudge=False when
-    the user already had one or more passkeys before this registration.
+    """Adding a passkey returns show_nudge=False when the user already had
+    one or more passkeys before this registration.
 
-    The modal must only fire on the 0→1 transition.
+    The modal must only fire on the 0→1 transition. A second passkey is added
+    through the session-authenticated route: the email-addressed
+    /auth/register/passkey/complete only ever enrols an Account's first
+    (#443).
     """
     from sqlalchemy import insert
 
@@ -255,6 +260,9 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     )
     await session.flush()
 
+    claims = AccountClaims(
+        sub=user_id, email="secondpasskey@dojo.test", role="member", is_active=True
+    )
     mock_verified = MagicMock()
     mock_verified.credential_id = b"second-cred-id-nudge-false"
     mock_verified.credential_public_key = b"second-public-key"
@@ -263,12 +271,13 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
 
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test/api"
+            transport=ASGITransport(app=app),
+            base_url="http://test/api",
+            cookies={"access_token": encode_token(claims)},
         ) as c:
             response = await c.post(
-                "/auth/register/passkey/complete",
+                "/auth/passkeys/register/complete",
                 json={
-                    "email": "secondpasskey@dojo.test",
                     "credential": {
                         "id": "c2Vjb25kLWNyZWQtaWQtbnVkZ2UtZmFsc2U",
                         "rawId": "c2Vjb25kLWNyZWQtaWQtbnVkZ2UtZmFsc2U",
@@ -285,7 +294,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     body = response.json()
     assert (
         "show_nudge" in body
-    ), "POST /auth/register/passkey/complete must return show_nudge in the response body"
+    ), "POST /auth/passkeys/register/complete must return show_nudge in the response body"
     assert (
         body["show_nudge"] is False
     ), f"show_nudge should be False when registering a subsequent passkey, got {body['show_nudge']!r}"

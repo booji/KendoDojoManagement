@@ -98,8 +98,9 @@ export type RequestOptions = Omit<RequestInit, "body"> & {
 
 /**
  * Endpoints where a 401 answers the request rather than reporting that the
- * session has gone: the pre-auth ceremonies, recovery-code redemption (a wrong
- * code is a 401), and `/auth/me`, whose caller distinguishes "not signed in"
+ * session has gone: the pre-auth ceremonies, adding a passkey (a failed
+ * ceremony is the same generic 401, and the caller shows it), recovery-code
+ * redemption (a wrong code is a 401), and `/auth/me`, whose caller distinguishes "not signed in"
  * from "this instance has never been set up" and routes to /setup accordingly.
  * Everywhere else a 401 means the cookie expired or was revoked.
  */
@@ -107,6 +108,7 @@ const PRE_AUTH_PATHS = [
   "/api/auth/me",
   "/api/auth/login/",
   "/api/auth/register/",
+  "/api/auth/passkeys/register/",
   "/api/auth/recovery/redeem",
   "/api/auth/invites/redeem/",
   "/api/setup",

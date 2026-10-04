@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 
 from app.auth.accounts import sign_in_email
 from app.auth.db_models import Account
@@ -97,3 +97,39 @@ def require_role(
 # Stable module-level references — use these in dependency_overrides
 REQUIRE_MEMBER = require_role()
 REQUIRE_ADMIN = require_role("admin")
+
+
+async def require_passkey_enrolment(
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    access_token: Annotated[str | None, Cookie()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> Account:
+    """The Account the caller may add a passkey to (#443).
+
+    Either the one their session cookie names, or the one a recovery token
+    names: redeeming a recovery code hands the SPA that token, which it sends
+    as a Bearer header (it is never a cookie), and enrolling a new passkey is
+    the only thing it is good for. Each is accepted only where it arrives —
+    a recovery token in the cookie, or a session token in the header, is
+    refused — so neither can stand in for the other here or anywhere else.
+
+    The Account is re-read rather than trusted from the token: one deleted
+    or deactivated since the token was minted gets nothing.
+    """
+    if authorization is not None and authorization.startswith("Bearer "):
+        token, expect_recovery = authorization.removeprefix("Bearer "), True
+    elif access_token is not None:
+        token, expect_recovery = access_token, False
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    try:
+        claims = decode_token(token)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    if claims.recovery_session != expect_recovery:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    account = await uow.session.get(Account, claims.sub)
+    if account is None or not account.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return account

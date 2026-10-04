@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
-import { isApiError, getMe, performPasskeyRegistration } from "@/api/auth"
+import { isApiError, getMe, performPasskeyAdd } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import type { AccountClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
@@ -369,8 +369,7 @@ const SecurityCard = () => {
     setAddError(null)
     setAddingPasskey(true)
     try {
-      const me = await getMe()
-      const result = await performPasskeyRegistration(me.email)
+      const result = await performPasskeyAdd()
       // Reload passkeys and security status
       loadData()
       if (result.show_nudge) {
@@ -387,8 +386,7 @@ const SecurityCard = () => {
     setNudgeAddError(null)
     setAddingFromNudge(true)
     try {
-      const me = await getMe()
-      await performPasskeyRegistration(me.email)
+      await performPasskeyAdd()
       // Reload after adding
       loadData()
       setNudgeOpen(false)

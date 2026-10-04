@@ -2,15 +2,16 @@ from datetime import UTC, datetime, timedelta
 
 import webauthn
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
 from app.auth.accounts import account_for_email, account_for_member
-from app.auth.db_models import Account, PasskeyCredential
+from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
 from app.auth.member_directory import MemberDirectory, member_directory_for
 from app.auth.models import (
     AccountClaims,
+    PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
@@ -138,6 +139,58 @@ async def register_passkey_complete(
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
 
+    # The submitted email is all that identifies the caller here, so this
+    # ceremony may only enrol an Account nobody has enrolled yet, as an invite
+    # does (#443). Otherwise anyone who knows a Member's address could enrol
+    # their own authenticator on that Account and sign in as them. Recovery
+    # codes count as enrolment too: a Member may delete their only passkey
+    # while holding codes, and that Account is still theirs. Adding another
+    # passkey goes through add_passkey_*, which takes the Account from the
+    # session. Same generic 401, for the same enumeration reason as below.
+    if await _is_enrolled(uow, user.id):
+        log_security_event("passkey_registered", "failure", user_id=user.id)
+        raise _AUTH_FAILED
+
+    return await add_passkey_complete(user, payload.email, payload.credential, uow)
+
+
+async def add_passkey_begin(
+    account: Account, email: str, uow: AbstractUnitOfWork
+) -> dict:
+    """Begin adding a passkey to an Account the caller has already proved is
+    theirs (a session, or a recovery token). See register_passkey_complete
+    for why this is not the email-addressed ceremony."""
+    ceremony = register_begin(email, Subject(user_id=account.id, user_name=email))
+    account.pending_challenge = ceremony.challenge
+    account.challenge_issued_at = datetime.now(UTC)
+    await uow.commit()
+    return ceremony.response
+
+
+async def _is_enrolled(uow: AbstractUnitOfWork, account_id: str) -> bool:
+    """Whether the Account has a passkey or recovery codes."""
+    result = await uow.session.execute(
+        select(
+            exists().where(PasskeyCredential.user_id == account_id)
+            | exists().where(RecoveryCode.user_id == account_id)
+        )
+    )
+    return result.scalar_one()
+
+
+async def add_passkey_complete(
+    user: Account,
+    email: str,
+    credential: PasskeyCredentialResponse,
+    uow: AbstractUnitOfWork,
+) -> PasskeyRegisterCompleteResponse:
+    """Verify a registration response against `user`'s pending challenge and
+    store the credential.
+
+    Trusts that the caller may add a passkey to `user`: the router only passes
+    the Account from a session or recovery token, and register_passkey_complete
+    only an Account with no passkey yet.
+    """
     # These must not be distinguishable from the unknown-email case above: a
     # 400 here would only ever be reachable for an email that already cleared
     # the Member gate, and accounts sit in the "no pending challenge" state
@@ -154,7 +207,7 @@ async def register_passkey_complete(
 
     try:
         verified = webauthn.verify_registration_response(
-            credential=to_registration_credential(payload.credential),
+            credential=to_registration_credential(credential),
             expected_challenge=expected_challenge,
             expected_rp_id=config.WEBAUTHN_RP_ID,
             expected_origin=config.WEBAUTHN_ORIGIN,
@@ -195,7 +248,7 @@ async def register_passkey_complete(
     log_security_event("passkey_registered", "success", user_id=user.id)
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
-        email=payload.email,
+        email=email,
         role=user.role,  # type: ignore[arg-type]
         is_active=user.is_active,
         show_nudge=show_nudge,
