@@ -17,7 +17,10 @@ export const isRecoverySession = (): boolean => {
   if (!token) return false
   try {
     const payload = JSON.parse(atob(token.split(".")[1])) as Record<string, unknown>
-    return payload.recovery_session === true
+    // The backend refuses an expired token; say so up front rather than
+    // after a ceremony the user has already started.
+    const live = typeof payload.exp !== "number" || payload.exp * 1000 > Date.now()
+    return payload.recovery_session === true && live
   } catch {
     return false
   }

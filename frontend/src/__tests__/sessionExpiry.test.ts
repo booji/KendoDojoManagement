@@ -58,6 +58,7 @@ describe("apiFetch on 401", () => {
     "/api/auth/login/passkey/begin",
     "/api/auth/recovery/redeem",
     "/api/auth/invites/redeem/complete",
+    "/api/auth/passkeys/register/complete",
     "/api/setup",
     "/api/auth/me",
   ])("keeps local 401 handling on %s", async (path) => {

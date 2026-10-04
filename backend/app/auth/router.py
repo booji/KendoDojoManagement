@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.auth.accounts import account_for_email
+from app.auth.accounts import account_for_email, sign_in_email
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import Account
 from app.auth.dependencies import (
@@ -17,7 +17,7 @@ from app.auth.dependencies import (
     get_passkey_repo,
     get_recovery_repo,
 )
-from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
+from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_passkey_enrolment
 from app.auth.invite_repository import AbstractInviteRepository
 from app.auth.invite_service import (
     invite_redeem_begin,
@@ -34,6 +34,7 @@ from app.auth.models import (
     InviteRedeemBeginRequest,
     InviteRedeemCompleteRequest,
     LenientEmail,
+    PasskeyAddCompleteRequest,
     PasskeyBeginRequest,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
@@ -41,6 +42,8 @@ from app.auth.models import (
 )
 from app.auth.passkey_repository import AbstractPasskeyRepository
 from app.auth.passkey_service import (
+    add_passkey_begin,
+    add_passkey_complete,
     login_passkey_begin,
     login_passkey_complete,
     register_passkey_begin,
@@ -117,6 +120,38 @@ async def passkey_register_complete(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> PasskeyRegisterCompleteResponse:
     return await register_passkey_complete(payload, uow)
+
+
+async def _enrolment_email(account: Account, uow: AbstractUnitOfWork) -> str:
+    email = await sign_in_email(uow.session, account.id)
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return email
+
+
+# Adding a passkey to the caller's own Account (#443). Unlike the ceremony
+# above, the Account comes from the session or recovery token, never from a
+# submitted email.
+@router.post("/passkeys/register/begin")
+@limiter.limit(PER_IP_LIMIT)
+async def passkey_add_begin(
+    request: Request,
+    account: Annotated[Account, Depends(require_passkey_enrolment)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict:
+    return await add_passkey_begin(account, await _enrolment_email(account, uow), uow)
+
+
+@router.post("/passkeys/register/complete", status_code=201)
+@limiter.limit(PER_IP_LIMIT)
+async def passkey_add_complete(
+    request: Request,
+    payload: PasskeyAddCompleteRequest,
+    account: Annotated[Account, Depends(require_passkey_enrolment)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> PasskeyRegisterCompleteResponse:
+    email = await _enrolment_email(account, uow)
+    return await add_passkey_complete(account, email, payload.credential, uow)
 
 
 @router.get("/security-status")

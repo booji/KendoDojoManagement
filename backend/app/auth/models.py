@@ -55,6 +55,12 @@ class PasskeyRegisterCompleteRequest(BaseModel):
     credential: PasskeyCredentialResponse
 
 
+class PasskeyAddCompleteRequest(BaseModel):
+    """No email: the Account comes from the caller's session (#443)."""
+
+    credential: PasskeyCredentialResponse
+
+
 class PasskeyLoginCompleteRequest(BaseModel):
     email: LenientEmail
     credential: PasskeyCredentialResponse

@@ -223,6 +223,30 @@ export const performPasskeyRegistration = async (email: string): Promise<Registe
   return registerPasskeyComplete(email, credentialData)
 }
 
+/**
+ * Add a passkey to the caller's own Account (#443): the signed-in session's,
+ * or — after redeeming a recovery code — the one `recoveryToken` names. Never
+ * by email: `performPasskeyRegistration` only enrols an Account's first.
+ */
+export const performPasskeyAdd = async (recoveryToken?: string): Promise<RegisterResponse> => {
+  const headers = recoveryToken ? { Authorization: `Bearer ${recoveryToken}` } : undefined
+  const begin = await apiFetch("/api/auth/passkeys/register/begin", { method: "POST", headers })
+  if (!begin.ok) {
+    throw { status: begin.status, message: "Failed to begin passkey registration" } satisfies ApiError
+  }
+  const { publicKey } = (await begin.json()) as { publicKey: PasskeyCreationOptions }
+  const credential = await runPasskeyCreationCeremony(publicKey)
+  const res = await apiFetch("/api/auth/passkeys/register/complete", {
+    method: "POST",
+    headers,
+    body: { credential },
+  })
+  if (!res.ok) {
+    throw { status: res.status, message: "Passkey registration failed" } satisfies ApiError
+  }
+  return res.json() as Promise<RegisterResponse>
+}
+
 export const performPasskeyLogin = async (email: string): Promise<LoginResponse> => {
   const options = await loginPasskeyBegin(email)
 

@@ -8,11 +8,11 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { performPasskeyRegistration } from "@/api/auth"
+import { performPasskeyAdd } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import { isRecoverySession, clearRecoveryToken, getRecoveryToken } from "@/lib/recoverySession"
 
-// Decode JWT email claim so we can pre-fill it for the WebAuthn call
+// Decode the JWT email claim to show whose Account the passkey is for
 const emailFromToken = (token: string | null): string | null => {
   if (!token) return null
   try {
@@ -43,15 +43,16 @@ const PasskeyRegisterPage = () => {
   }, [recoveryActive, navigate])
 
   const handleRegister = async () => {
-    if (!email) {
-      setPageState({ status: "error", message: "Could not determine email from recovery token." })
+    const token = getRecoveryToken()
+    if (!token || !isRecoverySession()) {
+      setPageState({ status: "error", message: "Your recovery session has expired." })
       return
     }
 
     setPageState({ status: "registering" })
 
     try {
-      await performPasskeyRegistration(email)
+      await performPasskeyAdd(token)
       clearRecoveryToken()
       setPageState({ status: "success" })
     } catch (err) {

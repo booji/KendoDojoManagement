@@ -95,7 +95,7 @@ def _mock_passkey_begin(page: Page) -> None:
             ),
         )
 
-    page.route("**/api/auth/register/passkey/begin", handle)
+    page.route("**/api/auth/passkeys/register/begin", handle)
 
 
 def _mock_passkey_complete(page: Page, *, show_nudge: bool) -> None:
@@ -117,7 +117,7 @@ def _mock_passkey_complete(page: Page, *, show_nudge: bool) -> None:
             ),
         )
 
-    page.route("**/api/auth/register/passkey/complete", handle)
+    page.route("**/api/auth/passkeys/register/complete", handle)
 
 
 def _mock_security_status(page: Page, passkey_count: int) -> None:
