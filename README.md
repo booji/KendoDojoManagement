@@ -1,4 +1,6 @@
-<img src="frontend/public/logo.svg" width="96" alt="KendoDojoManagement logo: a nafudakake, the dojo board of wooden member name tags held by battens">
+<div align="center">
+<img src="frontend/public/logo.svg" width="256" alt="KendoDojoManagement logo: a nafudakake, the dojo board of wooden member name tags held by battens">
+</div>
 
 # KendoDojoManagement
 
