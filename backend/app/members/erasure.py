@@ -10,6 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# Attendance is not here: it is kept, pointing at the anonymised Member, so
+# session head-counts stay true, and one check-in among many identifies no one.
+# Grade history is deleted rather than kept the same way: a grade and the date
+# it was awarded can single out a kendoka (a dojo has few high grades, and
+# federation results are often published), so it would stay personal data
+# under "Deleted member" (#447).
 _RELATED_RECORDS_TO_DELETE: frozenset[str] = frozenset(
     {
         "user",

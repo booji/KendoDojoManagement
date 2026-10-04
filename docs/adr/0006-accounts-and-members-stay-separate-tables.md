@@ -10,9 +10,12 @@ instance. Most Members have no Account. The obvious simplification is one
 for three reasons.
 
 - **They are deleted differently.** Erasure hard-deletes the Account and its
-  credentials but anonymises the Member in place, so attendance and grade
-  history keep a row to point at. A single table would need a tombstone row
-  with every auth column nulled: two tables sharing one row.
+  credentials but anonymises the Member in place, so attendance keeps a row
+  to point at. A single table would need a tombstone row with every auth
+  column nulled: two tables sharing one row. (Grade history is deleted on
+  erasure, not kept: a grade and the date it was awarded can single out a
+  kendoka even under "Deleted member", so keeping it would not be erasure —
+  #447.)
 - **They are read under different trust conditions.** Accounts are looked up
   by the unauthenticated registration and login endpoints, where enumeration
   and timing parity have had real work (#239, #267, #300). Members hold the
