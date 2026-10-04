@@ -80,8 +80,8 @@ erDiagram
         string first_name
         string surname
         string display_name
-        string dob
-        string join_date
+        date dob
+        date join_date
         string membership_status
         bool is_coach
         bool is_first_aider
@@ -116,8 +116,8 @@ erDiagram
     session_templates {
         string id PK
         string title
-        string start_date
-        string end_date
+        date start_date
+        date end_date
         string recurrence
         int day_of_week
         string location
@@ -130,7 +130,7 @@ erDiagram
     session_template_segments {
         string id PK
         string template_id FK
-        string start_time
+        time start_time
         int duration_minutes
         string title
         int position
@@ -144,7 +144,7 @@ erDiagram
     session_instances {
         string id PK
         string title
-        string date
+        date date
         string template_id FK
         bool cancelled
         string location
@@ -156,7 +156,7 @@ erDiagram
     session_instance_segments {
         string id PK
         string instance_id FK
-        string start_time
+        time start_time
         int duration_minutes
         string title
         int position
@@ -172,7 +172,7 @@ erDiagram
         string session_id FK
         string member_id FK
         string visitor_name
-        string checked_in_at
+        timestamptz checked_in_at
         string recorded_by
     }
     grade_history {
@@ -180,7 +180,7 @@ erDiagram
         string member_id FK
         string grade
         string display_name
-        string promoted_at
+        timestamptz promoted_at
         string assigned_by
         string status
     }
