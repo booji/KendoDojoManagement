@@ -403,7 +403,7 @@ class SqlSessionInstanceRepository:
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
     async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
-        today = (as_of or date.today()).isoformat()
+        today = as_of or date.today()
         result = await self._session.execute(
             select(SessionInstance)
             .where(
@@ -421,13 +421,12 @@ class SqlSessionInstanceRepository:
     async def list_in_range(
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]:
-        from_iso = from_date.isoformat()
-        to_iso = to_date.isoformat()
+        # Dates, not ISO strings: the column is a real `date` (#433, #449).
         result = await self._session.execute(
             select(SessionInstance)
             .where(
-                SessionInstance.date >= from_iso,
-                SessionInstance.date <= to_iso,
+                SessionInstance.date >= from_date,
+                SessionInstance.date <= to_date,
             )
             .options(
                 selectinload(SessionInstance.segments).selectinload(
@@ -509,7 +508,7 @@ class SqlSessionInstanceRepository:
             select(SessionInstance)
             .where(
                 SessionInstance.template_id == template_id,
-                SessionInstance.date >= as_of_date.isoformat(),
+                SessionInstance.date >= as_of_date,
                 SessionInstance.cancelled.is_(False),
             )
             .options(
@@ -530,7 +529,7 @@ class SqlSessionInstanceRepository:
         result = await self._session.execute(
             select(SessionInstance).where(
                 SessionInstance.template_id == template_id,
-                SessionInstance.date >= as_of_date.isoformat(),
+                SessionInstance.date >= as_of_date,
             )
         )
         rows = result.scalars().all()

@@ -9,7 +9,11 @@ itself would say 'HH:MM:SS'), and ISO-8601 with its offset.
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from datetime import date
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 from app.attendance.repository import SqlAttendanceRepository
 from app.grades.repository import SqlGradeRepository
@@ -78,3 +82,33 @@ async def test_values_read_back_as_the_strings_the_app_wrote(db_session) -> None
 
     [promotion] = await grades.get_history(member["id"])
     assert promotion["promoted_at"] == "2026-01-15T00:00:00+00:00"
+
+
+@contextmanager
+def _sent_parameters():
+    """Every parameter the driver is handed, across all statements."""
+    sent: list = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        sent.extend(parameters if isinstance(parameters, list | tuple) else [])
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        yield sent
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+
+
+async def test_calendar_range_compares_dates_not_strings(db_session) -> None:
+    """#449: with well-formed ISO data a string comparison returns the same
+    rows, so only what reaches Postgres shows the difference. The range
+    bounds must arrive as dates, compared against a `date` column, never as
+    text compared lexically."""
+    instances = SqlSessionInstanceRepository(db_session)
+
+    with _sent_parameters() as sent:
+        await instances.list_in_range(date(2026, 10, 1), date(2026, 10, 31))
+
+    assert date(2026, 10, 1) in sent
+    assert date(2026, 10, 31) in sent
+    assert not any(isinstance(p, str) and p.startswith("2026-10-") for p in sent)
