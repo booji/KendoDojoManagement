@@ -103,7 +103,7 @@ async def register_passkey_begin(
     is_bootstrap = bootstrap_names is not None and await _is_bootstrap(uow)
     if is_bootstrap:
         assert bootstrap_names is not None  # narrowed by is_bootstrap
-        member_id = await directory.ensure_member(email, *bootstrap_names)
+        member_id = await directory.ensure_member(email, *bootstrap_names, claim=True)
     else:
         member_id = await directory.member_id_for(email)
         if member_id is None:

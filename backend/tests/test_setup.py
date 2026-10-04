@@ -24,7 +24,7 @@ import app.config as config
 from app.auth.db_models import Account, PasskeyCredential
 from app.main import app
 from app.members.db_models import Member
-from tests.account_support import seed_account
+from tests.account_support import seed_account, seed_member
 
 # The claim gate (ADR-0003, #402): begin and complete both require the
 # pre-provisioned SETUP_TOKEN, presented as X-Setup-Token.
@@ -635,3 +635,174 @@ async def test_an_abandoned_claim_leaves_no_admin_to_take_over(db_client) -> Non
 
     assert completed.status_code == 201, completed.text
     assert completed.json()["role"] == "member"
+
+
+async def _members_and_accounts(session, email: str) -> tuple[int, int]:
+    members = (
+        await session.execute(select(Member.id).where(Member.email == email))
+    ).all()
+    accounts = (
+        await session.execute(
+            select(Account.id)
+            .join(Member, Member.id == Account.member_id)
+            .where(Member.email == email)
+        )
+    ).all()
+    return len(members), len(accounts)
+
+
+@pytest.mark.asyncio
+async def test_completing_a_claim_removes_abandoned_claim_attempts(db_client) -> None:
+    """#446: a claim begun under one address and finished under another must
+    not leave the first attempt's Member on the roster, or its Account for
+    the ordinary registration route to finish. A Member who was on the roster
+    before the claim is never removed or altered (an Account a claim attempt
+    made for it stays: it cannot be told from one the Member made)."""
+    session = db_client
+    roster = await seed_member(session, "kendoka@dojo.test", first_name="Ken")
+    await session.flush()
+
+    # Abandoned twice -- once under an address nobody has, once under a roster
+    # Member's -- then completed under the right one.
+    for email in ("typo@dojo.tst", "kendoka@dojo.test", "sensei@dojo.test"):
+        begun = await _post(
+            "/setup/passkey/begin",
+            {"email": email, "first_name": "Ai", "surname": "Sato"},
+            SETUP_HEADERS,
+        )
+        assert begun.status_code == 200
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "sensei@dojo.test"},
+            SETUP_HEADERS,
+        )
+    assert completed.status_code == 201, completed.text
+
+    assert await _members_and_accounts(session, "typo@dojo.tst") == (0, 0)
+    assert await _members_and_accounts(session, "sensei@dojo.test") == (1, 1)
+    kept = await session.get(Member, roster)
+    await session.refresh(kept)
+    assert (kept.email, kept.first_name) == ("kendoka@dojo.test", "Ken")
+    assert kept.claim_attempted_at is None
+    claimant = (
+        await session.execute(select(Member).where(Member.email == "sensei@dojo.test"))
+    ).scalar_one()
+    assert claimant.claim_attempted_at is None
+
+    # The abandoned address is now nobody: registration answers with the decoy
+    # and creates nothing.
+    decoy = await _post("/auth/register/passkey/begin", {"email": "typo@dojo.tst"})
+    assert decoy.status_code == 200
+    assert await _members_and_accounts(session, "typo@dojo.tst") == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_claim_cleanup_removes_whatever_an_abandoned_attempt_gathered(
+    db_client,
+) -> None:
+    """An operator can mint a recovery token (cli.py create-recovery-token) or
+    try a redemption against an abandoned attempt's address before the claim
+    completes; neither may stop the cleanup."""
+    from datetime import timedelta
+
+    from app.auth.db_models import AdminRecoveryToken, RecoveryAttempt
+
+    session = db_client
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "typo@dojo.tst", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 200
+    abandoned = (
+        await session.execute(
+            select(Account.id)
+            .join(Member, Member.id == Account.member_id)
+            .where(Member.email == "typo@dojo.tst")
+        )
+    ).scalar_one()
+    now = datetime.now(UTC)
+    await session.execute(
+        insert(AdminRecoveryToken).values(
+            id=str(uuid.uuid4()),
+            user_id=abandoned,
+            token_hash="hash",
+            expires_at=now + timedelta(hours=1),
+            created_at=now,
+        )
+    )
+    await session.execute(
+        insert(RecoveryAttempt).values(
+            id=str(uuid.uuid4()),
+            user_id=abandoned,
+            attempted_at=now,
+            ip_address="127.0.0.1",
+            success=False,
+        )
+    )
+    await session.flush()
+
+    await _post(
+        "/setup/passkey/begin",
+        {"email": "sensei@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "sensei@dojo.test"},
+            SETUP_HEADERS,
+        )
+
+    assert completed.status_code == 201, completed.text
+    assert await _members_and_accounts(session, "typo@dojo.tst") == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_cleanup_does_not_fail_a_completed_claim(
+    db_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The claim has committed by the time abandoned attempts are removed; an
+    error there must not turn it into a 500 the claimant cannot retry."""
+    from sqlalchemy.exc import OperationalError
+
+    import app.routers.setup as setup_router
+
+    async def broken(*_args) -> None:
+        raise OperationalError("DELETE", {}, Exception("boom"))
+
+    monkeypatch.setattr(setup_router, "_discard_abandoned_claims", broken)
+    await _post(
+        "/setup/passkey/begin",
+        {"email": "sensei@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "sensei@dojo.test"},
+            SETUP_HEADERS,
+        )
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["role"] == "admin"
+    assert "access_token" in completed.cookies

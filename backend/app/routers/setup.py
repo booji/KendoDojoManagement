@@ -18,13 +18,16 @@ pre-provisioned SETUP_TOKEN (ADR-0003, #402). GET stays open so the SPA can
 decide whether to render the setup page.
 """
 
+import logging
 import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import config
+from app.auth.accounts import account_for_member, delete_account
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.models import (
     AccountClaims,
@@ -37,8 +40,10 @@ from app.auth.token import encode_token
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.members.db_models import Member
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+_log = logging.getLogger(__name__)
 
 _ALREADY_DONE = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,
@@ -96,6 +101,40 @@ async def _has_registered_user(uow: AbstractUnitOfWork) -> bool:
     return passkey_count.scalar_one() > 0
 
 
+async def _discard_abandoned_claims(uow: AbstractUnitOfWork, claimant: Account) -> None:
+    """Remove every other claim attempt's Member and Account (#446).
+
+    A claim begun under one address and finished under another leaves the
+    first attempt's Member on the roster and its Account, with no passkey,
+    reachable by the ordinary registration route. Only Members a claim
+    created carry `claim_attempted_at`, so the roster is never touched.
+    """
+    session = uow.session
+    abandoned = (
+        (
+            await session.execute(
+                select(Member.id).where(
+                    Member.claim_attempted_at.is_not(None),
+                    Member.id != claimant.member_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for member_id in abandoned:
+        account = await account_for_member(session, member_id)
+        if account is not None:
+            await delete_account(session, account.id)
+    await session.execute(delete(Member).where(Member.id.in_(abandoned)))
+    await session.execute(
+        update(Member)
+        .where(Member.id == claimant.member_id)
+        .values(claim_attempted_at=None)
+    )
+    await uow.commit()
+
+
 @router.get("")
 async def get_setup(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
@@ -139,11 +178,9 @@ async def setup_passkey_complete(
     # The one place admin is granted: the claim has completed. Begin creates
     # the Account as a member, so an abandoned claim leaves no admin account
     # behind for the ordinary registration route to finish (#432).
+    user = await uow.session.get(Account, claims.sub)
+    assert user is not None  # register_passkey_complete just enrolled it
     if claims.role != "admin":
-        result = await uow.session.execute(
-            select(Account).where(Account.id == claims.sub)
-        )
-        user = result.scalar_one()
         user.role = "admin"
         await uow.commit()
         claims = AccountClaims(
@@ -152,6 +189,15 @@ async def setup_passkey_complete(
             role="admin",
             is_active=claims.is_active,
         )
+
+    # After the admin grant has committed, and best-effort: the claim has
+    # succeeded, and a failure tidying up must not turn it into an error the
+    # claimant cannot retry (setup now answers 404).
+    try:
+        await _discard_abandoned_claims(uow, user)
+    except SQLAlchemyError:
+        await uow.rollback()
+        _log.exception("Could not remove abandoned setup claim attempts")
 
     log_security_event("setup_claim", "success", user_id=claims.sub)
     token = encode_token(claims)
