@@ -12,7 +12,7 @@
 | `make certs` | Issue the `dojo.localhost` dev TLS certificate if it is missing or untrusted (run for you by `make dev`) |
 | `make certs-force` | Reissue the dev TLS certificate unconditionally |
 | `make logs` | Tail dev service logs |
-| `make migrate` | Run `alembic upgrade head` in the running dev container |
+| `make migrate` | Run `alembic upgrade head` on the dev database as the superuser and re-provision the app user |
 | `make help` | List all targets |
 
 The Makefile auto-detects `podman-compose` vs `docker compose`, so the targets run under either. That detection is kept because it costs nothing, not because Docker is tested — see [Container runtime](../index.md#container-runtime).

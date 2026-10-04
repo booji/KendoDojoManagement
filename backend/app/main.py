@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncConnection
 from starlette.exceptions import HTTPException
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse, Response
@@ -84,8 +86,27 @@ def _rate_limit_exceeded_handler(
     return response
 
 
+async def _refuse_superuser(conn: AsyncConnection) -> None:
+    """Refuse to serve over a superuser connection (ADR-0007, #453).
+
+    The app needs row reads and writes only. A superuser connection would hand
+    a compromised app `COPY ... TO PROGRAM`, the server's files, the schema and
+    user creation, so pointing DATABASE_URL back at the superuser to dodge a
+    missing grant must fail loudly instead.
+    """
+    is_superuser = await conn.execute(text("SELECT current_setting('is_superuser')"))
+    if is_superuser.scalar() == "on":
+        raise RuntimeError(
+            "DATABASE_URL logs in as a database superuser. It must name the "
+            "restricted app user the migration step provisions; the superuser "
+            "belongs in MIGRATION_DATABASE_URL, given to the migration step "
+            "only (ADR-0007)."
+        )
+
+
 async def _init_db() -> None:
-    """Seed default session types. Does NOT migrate.
+    """Refuse a superuser connection, then seed default session types. Does
+    NOT migrate.
 
     `alembic upgrade head` runs in its own unit before this process starts —
     the `migrate` service in docker-compose.yml, kendo-migrate.service under
@@ -95,6 +116,7 @@ async def _init_db() -> None:
     therefore assumes the schema is already at head.
     """
     async with engine.begin() as conn:
+        await _refuse_superuser(conn)
         await seed_session_types(conn)
 
 

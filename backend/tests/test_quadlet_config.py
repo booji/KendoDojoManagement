@@ -396,3 +396,26 @@ def test_every_unit_dependency_resolves_to_a_container_file():
                 f"{cname} references {ref}, but deploy/quadlet/ has no unit "
                 f"file for it. Known: {sorted(known)}"
             )
+
+
+# ---------------------------------------------------------------------------
+# The superuser login reaches the migration step only (#453, ADR-0007)
+# ---------------------------------------------------------------------------
+
+
+def test_superuser_login_is_attached_to_the_migrate_unit_only():
+    units = load_units()
+
+    def secrets(name: str) -> str:
+        return " ".join(units[name].get("Container", {}).get("Secret", []))
+
+    assert "kendo_migration_database_url,type=env,target=MIGRATION_DATABASE_URL" in (
+        secrets("kendo-migrate.container")
+    )
+    # The app user's login: bootstrap reads its name and password from it.
+    assert "kendo_database_url,type=env,target=DATABASE_URL" in secrets(
+        "kendo-migrate.container"
+    )
+    app = secrets("kendo-app.container")
+    assert "kendo_migration_database_url" not in app, app
+    assert "kendo_postgres_password" not in app, app

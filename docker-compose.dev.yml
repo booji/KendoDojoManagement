@@ -17,6 +17,9 @@ name: kendodojo-dev
 # port 5432 directly was #275.
 services:
   backend:
+    # Tagged so `migrate` below can run the same image without a build of its
+    # own: podman-compose builds only the services it is asked to start.
+    image: localhost/kendodojo-dev-backend:latest
     build:
       context: .
       target: backend-dev-deps
@@ -34,11 +37,34 @@ services:
       WATCHFILES_FORCE_POLLING: "1"
       # Override env_file value: .env.dev points at the published host port so
       # host-side alembic and psql work, but from in here the db is a service
-      # name on the internal network.
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kendo_dev}:${POSTGRES_PASSWORD:-kendo_dev_password}@db:5432/${POSTGRES_DB:-kendo_dev}"
+      # name on the internal network. The restricted app user (ADR-0007), as in
+      # production: the app refuses to start as the superuser.
+      DATABASE_URL: "postgresql+asyncpg://kendo_app:kendo_app_password@db:5432/${POSTGRES_DB:-kendo_dev}"
     env_file:
       - .env.dev
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      # Migrates, and creates the app user the backend logs in as.
+      migrate:
+        condition: service_completed_successfully
+
+  # `alembic upgrade head` as the superuser, then (re)provision the app user,
+  # then exit — the same step as `migrate` in docker-compose.yml. Re-run it
+  # after adding a migration with `make migrate`.
+  migrate:
+    image: localhost/kendodojo-dev-backend:latest
+    volumes:
+      - ./backend:/app
+    networks:
+      - backend
+    environment:
+      TZ: Europe/London
+      DATABASE_URL: "postgresql+asyncpg://kendo_app:kendo_app_password@db:5432/${POSTGRES_DB:-kendo_dev}"
+      MIGRATION_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-kendo_dev}:${POSTGRES_PASSWORD:-kendo_dev_password}@db:5432/${POSTGRES_DB:-kendo_dev}"
+    command: python -m app.db.bootstrap
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy

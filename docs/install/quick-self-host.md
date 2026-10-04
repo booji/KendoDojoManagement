@@ -26,7 +26,9 @@ podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 ```
 
 It asks for your domain and an ACME email, generates `POSTGRES_PASSWORD`,
-`JWT_SECRET` and `SETUP_TOKEN`, and writes `.env` plus
+`JWT_SECRET`, `SETUP_TOKEN` and the app's own database password — the app
+connects as `kendo_app`, which can only read and write rows, and the superuser
+login goes to the `migrate` service alone — and writes `.env` plus
 `deploy/traefik/selfhost/traefik.yml` and `dynamic/kendo.yml` from their
 `.example` files. One domain answer reaches all three passkey-bound settings
 (`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS`) and the Traefik `Host()`

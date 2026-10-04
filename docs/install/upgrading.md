@@ -93,6 +93,48 @@ the app run unprivileged and mounts the uploads volume `:U`; both live in
 `kendo-app.container`, so neither reaches an existing host until the copy
 above. The edge health check lives in the Traefik dynamic config.
 
+## Upgrading to the least-privilege app user (#453)
+
+The app now connects to PostgreSQL as its own user, `kendo_app`, which can only
+read and write rows; `kendo` stays the superuser and is given to the migration
+step alone ([ADR-0007](../adr/0007-the-app-connects-as-a-least-privilege-database-user.md)).
+`DATABASE_URL` is the app user's login and a new `MIGRATION_DATABASE_URL` holds
+the superuser's. The migration step creates `kendo_app` and sets its password
+from `DATABASE_URL` on every start, so nothing is done inside the database by
+hand. Until both URLs exist the migration step refuses to run — before touching
+the schema — and the app refuses to start as a superuser.
+
+**Quick self-host (Compose).** Run `./setup.sh upgrade` as usual: it brings the
+new `setup.sh` and compose file, then stops at the migration step because
+`MIGRATION_DATABASE_URL` is not in `.env` yet. Nothing has been migrated, so
+skip the rollback it prints. Re-run `./setup.sh` — it keeps `POSTGRES_PASSWORD`
+and every other secret, writes `MIGRATION_DATABASE_URL` with it, and moves
+`DATABASE_URL` onto `kendo_app` with a new password — then start the stack:
+
+```bash
+./setup.sh
+podman-compose up -d --force-recreate
+```
+
+**Hardened deployment (Quadlet).** `kendo_database_url` held the superuser's
+login; that becomes `kendo_migration_database_url`, and `kendo_database_url` is
+recreated with the app user's. The superuser password is the one `kendo-db`
+already has:
+
+```bash
+pw=$(podman exec kendo-db cat /run/secrets/postgres_password)
+printf '%s' "postgresql+asyncpg://kendo:$pw@kendo-db:5432/kendo" \
+  | podman secret create kendo_migration_database_url -
+unset pw
+
+podman secret rm kendo_database_url
+printf '%s' "postgresql+asyncpg://kendo_app:$(od -An -vtx1 -N24 /dev/urandom | tr -d ' \n')@kendo-db:5432/kendo" \
+  | podman secret create kendo_database_url -
+```
+
+Then refresh the units as above — `kendo-migrate.container` now attaches the
+new secret — and `systemctl --user restart kendo-migrate kendo-app`.
+
 ## Refreshing the env file after an upgrade
 
 Re-extracting the bundle updates `deploy/env/kendo-app.env.example` in

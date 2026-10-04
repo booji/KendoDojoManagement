@@ -228,9 +228,9 @@ run_check() {
     done
     if [ -z "$absent" ]; then ok "POSTGRES_PASSWORD, JWT_SECRET and SETUP_TOKEN are set"
     else for s in $absent; do fail "$s is blank in $env_file"; done; fi
-    case $(env_value "$env_file" DATABASE_URL) in
-      *":$(env_value "$env_file" POSTGRES_PASSWORD)@"*) ok "DATABASE_URL embeds POSTGRES_PASSWORD" ;;
-      *) fail "DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the app." ;;
+    case $(env_value "$env_file" MIGRATION_DATABASE_URL) in
+      *":$(env_value "$env_file" POSTGRES_PASSWORD)@"*) ok "MIGRATION_DATABASE_URL embeds POSTGRES_PASSWORD" ;;
+      *) fail "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the migrate service." ;;
     esac
   fi
 
@@ -510,6 +510,11 @@ carry() { [ "$mode" = compose ] && [ -f .env ] || return 0; sed -n "s/^$1=\([^<]
 db_password=$(carry POSTGRES_PASSWORD); [ -n "$db_password" ] || db_password=$(rand 24)
 jwt_secret=$(carry JWT_SECRET);         [ -n "$jwt_secret" ]  || jwt_secret=$(rand 32)
 setup_token=$(carry SETUP_TOKEN);       [ -n "$setup_token" ] || setup_token=$(rand 32)
+# The app user's own password (ADR-0007), carried out of DATABASE_URL. An .env
+# from before #453, whose DATABASE_URL is still the superuser's, gets a fresh
+# one: re-running is the upgrade.
+app_db_password=$(carry DATABASE_URL | sed -n 's|^postgresql+asyncpg://kendo_app:\([^@<]*\)@.*|\1|p')
+[ -n "$app_db_password" ] || app_db_password=$(rand 24)
 
 # The bundle knows the tag it was extracted from (ADR-0004), so the pin is never
 # a guess. A checkout has no .image-tag, so an existing .env's pin is carried
@@ -523,7 +528,8 @@ if [ "$mode" = compose ]; then
   backup .env
   ( umask 077
   sed \
-    -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://kendo:$db_password@db:5432/kendo|" \
+    -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql+asyncpg://kendo_app:$app_db_password@db:5432/kendo|" \
+    -e "s|^MIGRATION_DATABASE_URL=.*|MIGRATION_DATABASE_URL=postgresql+asyncpg://kendo:$db_password@db:5432/kendo|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$db_password|" \
     -e "s|^JWT_SECRET=.*|JWT_SECRET=$jwt_secret|" \
     -e "s|^SETUP_TOKEN=.*|SETUP_TOKEN=$setup_token|" \
@@ -604,11 +610,11 @@ copy_byo() { # copy_byo SRC DST — only when the operator brings their own cert
 }
 
 # ---------------------------------------------------------------- quadlet -----
-# Sections 2-4 of docs/deployment.md are pure transcription — the five podman
+# Sections 2-4 of docs/deployment.md are pure transcription — the six podman
 # secrets, the ~/kendo/ tree the units mount, the units themselves — and that is
-# exactly what an operator gets wrong at 11pm (#412). DATABASE_URL embeds the
-# postgres password, so one script owning both is what makes them impossible to
-# mismatch.
+# exactly what an operator gets wrong at 11pm (#412). MIGRATION_DATABASE_URL
+# embeds the postgres password, so one script owning both is what makes them
+# impossible to mismatch.
 
 put_secret() { # put_secret NAME VALUE
   printf '%s' "$2" | podman secret create "$1" - >/dev/null
@@ -628,15 +634,23 @@ quadlet_install() {
   # The password and the URL embedding it are one pair. Podman will not read a
   # secret back, so a half-present pair cannot be completed consistently —
   # refuse rather than write a URL with a password the database does not have.
-  if have_secret kendo_postgres_password && have_secret kendo_database_url; then
-    echo "  kept existing secrets kendo_postgres_password and kendo_database_url"
-  elif have_secret kendo_postgres_password || have_secret kendo_database_url; then
-    echo "Only one of kendo_postgres_password / kendo_database_url exists; they must embed the same password and neither can be read back. Remove both and re-run:" >&2
-    echo "  podman secret rm kendo_postgres_password kendo_database_url" >&2
+  if have_secret kendo_postgres_password && have_secret kendo_migration_database_url; then
+    echo "  kept existing secrets kendo_postgres_password and kendo_migration_database_url"
+  elif have_secret kendo_postgres_password || have_secret kendo_migration_database_url; then
+    echo "Only one of kendo_postgres_password / kendo_migration_database_url exists; they must embed the same password and neither can be read back. On a fresh install, remove both and re-run:" >&2
+    echo "  podman secret rm kendo_postgres_password kendo_migration_database_url" >&2
+    echo "Upgrading an install from before #453 instead? See docs/install/upgrading.md." >&2
     exit 1
   else
     put_secret kendo_postgres_password "$db_password"
-    put_secret kendo_database_url "postgresql+asyncpg://kendo:$db_password@kendo-db:5432/kendo"
+    put_secret kendo_migration_database_url "postgresql+asyncpg://kendo:$db_password@kendo-db:5432/kendo"
+  fi
+  # The app user's login (ADR-0007) pairs with nothing: kendo-migrate sets that
+  # user's password from it on every start.
+  if have_secret kendo_database_url; then
+    echo "  kept existing secret kendo_database_url"
+  else
+    put_secret kendo_database_url "postgresql+asyncpg://kendo_app:$app_db_password@kendo-db:5432/kendo"
   fi
   # A re-run must never rotate a secret out from under a running instance.
   if have_secret kendo_jwt_secret; then

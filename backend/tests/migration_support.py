@@ -11,12 +11,28 @@ import os
 from collections.abc import Callable
 
 from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from alembic import command
 from alembic.config import Config
 from app.db.bootstrap import _alembic_config
+
+# Roles are cluster-wide, so tests that run app.db.bootstrap provision their
+# own app user rather than `kendo_app`: re-running bootstrap with a different
+# password for the role the e2e server logs in as would lock it out mid-run.
+APP_USER = "kendo_app_bootstrap_test"
+APP_PASSWORD = "bootstrap-test-password"
+
+
+def app_url(url: str, user: str = APP_USER, password: str = APP_PASSWORD) -> str:
+    """`url` with the app user's login in place of the superuser's."""
+    return (
+        make_url(url)
+        .set(username=user, password=password)
+        .render_as_string(hide_password=False)
+    )
 
 
 def _migrate_blocking(

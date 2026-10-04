@@ -174,7 +174,7 @@ published port fails loudly on a collision, and 5433 avoids the common one
 entirely.
 
 To run two checkouts of this repo side by side, set a different `POSTGRES_PORT`
-in `.env.dev` and change the port in `DATABASE_URL` in the same file to match.
+in `.env.dev` and change the port in both database URLs in the same file to match.
 The other four host ports are fixed and will collide: 8443 and 8080 (proxy),
 5173 (Vite) and 8000 (uvicorn). Only one checkout's dev stack can be up at a
 time unless you edit them — and 8443 also appears in `WEBAUTHN_ORIGIN`,
@@ -195,6 +195,12 @@ published port, *not* 5432, and address `127.0.0.1` rather than `localhost`
 export DATABASE_URL=postgresql+asyncpg://kendo_dev:kendo_dev_password@127.0.0.1:5433/kendo_dev
 psql -h 127.0.0.1 -p 5433 -U kendo_dev -d kendo_dev
 ```
+
+That is the superuser, `MIGRATION_DATABASE_URL` in `.env.dev`, which alembic
+needs. The backend itself connects as the restricted `kendo_app` user that the
+`migrate` service creates, and refuses to start as a superuser
+([ADR-0007](../adr/0007-the-app-connects-as-a-least-privilege-database-user.md)).
+After adding a migration, `make migrate` runs that service again.
 
 If you get `password authentication failed for user "kendo_dev"` on port 5432,
 you are talking to a *different* PostgreSQL — the credentials are not the

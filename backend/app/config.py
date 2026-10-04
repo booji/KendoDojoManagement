@@ -16,6 +16,11 @@ API_PREFIX = "/api"
 
 DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
 
+# The superuser login, given only to the migration step (ADR-0007): the app
+# itself connects as the restricted user named in DATABASE_URL and must never
+# see this one.
+MIGRATION_DATABASE_URL: str = os.getenv("MIGRATION_DATABASE_URL") or ""
+
 # development | production. Explicit and never inferred from other settings
 # (e.g. COOKIE_SECURE) — production-only checks below key off this alone.
 # Normalized (stripped + lowercased) at import so every comparison against

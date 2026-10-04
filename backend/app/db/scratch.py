@@ -7,12 +7,13 @@ heredocs (per-run database create/drop) and `test_migrations.py`'s
 migration scratch databases). All three now call through here.
 
 Identifier validation (`is_safe_identifier` / `validate_identifier`) is a
-security boundary, not mere formatting: database names are interpolated
-directly into DDL (`CREATE DATABASE "..."`, `DROP DATABASE IF EXISTS
-"..."`) because PostgreSQL has no parameterised way to pass an identifier,
-only values. It lives in exactly this one place — every call site in this
-codebase that builds such DDL must route through here rather than
-re-deriving its own regex.
+security boundary, not mere formatting: database names — and the role names
+`app.db.bootstrap` grants to (#453) — are interpolated directly into DDL
+(`CREATE DATABASE "..."`, `DROP DATABASE IF EXISTS "..."`) because
+PostgreSQL has no parameterised way to pass an identifier, only values. It
+lives in exactly this one place — every call site in this codebase that
+builds such DDL must route through here rather than re-deriving its own
+regex.
 
 `select_sweepable` is the pure core of the sweep: given `(datname,
 connection_count)` rows as would come back from a `pg_stat_activity` join,
