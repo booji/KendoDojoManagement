@@ -54,7 +54,7 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-async def _wipe_test_email(engine) -> None:
+async def _wipe_test_email(engine, email: str = _TEST_EMAIL) -> None:
     """Delete any leftover row for _TEST_EMAIL and its dependents.
 
     Every test in this file seeds the same literal email (several assertions
@@ -68,7 +68,7 @@ async def _wipe_test_email(engine) -> None:
         result = await session.execute(
             select(User.id)
             .join(Member, Member.id == User.member_id)
-            .where(Member.email == _TEST_EMAIL)
+            .where(Member.email == email)
         )
         user_ids = [row[0] for row in result.all()]
         if user_ids:
@@ -128,11 +128,13 @@ async def _seed_recovery_code(
     return code_id
 
 
-async def _seed_failed_attempt(engine, user_id: str, count: int = 1) -> None:
+async def _seed_failed_attempt(
+    engine, user_id: str, count: int = 1, attempted_at: datetime | None = None
+) -> None:
     """Insert n failed recovery_attempts rows for rate-limit tests."""
     from app.auth.db_models import RecoveryAttempt  # red — model doesn't exist yet
 
-    now = datetime.now(UTC)
+    now = attempted_at or datetime.now(UTC)
     async with engine.begin() as conn:
         for _ in range(count):
             await conn.execute(
@@ -570,3 +572,72 @@ async def test_used_code_double_redemption_returns_401(db_client) -> None:
 
     assert r1.status_code == 200
     assert r2.status_code == 401
+
+
+# ── #434 — Retention of attempt rows and their IP addresses ───────────────────
+
+
+async def _attempts_for(engine, user_id: str) -> list[RecoveryAttempt]:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        result = await session.execute(
+            select(RecoveryAttempt).where(RecoveryAttempt.user_id == user_id)
+        )
+        return list(result.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_success_deletes_the_accounts_earlier_attempts(db_client) -> None:
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(db_client, user_id, count=3)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        r = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": "musashi@dojo.test", "code": plaintext},
+        )
+    assert r.status_code == 200
+
+    attempts = await _attempts_for(db_client, user_id)
+    assert [a.success for a in attempts] == [True]
+
+
+@pytest.mark.asyncio
+async def test_log_attempt_clears_ip_addresses_older_than_30_days(db_client) -> None:
+    """Every Account's aged rows lose their IP; the rows themselves stay."""
+    now = datetime.now(UTC)
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
+    await _seed_failed_attempt(
+        db_client, user_id, attempted_at=now - timedelta(days=29)
+    )
+    # An Account that never tries again still has its old IPs cleared.
+    other_email = "kojiro@dojo.test"
+    other_id = str(uuid.uuid4())
+    await _seed_user(db_client, other_email, other_id)
+    try:
+        await _seed_failed_attempt(
+            db_client, other_id, attempted_at=now - timedelta(days=31)
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test/api"
+        ) as c:
+            r = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": "musashi@dojo.test", "code": "wrong-code-yyyy"},
+            )
+        assert r.status_code == 401
+
+        others = await _attempts_for(db_client, other_id)
+        assert [(a.ip_address, a.success) for a in others] == [(None, False)]
+        mine = await _attempts_for(db_client, user_id)
+        assert [a.ip_address for a in mine] == ["127.0.0.1", "127.0.0.1"]
+    finally:
+        await _wipe_test_email(db_client, other_email)

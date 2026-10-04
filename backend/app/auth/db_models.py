@@ -81,7 +81,8 @@ class RecoveryAttempt(UUIDBase):
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
-    ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
+    # Cleared after IP_RETENTION (app.auth.attempt_repository, #434).
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 

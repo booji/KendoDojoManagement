@@ -226,6 +226,14 @@ erDiagram
   `recovery_codes` and `admin_recovery_tokens` hold bcrypt hashes;
   `invites.token_hash` is a deterministic sha256 digest (it is looked up by
   value — see `app/auth/invite_service.py` for why that differs).
+- **`recovery_attempts` retention** (#434). A successful attempt deletes that
+  Account's earlier rows, leaving only the success. Rows that remain (an
+  Account that keeps failing) are kept — lockout counts failures since the
+  last success with no time window, so deleting by age would expire lockouts
+  — but `ip_address` is cleared to NULL once a row is 30 days old
+  (`IP_RETENTION` in `app/auth/attempt_repository.py`). There is no scheduler:
+  the clear runs on every `log_attempt`, for all Accounts, so an address can
+  outlive 30 days until the next recovery attempt anywhere on the instance.
 - **Every Account belongs to exactly one Member** (#432, ADR-0006).
   `users.member_id` is a live link and is enforced: NOT NULL, UNIQUE, and a
   foreign key to `members.id` with ON DELETE RESTRICT (Members are
