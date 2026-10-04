@@ -36,12 +36,11 @@ export type AdminRecoveryTokenResponse = {
 }
 
 export const generateAdminRecoveryToken = async (
-  userId: string
+  memberId: string
 ): Promise<AdminRecoveryTokenResponse> => {
-  const res = await apiFetch("/api/auth/recovery/admin-token", { method: "POST", body: { user_id: userId } })
+  const res = await apiFetch("/api/auth/recovery/admin-token", { method: "POST", body: { member_id: memberId } })
   if (res.status === 401) await throwApiError(res, "Not authenticated")
   if (res.status === 403) await throwApiError(res, "Admin access required")
-  if (res.status === 404) await throwApiError(res, "Member not found")
   if (!res.ok) await throwApiError(res, "Failed to generate recovery token")
   return res.json() as Promise<AdminRecoveryTokenResponse>
 }

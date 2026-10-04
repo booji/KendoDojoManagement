@@ -705,9 +705,10 @@ async def test_admin_token_generation_emits_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """POST /auth/recovery/admin-token must emit an admin_token_generated/success event."""
-    from tests.account_support import seed_account
+    from tests.account_support import seed_account, seed_member
 
     target_user_id = str(uuid.uuid4())
+    target_member_id = await seed_member(db_client, "target@dojo.test")
     await seed_account(db_client, "target@dojo.test", user_id=target_user_id)
     await db_client.flush()
 
@@ -725,11 +726,14 @@ async def test_admin_token_generation_emits_log(
         ) as c:
             await c.post(
                 "/auth/recovery/admin-token",
-                json={"user_id": target_user_id},
+                json={"member_id": target_member_id},
             )
 
     logs = _capture_security_logs(caplog)
     assert any(
-        log["event_type"] == "admin_token_generated" and log["result"] == "success"
+        log["event_type"] == "admin_token_generated"
+        and log["result"] == "success"
+        # The Account the token is for, resolved from the Member (#445).
+        and log["detail"] == {"target_user_id": target_user_id}
         for log in logs
     ), f"Expected admin_token_generated/success event, got: {logs}"

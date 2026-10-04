@@ -5,9 +5,8 @@ from typing import Annotated, Any, Literal
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
-from app.auth.accounts import account_for_email, sign_in_email
+from app.auth.accounts import account_for_email, account_for_member, sign_in_email
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.db_models import Account
 from app.auth.dependencies import (
@@ -366,7 +365,9 @@ async def redeem_recovery_code(
 
 
 class _AdminTokenRequest(BaseModel):
-    user_id: str = Field(..., min_length=1)
+    # The Member the admin is looking at (#445); the token is for their
+    # Account.
+    member_id: uuid.UUID
 
 
 @router.post("/recovery/admin-token", status_code=200)
@@ -378,19 +379,35 @@ async def generate_admin_token(
         AbstractAdminTokenRepository, Depends(get_admin_token_repo)
     ],
 ) -> dict[str, str]:
-    result = await uow.session.execute(
-        select(Account).where(Account.id == payload.user_id)
-    )
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    # A Member who never registered has no Account, and nothing to recover;
+    # redemption refuses an inactive one, so a token for it would be a dud.
+    user = await account_for_member(uow.session, str(payload.member_id))
+    if user is None or not user.is_active:
+        log_security_event(
+            "admin_token_generated",
+            "failure",
+            user_id=claims.sub,
+            detail={"target_member_id": str(payload.member_id)},
+        )
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="There is no account to recover for this member",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This member's account is deactivated, "
+                "so a recovery token could not be used"
+            ),
+        )
 
     plaintext = generate_admin_token_plaintext()
     token_hash = hash_admin_token(plaintext)
     expires_at = admin_token_expiry()
 
     await admin_token_repo.create_admin_token(
-        user_id=payload.user_id,
+        user_id=user.id,
         created_by_id=claims.sub,
         token_hash=token_hash,
         expires_at=expires_at,
@@ -400,7 +417,7 @@ async def generate_admin_token(
         "admin_token_generated",
         "success",
         user_id=claims.sub,
-        detail={"target_user_id": payload.user_id},
+        detail={"target_user_id": user.id},
     )
     return {"token": plaintext}
 

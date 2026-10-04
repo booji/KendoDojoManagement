@@ -1,9 +1,9 @@
 """E2E browser tests for admin-issued recovery tokens (issue #42).
 
 AC4: passkey count in member list — deferred (requires backend schema change).
-AC5: Admin member detail view has a "Generate recovery token" button.
-     Token generation flow deferred: frontend passes member.id as user_id;
-     needs member.user_id fix before the generation flow can be tested E2E.
+AC5: Admin member detail view has a "Generate recovery token" button, and
+     it issues a token for that Member's Account (#445: the endpoint takes the
+     Member id the page has, not an Account id).
 """
 
 from __future__ import annotations
@@ -99,17 +99,49 @@ def test_admin_member_detail_has_generate_recovery_token_button(page: Page) -> N
     expect(page.get_by_role("button", name="Generate recovery token")).to_be_visible()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Frontend passes member.id as user_id; needs member.user_id fix before this flow works",
-)
+def _token_dialog(page: Page):
+    return page.get_by_role("dialog", name="Recovery token", exact=True)
+
+
+def _generate_token_for_a_registered_member(page: Page) -> str:
+    """Drive the member page's generate flow; the plaintext token shown."""
+    admin_token = _make_token("admin")
+    complete_onboarding(admin_token)
+    # A Member who has registered: complete_onboarding makes their forged
+    # subject a real Account, so there is an Account to recover.
+    member_id = complete_onboarding(_make_token("member"))["id"]
+
+    _set_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/members/{member_id}")
+    page.wait_for_load_state("networkidle")
+    page.get_by_role("button", name="Generate recovery token").click()
+    page.get_by_role("button", name="Generate token").click()
+
+    shown = _token_dialog(page).get_by_label("Recovery token", exact=True)
+    expect(shown).to_be_visible()
+    token = shown.inner_text().strip()
+    assert len(token) > 8
+    return token
+
+
 def test_admin_generate_recovery_token_shows_plaintext_once(page: Page) -> None:
-    pytest.fail("not implemented: member.id vs user_id mismatch")
+    token = _generate_token_for_a_registered_member(page)
+
+    _token_dialog(page).get_by_label("Close", exact=True).click()
+
+    expect(_token_dialog(page)).to_have_count(0)
+    expect(page.get_by_text(token)).to_have_count(0)
+    # Starting the flow again does not bring the old token back.
+    page.get_by_role("button", name="Generate recovery token").click()
+    expect(page.get_by_role("dialog", name="Generate recovery token?")).to_be_visible()
+    expect(page.get_by_text(token)).to_have_count(0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Frontend passes member.id as user_id; needs member.user_id fix before this flow works",
-)
 def test_admin_generate_recovery_token_has_copy_to_clipboard(page: Page) -> None:
-    pytest.fail("not implemented: member.id vs user_id mismatch")
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    token = _generate_token_for_a_registered_member(page)
+
+    page.get_by_role("button", name="Copy token to clipboard").click()
+
+    expect(page.get_by_text("Copied!")).to_be_visible()
+    assert page.evaluate("navigator.clipboard.readText()") == token
