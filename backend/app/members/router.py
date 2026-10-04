@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete
 
 from app.auth.db_models import (
+    Account,
     AdminRecoveryToken,
     PasskeyCredential,
     RecoveryAttempt,
     RecoveryCode,
-    User,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
@@ -30,8 +30,8 @@ router = APIRouter(tags=["members"])
 
 _Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AdminDirectory = Annotated[AbstractAdminDirectory, Depends(get_admin_directory)]
 
 # Member fields an admin may clear by sending an explicit null. Every other
@@ -223,7 +223,7 @@ async def erase_member(
     session = uow.session
 
     # Children before parent: passkeys/recovery/tokens must go before the
-    # users row itself, to satisfy foreign key constraints.
+    # accounts row itself, to satisfy foreign key constraints.
     if target_user_id is not None:
         await session.execute(
             delete(PasskeyCredential).where(PasskeyCredential.user_id == target_user_id)
@@ -239,7 +239,7 @@ async def erase_member(
                 AdminRecoveryToken.user_id == target_user_id
             )
         )
-        await session.execute(delete(User).where(User.id == target_user_id))
+        await session.execute(delete(Account).where(Account.id == target_user_id))
 
     await session.execute(
         delete(GradeHistory).where(GradeHistory.member_id == member_id)

@@ -9,13 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.reports.dependencies import get_report_repo
 from app.reports.repository import AbstractReportRepository
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
 _ReportRepo = Annotated[AbstractReportRepository, Depends(get_report_repo)]
 
 _MAX_RANGE_DAYS = 366

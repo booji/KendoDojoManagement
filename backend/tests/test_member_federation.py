@@ -13,7 +13,7 @@ Acceptance criteria exercised here:
   6.  Members can edit existing federation memberships
   7.  Members can remove a federation membership
   9.  Admins can manage memberships on any member via /members/{id}/federations
- 10.  Members can manage their own via /users/me/federations; cannot access others'
+ 10.  Members can manage their own via /accounts/me/federations; cannot access others'
  18.  Renewal date status is a computed field in the response, not stored
 """
 
@@ -27,7 +27,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.federations.db_models import Federation
 from app.federations.dependencies import get_federation_repo  # noqa: F401 — red
 from app.main import app
@@ -46,13 +46,13 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER_A = UserClaims(
+_MEMBER_A = AccountClaims(
     sub="member-a-uuid", email="member-a@dojo.test", role="member", is_active=True
 )
-_MEMBER_B = UserClaims(
+_MEMBER_B = AccountClaims(
     sub="member-b-uuid", email="member-b@dojo.test", role="member", is_active=True
 )
 
@@ -677,7 +677,7 @@ async def test_get_member_federations_not_found_returns_404(
 
 
 # ---------------------------------------------------------------------------
-# AC10 — /users/me/federations (member self-service)
+# AC10 — /accounts/me/federations (member self-service)
 # ---------------------------------------------------------------------------
 
 
@@ -690,7 +690,7 @@ async def test_member_can_add_own_federation_membership(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/users/me/federations",
+            "/accounts/me/federations",
             json={
                 "federation_id": "fed-ajkf-uuid",
                 "member_number": "SELF-001",
@@ -717,7 +717,7 @@ async def test_member_can_list_own_federation_memberships(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/federations")
+        response = await c.get("/accounts/me/federations")
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["member_number"] == "SELF-A"
@@ -740,7 +740,7 @@ async def test_member_can_edit_own_federation_membership(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            f"/users/me/federations/{mf_id}",
+            f"/accounts/me/federations/{mf_id}",
             json={"member_number": "AFTER"},
         )
     assert response.status_code == 200
@@ -763,14 +763,14 @@ async def test_member_can_remove_own_federation_membership(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(f"/users/me/federations/{mf_id}")
+        response = await c.delete(f"/accounts/me/federations/{mf_id}")
     assert response.status_code == 204
 
 
 async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
-    """AC10: Member B cannot edit Member A's federation membership via /users/me/federations."""
+    """AC10: Member B cannot edit Member A's federation membership via /accounts/me/federations."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
     # A membership belonging to member A
     membership = await mf_repo.add(
@@ -785,7 +785,7 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            f"/users/me/federations/{mf_id}",
+            f"/accounts/me/federations/{mf_id}",
             json={"member_number": "STOLEN"},
         )
     assert response.status_code == 404
@@ -794,7 +794,7 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
 async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
-    """AC10: Member B cannot delete Member A's membership via /users/me/federations."""
+    """AC10: Member B cannot delete Member A's membership via /accounts/me/federations."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_b_override
     membership = await mf_repo.add(
         {
@@ -807,7 +807,7 @@ async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(f"/users/me/federations/{mf_id}")
+        response = await c.delete(f"/accounts/me/federations/{mf_id}")
     assert response.status_code == 404
 
 
@@ -817,7 +817,7 @@ async def test_me_federations_unauthenticated_returns_401(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/federations")
+        response = await c.get("/accounts/me/federations")
     assert response.status_code == 401
 
 

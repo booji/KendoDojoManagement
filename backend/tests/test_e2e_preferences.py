@@ -1,5 +1,5 @@
 """
-E2E tests for issue #26 — User preferences API (theme persistence).
+E2E tests for issue #26 — Account preferences API (theme persistence).
 
 These tests call the live backend API directly via Playwright's request context
 (no UI needed — issue #26 is a backend-only feature).
@@ -29,7 +29,7 @@ def _get_token(playwright: Playwright) -> str:
 
 
 # ---------------------------------------------------------------------------
-# AC1 — GET /users/me/preferences returns {"theme": "system"} with no saved pref
+# AC1 — GET /accounts/me/preferences returns {"theme": "system"} with no saved pref
 # ---------------------------------------------------------------------------
 
 
@@ -40,7 +40,8 @@ def test_preferences_get_returns_system_theme_by_default(
     ctx = playwright.request.new_context(base_url=BASE_API)
 
     resp = ctx.get(
-        f"{BASE_API}/users/me/preferences", headers={"Cookie": f"access_token={token}"}
+        f"{BASE_API}/accounts/me/preferences",
+        headers={"Cookie": f"access_token={token}"},
     )
     assert resp.ok, f"expected 200, got {resp.status}: {resp.text()}"
     assert resp.json()["theme"] == "system"
@@ -48,7 +49,7 @@ def test_preferences_get_returns_system_theme_by_default(
 
 
 # ---------------------------------------------------------------------------
-# AC2 — PUT /users/me/preferences with {"theme": "dark"} persists and returns it
+# AC2 — PUT /accounts/me/preferences with {"theme": "dark"} persists and returns it
 # ---------------------------------------------------------------------------
 
 
@@ -60,7 +61,7 @@ def test_preferences_put_dark_theme_persists_and_is_returned(
     auth = {"Cookie": f"access_token={token}"}
 
     put_resp = ctx.fetch(
-        f"{BASE_API}/users/me/preferences",
+        f"{BASE_API}/accounts/me/preferences",
         method="PUT",
         headers={**auth, "Content-Type": "application/json"},
         data=json.dumps({"theme": "dark"}),
@@ -68,13 +69,13 @@ def test_preferences_put_dark_theme_persists_and_is_returned(
     assert put_resp.ok, f"PUT failed: {put_resp.status} {put_resp.text()}"
     assert put_resp.json()["theme"] == "dark"
 
-    get_resp = ctx.get(f"{BASE_API}/users/me/preferences", headers=auth)
+    get_resp = ctx.get(f"{BASE_API}/accounts/me/preferences", headers=auth)
     assert get_resp.json()["theme"] == "dark"
     ctx.dispose()
 
 
 # ---------------------------------------------------------------------------
-# AC3 — PUT /users/me/preferences with invalid theme returns 422
+# AC3 — PUT /accounts/me/preferences with invalid theme returns 422
 # ---------------------------------------------------------------------------
 
 
@@ -84,7 +85,7 @@ def test_preferences_put_invalid_theme_returns_422(playwright: Playwright) -> No
     auth = {"Cookie": f"access_token={token}"}
 
     resp = ctx.fetch(
-        f"{BASE_API}/users/me/preferences",
+        f"{BASE_API}/accounts/me/preferences",
         method="PUT",
         headers={**auth, "Content-Type": "application/json"},
         data=json.dumps({"theme": "invalid_value"}),
@@ -94,26 +95,26 @@ def test_preferences_put_invalid_theme_returns_422(playwright: Playwright) -> No
 
 
 # ---------------------------------------------------------------------------
-# AC4 — GET /users/me/preferences returns 401 for unauthenticated requests
+# AC4 — GET /accounts/me/preferences returns 401 for unauthenticated requests
 # ---------------------------------------------------------------------------
 
 
 def test_preferences_get_unauthenticated_returns_401(playwright: Playwright) -> None:
     ctx = playwright.request.new_context(base_url=BASE_API)
-    resp = ctx.get(f"{BASE_API}/users/me/preferences")
+    resp = ctx.get(f"{BASE_API}/accounts/me/preferences")
     assert resp.status == 401, f"expected 401, got {resp.status}: {resp.text()}"
     ctx.dispose()
 
 
 # ---------------------------------------------------------------------------
-# AC5 — PUT /users/me/preferences returns 401 for unauthenticated requests
+# AC5 — PUT /accounts/me/preferences returns 401 for unauthenticated requests
 # ---------------------------------------------------------------------------
 
 
 def test_preferences_put_unauthenticated_returns_401(playwright: Playwright) -> None:
     ctx = playwright.request.new_context(base_url=BASE_API)
     resp = ctx.fetch(
-        f"{BASE_API}/users/me/preferences",
+        f"{BASE_API}/accounts/me/preferences",
         method="PUT",
         headers={"Content-Type": "application/json"},
         data=json.dumps({"theme": "dark"}),

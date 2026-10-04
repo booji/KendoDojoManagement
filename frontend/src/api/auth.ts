@@ -14,7 +14,7 @@ export type LoginResponse = {
   detail: string
 }
 
-export type UserClaims = {
+export type AccountClaims = {
   sub: string
   email: string
   role: "admin" | "member"
@@ -25,7 +25,7 @@ export type UserClaims = {
 export { isApiError, throwApiError } from "@/api/client"
 export type { ApiError } from "@/api/client"
 
-export const getMe = async (): Promise<UserClaims> => {
+export const getMe = async (): Promise<AccountClaims> => {
   const res = await apiFetch("/api/auth/me")
 
   if (res.status === 401 || res.status === 403) {
@@ -35,7 +35,7 @@ export const getMe = async (): Promise<UserClaims> => {
     throw { status: res.status, message: "Failed to fetch user" } satisfies ApiError
   }
 
-  return res.json() as Promise<UserClaims>
+  return res.json() as Promise<AccountClaims>
 }
 
 export const logout = async (): Promise<void> => {

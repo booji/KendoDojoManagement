@@ -22,7 +22,7 @@ from app.attendance.dependencies import (
     get_attendance_repo,
 )
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.token import encode_token
 from app.main import app
 from app.members.dependencies import get_current_member_id
@@ -43,14 +43,14 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
 # The Member record id behind _MEMBER's user. Attendance is keyed by Member id
-# (#340), so it must differ from the User id in the token for these tests to
+# (#340), so it must differ from the Account id in the token for these tests to
 # tell the two apart.
 _MEMBER_ID = "member-record-uuid"
 
@@ -323,7 +323,7 @@ async def test_admin_marked_member_sees_themselves_as_checked_in(
     """Being marked present by an admin counts as checked in for that member.
 
     Issue #340: the roster said the member was attending while their own
-    session list said they were not, because self check-in wrote a User id and
+    session list said they were not, because self check-in wrote an Account id and
     admin marking wrote a Member id into the same column.
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override

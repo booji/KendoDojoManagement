@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import AbstractAttemptRepository
-from app.auth.db_models import User
+from app.auth.db_models import Account
 from app.auth.dependencies import (
     get_admin_token_repo,
     get_attempt_repo,
@@ -27,6 +27,7 @@ from app.auth.invite_service import (
 )
 from app.auth.member_directory import member_directory_for
 from app.auth.models import (
+    AccountClaims,
     InviteCreateRequest,
     InviteListItem,
     InviteMintResponse,
@@ -37,7 +38,6 @@ from app.auth.models import (
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
-    UserClaims,
 )
 from app.auth.passkey_repository import AbstractPasskeyRepository
 from app.auth.passkey_service import (
@@ -85,17 +85,17 @@ async def logout(response: Response) -> dict:
     return {"detail": "logged out"}
 
 
-@router.get("/me", response_model=UserClaims)
+@router.get("/me", response_model=AccountClaims)
 async def me(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
-) -> UserClaims:
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
+) -> AccountClaims:
     return claims
 
 
-@router.get("/admin-only", response_model=UserClaims)
+@router.get("/admin-only", response_model=AccountClaims)
 async def admin_only(
-    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
-) -> UserClaims:
+    claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
+) -> AccountClaims:
     return claims
 
 
@@ -121,7 +121,7 @@ async def passkey_register_complete(
 
 @router.get("/security-status")
 async def security_status(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
 ) -> dict[str, int]:
     count = await repo.count_for_user(claims.sub)
@@ -175,7 +175,7 @@ def _passkey_to_response(record: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("/passkeys")
 async def list_passkeys(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
 ) -> list[dict[str, Any]]:
     records = await repo.list_for_user(claims.sub)
@@ -186,7 +186,7 @@ async def list_passkeys(
 async def update_passkey_label(
     passkey_id: str,
     payload: _LabelUpdate,
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
 ) -> dict[str, Any]:
     record = await repo.get(passkey_id)
@@ -199,7 +199,7 @@ async def update_passkey_label(
 @router.delete("/passkeys/{passkey_id}", status_code=204)
 async def delete_passkey(
     passkey_id: str,
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
 ) -> None:
@@ -220,7 +220,7 @@ async def delete_passkey(
 
 @router.post("/recovery/codes/generate", status_code=200)
 async def generate_codes(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
@@ -239,7 +239,7 @@ async def generate_codes(
 
 @router.post("/recovery/codes/regenerate", status_code=200)
 async def regenerate_codes(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
@@ -254,7 +254,7 @@ async def regenerate_codes(
 
 @router.get("/recovery/codes/status", status_code=200)
 async def recovery_codes_status(
-    claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
 ) -> dict[str, Any]:
     unused_count = await recovery_repo.count_unused(claims.sub)
@@ -337,13 +337,15 @@ class _AdminTokenRequest(BaseModel):
 @router.post("/recovery/admin-token", status_code=200)
 async def generate_admin_token(
     payload: _AdminTokenRequest,
-    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     admin_token_repo: Annotated[
         AbstractAdminTokenRepository, Depends(get_admin_token_repo)
     ],
 ) -> dict[str, str]:
-    result = await uow.session.execute(select(User).where(User.id == payload.user_id))
+    result = await uow.session.execute(
+        select(Account).where(Account.id == payload.user_id)
+    )
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -376,7 +378,7 @@ async def generate_admin_token(
 @router.post("/admin/invites", status_code=201, response_model=InviteMintResponse)
 async def mint_invite_route(
     payload: InviteCreateRequest,
-    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> InviteMintResponse:
@@ -388,7 +390,7 @@ async def mint_invite_route(
 
 @router.get("/admin/invites", response_model=list[InviteListItem])
 async def list_invites_route(
-    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
 ) -> list[InviteListItem]:
     records = await repo.list()
@@ -401,7 +403,7 @@ async def list_invites_route(
 @router.post("/admin/invites/{invite_id}/revoke")
 async def revoke_invite_route(
     invite_id: str,
-    claims: Annotated[UserClaims, Depends(REQUIRE_ADMIN)],
+    claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
@@ -473,7 +475,7 @@ if _ALLOW_TEST_AUTH:
             member_id = await member_directory_for(uow).ensure_member(
                 payload.email, payload.first_name, payload.surname
             )
-            user = User(
+            user = Account(
                 id=payload.sub or str(uuid.uuid4()),
                 member_id=member_id,
                 role=payload.role,
@@ -483,7 +485,7 @@ if _ALLOW_TEST_AUTH:
             await uow.session.flush()
         await uow.commit()
         token = encode_token(
-            UserClaims(
+            AccountClaims(
                 sub=user.id,
                 email=payload.email,
                 role=user.role,

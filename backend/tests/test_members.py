@@ -29,7 +29,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_member_repo  # noqa: F401 — will fail (red)
 from tests.fake_repositories import InMemoryMemberRepository
@@ -38,10 +38,10 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER_CLAIMS = UserClaims(
+_MEMBER_CLAIMS = AccountClaims(
     sub="member-uuid-self", email="self@dojo.test", role="member", is_active=True
 )
 

@@ -27,7 +27,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo as get_att_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.dependencies import get_uow
 from app.grades.dependencies import get_grade_repo
 from app.main import app
@@ -49,13 +49,13 @@ from tests.fake_repositories import (
 # Shared auth overrides
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="00000000-0000-0000-0000-000000000001",
     email="admin@dojo.test",
     role="admin",
     is_active=True,
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",

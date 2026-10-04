@@ -1,7 +1,7 @@
-"""Small read-only lookup over the auth users table, used by member erasure
+"""Small read-only lookup over the auth accounts table, used by member erasure
 to decide whether a target member is an admin and how many active admins
 remain. Kept separate from AbstractMemberRepository since it queries a
-different aggregate (users, not members).
+different aggregate (accounts, not members).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import User
+from app.auth.db_models import Account
 
 
 @runtime_checkable
@@ -31,7 +31,9 @@ class SqlAdminDirectory:
         # Mirror count_admins: only an *active* admin counts, so the
         # last-admin guard and the count it compares against share semantics.
         result = await self._session.execute(
-            select(User.role).where(User.id == user_id, User.is_active.is_(True))
+            select(Account.role).where(
+                Account.id == user_id, Account.is_active.is_(True)
+            )
         )
         role = result.scalar_one_or_none()
         return role == "admin"
@@ -43,8 +45,8 @@ class SqlAdminDirectory:
         # zero admins. FOR UPDATE cannot combine with an aggregate, so we lock
         # the rows and count them in Python.
         result = await self._session.execute(
-            select(User.id)
-            .where(User.role == "admin", User.is_active.is_(True))
+            select(Account.id)
+            .where(Account.role == "admin", Account.is_active.is_(True))
             .with_for_update()
         )
         return len(result.scalars().all())

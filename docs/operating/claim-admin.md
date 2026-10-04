@@ -67,5 +67,5 @@ echo "$token"   # hand it over out of band, then clear your scrollback
 ```
 
 `app/cli.py create-recovery-token` does **not** cover a never-claimed instance:
-it resolves a `User` row by email, and an unclaimed instance has none. Rotation
+it resolves an Account by email, and an unclaimed instance has none. Rotation
 is the only path there, and it costs seconds.

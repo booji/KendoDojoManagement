@@ -20,7 +20,7 @@ from app.attendance.repository import (
     AbstractSessionInstanceRepository,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_current_member_id
@@ -36,8 +36,8 @@ _SessRepo = Annotated[
     AbstractSessionInstanceRepository, Depends(get_session_instance_repo)
 ]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _CurrentMemberId = Annotated[str | None, Depends(get_current_member_id)]
 _SettingsRepo = Annotated[
     AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)

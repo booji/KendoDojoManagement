@@ -572,7 +572,7 @@ class InMemoryAttendanceRepository:
 # ``members.dob`` and ``members.join_date`` are ``String(10)`` columns, so
 # ``SqlMemberRepository`` writes a ``date`` as its ISO string. Eleven partial
 # stubs stored whatever they were handed, and ``members/router.py`` and
-# ``users/router.py`` each converted before writing to compensate -- production
+# ``accounts/router.py`` each converted before writing to compensate -- production
 # shaped by incomplete test doubles, the shape #337 found for sessions. #345
 # deleted those guards; the rule lives here now (#348).
 _MEMBER_DATE_COLUMNS = ("dob", "join_date")

@@ -25,11 +25,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import func, select
 
 from app import config
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.auth.models import (
+    AccountClaims,
     PasskeyRegisterCompleteRequest,
     SetupBeginRequest,
-    UserClaims,
 )
 from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
 from app.auth.session_cookie import set_session_cookie
@@ -128,7 +128,7 @@ async def setup_passkey_complete(
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
     x_setup_token: SetupTokenHeader = None,
-) -> UserClaims:
+) -> AccountClaims:
     """Complete passkey registration, promote user to admin, set cookie."""
     if await _has_registered_user(uow):
         raise _ALREADY_DONE
@@ -140,11 +140,13 @@ async def setup_passkey_complete(
     # the Account as a member, so an abandoned claim leaves no admin account
     # behind for the ordinary registration route to finish (#432).
     if claims.role != "admin":
-        result = await uow.session.execute(select(User).where(User.id == claims.sub))
+        result = await uow.session.execute(
+            select(Account).where(Account.id == claims.sub)
+        )
         user = result.scalar_one()
         user.role = "admin"
         await uow.commit()
-        claims = UserClaims(
+        claims = AccountClaims(
             sub=claims.sub,
             email=claims.email,
             role="admin",

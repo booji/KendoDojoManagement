@@ -29,7 +29,7 @@ from sqlalchemy import select
 from app import config
 from app.auth.aaguid import label_from_aaguid
 from app.auth.accounts import account_for_email
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
 from app.auth.models import (
@@ -134,7 +134,7 @@ async def mint_invite(
 
 async def _create_invited_user(
     record: dict[str, Any], uow: AbstractUnitOfWork
-) -> User | None:
+) -> Account | None:
     """Create the invited Member's Account, or None if the email has one.
 
     An account can appear between minting and redemption, so refusing at mint
@@ -147,7 +147,7 @@ async def _create_invited_user(
     member_id = await member_directory_for(uow).ensure_member(
         record["email"], record["first_name"], record["surname"]
     )
-    user = User(member_id=member_id, role="member", is_active=True)
+    user = Account(member_id=member_id, role="member", is_active=True)
     uow.session.add(user)
     await uow.session.flush()
     return user

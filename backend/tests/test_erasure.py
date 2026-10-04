@@ -46,7 +46,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from tests.account_support import seed_account
 from tests.fake_repositories import InMemoryMemberRepository
@@ -201,10 +201,10 @@ class TestCanErase:
 # ===========================================================================
 
 
-_MEMBER_CLAIMS = UserClaims(
+_MEMBER_CLAIMS = AccountClaims(
     sub="member-uuid-self", email="self@dojo.test", role="member", is_active=True
 )
-_ADMIN_CLAIMS = UserClaims(
+_ADMIN_CLAIMS = AccountClaims(
     sub="admin-1", email="admin@dojo.test", role="admin", is_active=True
 )
 
@@ -344,7 +344,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     )
     await db_session.execute(
         text(
-            "INSERT INTO users (id, member_id, role, is_active, theme) "
+            "INSERT INTO accounts (id, member_id, role, is_active, theme) "
             "VALUES (:id, :member_id, 'member', true, 'system')"
         ),
         {"id": member_user_id, "member_id": member_id},
@@ -445,7 +445,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     uow = _DbSessionUnitOfWork(db_session)
     app.dependency_overrides[get_uow] = lambda: uow
     app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
-    app.dependency_overrides[REQUIRE_ADMIN] = lambda: UserClaims(
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
         sub=actor_id, email="actor@dojo.test", role="admin", is_active=True
     )
 
@@ -484,7 +484,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
 
     # --- assert: related auth / recovery / grade / federation rows deleted --
     for table, column, value in [
-        ("users", "id", member_user_id),
+        ("accounts", "id", member_user_id),
         ("passkey_credentials", "user_id", member_user_id),
         ("recovery_codes", "user_id", member_user_id),
         ("recovery_attempts", "user_id", member_user_id),
@@ -516,7 +516,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     #     own user account is in scope) ---------------------------------------
     actor_count = (
         await db_session.execute(
-            text("SELECT COUNT(*) FROM users WHERE id = :id"), {"id": actor_id}
+            text("SELECT COUNT(*) FROM accounts WHERE id = :id"), {"id": actor_id}
         )
     ).scalar_one()
     assert actor_count == 1

@@ -15,6 +15,8 @@ from tests.migration_support import sql, upgrade
 
 # The revision before the move, for seeding the old shape.
 _BEFORE = "f2a3b4c5d6e8"
+# This migration. Pinned rather than head: #436 later renames `users`.
+_AFTER = "b4c5d6e7f8a0"
 
 
 def member(member_id: str, email: str | None, user_id: str | None = None) -> str:
@@ -44,14 +46,14 @@ def account(user_id: str, member_id: str | None) -> str:
 
 
 async def test_an_account_cannot_exist_without_a_member(scratch_db):
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
 
     with pytest.raises(IntegrityError, match="member_id"):
         await sql(scratch_db, account(str(uuid.uuid4()), None))
 
 
 async def test_two_accounts_cannot_belong_to_one_member(scratch_db):
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
     member_id = str(uuid.uuid4())
     await sql(
         scratch_db,
@@ -65,7 +67,7 @@ async def test_two_accounts_cannot_belong_to_one_member(scratch_db):
 
 async def test_a_member_with_an_account_cannot_be_deleted(scratch_db):
     # Members are deactivated or anonymised, never hard-deleted (RESTRICT).
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
     member_id = str(uuid.uuid4())
     await sql(
         scratch_db,
@@ -93,7 +95,7 @@ async def test_upgrade_moves_the_link_onto_the_account(scratch_db):
         member(unlinked, "ken@dojo.test"),
     )
 
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
 
     rows = await sql(scratch_db, "SELECT id, member_id FROM users")
     assert [(str(r[0]), str(r[1])) for r in rows] == [(user_id, member_id)]
@@ -111,7 +113,7 @@ async def test_upgrade_drops_a_link_to_an_account_that_no_longer_exists(scratch_
     member_id = str(uuid.uuid4())
     await sql(scratch_db, member(member_id, "ai@dojo.test", str(uuid.uuid4())))
 
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
 
     rows = await sql(scratch_db, "SELECT id FROM members")
     assert [str(r[0]) for r in rows] == [member_id]
@@ -125,7 +127,7 @@ async def test_upgrade_deletes_an_account_nobody_can_sign_in_to(scratch_db):
     await upgrade(scratch_db, _BEFORE)
     await sql(scratch_db, old_account(str(uuid.uuid4()), "typo@dojo.tst"))
 
-    await upgrade(scratch_db)
+    await upgrade(scratch_db, _AFTER)
 
     assert await sql(scratch_db, "SELECT count(*) FROM users") == [(0,)]
 
@@ -169,7 +171,7 @@ async def test_upgrade_aborts_naming_what_needs_a_human(scratch_db, violation):
     await sql(scratch_db, *statements)
 
     with pytest.raises(RuntimeError) as aborted:
-        await upgrade(scratch_db)
+        await upgrade(scratch_db, _AFTER)
 
     message = str(aborted.value)
     assert "fix these by hand" in message

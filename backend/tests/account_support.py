@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import User
+from app.auth.db_models import Account
 from app.members.db_models import Member
 
 
@@ -55,7 +55,7 @@ async def seed_account(
     member_id = await seed_member(session, email)
     user_id = user_id or str(uuid.uuid4())
     await session.execute(
-        insert(User).values(
+        insert(Account).values(
             id=user_id,
             member_id=member_id,
             role=role,

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet, useOutletContext } from "react-router-dom"
 import { getMe } from "@/api/auth"
 import { markSessionEstablished } from "@/api/client"
-import type { UserClaims } from "@/api/auth"
+import type { AccountClaims } from "@/api/auth"
 import { checkSetupAvailable } from "@/api/setup"
-import { getMyMember } from "@/api/users"
+import { getMyMember } from "@/api/accounts"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
@@ -29,14 +29,14 @@ import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 import SessionDetailPage from "@/pages/SessionDetailPage"
 import OnboardingPage from "@/pages/OnboardingPage"
 
-type LayoutContext = { user: UserClaims }
+type LayoutContext = { user: AccountClaims }
 
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
 const AuthenticatedLayout = () => {
   const { refresh } = useDojoSettings()
   const navigate = useNavigate()
-  const [user, setUser] = useState<UserClaims | null>(null)
+  const [user, setUser] = useState<AccountClaims | null>(null)
 
   useEffect(() => {
     getMe()

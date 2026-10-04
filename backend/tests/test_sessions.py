@@ -26,7 +26,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
@@ -43,10 +43,10 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
 
@@ -137,7 +137,7 @@ async def test_member_cannot_create_session_type(type_repo) -> None:
     """Members must receive 403 when attempting to create a session type."""
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
@@ -210,7 +210,7 @@ async def test_admin_can_create_session_template(
 async def test_member_cannot_create_session_template(template_repo) -> None:
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
@@ -349,7 +349,7 @@ async def test_create_adhoc_session_rejects_a_date_that_is_not_real(
 async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> None:
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
@@ -504,7 +504,7 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
 
     # Now attempt cancel as member (remove admin override, use real member token)
     del app.dependency_overrides[REQUIRE_ADMIN]
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)

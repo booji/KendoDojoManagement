@@ -7,14 +7,14 @@ from sqlalchemy import func, select
 from app import config
 from app.auth.aaguid import label_from_aaguid
 from app.auth.accounts import account_for_email, account_for_member
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.auth.member_directory import MemberDirectory, member_directory_for
 from app.auth.models import (
+    AccountClaims,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
     TokenResponse,
-    UserClaims,
 )
 from app.auth.token import encode_token
 from app.auth.webauthn_ceremony import (
@@ -38,8 +38,8 @@ _AUTH_FAILED = HTTPException(
 async def _is_bootstrap(uow: AbstractUnitOfWork) -> bool:
     """True when no fully-registered user exists yet.
 
-    Counts PasskeyCredential rows, not User rows, matching the convention in
-    app/routers/setup.py. A User row is inserted before the interactive
+    Counts PasskeyCredential rows, not Account rows, matching the convention in
+    app/routers/setup.py. An Account row is inserted before the interactive
     WebAuthn ceremony completes, so counting users would let a single
     abandoned first-run ceremony leave a phantom user behind, flip this to
     False forever, and permanently brick setup (no Member row exists yet, so
@@ -51,7 +51,7 @@ async def _is_bootstrap(uow: AbstractUnitOfWork) -> bool:
     return passkey_count.scalar_one() == 0
 
 
-async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> User:
+async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> Account:
     """The Member's Account, created if it has none (#432: every Account
     belongs to exactly one Member).
 
@@ -65,7 +65,7 @@ async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> Use
     """
     user = await account_for_member(uow.session, member_id)
     if user is None:
-        user = User(member_id=member_id, role="member", is_active=True)
+        user = Account(member_id=member_id, role="member", is_active=True)
         uow.session.add(user)
         await uow.session.flush()
     return user
@@ -288,7 +288,7 @@ async def login_passkey_complete(
     user.pending_challenge = None
     await uow.commit()
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=user.id,
         email=payload.email,
         role=user.role,  # type: ignore[arg-type]

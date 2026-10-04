@@ -2,11 +2,11 @@
 
 A **Member** is the kendoka: name, email, date of birth, grade, emergency
 contact, safeguarding data. An **Account** is how a Member signs in: passkeys,
-recovery codes, **Role** (the code still calls it `User` / `users`). Every
+recovery codes, **Role** (the code called it `User` / `users` until #436). Every
 Account belongs to exactly one Member — there is no sign-in without a kendoka,
 the first **Admin** included, whose Member is created when they claim the
 instance. Most Members have no Account. The obvious simplification is one
-`people` table; we keep two, linked by a NOT NULL, unique `users.member_id`,
+`people` table; we keep two, linked by a NOT NULL, unique `accounts.member_id`,
 for three reasons.
 
 - **They are deleted differently.** Erasure hard-deletes the Account and its

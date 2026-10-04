@@ -69,13 +69,13 @@ class TestUUIDBaseIdType:
     """UUIDBase.id column type must be an instance of UUIDType (not raw String)."""
 
     def test_user_id_column_uses_uuid_type(self) -> None:
-        from app.auth.db_models import User
+        from app.auth.db_models import Account
         from app.db.base import UUIDType
 
-        col_type = User.__table__.c.id.type
+        col_type = Account.__table__.c.id.type
         assert isinstance(
             col_type, UUIDType
-        ), f"Expected User.id to use UUIDType, got {type(col_type).__name__}"
+        ), f"Expected Account.id to use UUIDType, got {type(col_type).__name__}"
 
     def test_member_id_column_uses_uuid_type(self) -> None:
         from app.db.base import UUIDType
@@ -117,7 +117,7 @@ class TestAttendanceFKConstraints:
 
     @pytest.mark.xfail(
         strict=False,
-        reason="FK not enforced: recorded_by stores user sub but no FK to users.id defined",
+        reason="FK not enforced: recorded_by stores user sub but no FK to accounts.id defined",
     )
     def test_attendance_recorded_by_fk_references_users(self) -> None:
         from app.attendance.db_models import Attendance
@@ -126,8 +126,8 @@ class TestAttendanceFKConstraints:
         assert len(fks) > 0, "attendance.recorded_by must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
         assert (
-            "users.id" in targets
-        ), f"attendance.recorded_by FK must reference users.id, got {targets}"
+            "accounts.id" in targets
+        ), f"attendance.recorded_by FK must reference accounts.id, got {targets}"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ class TestGradeHistoryFKConstraints:
 
     @pytest.mark.xfail(
         strict=False,
-        reason="FK not enforced: assigned_by stores user sub but no FK to users.id defined",
+        reason="FK not enforced: assigned_by stores user sub but no FK to accounts.id defined",
     )
     def test_grade_history_assigned_by_fk_references_users(self) -> None:
         from app.grades.db_models import GradeHistory
@@ -179,8 +179,8 @@ class TestGradeHistoryFKConstraints:
         assert len(fks) > 0, "grade_history.assigned_by must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
         assert (
-            "users.id" in targets
-        ), f"grade_history.assigned_by FK must reference users.id, got {targets}"
+            "accounts.id" in targets
+        ), f"grade_history.assigned_by FK must reference accounts.id, got {targets}"
 
 
 # ---------------------------------------------------------------------------
@@ -189,11 +189,11 @@ class TestGradeHistoryFKConstraints:
 
 
 class TestMemberUserIdFKConstraint:
-    """Member.user_id (nullable) must reference users.id."""
+    """Member.user_id (nullable) must reference accounts.id."""
 
     @pytest.mark.xfail(
         strict=False,
-        reason="FK not enforced: members.user_id has no FK to users.id in the model",
+        reason="FK not enforced: members.user_id has no FK to accounts.id in the model",
     )
     def test_member_user_id_fk_references_users(self) -> None:
         from app.members.db_models import Member
@@ -202,5 +202,5 @@ class TestMemberUserIdFKConstraint:
         assert len(fks) > 0, "members.user_id must have a FK constraint"
         targets = {fk.target_fullname for fk in fks}
         assert (
-            "users.id" in targets
-        ), f"members.user_id FK must reference users.id, got {targets}"
+            "accounts.id" in targets
+        ), f"members.user_id FK must reference accounts.id, got {targets}"

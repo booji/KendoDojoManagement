@@ -102,7 +102,7 @@ export const deactivateFederation = async (id: string): Promise<FederationRespon
 // ── Self-service (member's own profile) ───────────────────────────────────────
 
 export const getMyFederations = async (): Promise<MemberFederationResponse[]> => {
-  const res = await apiFetch(`/api/users/me/federations`)
+  const res = await apiFetch(`/api/accounts/me/federations`)
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (!res.ok) await throwApiError(res, "Failed to load federation memberships")
   return res.json() as Promise<MemberFederationResponse[]>
@@ -111,7 +111,7 @@ export const getMyFederations = async (): Promise<MemberFederationResponse[]> =>
 export const addMyFederation = async (
   body: MemberFederationCreateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await apiFetch(`/api/users/me/federations`, { method: "POST", body: body })
+  const res = await apiFetch(`/api/accounts/me/federations`, { method: "POST", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 409) await throwApiError(res, "Already a member of this federation")
   if (!res.ok) await throwApiError(res, "Failed to add federation membership")
@@ -122,7 +122,7 @@ export const updateMyFederation = async (
   mfId: string,
   body: MemberFederationUpdateRequest
 ): Promise<MemberFederationResponse> => {
-  const res = await apiFetch(`/api/users/me/federations/${mfId}`, { method: "PUT", body: body })
+  const res = await apiFetch(`/api/accounts/me/federations/${mfId}`, { method: "PUT", body: body })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to update federation membership")
@@ -130,7 +130,7 @@ export const updateMyFederation = async (
 }
 
 export const deleteMyFederation = async (mfId: string): Promise<void> => {
-  const res = await apiFetch(`/api/users/me/federations/${mfId}`, { method: "DELETE" })
+  const res = await apiFetch(`/api/accounts/me/federations/${mfId}`, { method: "DELETE" })
   if (res.status === 401 || res.status === 403) await throwApiError(res, "Not authorized")
   if (res.status === 404) await throwApiError(res, "Federation membership not found")
   if (!res.ok) await throwApiError(res, "Failed to remove federation membership")

@@ -24,6 +24,7 @@ import app.member_federations.db_models  # noqa: F401
 import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
 import app.settings.models  # noqa: F401
+from app.accounts.router import router as accounts_router
 from app.attendance.router import router as attendance_router
 from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
@@ -44,7 +45,6 @@ from app.routers.setup import router as setup_router
 from app.sessions.router import router as sessions_router
 from app.sessions.seed import seed_session_types
 from app.settings.router import router as settings_router
-from app.users.router import router as users_router
 
 _log = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(sessions_router, prefix=API_PREFIX)
 app.include_router(members_router, prefix=API_PREFIX)
 app.include_router(member_federations_router, prefix=API_PREFIX)
-app.include_router(users_router, prefix=API_PREFIX)
+app.include_router(accounts_router, prefix=API_PREFIX)
 app.include_router(grades_router, prefix=API_PREFIX)
 app.include_router(attendance_router, prefix=API_PREFIX)
 app.include_router(reports_router, prefix=API_PREFIX)

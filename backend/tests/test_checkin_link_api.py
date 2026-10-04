@@ -27,7 +27,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.attendance.dependencies import get_attendance_repo
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_current_member_id
 from app.sessions.dependencies import get_session_instance_repo
@@ -36,10 +36,10 @@ from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
 )
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
 _MEMBER_ID = "member-record-uuid"

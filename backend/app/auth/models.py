@@ -15,8 +15,8 @@ def _validate_email(v: object) -> str:
 LenientEmail = Annotated[str, BeforeValidator(_validate_email)]
 
 
-class UserClaims(BaseModel):
-    sub: str  # user UUID
+class AccountClaims(BaseModel):
+    sub: str  # Account id
     email: str
     role: Literal["admin", "member"]
     is_active: bool
@@ -60,7 +60,7 @@ class PasskeyLoginCompleteRequest(BaseModel):
     credential: PasskeyCredentialResponse
 
 
-class PasskeyRegisterCompleteResponse(UserClaims):
+class PasskeyRegisterCompleteResponse(AccountClaims):
     show_nudge: bool
 
 

@@ -140,7 +140,7 @@ export type MyMemberUpdateRequest = {
 }
 
 export const getMyMember = async (): Promise<MemberResponse | null> => {
-  const res = await apiFetch("/api/users/me/member")
+  const res = await apiFetch("/api/accounts/me/member")
 
   if (res.status === 404) {
     return null
@@ -158,7 +158,7 @@ export const getMyMember = async (): Promise<MemberResponse | null> => {
 export const updateMyMember = async (
   data: MyMemberUpdateRequest
 ): Promise<MemberResponse> => {
-  const res = await apiFetch("/api/users/me/member", { method: "PUT", body: data })
+  const res = await apiFetch("/api/accounts/me/member", { method: "PUT", body: data })
 
   if (res.status === 401 || res.status === 403) {
     await throwApiError(res, "Not authorized")

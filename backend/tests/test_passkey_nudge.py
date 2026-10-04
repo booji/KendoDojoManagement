@@ -23,7 +23,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from tests.account_support import seed_account
 
@@ -31,7 +31,7 @@ from tests.account_support import seed_account
 # Helpers
 # ---------------------------------------------------------------------------
 
-_USER_A = UserClaims(
+_USER_A = AccountClaims(
     sub="user-a-nudge-uuid", email="nudge-a@dojo.test", role="member", is_active=True
 )
 
@@ -145,7 +145,13 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
     # (ADR-0003, #402). This user still has none of its own, which is what
     # show_nudge is about.
     claimed_user_id = str(uuid.uuid4())
-    await seed_account(session, f"claimed-{claimed_user_id}@dojo.test", user_id=claimed_user_id, role="admin", is_active=True)
+    await seed_account(
+        session,
+        f"claimed-{claimed_user_id}@dojo.test",
+        user_id=claimed_user_id,
+        role="admin",
+        is_active=True,
+    )
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -159,7 +165,15 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
 
     # Seed a user with pending challenge and NO existing passkeys
     user_id = str(uuid.uuid4())
-    await seed_account(session, "firstpasskey@dojo.test", user_id=user_id, role="member", is_active=True, pending_challenge="dGVzdC1jaGFsbGVuZ2U", challenge_issued_at=datetime.now(UTC))
+    await seed_account(
+        session,
+        "firstpasskey@dojo.test",
+        user_id=user_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
+    )
     await session.flush()
 
     mock_verified = MagicMock()
@@ -191,12 +205,12 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
     assert response.status_code == 201
     body = response.json()
     # The response must include show_nudge=True because this was the first passkey
-    assert "show_nudge" in body, (
-        "POST /auth/register/passkey/complete must return show_nudge in the response body"
-    )
-    assert body["show_nudge"] is True, (
-        f"show_nudge should be True when registering first passkey, got {body['show_nudge']!r}"
-    )
+    assert (
+        "show_nudge" in body
+    ), "POST /auth/register/passkey/complete must return show_nudge in the response body"
+    assert (
+        body["show_nudge"] is True
+    ), f"show_nudge should be True when registering first passkey, got {body['show_nudge']!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +235,15 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
 
     user_id = str(uuid.uuid4())
     # Seed a user with an existing passkey (count=1 before this registration)
-    await seed_account(session, "secondpasskey@dojo.test", user_id=user_id, role="member", is_active=True, pending_challenge="dGVzdC1jaGFsbGVuZ2U", challenge_issued_at=datetime.now(UTC))
+    await seed_account(
+        session,
+        "secondpasskey@dojo.test",
+        user_id=user_id,
+        role="member",
+        is_active=True,
+        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
+        challenge_issued_at=datetime.now(UTC),
+    )
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -261,12 +283,12 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
 
     assert response.status_code == 201
     body = response.json()
-    assert "show_nudge" in body, (
-        "POST /auth/register/passkey/complete must return show_nudge in the response body"
-    )
-    assert body["show_nudge"] is False, (
-        f"show_nudge should be False when registering a subsequent passkey, got {body['show_nudge']!r}"
-    )
+    assert (
+        "show_nudge" in body
+    ), "POST /auth/register/passkey/complete must return show_nudge in the response body"
+    assert (
+        body["show_nudge"] is False
+    ), f"show_nudge should be False when registering a subsequent passkey, got {body['show_nudge']!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -286,13 +308,13 @@ async def test_security_status_returns_passkey_count_zero(passkey_repo) -> None:
     ) as c:
         response = await c.get("/auth/security-status")
 
-    assert response.status_code == 200, (
-        f"GET /auth/security-status should return 200, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"GET /auth/security-status should return 200, got {response.status_code}"
     body = response.json()
-    assert "passkey_count" in body, (
-        "GET /auth/security-status must include passkey_count in the response body"
-    )
+    assert (
+        "passkey_count" in body
+    ), "GET /auth/security-status must include passkey_count in the response body"
     assert body["passkey_count"] == 0
 
 
@@ -312,12 +334,12 @@ async def test_security_status_returns_passkey_count_one(passkey_repo) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert "passkey_count" in body, (
-        "GET /auth/security-status must include passkey_count in the response body"
-    )
-    assert body["passkey_count"] == 1, (
-        f"passkey_count should be 1 after one passkey is registered, got {body['passkey_count']!r}"
-    )
+    assert (
+        "passkey_count" in body
+    ), "GET /auth/security-status must include passkey_count in the response body"
+    assert (
+        body["passkey_count"] == 1
+    ), f"passkey_count should be 1 after one passkey is registered, got {body['passkey_count']!r}"
 
 
 async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
@@ -336,12 +358,12 @@ async def test_security_status_returns_passkey_count_two(passkey_repo) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert "passkey_count" in body, (
-        "GET /auth/security-status must include passkey_count in the response body"
-    )
-    assert body["passkey_count"] == 2, (
-        f"passkey_count should be 2 after two passkeys are registered, got {body['passkey_count']!r}"
-    )
+    assert (
+        "passkey_count" in body
+    ), "GET /auth/security-status must include passkey_count in the response body"
+    assert (
+        body["passkey_count"] == 2
+    ), f"passkey_count should be 2 after two passkeys are registered, got {body['passkey_count']!r}"
 
 
 async def test_security_status_requires_authentication() -> None:
@@ -350,6 +372,6 @@ async def test_security_status_requires_authentication() -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/auth/security-status")
-    assert response.status_code == 401, (
-        f"GET /auth/security-status must require authentication, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 401
+    ), f"GET /auth/security-status must require authentication, got {response.status_code}"

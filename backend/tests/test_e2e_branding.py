@@ -84,7 +84,7 @@ def _complete_onboarding(token: str) -> None:
     """Give the admin a Member record so the app's onboarding guard doesn't
     redirect /admin/settings visits to /onboarding."""
     resp = requests.put(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         json={
             "first_name": "Admin",
             "surname": "User",

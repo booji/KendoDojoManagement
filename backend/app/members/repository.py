@@ -5,7 +5,7 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import User
+from app.auth.db_models import Account
 from app.members.db_models import Member
 
 
@@ -33,11 +33,11 @@ class AbstractMemberRepository(Protocol):
 def _with_account():
     """Members with the id of the Account that signs in as each, if any.
 
-    The link lives on the Account (users.member_id, #432); `user_id` in the
+    The link lives on the Account (accounts.member_id, #432); `user_id` in the
     returned dict is that Account's id, kept under the name every caller
     already reads.
     """
-    return select(Member, User.id).outerjoin(User, User.member_id == Member.id)
+    return select(Member, Account.id).outerjoin(Account, Account.member_id == Member.id)
 
 
 def _to_dict(obj: Member, user_id: str | None) -> dict[str, Any]:
@@ -77,7 +77,7 @@ class SqlMemberRepository:
         return await self._one(Member.email == email)
 
     async def get_by_user_id(self, user_id: str) -> dict[str, Any] | None:
-        return await self._one(User.id == user_id)
+        return await self._one(Account.id == user_id)
 
     async def add(self, data: dict[str, Any]) -> dict[str, Any]:
         existing = await self.get_by_email(data["email"])

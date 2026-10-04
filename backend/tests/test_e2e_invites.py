@@ -101,8 +101,8 @@ def _real_login(role: str = "admin") -> str:
     and return the session token.
 
     Needed anywhere a forged-but-unbacked JWT (tests.e2e_support.make_token)
-    won't do: invites.issued_by is a foreign key to users.id, so minting an
-    invite as a user with no row in `users` fails the FK with a 500.
+    won't do: invites.issued_by is a foreign key to accounts.id, so minting an
+    invite as a user with no row in `accounts` fails the FK with a 500.
     """
     email = f"{role}-{uuid.uuid4().hex[:8]}@dojo.test"
     resp = requests.post(

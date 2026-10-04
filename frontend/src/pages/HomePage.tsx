@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getMe, isApiError } from "@/api/auth"
-import type { UserClaims } from "@/api/auth"
+import type { AccountClaims } from "@/api/auth"
 import CalendarView from "@/components/CalendarView"
 
 const HomePage = () => {
   const navigate = useNavigate()
-  const [user, setUser] = useState<UserClaims | null>(null)
+  const [user, setUser] = useState<AccountClaims | null>(null)
 
   useEffect(() => {
     getMe()

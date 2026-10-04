@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 from typer.testing import CliRunner
 
-from app.auth.db_models import AdminRecoveryToken, RecoveryAttempt, User
+from app.auth.db_models import Account, AdminRecoveryToken, RecoveryAttempt
 
 # CLI app import — will fail (ImportError) since app/cli.py does not exist yet.
 from app.cli import app as cli_app  # noqa: E402  # red — cli.py doesn't exist
@@ -98,7 +98,7 @@ async def seeded_db(database_url: str):
             await session.execute(
                 delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
             )
-            await session.execute(delete(User).where(User.id == user_id))
+            await session.execute(delete(Account).where(Account.id == user_id))
             await session.commit()
     finally:
         await engine.dispose()
@@ -151,7 +151,7 @@ async def _delete_target(engine, user_id: str) -> None:
         await session.execute(
             delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
         )
-        await session.execute(delete(User).where(User.id == user_id))
+        await session.execute(delete(Account).where(Account.id == user_id))
         await session.commit()
 
 
@@ -212,7 +212,7 @@ async def test_cli_token_stored_with_null_created_by_id(tmp_db) -> None:
                     AdminRecoveryToken.user_id == target_id
                 )
             )
-            await session.execute(delete(User).where(User.id == target_id))
+            await session.execute(delete(Account).where(Account.id == target_id))
             await session.commit()
         await eng.dispose()
 
@@ -254,7 +254,7 @@ async def test_cli_token_only_one_row_created(tmp_db) -> None:
                     AdminRecoveryToken.user_id == target_id
                 )
             )
-            await session.execute(delete(User).where(User.id == target_id))
+            await session.execute(delete(Account).where(Account.id == target_id))
             await session.commit()
         await eng.dispose()
 

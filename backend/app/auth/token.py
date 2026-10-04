@@ -5,7 +5,7 @@ from joserfc.errors import JoseError
 from joserfc.jwk import OctKey
 
 from app import config
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 
 
 def _key() -> OctKey:
@@ -14,7 +14,7 @@ def _key() -> OctKey:
     return OctKey.import_key(config.JWT_SECRET.encode())
 
 
-def encode_token(claims: UserClaims, session_started_at: int | None = None) -> str:
+def encode_token(claims: AccountClaims, session_started_at: int | None = None) -> str:
     """Mint an access token for ``claims``.
 
     ``sst`` is when the *session* began, as opposed to ``iat``, when this
@@ -96,7 +96,7 @@ def renewal_due(token: str) -> int | None:
     return started
 
 
-def decode_token(token: str) -> UserClaims:
+def decode_token(token: str) -> AccountClaims:
     try:
         token_obj = jwt.decode(token, _key(), algorithms=["HS256"])
         payload = token_obj.claims
@@ -108,7 +108,7 @@ def decode_token(token: str) -> UserClaims:
     # of the 401 the guard intends.
     except (JoseError, ValueError, KeyError) as exc:
         raise ValueError("Invalid or expired token") from exc
-    return UserClaims(
+    return AccountClaims(
         sub=payload["sub"],
         email=payload["email"],
         role=payload["role"],

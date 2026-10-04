@@ -3,7 +3,7 @@ import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError, getMe, performPasskeyRegistration } from "@/api/auth"
 import { errorMessage } from "@/api/client"
-import type { UserClaims } from "@/api/auth"
+import type { AccountClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
 import type { PasskeyRecord } from "@/api/passkeys"
 import {
@@ -564,7 +564,7 @@ const SecurityCard = () => {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; member: MemberResponse | null; user: UserClaims }
+  | { status: "ready"; member: MemberResponse | null; user: AccountClaims }
   | { status: "error"; message: string }
 
 const SettingsPage = () => {

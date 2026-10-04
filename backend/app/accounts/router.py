@@ -5,8 +5,10 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
+from app.accounts.dependencies import get_account_prefs_repo
+from app.accounts.preferences_repository import AbstractAccountPrefsRepo
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.session_cookie import set_theme_cookie
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -14,10 +16,8 @@ from app.members.dependencies import get_member_repo
 from app.members.models import MemberResponse, SelfUpdateMemberRequest
 from app.members.repository import AbstractMemberRepository
 from app.members.router import _to_response
-from app.users.dependencies import get_user_prefs_repo
-from app.users.preferences_repository import AbstractUserPrefsRepo
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 # Self-service fields a member may clear on their own record by sending an
 # explicit null. first_name and surname are required-by-domain on this route,
@@ -32,8 +32,8 @@ _CLEARABLE_FIELDS = (
 
 _Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
-_PrefsRepo = Annotated[AbstractUserPrefsRepo, Depends(get_user_prefs_repo)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
+_PrefsRepo = Annotated[AbstractAccountPrefsRepo, Depends(get_account_prefs_repo)]
 
 
 class _PreferencesResponse(BaseModel):
@@ -45,7 +45,7 @@ class _PreferencesUpdate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# GET /users/me/member — returns the Member record linked to the caller
+# GET /accounts/me/member — returns the Member record linked to the caller
 # ---------------------------------------------------------------------------
 
 
@@ -64,7 +64,7 @@ async def get_my_member(
 
 
 # ---------------------------------------------------------------------------
-# PUT /users/me/member — partial update, including completing onboarding
+# PUT /accounts/me/member — partial update, including completing onboarding
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ async def put_my_member(
 
 
 # ---------------------------------------------------------------------------
-# GET /users/me/preferences — returns caller's saved preferences
+# GET /accounts/me/preferences — returns caller's saved preferences
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ async def get_my_preferences(
 
 
 # ---------------------------------------------------------------------------
-# PUT /users/me/preferences — saves preferences and returns them
+# PUT /accounts/me/preferences — saves preferences and returns them
 # ---------------------------------------------------------------------------
 
 
