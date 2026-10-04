@@ -2,102 +2,102 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/architecture-review-2026-08/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/auth-timing-calibration/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/deployment/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/schema/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0001-single-origin-api-under-api-prefix/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0002-traefik-in-the-dev-stack/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0003-first-admin-claim-requires-a-pre-provisioned-setup-token/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0004-published-images-pinned-by-major-tag/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0005-session-templates-and-instances-stay-separate-tables/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0006-accounts-and-members-stay-separate-tables/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/adr/0007-the-app-connects-as-a-least-privilege-database-user/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/contributing/dev-stack/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/contributing/make-targets/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/contributing/tdd/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/contributing/tests/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/install/backups/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/install/quick-self-host/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/install/upgrading/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/operating/break-glass/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/operating/claim-admin/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/operating/day-2/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/reference/container-architecture/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/reference/environment/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
     <url>
          <loc>https://booji.github.io/KendoDojoManagement/dev/reference/glossary/</loc>
-         <lastmod>2026-10-03</lastmod>
+         <lastmod>2026-10-04</lastmod>
     </url>
 </urlset>
