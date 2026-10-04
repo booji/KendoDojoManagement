@@ -13,6 +13,9 @@ class GradeHistory(UUIDBase):
         UUIDType(), ForeignKey("members.id"), nullable=False, index=True
     )
     grade: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Derivable from `grade` today, kept on purpose: it records what was
+    # displayed at the time of the Promotion, which is the point of an audit
+    # table (#418, #435).
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     promoted_at: Mapped[str] = mapped_column(IsoTimestamp(), nullable=False)
     assigned_by: Mapped[str | None] = mapped_column(UUIDType(), nullable=True)

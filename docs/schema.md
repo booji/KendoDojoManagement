@@ -234,6 +234,10 @@ erDiagram
   (`IP_RETENTION` in `app/auth/attempt_repository.py`). There is no scheduler:
   the clear runs on every `log_attempt`, for all Accounts, so an address can
   outlive 30 days until the next recovery attempt anywhere on the instance.
+- **One WebAuthn ceremony per Account** (#435). `users.pending_challenge` /
+  `challenge_issued_at` hold a single challenge, so a second concurrent
+  registration or login for the same Account overwrites the first, which
+  then fails. A known single-flight limit, accepted at dojo scale.
 - **Every Account belongs to exactly one Member** (#432, ADR-0006).
   `users.member_id` is a live link and is enforced: NOT NULL, UNIQUE, and a
   foreign key to `members.id` with ON DELETE RESTRICT (Members are
@@ -245,6 +249,9 @@ erDiagram
   acted. They are deliberately not FK-enforced, so the id outlives the
   Account it names: erasing a member deletes their Account, and the history
   that Account recorded must not cascade with it.
+- **`grade_history.display_name` is deliberately denormalised** (#435). It is
+  derivable from `grade` today, but it records what was displayed at the time
+  of the **Promotion**, which is the point of an audit table.
 - **Constraints beyond keys** (#431). The database, not just the app, refuses:
   - `uq_attendance_session_member` — UNIQUE `(session_id, member_id)` on
     `attendance`: a member is checked in at most once per session. NULLs are
@@ -258,6 +265,9 @@ erDiagram
   - `uq_dojo_settings_single_row` — a unique index on the constant `(true)`:
     `dojo_settings` holds one row.
   - `uq_federations_name` — UNIQUE `federations.name`.
+- **Index policy** (#418). No indexes beyond those that keys and constraints
+  create and the `index=True` lookup columns on the ORM. Add one when a query
+  is measured slow — at dojo scale a sequential scan is microseconds.
 - **Federation membership is a table, not a column.** `members` has no
   `federation_number`: a member can hold numbers with several federations, so
   it lives in `member_federations` (dropped from `members` in #297 — see

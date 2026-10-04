@@ -29,6 +29,9 @@ class User(UUIDBase):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")
+    # One WebAuthn ceremony in flight per Account: a second concurrent
+    # registration or login for the same Account overwrites the challenge, and
+    # the first then fails. Accepted at dojo scale (#418, #435).
     pending_challenge: Mapped[str | None] = mapped_column(String(255), nullable=True)
     challenge_issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
