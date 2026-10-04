@@ -84,7 +84,16 @@ def test_generates_the_three_secrets_and_keeps_env_unreadable_to_others(tmp_path
     env = env_of(home)
     for key in ("POSTGRES_PASSWORD", "JWT_SECRET", "SETUP_TOKEN"):
         assert re.fullmatch(r"[0-9a-f]{40,}", env[key]), f"{key} not generated"
-    assert env["POSTGRES_PASSWORD"] in env["DATABASE_URL"]
+    assert env["MIGRATION_DATABASE_URL"] == (
+        f"postgresql+asyncpg://kendo:{env['POSTGRES_PASSWORD']}@db:5432/kendo"
+    )
+    # The app's own login (ADR-0007), with a password of its own.
+    app_password = re.fullmatch(
+        r"postgresql\+asyncpg://kendo_app:([0-9a-f]{40,})@db:5432/kendo",
+        env["DATABASE_URL"],
+    )
+    assert app_password, env["DATABASE_URL"]
+    assert app_password.group(1) != env["POSTGRES_PASSWORD"]
     assert not any(p in (home / ".env").read_text() for p in PLACEHOLDERS)
     assert (home / ".env").stat().st_mode & 0o077 == 0
 
@@ -97,10 +106,31 @@ def test_rerunning_changes_the_domain_without_clobbering_the_secrets(tmp_path):
     run(home, "shinkendo.example.org", "1", "1", "admin@example.com")
     second = env_of(home)
 
-    for key in ("POSTGRES_PASSWORD", "JWT_SECRET", "SETUP_TOKEN"):
+    for key in ("POSTGRES_PASSWORD", "DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"):
         assert second[key] == first[key]
     assert second["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
     assert (home / ".env.bak").exists()
+
+
+def test_rerunning_moves_a_pre_453_env_onto_the_app_user(tmp_path):
+    # The documented upgrade (#453): an .env whose DATABASE_URL is still the
+    # superuser's gets an app-user login, and the database password is kept.
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+    first = env_of(home)
+    old = (
+        (home / ".env")
+        .read_text()
+        .replace(first["DATABASE_URL"], first["MIGRATION_DATABASE_URL"])
+    )
+    (home / ".env").write_text(old)
+
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+    second = env_of(home)
+
+    assert second["POSTGRES_PASSWORD"] == first["POSTGRES_PASSWORD"]
+    assert second["MIGRATION_DATABASE_URL"] == first["MIGRATION_DATABASE_URL"]
+    assert second["DATABASE_URL"].startswith("postgresql+asyncpg://kendo_app:")
 
 
 def test_writes_the_tag_the_bundle_was_extracted_from(tmp_path):
@@ -356,7 +386,7 @@ class Host:
 
 
 def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
-    # The whole reason one script owns both: DATABASE_URL and the postgres
+    # The whole reason one script owns both: MIGRATION_DATABASE_URL and the postgres
     # password are generated together, so the trap cannot be walked into.
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "1", "admin@example.com")
@@ -364,8 +394,14 @@ def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
     password = host.secret("kendo_postgres_password")
     assert re.fullmatch(r"[0-9a-f]{40,}", password)
     assert (
-        host.secret("kendo_database_url")
+        host.secret("kendo_migration_database_url")
         == f"postgresql+asyncpg://kendo:{password}@kendo-db:5432/kendo"
+    )
+    # The app's own login (ADR-0007): kendo-migrate sets this user's password
+    # from it, so it pairs with nothing.
+    assert re.fullmatch(
+        r"postgresql\+asyncpg://kendo_app:[0-9a-f]{40,}@kendo-db:5432/kendo",
+        host.secret("kendo_database_url"),
     )
     for name in ("kendo_jwt_secret", "kendo_setup_token"):
         assert re.fullmatch(r"[0-9a-f]{40,}", host.secret(name)), name
@@ -516,9 +552,10 @@ def test_quadlet_refuses_a_half_present_database_url_pair(tmp_path):
     result = host.run("dojo.example.com", "4", expect=1)
 
     assert (
-        "podman secret rm kendo_postgres_password kendo_database_url" in result.stderr
+        "podman secret rm kendo_postgres_password kendo_migration_database_url"
+        in result.stderr
     )
-    assert not (host.state / "kendo_database_url").exists()
+    assert not (host.state / "kendo_migration_database_url").exists()
 
 
 def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
@@ -738,8 +775,8 @@ def test_check_catches_a_domain_changed_in_only_one_place(tmp_path):
 def test_check_catches_a_blank_secret_and_a_password_the_url_no_longer_embeds(
     tmp_path,
 ):
-    # Rotating POSTGRES_PASSWORD by hand without DATABASE_URL: the app then
-    # fails at its first query with an auth error, not at startup.
+    # Rotating POSTGRES_PASSWORD by hand without MIGRATION_DATABASE_URL: the
+    # migrate service then fails to log in.
     home = bundle(tmp_path)
     run(home, *ANSWERS)
     before = env_of(home)
@@ -758,7 +795,7 @@ def test_check_catches_a_blank_secret_and_a_password_the_url_no_longer_embeds(
 
     assert out.returncode == 1
     assert "JWT_SECRET is blank" in out.stdout
-    assert "DATABASE_URL does not embed POSTGRES_PASSWORD" in out.stdout
+    assert "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD" in out.stdout
 
 
 def test_check_quadlet_passes_its_own_setup_and_names_a_missing_secret(tmp_path):

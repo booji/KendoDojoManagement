@@ -105,9 +105,11 @@ clean:
 logs:
 	$(COMPOSE_DEV) logs -f
 
-## migrate: Run alembic upgrade head inside the running dev backend container
+## migrate: Run alembic upgrade head on the dev database and re-provision the app user
 migrate:
-	$(COMPOSE_DEV) exec backend alembic upgrade head
+	# The migrate service, not `exec backend alembic`: the backend logs in as the
+	# restricted app user, which cannot change the schema (ADR-0007).
+	$(COMPOSE_DEV) run --rm migrate
 
 ## help: List all targets with descriptions
 help:

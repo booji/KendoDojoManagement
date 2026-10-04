@@ -7,7 +7,7 @@ release you are reading.
 ## Quick self-host — `.env`
 
 `./setup.sh` writes `.env` from this template, filling in the domain and
-generating the three secrets.
+generating the secrets.
 
 ```bash
 --8<-- ".env.example"
@@ -15,7 +15,8 @@ generating the three secrets.
 
 ## Hardened deployment — `~/kendo/kendo-app.env`
 
-Non-sensitive settings only. `DATABASE_URL`, `JWT_SECRET` and `SETUP_TOKEN` are
+Non-sensitive settings only. `DATABASE_URL`, `MIGRATION_DATABASE_URL`,
+`JWT_SECRET` and `SETUP_TOKEN` are
 podman secrets under the hardened deployment, not variables in this file — see
 [Hardened deployment](../deployment.md).
 

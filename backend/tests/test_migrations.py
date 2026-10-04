@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.db.scratch import create_database, drop_database, url_parts
+from tests.migration_support import app_url
 
 _DATABASE_URL = os.environ["DATABASE_URL"]
 _BASE_URL, _ = url_parts(_DATABASE_URL)
@@ -274,7 +275,9 @@ async def test_prepare_database_produces_head_schema_from_empty_database(
 ):
     from app.db.bootstrap import prepare_database
 
-    await prepare_database(scratch_db_url, max_attempts=1, initial_delay=0.01)
+    await prepare_database(
+        scratch_db_url, app_url(scratch_db_url), max_attempts=1, initial_delay=0.01
+    )
 
     engine = create_async_engine(scratch_db_url, poolclass=NullPool)
     try:
@@ -339,7 +342,9 @@ async def test_prepare_database_produces_head_schema_from_legacy_populated_datab
                 {"id": federation_id, "name": "European Kendo Federation"},
             )
 
-        await prepare_database(scratch_db_url, max_attempts=1, initial_delay=0.01)
+        await prepare_database(
+            scratch_db_url, app_url(scratch_db_url), max_attempts=1, initial_delay=0.01
+        )
 
         version = await _alembic_version(engine)
         assert version == _current_head_revision()

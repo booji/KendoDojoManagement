@@ -749,3 +749,53 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert "KENDO_IMAGE_REF=" in release, release
     assert "${v%%.*}" in release, "a release must stamp the major tag it documents"
+
+
+# ---------------------------------------------------------------------------
+# The app connects as the least-privilege user, never the superuser (#453,
+# ADR-0007)
+# ---------------------------------------------------------------------------
+
+
+def _env_keys_and_values(service: dict) -> dict[str, str]:
+    env = service.get("environment", {})
+    if isinstance(env, list):
+        return dict(entry.split("=", 1) for entry in env)
+    return {k: str(v) for k, v in env.items()}
+
+
+@pytest.mark.parametrize(
+    "load, service",
+    [(load_compose, "app"), (load_dev_compose, "backend")],
+    ids=["compose-app", "dev-backend"],
+)
+def test_compose_app_never_sees_the_superuser_login(load, service: str):
+    env = _env_keys_and_values(load()["services"][service])
+    assert "MIGRATION_DATABASE_URL" not in env, env
+    assert "POSTGRES_PASSWORD" not in env["DATABASE_URL"], env["DATABASE_URL"]
+
+
+@pytest.mark.parametrize("load", [load_compose, load_dev_compose], ids=["prod", "dev"])
+def test_compose_migrate_gets_both_logins(load):
+    env = _env_keys_and_values(load()["services"]["migrate"])
+    assert {"DATABASE_URL", "MIGRATION_DATABASE_URL"} <= env.keys(), env
+
+
+def test_dev_backend_waits_for_migrate():
+    """The dev backend refuses to start as the superuser, so its app user has
+    to exist first — and only the migration step creates it."""
+    deps = load_dev_compose()["services"]["backend"].get("depends_on", {})
+    assert deps.get("migrate", {}).get("condition") == "service_completed_successfully"
+
+
+@pytest.mark.parametrize(
+    "env_file", [".env.example", ".env.prod.example", ".env.dev", ".env.test"]
+)
+def test_env_files_split_the_app_and_migration_logins(env_file: str):
+    from sqlalchemy.engine.url import make_url
+
+    values = _env_values(ROOT / env_file)
+    assert make_url(values["DATABASE_URL"]).username == "kendo_app"
+    migration = make_url(values["MIGRATION_DATABASE_URL"])
+    assert migration.username == values["POSTGRES_USER"]
+    assert migration.password == values["POSTGRES_PASSWORD"]

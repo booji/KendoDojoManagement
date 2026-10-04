@@ -44,13 +44,20 @@ if [[ ! "$TEST_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
     exit 1
 fi
 
-# DATABASE_URL from .env.test names the shared 'kendo_test' database; swap in
-# the per-run name and create it before anything connects. app.db.scratch
-# (backed by asyncpg, already a dependency of the app) does the actual DDL
-# rather than shelling out to a psql/createdb client this image doesn't
-# install.
-TEST_DB_BASE_URL="${DATABASE_URL%/*}"
-export DATABASE_URL="${TEST_DB_BASE_URL}/${TEST_DB_NAME}"
+# Both URLs from .env.test name the shared 'kendo_test' database; swap in the
+# per-run name and create it before anything connects. app.db.scratch (backed
+# by asyncpg, already a dependency of the app) does the actual DDL rather than
+# shelling out to a psql/createdb client this image doesn't install.
+#
+# Two logins on that one database (ADR-0007, #453). MIGRATION_DATABASE_URL is
+# the superuser: it creates, migrates and drops the database, and pytest's own
+# fixtures keep it (see the export before pytest below). DATABASE_URL is the
+# restricted app user the migration step provisions, and the uvicorn server the
+# e2e tests drive connects as it — so a missing grant fails here, not in
+# production.
+TEST_DB_BASE_URL="${MIGRATION_DATABASE_URL%/*}"
+export MIGRATION_DATABASE_URL="${TEST_DB_BASE_URL}/${TEST_DB_NAME}"
+export DATABASE_URL="${DATABASE_URL%/*}/${TEST_DB_NAME}"
 
 # Sweep databases orphaned by a previous run's container being SIGKILLed
 # before its own cleanup() could fire (e.g. a CI job cancellation). This is a
@@ -90,9 +97,10 @@ SCRATCH_DB_BASE_URL="$TEST_DB_BASE_URL" SCRATCH_DB_NAME="$TEST_DB_NAME" \
     python -m app.db.scratch hold &
 DB_HOLD_PID=$!
 
-# Migrate the fresh per-run database. uvicorn's lifespan no longer does this
-# (#391) — the app does not own `alembic upgrade head` any more — so the
-# harness has to, before uvicorn or pytest touches the schema.
+# Migrate the fresh per-run database and provision the app user on it.
+# uvicorn's lifespan no longer does this (#391) — the app does not own `alembic
+# upgrade head` any more — so the harness has to, before uvicorn or pytest
+# touches the schema.
 python -m app.db.bootstrap
 
 # Start backend API server. Deliberately outside the BACKEND_ONLY guard: not
@@ -232,6 +240,11 @@ MARK_ARGS=()
 if [[ -n "${PYTEST_MARK:-}" ]]; then
     MARK_ARGS=(-m "$PYTEST_MARK")
 fi
+
+# pytest keeps the superuser login (#453): its fixtures create and drop
+# scratch databases and seed rows outside the app. Exported only now, after
+# uvicorn has started with the app user's.
+export DATABASE_URL="$MIGRATION_DATABASE_URL"
 
 set +e
 pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "${BACKEND_ONLY_ARGS[@]}" "${MARK_ARGS[@]}" "$@"
