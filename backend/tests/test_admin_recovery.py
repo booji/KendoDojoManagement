@@ -27,12 +27,13 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.auth.db_models import Account
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
-from tests.account_support import seed_account
+from tests.account_support import seed_account, seed_member
 
 _ADMIN = AccountClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
@@ -72,6 +73,15 @@ async def _seed_user(engine, user_id: str, *, role: str = "member") -> str:
     async with engine.begin() as conn:
         await seed_account(conn, email, user_id=user_id, role=role, is_active=True)
     return email
+
+
+async def _member_of(engine, account_id: str) -> str:
+    """The id of the Member an Account belongs to."""
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            select(Account.member_id).where(Account.id == account_id)
+        )
+    return result.scalar_one()
 
 
 async def _seed_admin_token(
@@ -199,7 +209,7 @@ async def test_admin_can_generate_token_for_user(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": target_id},
+            json={"member_id": await _member_of(db_client, target_id)},
         )
 
     assert response.status_code == 200
@@ -223,7 +233,7 @@ async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": target_id},
+            json={"member_id": await _member_of(db_client, target_id)},
         )
 
     assert response.status_code == 200
@@ -253,7 +263,7 @@ async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": target_id},
+            json={"member_id": await _member_of(db_client, target_id)},
         )
 
     assert response.status_code == 200
@@ -291,7 +301,7 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": target_id},
+            json={"member_id": await _member_of(db_client, target_id)},
         )
     after = datetime.now(UTC)
 
@@ -330,7 +340,7 @@ async def test_non_admin_cannot_generate_admin_token() -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": str(uuid.uuid4())},
+            json={"member_id": str(uuid.uuid4())},
         )
 
     assert response.status_code == 403
@@ -343,7 +353,7 @@ async def test_unauthenticated_cannot_generate_admin_token() -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": str(uuid.uuid4())},
+            json={"member_id": str(uuid.uuid4())},
         )
 
     assert response.status_code == 401
@@ -351,7 +361,7 @@ async def test_unauthenticated_cannot_generate_admin_token() -> None:
 
 @pytest.mark.asyncio
 async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
-    """POST /auth/recovery/admin-token returns 404 when user_id doesn't exist."""
+    """POST /auth/recovery/admin-token returns 404 when member_id doesn't exist."""
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, admin_id, role="admin")
 
@@ -365,15 +375,82 @@ async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": str(uuid.uuid4())},
+            json={"member_id": str(uuid.uuid4())},
         )
 
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
-    """POST /auth/recovery/admin-token returns 422 when user_id is absent."""
+async def test_admin_token_returns_404_for_a_member_with_no_account(db_client) -> None:
+    """A Member who never registered has nothing to recover (#445)."""
+    from app.auth.db_models import AdminRecoveryToken
+
+    admin_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    async with db_client.begin() as conn:
+        member_id = await seed_member(conn, f"{uuid.uuid4()}@dojo.test")
+
+    claims = AccountClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": member_id}
+        )
+
+    assert response.status_code == 404
+    assert "no account" in response.json()["detail"]
+    async with db_client.connect() as conn:
+        rows = await conn.execute(
+            select(AdminRecoveryToken).where(
+                AdminRecoveryToken.created_by_id == admin_id
+            )
+        )
+    assert rows.all() == []
+
+
+@pytest.mark.asyncio
+async def test_admin_token_refused_for_a_deactivated_account(db_client) -> None:
+    """Redemption refuses an inactive Account, so a token for one could never
+    be used; refuse it up front rather than hand the admin a dud."""
+    from app.auth.db_models import AdminRecoveryToken
+
+    admin_id = str(uuid.uuid4())
+    target_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    async with db_client.begin() as conn:
+        await seed_account(
+            conn, f"{target_id}@dojo.test", user_id=target_id, is_active=False
+        )
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/admin-token",
+            json={"member_id": await _member_of(db_client, target_id)},
+        )
+
+    assert response.status_code == 409
+    assert "deactivated" in response.json()["detail"]
+    async with db_client.connect() as conn:
+        rows = await conn.execute(
+            select(AdminRecoveryToken).where(AdminRecoveryToken.user_id == target_id)
+        )
+    assert rows.all() == []
+
+
+@pytest.mark.asyncio
+async def test_admin_token_missing_member_id_returns_422(db_client) -> None:
+    """POST /auth/recovery/admin-token returns 422 when member_id is absent."""
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, admin_id, role="admin")
 
@@ -386,6 +463,24 @@ async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/auth/recovery/admin-token", json={})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_token_malformed_member_id_returns_422(db_client) -> None:
+    admin_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": "not-a-uuid"}
+        )
 
     assert response.status_code == 422
 
@@ -647,7 +742,7 @@ async def test_non_admin_cannot_call_generate_endpoint() -> None:
     ) as c:
         r = await c.post(
             "/auth/recovery/admin-token",
-            json={"user_id": str(uuid.uuid4())},
+            json={"member_id": str(uuid.uuid4())},
         )
 
     assert r.status_code == 403
