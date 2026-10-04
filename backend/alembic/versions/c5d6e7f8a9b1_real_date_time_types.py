@@ -31,6 +31,8 @@ Create Date: 2026-10-03
 
 """
 
+from typing import NamedTuple
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -40,13 +42,22 @@ down_revision = "b4c5d6e7f8a0"
 branch_labels = None
 depends_on = None
 
-# Each kind: the real type, the shape the app writes, the VARCHAR it was, and
-# how to_char writes it back. US is microseconds; Python's isoformat leaves
-# them out when they are zero, so the downgrade strips '.000000'.
+
+class _Kind(NamedTuple):
+    type_: sa.types.TypeEngine  # the real type
+    shape: str  # regex for the string the app writes
+    length: int  # the VARCHAR it was
+    to_text: str  # how to_char writes it back; {c} is the column
+
+
+# US is microseconds; Python's isoformat leaves them out when they are zero,
+# so the timestamptz downgrade strips '.000000'.
 _KINDS = {
-    "date": (sa.Date(), r"^\d{4}-\d{2}-\d{2}$", 10, "to_char({c}, 'YYYY-MM-DD')"),
-    "time": (sa.Time(), r"^([01]\d|2[0-3]):[0-5]\d$", 5, "to_char({c}, 'HH24:MI')"),
-    "timestamptz": (
+    "date": _Kind(sa.Date(), r"^\d{4}-\d{2}-\d{2}$", 10, "to_char({c}, 'YYYY-MM-DD')"),
+    "time": _Kind(
+        sa.Time(), r"^([01]\d|2[0-3]):[0-5]\d$", 5, "to_char({c}, 'HH24:MI')"
+    ),
+    "timestamptz": _Kind(
         sa.DateTime(timezone=True),
         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$",
         50,
@@ -71,7 +82,6 @@ _COLUMNS = [
 def _refuse_values_that_will_not_cast(conn) -> None:
     problems = []
     for table, column, kind in _COLUMNS:
-        _, shape, _, _ = _KINDS[kind]
         # pg_input_is_valid (Postgres 16) tests the cast without raising.
         rows = conn.execute(
             sa.text(
@@ -79,7 +89,7 @@ def _refuse_values_that_will_not_cast(conn) -> None:
                 f'WHERE "{column}" IS NOT NULL AND NOT ("{column}" ~ :shape '
                 f'AND pg_input_is_valid("{column}", :kind)) ORDER BY id'
             ),
-            {"shape": shape, "kind": kind},
+            {"shape": _KINDS[kind].shape, "kind": kind},
         )
         problems += [f"{table}.{column}, row {id_}: {value!r}" for id_, value in rows]
 
@@ -95,18 +105,19 @@ def _refuse_values_that_will_not_cast(conn) -> None:
 def upgrade() -> None:
     _refuse_values_that_will_not_cast(op.get_bind())
     for table, column, kind in _COLUMNS:
-        real_type = _KINDS[kind][0]
         op.alter_column(
-            table, column, type_=real_type, postgresql_using=f'"{column}"::{kind}'
+            table,
+            column,
+            type_=_KINDS[kind].type_,
+            postgresql_using=f'"{column}"::{kind}',
         )
 
 
 def downgrade() -> None:
     for table, column, kind in _COLUMNS:
-        _, _, length, to_text = _KINDS[kind]
         op.alter_column(
             table,
             column,
-            type_=sa.String(length),
-            postgresql_using=to_text.format(c=f'"{column}"'),
+            type_=sa.String(_KINDS[kind].length),
+            postgresql_using=_KINDS[kind].to_text.format(c=f'"{column}"'),
         )
