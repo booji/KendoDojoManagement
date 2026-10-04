@@ -1823,7 +1823,7 @@ then exited 1 while <code>podman-compose up -d db</code> still reported success.
 published port fails loudly on a collision, and 5433 avoids the common one
 entirely.</p>
 <p>To run two checkouts of this repo side by side, set a different <code>POSTGRES_PORT</code>
-in <code>.env.dev</code> and change the port in <code>DATABASE_URL</code> in the same file to match.
+in <code>.env.dev</code> and change the port in both database URLs in the same file to match.
 The other four host ports are fixed and will collide: 8443 and 8080 (proxy),
 5173 (Vite) and 8000 (uvicorn). Only one checkout's dev stack can be up at a
 time unless you edit them — and 8443 also appears in <code>WEBAUTHN_ORIGIN</code>,
@@ -1840,6 +1840,11 @@ published port, <em>not</em> 5432, and address <code>127.0.0.1</code> rather tha
 <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo_dev:kendo_dev_password@127.0.0.1:5433/kendo_dev
 psql<span class="w"> </span>-h<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>-p<span class="w"> </span><span class="m">5433</span><span class="w"> </span>-U<span class="w"> </span>kendo_dev<span class="w"> </span>-d<span class="w"> </span>kendo_dev
 </code></pre></div>
+<p>That is the superuser, <code>MIGRATION_DATABASE_URL</code> in <code>.env.dev</code>, which alembic
+needs. The backend itself connects as the restricted <code>kendo_app</code> user that the
+<code>migrate</code> service creates, and refuses to start as a superuser
+(<a href="../../adr/0007-the-app-connects-as-a-least-privilege-database-user/">ADR-0007</a>).
+After adding a migration, <code>make migrate</code> runs that service again.</p>
 <p>If you get <code>password authentication failed for user "kendo_dev"</code> on port 5432,
 you are talking to a <em>different</em> PostgreSQL — the credentials are not the
 problem, the port is.</p>

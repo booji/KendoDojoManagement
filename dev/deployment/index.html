@@ -1770,11 +1770,17 @@ podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </
 challenge, then does every mechanical step that used to be three sections of
 transcription here:</p>
 <ul>
-<li><strong>the five secrets</strong> — <code>kendo_postgres_password</code>, <code>kendo_jwt_secret</code>,
-  <code>kendo_database_url</code>, <code>kendo_setup_token</code>, and the DNS-provider token when
-  DNS-01 is chosen. <code>kendo_database_url</code> has to embed the same password as
-  <code>kendo_postgres_password</code>; one script generating both cannot mismatch them.
-  A re-run keeps every existing secret rather than rotating it.</li>
+<li><strong>the six secrets</strong> — <code>kendo_postgres_password</code>,
+  <code>kendo_migration_database_url</code>, <code>kendo_database_url</code>, <code>kendo_jwt_secret</code>,
+  <code>kendo_setup_token</code>, and the DNS-provider token when DNS-01 is chosen.
+  <code>kendo_migration_database_url</code> is the superuser's login and has to embed the
+  same password as <code>kendo_postgres_password</code>; one script generating both cannot
+  mismatch them. <code>kendo_database_url</code> is the app's own login, <code>kendo_app</code>, which
+  can only read and write rows
+  (<a href="../adr/0007-the-app-connects-as-a-least-privilege-database-user/">ADR-0007</a>):
+  <code>kendo-migrate</code> is the only unit given the superuser, and it creates
+  <code>kendo_app</code> and sets its password from the secret on every start. A re-run
+  keeps every existing secret rather than rotating it.</li>
 <li><strong>the <code>~/kendo/</code> tree</strong> — <code>kendo-app.env</code> with your domain in all three
   passkey-bound settings, <code>traefik/traefik.yml</code> with your ACME email and the
   challenge you picked, <code>traefik/dynamic/kendo.yml</code> with your <code>Host()</code> rule.
@@ -1832,18 +1838,24 @@ use `read`):
 python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import secrets; print(secrets.token_hex(32))"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">'\n'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_jwt_secret<span class="w"> </span>-
 
-<span class="c1"># 3. Full DATABASE_URL (must embed the SAME password as #1)</span>
+<span class="c1"># 3. The superuser's login, for kendo-migrate only (must embed the SAME</span>
+<span class="c1">#    password as #1)</span>
 <span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s1">'postgresql+asyncpg://kendo:REPLACE-with-strong-db-password@kendo-db:5432/kendo'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_migration_database_url<span class="w"> </span>-
+
+<span class="c1"># 4. The app's own login (ADR-0007), with a DIFFERENT password. kendo-migrate</span>
+<span class="c1">#    creates the kendo_app user and sets its password from this.</span>
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s1">'postgresql+asyncpg://kendo_app:REPLACE-with-another-strong-password@kendo-db:5432/kendo'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_database_url<span class="w"> </span>-
 
-<span class="c1"># 4. Setup token — gates claiming the first admin account (ADR-0003). Create it</span>
+<span class="c1"># 5. Setup token — gates claiming the first admin account (ADR-0003). Create it</span>
 <span class="c1">#    BEFORE first boot: the app refuses to start without it, and whoever holds</span>
 <span class="c1">#    it is who can claim admin.</span>
 openssl<span class="w"> </span>rand<span class="w"> </span>-base64<span class="w"> </span><span class="m">32</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">'\n'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_setup_token<span class="w"> </span>-
 </code></pre></div>
 
-A fifth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
+A sixth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
 
 Then the units:
 
@@ -1867,7 +1879,7 @@ still blocking cross-network traffic by IP. The trade is that the database
 keeps an outbound route; on Podman that cannot be removed without also losing
 name resolution.</p>
 </blockquote>
-<p>To rotate a secret later: <code>podman secret rm &lt;name&gt;</code> then recreate, and <code>systemctl --user restart</code> the affected unit.</p>
+<p>To rotate a secret later: <code>podman secret rm &lt;name&gt;</code> then recreate, and <code>systemctl --user restart</code> the affected unit. For <code>kendo_database_url</code> that is <code>kendo-migrate kendo-app</code>: the migration step is what sets the app user's new password, and restarting <code>kendo-app</code> alone does not re-run it.</p>
 <p>Because the user has <strong>linger</strong> enabled and the units declare <code>WantedBy=default.target</code>, the stack now starts automatically on boot. No <code>enable</code> step is needed for <code>.container</code> units generated by Quadlet — the <code>[Install]</code> section handles it after <code>daemon-reload</code>.</p>
 <p>Watch the first cert issuance:</p>
 <div class="highlight"><pre><span></span><code>podman<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>kendo-traefik<span class="w">   </span><span class="c1"># look for successful ACME / certificate obtained</span>

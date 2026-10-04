@@ -596,6 +596,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to the least-privilege app user (#453)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1468,6 +1479,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to the least-privilege app user (#453)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1580,6 +1602,39 @@ renewal fails. Write the drop-in from <a href="../../deployment/#5-tls-options">
 the app run unprivileged and mounts the uploads volume <code>:U</code>; both live in
 <code>kendo-app.container</code>, so neither reaches an existing host until the copy
 above. The edge health check lives in the Traefik dynamic config.</p>
+<h2 id="upgrading-to-the-least-privilege-app-user-453">Upgrading to the least-privilege app user (#453)<a class="headerlink" href="#upgrading-to-the-least-privilege-app-user-453" title="Permanent link">&para;</a></h2>
+<p>The app now connects to PostgreSQL as its own user, <code>kendo_app</code>, which can only
+read and write rows; <code>kendo</code> stays the superuser and is given to the migration
+step alone (<a href="../../adr/0007-the-app-connects-as-a-least-privilege-database-user/">ADR-0007</a>).
+<code>DATABASE_URL</code> is the app user's login and a new <code>MIGRATION_DATABASE_URL</code> holds
+the superuser's. The migration step creates <code>kendo_app</code> and sets its password
+from <code>DATABASE_URL</code> on every start, so nothing is done inside the database by
+hand. Until both URLs exist the migration step refuses to run — before touching
+the schema — and the app refuses to start as a superuser.</p>
+<p><strong>Quick self-host (Compose).</strong> Run <code>./setup.sh upgrade</code> as usual: it brings the
+new <code>setup.sh</code> and compose file, then stops at the migration step because
+<code>MIGRATION_DATABASE_URL</code> is not in <code>.env</code> yet. Nothing has been migrated, so
+skip the rollback it prints. Re-run <code>./setup.sh</code> — it keeps <code>POSTGRES_PASSWORD</code>
+and every other secret, writes <code>MIGRATION_DATABASE_URL</code> with it, and moves
+<code>DATABASE_URL</code> onto <code>kendo_app</code> with a new password — then start the stack:</p>
+<div class="highlight"><pre><span></span><code>./setup.sh
+podman-compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>--force-recreate
+</code></pre></div>
+<p><strong>Hardened deployment (Quadlet).</strong> <code>kendo_database_url</code> held the superuser's
+login; that becomes <code>kendo_migration_database_url</code>, and <code>kendo_database_url</code> is
+recreated with the app user's. The superuser password is the one <code>kendo-db</code>
+already has:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">pw</span><span class="o">=</span><span class="k">$(</span>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-db<span class="w"> </span>cat<span class="w"> </span>/run/secrets/postgres_password<span class="k">)</span>
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"postgresql+asyncpg://kendo:</span><span class="nv">$pw</span><span class="s2">@kendo-db:5432/kendo"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_migration_database_url<span class="w"> </span>-
+<span class="nb">unset</span><span class="w"> </span>pw
+
+podman<span class="w"> </span>secret<span class="w"> </span>rm<span class="w"> </span>kendo_database_url
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"postgresql+asyncpg://kendo_app:</span><span class="k">$(</span>od<span class="w"> </span>-An<span class="w"> </span>-vtx1<span class="w"> </span>-N24<span class="w"> </span>/dev/urandom<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">' \n'</span><span class="k">)</span><span class="s2">@kendo-db:5432/kendo"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_database_url<span class="w"> </span>-
+</code></pre></div>
+<p>Then refresh the units as above — <code>kendo-migrate.container</code> now attaches the
+new secret — and <code>systemctl --user restart kendo-migrate kendo-app</code>.</p>
 <h2 id="refreshing-the-env-file-after-an-upgrade">Refreshing the env file after an upgrade<a class="headerlink" href="#refreshing-the-env-file-after-an-upgrade" title="Permanent link">&para;</a></h2>
 <p>Re-extracting the bundle updates <code>deploy/env/kendo-app.env.example</code> in
 <code>~/src</code>. It does not update <code>~/kendo/kendo-app.env</code> — that file is yours, per

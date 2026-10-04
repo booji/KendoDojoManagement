@@ -1411,7 +1411,9 @@ there is no clone and no build (ADR-0004):</p>
 <div class="highlight"><pre><span></span><code>./setup.sh
 </code></pre></div>
 <p>It asks for your domain and an ACME email, generates <code>POSTGRES_PASSWORD</code>,
-<code>JWT_SECRET</code> and <code>SETUP_TOKEN</code>, and writes <code>.env</code> plus
+<code>JWT_SECRET</code>, <code>SETUP_TOKEN</code> and the app's own database password — the app
+connects as <code>kendo_app</code>, which can only read and write rows, and the superuser
+login goes to the <code>migrate</code> service alone — and writes <code>.env</code> plus
 <code>deploy/traefik/selfhost/traefik.yml</code> and <code>dynamic/kendo.yml</code> from their
 <code>.example</code> files. One domain answer reaches all three passkey-bound settings
 (<code>WEBAUTHN_RP_ID</code>, <code>WEBAUTHN_ORIGIN</code>, <code>CORS_ORIGINS</code>) and the Traefik <code>Host()</code>

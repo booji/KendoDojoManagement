@@ -1490,7 +1490,7 @@ next to the value it ships with. They are included here as they are in the
 release you are reading.</p>
 <h2 id="quick-self-host-env">Quick self-host — <code>.env</code><a class="headerlink" href="#quick-self-host-env" title="Permanent link">&para;</a></h2>
 <p><code>./setup.sh</code> writes <code>.env</code> from this template, filling in the domain and
-generating the three secrets.</p>
+generating the secrets.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Template for the production Compose stack (docker-compose.yml).</span>
 <span class="c1"># Start it with: podman-compose --env-file .env up -d</span>
 <span class="c1"># Copy to .env and fill in real values — .env is gitignored, never commit it.</span>
@@ -1512,8 +1512,14 @@ generating the three secrets.</p>
 <span class="c1"># dev defaults.</span>
 <span class="nv">APP_ENV</span><span class="o">=</span>production
 
-<span class="c1"># Required — the app refuses to start if this is unset/blank.</span>
-<span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo:&lt;your-db-password&gt;@db:5432/kendo
+<span class="c1"># Required — the app refuses to start if this is unset/blank, or if it names a</span>
+<span class="c1"># superuser. The restricted app user (ADR-0007), which can only read and write</span>
+<span class="c1"># rows: the migrate service creates it and sets its password from this URL on</span>
+<span class="c1"># every start, so changing the password here and restarting rotates it.</span>
+<span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo_app:&lt;your-app-db-password&gt;@db:5432/kendo
+<span class="c1"># The superuser login, given to the migrate service only. Must embed</span>
+<span class="c1"># POSTGRES_USER and POSTGRES_PASSWORD below.</span>
+<span class="nv">MIGRATION_DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo:&lt;your-db-password&gt;@db:5432/kendo
 <span class="nv">POSTGRES_USER</span><span class="o">=</span>kendo
 <span class="nv">POSTGRES_PASSWORD</span><span class="o">=</span>&lt;your-db-password&gt;
 <span class="nv">POSTGRES_DB</span><span class="o">=</span>kendo
@@ -1572,7 +1578,8 @@ generating the three secrets.</p>
 <span class="c1"># will be written outside the volume and lost on restart.</span>
 </code></pre></div>
 <h2 id="hardened-deployment-kendokendo-appenv">Hardened deployment — <code>~/kendo/kendo-app.env</code><a class="headerlink" href="#hardened-deployment-kendokendo-appenv" title="Permanent link">&para;</a></h2>
-<p>Non-sensitive settings only. <code>DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> are
+<p>Non-sensitive settings only. <code>DATABASE_URL</code>, <code>MIGRATION_DATABASE_URL</code>,
+<code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> are
 podman secrets under the hardened deployment, not variables in this file — see
 <a href="../../deployment/">Hardened deployment</a>.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Non-sensitive app config for UAT/PROD. Copy to ~kendo/kendo/kendo-app.env and</span>
