@@ -1691,6 +1691,10 @@ mermaid rendering of that, not a varchar.</p>
   (<code>IP_RETENTION</code> in <code>app/auth/attempt_repository.py</code>). There is no scheduler:
   the clear runs on every <code>log_attempt</code>, for all Accounts, so an address can
   outlive 30 days until the next recovery attempt anywhere on the instance.</li>
+<li><strong>One WebAuthn ceremony per Account</strong> (#435). <code>users.pending_challenge</code> /
+  <code>challenge_issued_at</code> hold a single challenge, so a second concurrent
+  registration or login for the same Account overwrites the first, which
+  then fails. A known single-flight limit, accepted at dojo scale.</li>
 <li><strong>Every Account belongs to exactly one Member</strong> (#432, ADR-0006).
   <code>users.member_id</code> is a live link and is enforced: NOT NULL, UNIQUE, and a
   foreign key to <code>members.id</code> with ON DELETE RESTRICT (Members are
@@ -1702,6 +1706,9 @@ mermaid rendering of that, not a varchar.</p>
   acted. They are deliberately not FK-enforced, so the id outlives the
   Account it names: erasing a member deletes their Account, and the history
   that Account recorded must not cascade with it.</li>
+<li><strong><code>grade_history.display_name</code> is deliberately denormalised</strong> (#435). It is
+  derivable from <code>grade</code> today, but it records what was displayed at the time
+  of the <strong>Promotion</strong>, which is the point of an audit table.</li>
 <li><strong>Constraints beyond keys</strong> (#431). The database, not just the app, refuses:</li>
 <li><code>uq_attendance_session_member</code> — UNIQUE <code>(session_id, member_id)</code> on
     <code>attendance</code>: a member is checked in at most once per session. NULLs are
@@ -1715,6 +1722,9 @@ mermaid rendering of that, not a varchar.</p>
 <li><code>uq_dojo_settings_single_row</code> — a unique index on the constant <code>(true)</code>:
     <code>dojo_settings</code> holds one row.</li>
 <li><code>uq_federations_name</code> — UNIQUE <code>federations.name</code>.</li>
+<li><strong>Index policy</strong> (#418). No indexes beyond those that keys and constraints
+  create and the <code>index=True</code> lookup columns on the ORM. Add one when a query
+  is measured slow — at dojo scale a sequential scan is microseconds.</li>
 <li><strong>Federation membership is a table, not a column.</strong> <code>members</code> has no
   <code>federation_number</code>: a member can hold numbers with several federations, so
   it lives in <code>member_federations</code> (dropped from <code>members</code> in #297 — see
