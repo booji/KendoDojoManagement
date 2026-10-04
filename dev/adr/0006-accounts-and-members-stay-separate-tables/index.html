@@ -1400,11 +1400,11 @@
 <h1 id="accounts-and-members-stay-separate-tables">Accounts and Members stay separate tables<a class="headerlink" href="#accounts-and-members-stay-separate-tables" title="Permanent link">&para;</a></h1>
 <p>A <strong>Member</strong> is the kendoka: name, email, date of birth, grade, emergency
 contact, safeguarding data. An <strong>Account</strong> is how a Member signs in: passkeys,
-recovery codes, <strong>Role</strong> (the code still calls it <code>User</code> / <code>users</code>). Every
+recovery codes, <strong>Role</strong> (the code called it <code>User</code> / <code>users</code> until #436). Every
 Account belongs to exactly one Member — there is no sign-in without a kendoka,
 the first <strong>Admin</strong> included, whose Member is created when they claim the
 instance. Most Members have no Account. The obvious simplification is one
-<code>people</code> table; we keep two, linked by a NOT NULL, unique <code>users.member_id</code>,
+<code>people</code> table; we keep two, linked by a NOT NULL, unique <code>accounts.member_id</code>,
 for three reasons.</p>
 <ul>
 <li><strong>They are deleted differently.</strong> Erasure hard-deletes the Account and its

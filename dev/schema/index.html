@@ -1476,7 +1476,7 @@ rather than patching it by hand:</p>
 <p>Primary keys are UUIDs throughout (<code>UUIDBase</code>); <code>string id PK</code> below is the
 mermaid rendering of that, not a varchar.</p>
 <div class="highlight"><pre><span></span><code>erDiagram
-    users {
+    accounts {
         string id PK
         string member_id FK,UK
         string role
@@ -1656,13 +1656,13 @@ mermaid rendering of that, not a varchar.</p>
         timestamptz updated_at
     }
 
-    users ||--o{ passkey_credentials : "has"
-    users ||--o{ recovery_codes : "has"
-    users ||--o{ recovery_attempts : "has"
-    users ||--o{ admin_recovery_tokens : "issued to"
-    users ||--o{ admin_recovery_tokens : "created by"
-    users ||--o{ invites : "issued by"
-    members ||--o| users : "signs in as"
+    accounts ||--o{ passkey_credentials : "has"
+    accounts ||--o{ recovery_codes : "has"
+    accounts ||--o{ recovery_attempts : "has"
+    accounts ||--o{ admin_recovery_tokens : "issued to"
+    accounts ||--o{ admin_recovery_tokens : "created by"
+    accounts ||--o{ invites : "issued by"
+    members ||--o| accounts : "signs in as"
     members ||--o{ member_federations : "belongs to"
     federations ||--o{ member_federations : "has members"
     members ||--o{ attendance : "attends"
@@ -1679,7 +1679,7 @@ mermaid rendering of that, not a varchar.</p>
 <h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Authentication has no password column.</strong> Passkeys are the only login path
-  (#155); <code>users</code> carries the WebAuthn challenge fields and nothing else.
+  (#155); <code>accounts</code> carries the WebAuthn challenge fields and nothing else.
   <code>recovery_codes</code> and <code>admin_recovery_tokens</code> hold bcrypt hashes;
   <code>invites.token_hash</code> is a deterministic sha256 digest (it is looked up by
   value — see <code>app/auth/invite_service.py</code> for why that differs).</li>
@@ -1691,16 +1691,16 @@ mermaid rendering of that, not a varchar.</p>
   (<code>IP_RETENTION</code> in <code>app/auth/attempt_repository.py</code>). There is no scheduler:
   the clear runs on every <code>log_attempt</code>, for all Accounts, so an address can
   outlive 30 days until the next recovery attempt anywhere on the instance.</li>
-<li><strong>One WebAuthn ceremony per Account</strong> (#435). <code>users.pending_challenge</code> /
+<li><strong>One WebAuthn ceremony per Account</strong> (#435). <code>accounts.pending_challenge</code> /
   <code>challenge_issued_at</code> hold a single challenge, so a second concurrent
   registration or login for the same Account overwrites the first, which
   then fails. A known single-flight limit, accepted at dojo scale.</li>
 <li><strong>Every Account belongs to exactly one Member</strong> (#432, ADR-0006).
-  <code>users.member_id</code> is a live link and is enforced: NOT NULL, UNIQUE, and a
+  <code>accounts.member_id</code> is a live link and is enforced: NOT NULL, UNIQUE, and a
   foreign key to <code>members.id</code> with ON DELETE RESTRICT (Members are
   deactivated or anonymised, never hard-deleted). Most Members have no
   Account. The email lives once, on the Member — <code>members.email</code> is both the
-  contact address and the sign-in identifier; <code>users</code> has no email column.</li>
+  contact address and the sign-in identifier; <code>accounts</code> has no email column.</li>
 <li><strong>Audit columns are not foreign keys.</strong> <code>attendance.recorded_by</code>,
   <code>grade_history.assigned_by</code> and <code>members.anonymised_by</code> record which Account
   acted. They are deliberately not FK-enforced, so the id outlives the

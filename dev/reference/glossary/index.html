@@ -1732,7 +1732,7 @@
 <tbody>
 <tr>
 <td><strong>Account</strong></td>
-<td>A <strong>Member's</strong> means of signing in: their <strong>Passkeys</strong>, recovery codes and <strong>Role</strong>. Not a person — it always belongs to exactly one <strong>Member</strong>, and signs in with that Member's email. The code still calls it <code>User</code> / <code>users</code> until the rename lands (#436)</td>
+<td>A <strong>Member's</strong> means of signing in: their <strong>Passkeys</strong>, recovery codes and <strong>Role</strong>. Not a person — it always belongs to exactly one <strong>Member</strong>, and signs in with that Member's email</td>
 <td>User, login</td>
 </tr>
 <tr>
@@ -2017,7 +2017,7 @@ stacks, so they are pinned here.</p>
 </blockquote>
 <h2 id="flagged-ambiguities">Flagged ambiguities<a class="headerlink" href="#flagged-ambiguities" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>"User"</strong>: Retired as a domain term (#418) because it sounds like a person, and the person is always the <strong>Member</strong>. The sign-in is the <strong>Account</strong>. "The user's name" means "the <strong>Member's</strong> name"; there is no such thing as a user's email, only the <strong>Member's</strong>. The code keeps <code>User</code> until the rename lands (#436). <strong>User Settings</strong> stays as a page name.</li>
+<li><strong>"User"</strong>: Retired as a domain term (#418) because it sounds like a person, and the person is always the <strong>Member</strong>. The sign-in is the <strong>Account</strong> (the code followed in #436). "The user's name" means "the <strong>Member's</strong> name". <strong>User Settings</strong> stays as a page name.</li>
 <li><strong>"Settings"</strong>: Used unqualified for both per-user preferences and dojo-wide configuration. Always qualify: <strong>User Settings</strong> or <strong>Dojo Settings</strong>.</li>
 <li><strong>"Delete" vs "Deactivate"</strong>: The API endpoint <code>DELETE /members/{id}</code> performs a <strong>Deactivation</strong>, not a deletion. The word "delete" must not be used for this operation in any user-facing text, documentation, or domain discussion.</li>
 <li><strong>"Profile"</strong>: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is <strong>Member</strong>. Avoid bare "profile" and the retired "Member Profile".</li>

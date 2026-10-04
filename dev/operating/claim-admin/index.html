@@ -1448,7 +1448,7 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span clas
 <span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$token</span><span class="s2">"</span><span class="w">   </span><span class="c1"># hand it over out of band, then clear your scrollback</span>
 </code></pre></div>
 <p><code>app/cli.py create-recovery-token</code> does <strong>not</strong> cover a never-claimed instance:
-it resolves a <code>User</code> row by email, and an unclaimed instance has none. Rotation
+it resolves an Account by email, and an unclaimed instance has none. Rotation
 is the only path there, and it costs seconds.</p>
 
 
