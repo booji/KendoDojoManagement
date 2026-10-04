@@ -10,7 +10,7 @@ import { MemoryRouter } from "react-router-dom"
 
 import OnboardingPage from "@/pages/OnboardingPage"
 
-vi.mock("@/api/users", () => ({
+vi.mock("@/api/accounts", () => ({
   getMyMember: vi.fn().mockResolvedValue({
     id: "m1",
     email: "sensei@dojo.test",

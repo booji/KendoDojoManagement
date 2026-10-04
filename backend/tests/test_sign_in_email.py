@@ -16,16 +16,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.token import decode_token
 from app.main import app
 from tests.account_support import seed_account
 
 _CREDENTIAL_ID = b"sign-in-email-credential"
 _CREDENTIAL_B64 = "c2lnbi1pbi1lbWFpbC1jcmVkZW50aWFs"
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub=str(uuid.uuid4()), email="sensei@dojo.test", role="admin", is_active=True
 )
 
@@ -73,7 +73,7 @@ async def _account_with_passkey(session, email: str) -> tuple[str, str]:
         )
     )
     member_id = (
-        await session.execute(select(User.member_id).where(User.id == user_id))
+        await session.execute(select(Account.member_id).where(Account.id == user_id))
     ).scalar_one()
     return user_id, member_id
 

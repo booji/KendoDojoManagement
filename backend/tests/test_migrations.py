@@ -152,7 +152,7 @@ async def test_alembic_upgrade_head_from_empty_database_reaches_head(
         # NB: there is no `sessions` table — session rows live in
         # `session_instances` (see app.sessions.db_models). The name in issue
         # #264's prose is informal shorthand, not a real table.
-        for expected in ("members", "session_instances", "users", "federations"):
+        for expected in ("members", "session_instances", "accounts", "federations"):
             assert expected in table_names, (
                 f"expected table {expected!r} to exist after alembic upgrade "
                 f"head from empty; got tables: {sorted(table_names)}"

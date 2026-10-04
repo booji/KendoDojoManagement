@@ -157,7 +157,7 @@ async def test_fresh_database_reaches_head_via_migrations(
     assert "alembic_version" in tables
     assert "members" in tables
     assert "sessions" in tables or "session_instances" in tables
-    assert "users" in tables
+    assert "accounts" in tables
 
     assert await _alembic_version(_bootstrap_db) == _expected_head_revision()
 

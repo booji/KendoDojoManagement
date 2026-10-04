@@ -21,8 +21,8 @@ class Attendance(UUIDBase):
     session_id: Mapped[str] = mapped_column(
         UUIDType(), ForeignKey("session_instances.id"), nullable=False
     )
-    # NULL for a visitor row, which has a name instead of a member. Never a
-    # User id: attendance is keyed by member however it was recorded (#340),
+    # NULL for a visitor row, which has a name instead of a member. Never an
+    # Account id: attendance is keyed by member however it was recorded (#340),
     # and the foreign key is what keeps it that way.
     member_id: Mapped[str | None] = mapped_column(
         UUIDType(), ForeignKey("members.id"), nullable=True

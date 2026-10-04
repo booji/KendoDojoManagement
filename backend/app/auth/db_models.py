@@ -14,16 +14,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import UUIDBase, UUIDType
 
 
-class User(UUIDBase):
-    __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("member_id", name="uq_users_member_id"),)
+class Account(UUIDBase):
+    __tablename__ = "accounts"
+    __table_args__ = (UniqueConstraint("member_id", name="uq_accounts_member_id"),)
 
     # The Member this Account signs in as (#432, ADR-0006). Every Account has
     # exactly one; the email it signs in with is that Member's. RESTRICT
     # because Members are deactivated or anonymised, never hard-deleted.
     member_id: Mapped[str] = mapped_column(
         UUIDType(),
-        ForeignKey("members.id", name="fk_users_member_id", ondelete="RESTRICT"),
+        ForeignKey("members.id", name="fk_accounts_member_id", ondelete="RESTRICT"),
         nullable=False,
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
@@ -42,7 +42,7 @@ class PasskeyCredential(UUIDBase):
     __tablename__ = "passkey_credentials"
 
     user_id: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False
+        UUIDType(), ForeignKey("accounts.id"), nullable=False
     )
     credential_id: Mapped[bytes] = mapped_column(
         LargeBinary, nullable=False, unique=True
@@ -63,7 +63,7 @@ class RecoveryCode(UUIDBase):
     __tablename__ = "recovery_codes"
 
     user_id: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("accounts.id"), nullable=False, index=True
     )
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     set_id: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -79,7 +79,7 @@ class RecoveryAttempt(UUIDBase):
     __tablename__ = "recovery_attempts"
 
     user_id: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("accounts.id"), nullable=False, index=True
     )
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -113,11 +113,11 @@ class Invite(UUIDBase):
         DateTime(timezone=True), nullable=False
     )
     issued_by: Mapped[str | None] = mapped_column(
-        # SET NULL rather than RESTRICT: erasure deletes the User row, and an
+        # SET NULL rather than RESTRICT: erasure deletes the Account row, and an
         # admin who once issued an invite must not become un-erasable. The
         # invite itself is still worth keeping as an audit record.
         UUIDType(),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("accounts.id", ondelete="SET NULL"),
         nullable=True,
     )
     redeemed_at: Mapped[datetime | None] = mapped_column(
@@ -135,10 +135,10 @@ class AdminRecoveryToken(UUIDBase):
     __tablename__ = "admin_recovery_tokens"
 
     user_id: Mapped[str] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=False, index=True
+        UUIDType(), ForeignKey("accounts.id"), nullable=False, index=True
     )
     created_by_id: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("users.id"), nullable=True
+        UUIDType(), ForeignKey("accounts.id"), nullable=True
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(

@@ -11,12 +11,12 @@ export type SelfUpdateMemberRequest = {
 }
 
 export const getMyMember = async (): Promise<MemberResponse | null> => {
-  const res = await apiFetch("/api/users/me/member")
+  const res = await apiFetch("/api/accounts/me/member")
   if (res.status === 404) return null
   if (!res.ok) await throwApiError(res, "Failed to fetch member profile")
   return res.json() as Promise<MemberResponse>
 }
 
 export const putMyMember = async (data: SelfUpdateMemberRequest): Promise<MemberResponse> => {
-  return request<MemberResponse>("/api/users/me/member", { method: "PUT", body: data, errorMessage: "Failed to save profile" })
+  return request<MemberResponse>("/api/accounts/me/member", { method: "PUT", body: data, errorMessage: "Failed to save profile" })
 }

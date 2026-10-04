@@ -5,10 +5,10 @@ Uses StubRepository pattern — NO real DB. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
-  1. GET /users/me/member returns caller's Member record (200) or 404 if none
-  2. PUT /users/me/member updates allowed self-service fields, returns updated record
-  3. Admin-only fields sent to PUT /users/me/member are rejected (422) or silently ignored
-  4. PUT /users/me/member creates a new Member record if none linked (first-save onboarding)
+  1. GET /accounts/me/member returns caller's Member record (200) or 404 if none
+  2. PUT /accounts/me/member updates allowed self-service fields, returns updated record
+  3. Admin-only fields sent to PUT /accounts/me/member are rejected (422) or silently ignored
+  4. PUT /accounts/me/member creates a new Member record if none linked (first-save onboarding)
   5. Both endpoints return 401 for unauthenticated requests
 
 Issue #158 changes:
@@ -25,7 +25,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
 from tests.fake_repositories import InMemoryMemberRepository
@@ -37,7 +37,7 @@ from tests.fake_repositories import InMemoryMemberRepository
 _USER_SUB = "user-uuid-self"
 _OTHER_SUB = "user-uuid-other"
 
-_MEMBER_CLAIMS = UserClaims(
+_MEMBER_CLAIMS = AccountClaims(
     sub=_USER_SUB, email="self@dojo.test", role="member", is_active=True
 )
 
@@ -84,7 +84,7 @@ def member_repo() -> InMemoryMemberRepository:
 
 
 # ---------------------------------------------------------------------------
-# AC1 — GET /users/me/member
+# AC1 — GET /accounts/me/member
 # ---------------------------------------------------------------------------
 
 
@@ -96,7 +96,7 @@ async def test_get_my_member_returns_own_record(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/member")
+        response = await c.get("/accounts/me/member")
 
     assert response.status_code == 200
     body = response.json()
@@ -113,7 +113,7 @@ async def test_get_my_member_returns_404_when_no_linked_record(member_repo) -> N
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/member")
+        response = await c.get("/accounts/me/member")
 
     assert response.status_code == 404
 
@@ -123,7 +123,7 @@ async def test_get_my_member_unauthenticated_returns_401(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/member")
+        response = await c.get("/accounts/me/member")
 
     assert response.status_code == 401
 
@@ -136,7 +136,7 @@ async def test_get_my_member_response_schema(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/member")
+        response = await c.get("/accounts/me/member")
 
     assert response.status_code == 200
     body = response.json()
@@ -173,14 +173,14 @@ async def test_get_my_member_only_returns_own_record(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/member")
+        response = await c.get("/accounts/me/member")
 
     # Caller has no linked record, should be 404
     assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
-# AC2 — PUT /users/me/member updates allowed fields
+# AC2 — PUT /accounts/me/member updates allowed fields
 # ---------------------------------------------------------------------------
 
 
@@ -193,7 +193,7 @@ async def test_put_my_member_updates_first_name(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"first_name": "UpdatedFirst"},
         )
 
@@ -210,7 +210,7 @@ async def test_put_my_member_updates_surname(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"surname": "UpdatedSurname"},
         )
 
@@ -227,7 +227,7 @@ async def test_put_my_member_updates_display_name(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"display_name": "Taro-san"},
         )
 
@@ -245,7 +245,7 @@ async def test_put_my_member_updates_dob(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"dob": new_dob},
         )
 
@@ -265,7 +265,7 @@ async def test_put_my_member_updates_emergency_contact(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={
                 "emergency_contact_name": "New Emergency",
                 "emergency_contact_phone": "+447700900999",
@@ -286,12 +286,12 @@ async def test_put_my_member_update_persists(member_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        await c.put("/users/me/member", json={"first_name": "Persisted"})
+        await c.put("/accounts/me/member", json={"first_name": "Persisted"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        get_response = await c.get("/users/me/member")
+        get_response = await c.get("/accounts/me/member")
 
     assert get_response.status_code == 200
     assert get_response.json()["first_name"] == "Persisted"
@@ -303,7 +303,7 @@ async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"first_name": "Hacker"},
         )
 
@@ -311,7 +311,7 @@ async def test_put_my_member_unauthenticated_returns_401(member_repo) -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC3 — Admin-only fields must not be applied via PUT /users/me/member
+# AC3 — Admin-only fields must not be applied via PUT /accounts/me/member
 # ---------------------------------------------------------------------------
 
 
@@ -319,7 +319,7 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
     member_repo,
 ) -> None:
     """
-    Sending is_coach (admin-only) via PUT /users/me/member must not apply the change.
+    Sending is_coach (admin-only) via PUT /accounts/me/member must not apply the change.
     Either 422 (rejected) or 200 with the field unchanged are acceptable.
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -329,7 +329,7 @@ async def test_put_my_member_admin_only_field_is_rejected_or_ignored(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"is_coach": True},
         )
 
@@ -343,7 +343,7 @@ async def test_put_my_member_membership_status_is_rejected_or_ignored(
     member_repo,
 ) -> None:
     """
-    Sending membership_status (admin-only) via PUT /users/me/member must not apply the change.
+    Sending membership_status (admin-only) via PUT /accounts/me/member must not apply the change.
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(membership_status="active"))
@@ -352,7 +352,7 @@ async def test_put_my_member_membership_status_is_rejected_or_ignored(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"membership_status": "inactive"},
         )
 
@@ -370,7 +370,7 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"is_first_aider": True},
         )
 
@@ -380,7 +380,7 @@ async def test_put_my_member_is_first_aider_is_rejected_or_ignored(member_repo) 
 
 
 # ---------------------------------------------------------------------------
-# AC4 (#432) — PUT /users/me/member never creates a Member
+# AC4 (#432) — PUT /accounts/me/member never creates a Member
 #
 # Every Account belongs to a Member, created before the Account is (the first
 # Admin's at the setup claim), so onboarding completes an existing record. An
@@ -395,7 +395,7 @@ async def test_put_my_member_without_a_linked_record_is_404(member_repo) -> None
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"first_name": "Brand", "surname": "New", "dob": "1995-08-22"},
         )
 
@@ -419,7 +419,7 @@ async def test_put_my_member_display_name_only_preserves_first_and_surname(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"display_name": "Taro-san"},
         )
 
@@ -441,7 +441,7 @@ async def test_put_my_member_omitting_dob_preserves_existing_dob(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"display_name": "NoDobChange"},
         )
 
@@ -466,7 +466,7 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_phone(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"emergency_contact_phone": None},
         )
 
@@ -483,14 +483,14 @@ async def test_put_my_member_explicit_null_clear_persists_to_get(member_repo) ->
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"emergency_contact_phone": None},
         )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        get_response = await c.get("/users/me/member")
+        get_response = await c.get("/accounts/me/member")
 
     assert get_response.status_code == 200
     assert get_response.json()["emergency_contact_phone"] is None
@@ -505,7 +505,7 @@ async def test_put_my_member_explicit_null_clears_display_name(member_repo) -> N
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"display_name": None},
         )
 
@@ -524,7 +524,7 @@ async def test_put_my_member_explicit_null_clears_emergency_contact_name(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"emergency_contact_name": None},
         )
 
@@ -546,7 +546,7 @@ async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"dob": None},
         )
 
@@ -565,7 +565,7 @@ async def test_put_my_member_omitted_emergency_contact_name_untouched(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"first_name": "StillSelf"},
         )
 
@@ -588,7 +588,7 @@ async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"first_name": None, "display_name": "Taro-san"},
         )
 
@@ -609,7 +609,7 @@ async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            "/users/me/member",
+            "/accounts/me/member",
             json={"surname": None, "display_name": "Taro-san"},
         )
 

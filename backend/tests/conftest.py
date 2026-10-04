@@ -65,10 +65,10 @@ def cookies_for():
 
     No DB is involved: the token is signed with the JWT_SECRET set above.
     """
-    from app.auth.models import UserClaims
+    from app.auth.models import AccountClaims
     from app.auth.token import encode_token
 
-    def _make(claims: "UserClaims") -> dict[str, str]:
+    def _make(claims: "AccountClaims") -> dict[str, str]:
         return {"access_token": encode_token(claims)}
 
     return _make
@@ -109,12 +109,12 @@ def _default_current_member_id():
     from fastapi import Depends
 
     from app.auth.guards import REQUIRE_MEMBER
-    from app.auth.models import UserClaims
+    from app.auth.models import AccountClaims
     from app.main import app
     from app.members.dependencies import get_current_member_id
 
     async def _member_id_for_caller(
-        claims: Annotated[UserClaims, Depends(REQUIRE_MEMBER)],
+        claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     ) -> str:
         return f"member-of-{claims.sub}"
 

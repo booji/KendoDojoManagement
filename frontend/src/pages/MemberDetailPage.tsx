@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
-import type { UserClaims } from "@/api/auth"
+import type { AccountClaims } from "@/api/auth"
 import { setMemberGrade, proposeGrade, getGradeHistory, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
@@ -817,7 +817,7 @@ const MemberDetailPage = () => {
   const navigate = useNavigate()
 
   const [member, setMember] = useState<MemberResponse | null>(null)
-  const [currentUser, setCurrentUser] = useState<UserClaims | null>(null)
+  const [currentUser, setCurrentUser] = useState<AccountClaims | null>(null)
   const [myMember, setMyMember] = useState<MemberResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 

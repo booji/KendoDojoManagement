@@ -35,7 +35,7 @@ load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
-from app.auth.models import UserClaims  # noqa: E402
+from app.auth.models import AccountClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
 from tests.e2e_support import complete_onboarding  # noqa: E402
 
@@ -52,7 +52,7 @@ BASE_URL = "http://localhost:5173"
 
 
 def _make_token(role: str = "member") -> str:
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=str(uuid.uuid4()),
         email=f"{role}-{uuid.uuid4().hex[:6]}@example.com",
         role=role,  # type: ignore[arg-type]

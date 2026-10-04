@@ -27,7 +27,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.sessions.dependencies import get_session_type_repo
 from tests.fake_repositories import (
@@ -38,10 +38,10 @@ from tests.fake_repositories import (
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
 
@@ -182,7 +182,7 @@ async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     """PUT /session-types/{id} must return 403 for a non-admin user."""
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)

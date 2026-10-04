@@ -50,7 +50,7 @@ def clear_overrides():
 
 
 async def _seed_user(session, email: str, role: str = "member") -> str:
-    """Seed a fully-registered user: a User row plus a PasskeyCredential.
+    """Seed a fully-registered user: an Account row plus a PasskeyCredential.
 
     The credential is what makes register-begin count as "not bootstrap" --
     see the note in test_passkey_enumeration.py.
@@ -159,7 +159,7 @@ async def test_register_begin_authorized_email_meets_floor(
 async def test_register_begin_bootstrap_email_meets_floor(
     db_client, monkeypatch
 ) -> None:
-    """register_passkey_begin on a fresh (zero-User) instance -- the bootstrap
+    """register_passkey_begin on a fresh (zero-Account) instance -- the bootstrap
     real path -- takes at least the configured minimum duration."""
     monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
 

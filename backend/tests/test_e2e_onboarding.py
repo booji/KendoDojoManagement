@@ -61,7 +61,7 @@ def _ensure_seeded() -> None:
 def _complete_profile(token: str) -> None:
     """Give the caller's Member the date of birth onboarding asks for."""
     resp = requests.put(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         json={"dob": "1990-06-15"},
         cookies={"access_token": token},
         timeout=5,

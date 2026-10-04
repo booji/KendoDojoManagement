@@ -97,7 +97,7 @@ describe("apiFetch on 401 before any session exists", () => {
     const { apiFetch: freshFetch } = await import("@/api/client")
     respondWith(401)
 
-    await freshFetch("/api/users/me/preferences")
+    await freshFetch("/api/accounts/me/preferences")
 
     expect(assign).not.toHaveBeenCalled()
   })

@@ -1,6 +1,6 @@
 import { apiFetch, throwApiError } from "@/api/client"
 
-import type { UserClaims, ApiError } from "@/api/auth"
+import type { AccountClaims, ApiError } from "@/api/auth"
 
 // --- WebAuthn buffer helpers (copied from auth.ts — not exported there) ---
 
@@ -37,7 +37,7 @@ type PasskeyCreationOptions = {
 }
 
 /**
- * Returns true if the instance has no users yet (setup available),
+ * Returns true if the instance has no Accounts yet (setup available),
  * false if setup is already completed.
  */
 export const checkSetupAvailable = async (): Promise<boolean> => {
@@ -49,7 +49,7 @@ export const checkSetupAvailable = async (): Promise<boolean> => {
 
 /**
  * Runs the full passkey registration ceremony against /api/setup/passkey/begin
- * and /api/setup/passkey/complete, returning UserClaims for the new admin.
+ * and /api/setup/passkey/complete, returning AccountClaims for the new admin.
  *
  * The claim names the first admin as well as their email: it creates their
  * Member and Account together (#432), so there is no sign-in without a kendoka.
@@ -67,7 +67,7 @@ export type SetupClaimant = {
 export const performSetupPasskeyRegistration = async (
   claimant: SetupClaimant,
   setupToken: string,
-): Promise<UserClaims> => {
+): Promise<AccountClaims> => {
   const { email } = claimant
   const headers = { "X-Setup-Token": setupToken }
 
@@ -125,5 +125,5 @@ export const performSetupPasskeyRegistration = async (
   if (!completeRes.ok) {
     await throwApiError(completeRes, "Setup passkey registration failed")
   }
-  return completeRes.json() as Promise<UserClaims>
+  return completeRes.json() as Promise<AccountClaims>
 }

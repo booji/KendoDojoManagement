@@ -51,7 +51,7 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import Invite, PasskeyCredential, User
+from app.auth.db_models import Account, Invite, PasskeyCredential
 from app.auth.invite_service import hash_invite_token
 from app.members.db_models import Member
 
@@ -174,7 +174,7 @@ async def _seed() -> tuple[list[str], list[str]]:
                 )
             )
             await session.execute(
-                insert(User).values(
+                insert(Account).values(
                     id=anchor_id,
                     member_id=anchor_member_id,
                     role="admin",
@@ -216,7 +216,7 @@ async def _seed() -> tuple[list[str], list[str]]:
                 ],
             )
             await session.execute(
-                insert(User),
+                insert(Account),
                 [
                     {
                         "id": str(uuid.uuid4()),
@@ -230,7 +230,7 @@ async def _seed() -> tuple[list[str], list[str]]:
 
             # Invite redemption creates the account it invites, so a token only
             # takes the real path once — hence one seeded invite per request,
-            # each for an email that has no User yet.
+            # each for an email that has no Account yet.
             await session.execute(
                 insert(Invite),
                 [
@@ -265,12 +265,13 @@ async def _assert_real_paths_taken(email_count: int, invite_count: int) -> None:
         async with session_factory() as session:
             accounts = (
                 select(func.count())
-                .select_from(User)
-                .join(Member, Member.id == User.member_id)
+                .select_from(Account)
+                .join(Member, Member.id == Account.member_id)
             )
             challenged = await session.scalar(
                 accounts.where(
-                    Member.email.like(f"{_TAG}-%"), User.pending_challenge.isnot(None)
+                    Member.email.like(f"{_TAG}-%"),
+                    Account.pending_challenge.isnot(None),
                 )
             )
             # The anchor is an Account too, but no request created it.
@@ -315,8 +316,8 @@ async def _teardown() -> None:
             user_ids = list(
                 (
                     await session.execute(
-                        select(User.id)
-                        .join(Member, Member.id == User.member_id)
+                        select(Account.id)
+                        .join(Member, Member.id == Account.member_id)
                         .where(tagged)
                     )
                 ).scalars()
@@ -324,8 +325,8 @@ async def _teardown() -> None:
             await session.execute(
                 delete(PasskeyCredential).where(PasskeyCredential.user_id.in_(user_ids))
             )
-            # Accounts before their Members: users.member_id is RESTRICT (#432).
-            await session.execute(delete(User).where(User.id.in_(user_ids)))
+            # Accounts before their Members: accounts.member_id is RESTRICT (#432).
+            await session.execute(delete(Account).where(Account.id.in_(user_ids)))
             await session.execute(delete(Member).where(tagged))
             await session.execute(delete(Invite).where(Invite.email.like(f"{_TAG}-%")))
             await session.commit()

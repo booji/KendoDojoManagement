@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
@@ -91,7 +91,7 @@ async def test_register_passkey_begin_returns_options(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> None:
-    """Calling begin for a new email creates a User row in the DB."""
+    """Calling begin for a new email creates an Account row in the DB."""
     session = db_client
     await _claimed_instance_with_member(session, "musashi@dojo.test")
 
@@ -105,8 +105,8 @@ async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> N
     assert response.status_code == 200
 
     result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "musashi@dojo.test")
     )
     user = result.fetchone()
@@ -136,8 +136,8 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
 
     # Should still be exactly one user with that email
     result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "existing@dojo.test")
     )
     rows = result.fetchall()
@@ -149,7 +149,7 @@ async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_register_passkey_complete_stores_credential(db_client) -> None:
-    """POST /auth/register/passkey/complete verifies credential and returns UserClaims (201)."""
+    """POST /auth/register/passkey/complete verifies credential and returns AccountClaims (201)."""
     session = db_client
     await _claimed_instance_with_member(session, "complete@dojo.test")
 
@@ -237,7 +237,7 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     assert len(challenge) > 0
 
     stored = (
-        await session.execute(select(User).where(User.id == user_id))
+        await session.execute(select(Account).where(Account.id == user_id))
     ).scalar_one()
     assert stored.pending_challenge == challenge
     assert stored.challenge_issued_at is not None

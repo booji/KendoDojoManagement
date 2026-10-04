@@ -11,7 +11,7 @@ from app import config
 from app.attendance.dependencies import get_attendance_repo
 from app.attendance.repository import AbstractAttendanceRepository
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_current_member_id
@@ -77,8 +77,8 @@ _InstRepo = Annotated[
     AbstractSessionInstanceRepository, Depends(get_session_instance_repo)
 ]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AttendanceRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
 _CurrentMemberId = Annotated[str | None, Depends(get_current_member_id)]
 
@@ -325,7 +325,7 @@ async def list_upcoming_sessions(
     is_admin = claims.role == "admin"
 
     async def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        # The caller's Member id, not their User id: attendance is keyed by
+        # The caller's Member id, not their Account id: attendance is keyed by
         # member however it was recorded (#340).
         enriched = await _enrich_with_attendance(
             rows, attendance_repo, current_member_id

@@ -21,7 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert, select
 
 import app.config as config
-from app.auth.db_models import PasskeyCredential, User
+from app.auth.db_models import Account, PasskeyCredential
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
@@ -51,7 +51,7 @@ def clear_overrides():
 
 @pytest.mark.asyncio
 async def test_get_setup_returns_200_when_no_users(db_client) -> None:
-    """GET /setup returns 200 when the users table is empty (fresh instance)."""
+    """GET /setup returns 200 when the accounts table is empty (fresh instance)."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -233,7 +233,7 @@ async def test_setup_claim_creates_the_first_admins_member_and_account(
     ).scalar_one()
     assert (member.first_name, member.surname) == ("Ai", "Sato")
     account = (
-        await db_client.execute(select(User).where(User.member_id == member.id))
+        await db_client.execute(select(Account).where(Account.member_id == member.id))
     ).scalar_one()
     # Admin is granted when the claim completes, not here (#432 review).
     assert account.role == "member"
@@ -345,7 +345,7 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
     assert body["role"] == "admin"
     assert "access_token" in response.cookies
     stored = (
-        await session.execute(select(User).where(User.id == user_id))
+        await session.execute(select(Account).where(Account.id == user_id))
     ).scalar_one()
     assert stored.role == "admin"
 
@@ -549,8 +549,8 @@ async def test_ordinary_register_begin_cannot_bootstrap_an_admin(db_client) -> N
 
     assert response.status_code == 200  # decoy is indistinguishable by shape
     rows = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "stranger@dojo.test")
     )
     assert rows.scalar_one_or_none() is None

@@ -29,7 +29,7 @@ from app.auth.dependencies import (
     get_recovery_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 
 # ---------------------------------------------------------------------------
@@ -598,7 +598,7 @@ async def test_account_lockout_emits_log(
 
 async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> None:
     """DELETE /auth/passkeys/{id} must emit a passkey_deleted/success event."""
-    user = UserClaims(
+    user = AccountClaims(
         sub="del-user", email="del@dojo.test", role="member", is_active=True
     )
     passkey_repo = StubPasskeyRepo()
@@ -711,7 +711,7 @@ async def test_admin_token_generation_emits_log(
     await seed_account(db_client, "target@dojo.test", user_id=target_user_id)
     await db_client.flush()
 
-    admin_claims = UserClaims(
+    admin_claims = AccountClaims(
         sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
     )
     admin_token_repo = StubAdminTokenRepo()

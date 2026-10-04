@@ -28,16 +28,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
 from tests.account_support import seed_account
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub=str(uuid.uuid4()), email="member@dojo.test", role="member", is_active=True
 )
 _TARGET_USER_ID = str(uuid.uuid4())
@@ -189,7 +189,7 @@ async def test_admin_can_generate_token_for_user(db_client) -> None:
     await _seed_user(db_client, admin_id, role="admin")
     await _seed_user(db_client, target_id)
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -213,7 +213,7 @@ async def test_admin_token_response_contains_plaintext_token(db_client) -> None:
     await _seed_user(db_client, admin_id, role="admin")
     await _seed_user(db_client, target_id)
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -243,7 +243,7 @@ async def test_admin_token_stored_as_hash_not_plaintext(db_client) -> None:
     await _seed_user(db_client, admin_id, role="admin")
     await _seed_user(db_client, target_id)
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -280,7 +280,7 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
     await _seed_user(db_client, admin_id, role="admin")
     await _seed_user(db_client, target_id)
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -318,7 +318,7 @@ async def test_non_admin_cannot_generate_admin_token() -> None:
     """POST /auth/recovery/admin-token returns 403 for a member-role token."""
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub=str(uuid.uuid4()), email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
@@ -355,7 +355,7 @@ async def test_admin_token_returns_404_for_unknown_user(db_client) -> None:
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, admin_id, role="admin")
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -377,7 +377,7 @@ async def test_admin_token_missing_user_id_returns_422(db_client) -> None:
     admin_id = str(uuid.uuid4())
     await _seed_user(db_client, admin_id, role="admin")
 
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=admin_id, email="admin@dojo.test", role="admin", is_active=True
     )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
@@ -635,7 +635,7 @@ async def test_non_admin_cannot_call_generate_endpoint() -> None:
     """Unit: member-role token → 403 on POST /auth/recovery/admin-token."""
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub=str(uuid.uuid4()), email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)

@@ -5,8 +5,8 @@ Each test covers one acceptance criterion.
 
 Implementation note: theme is a user preference, not an auth claim (#322).  It
 is never carried on the JWT or returned by getMe(); the server-side copy lives
-in `users.theme` and is read and written solely through
-GET/PUT /users/me/preferences.  These tests exercise the observable client-side
+in `accounts.theme` and is read and written solely through
+GET/PUT /accounts/me/preferences.  These tests exercise the observable client-side
 behaviour (localStorage, dark-class toggling, cycle order, keyboard navigation,
 sidebar visibility); the server reconcile is covered by the preferences tests.
 """
@@ -24,7 +24,7 @@ load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
-from app.auth.models import UserClaims  # noqa: E402
+from app.auth.models import AccountClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
 from tests.e2e_support import API_URL, complete_onboarding  # noqa: E402
 
@@ -40,7 +40,7 @@ BASE_URL = "http://localhost:5173"
 
 
 def _make_token(role: str = "member") -> str:
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=str(uuid.uuid4()),
         email=f"{role}-{uuid.uuid4().hex[:6]}@example.com",
         role=role,  # type: ignore[arg-type]
@@ -177,7 +177,7 @@ def test_theme_preference_survives_page_refresh(page: Page) -> None:
 
     The blocking script (frontend/public/theme.js) reads localStorage before first paint, so
     the saved theme survives a reload without a flash.  ThemeProvider then
-    reconciles against GET /users/me/preferences on mount.  This test covers the
+    reconciles against GET /accounts/me/preferences on mount.  This test covers the
     client-side persistence half of AC4.
     """
     page.emulate_media(color_scheme="light")
@@ -310,7 +310,7 @@ def _user_with_saved_theme(theme: str) -> tuple[str, str]:
     token = login.cookies["access_token"]
     complete_onboarding(token)
     saved = requests.put(
-        f"{API_URL}/users/me/preferences",
+        f"{API_URL}/accounts/me/preferences",
         json={"theme": theme},
         cookies={"access_token": token},
     )
@@ -370,7 +370,7 @@ def test_login_issues_the_readable_theme_cookie() -> None:
     )
     first.raise_for_status()
     saved = requests.put(
-        f"{API_URL}/users/me/preferences",
+        f"{API_URL}/accounts/me/preferences",
         json={"theme": "dark"},
         cookies={"access_token": first.cookies["access_token"]},
     )

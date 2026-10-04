@@ -14,7 +14,7 @@
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Account** | A **Member's** means of signing in: their **Passkeys**, recovery codes and **Role**. Not a person — it always belongs to exactly one **Member**, and signs in with that Member's email. The code still calls it `User` / `users` until the rename lands (#436) | User, login |
+| **Account** | A **Member's** means of signing in: their **Passkeys**, recovery codes and **Role**. Not a person — it always belongs to exactly one **Member**, and signs in with that Member's email | User, login |
 | **Role** | The permission level of an **Account**: either `admin` or `member` | Permission, access level |
 | **Passkey** | A WebAuthn credential stored on a device, used for passwordless authentication | Biometric login, FIDO key |
 | **First-registered Admin** | The first **Member** to register on a fresh instance: their **Member** and **Account** are created together when they claim it, with the `admin` **Role** | Superuser, root user |
@@ -124,7 +124,7 @@ stacks, so they are pinned here.
 
 ## Flagged ambiguities
 
-- **"User"**: Retired as a domain term (#418) because it sounds like a person, and the person is always the **Member**. The sign-in is the **Account**. "The user's name" means "the **Member's** name"; there is no such thing as a user's email, only the **Member's**. The code keeps `User` until the rename lands (#436). **User Settings** stays as a page name.
+- **"User"**: Retired as a domain term (#418) because it sounds like a person, and the person is always the **Member**. The sign-in is the **Account** (the code followed in #436). "The user's name" means "the **Member's** name". **User Settings** stays as a page name.
 - **"Settings"**: Used unqualified for both per-user preferences and dojo-wide configuration. Always qualify: **User Settings** or **Dojo Settings**.
 - **"Delete" vs "Deactivate"**: The API endpoint `DELETE /members/{id}` performs a **Deactivation**, not a deletion. The word "delete" must not be used for this operation in any user-facing text, documentation, or domain discussion.
 - **"Profile"**: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is **Member**. Avoid bare "profile" and the retired "Member Profile".

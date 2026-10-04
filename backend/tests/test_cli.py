@@ -16,7 +16,7 @@ Acceptance criteria:
   AC7. Exits code 1 + error when DATABASE_URL not set
   AC8. create_engine / psycopg2 are never imported or called in the CLI path
 
-Each test seeds its own User row with a unique, uuid-suffixed email against
+Each test seeds its own Account row with a unique, uuid-suffixed email against
 the shared PostgreSQL test database (via the `database_url` fixture) rather
 than a private per-test embedded-file DB, then cleans up the rows it created —
 there is no per-test throwaway database to rely on for isolation here.
@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 from typer.testing import CliRunner
 
-from app.auth.db_models import AdminRecoveryToken, User
+from app.auth.db_models import Account, AdminRecoveryToken
 from app.cli import app as cli_app
 from tests.account_support import seed_account
 
@@ -66,7 +66,7 @@ async def _cleanup_user(database_url: str, user_id: str) -> None:
             await session.execute(
                 delete(AdminRecoveryToken).where(AdminRecoveryToken.user_id == user_id)
             )
-            await session.execute(delete(User).where(User.id == user_id))
+            await session.execute(delete(Account).where(Account.id == user_id))
             await session.commit()
     finally:
         await engine.dispose()

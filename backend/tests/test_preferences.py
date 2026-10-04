@@ -1,15 +1,15 @@
 """
-Unit tests for issue #26 — User preferences API (theme persistence).
+Unit tests for issue #26 — Account preferences API (theme persistence).
 
 Uses StubRepository pattern — NO real DB. Dependencies are overridden via
 app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
-  1. GET /users/me/preferences returns {"theme": "system"} for no saved preference
-  2. PUT /users/me/preferences with {"theme": "dark"} persists and returns it
-  3. PUT /users/me/preferences with an invalid theme value returns 422
-  4. GET /users/me/preferences returns 401 for unauthenticated requests
-  5. PUT /users/me/preferences returns 401 for unauthenticated requests
+  1. GET /accounts/me/preferences returns {"theme": "system"} for no saved preference
+  2. PUT /accounts/me/preferences with {"theme": "dark"} persists and returns it
+  3. PUT /accounts/me/preferences with an invalid theme value returns 422
+  4. GET /accounts/me/preferences returns 401 for unauthenticated requests
+  5. PUT /accounts/me/preferences returns 401 for unauthenticated requests
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.accounts.dependencies import get_account_prefs_repo
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
-from app.users.dependencies import get_user_prefs_repo
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -28,7 +28,7 @@ from app.users.dependencies import get_user_prefs_repo
 
 _USER_SUB = "user-uuid-prefs"
 
-_MEMBER_CLAIMS = UserClaims(
+_MEMBER_CLAIMS = AccountClaims(
     sub=_USER_SUB, email="prefs@dojo.test", role="member", is_active=True
 )
 
@@ -42,7 +42,7 @@ def _member_override():
 # ---------------------------------------------------------------------------
 
 
-class StubUserPrefsRepo:
+class StubAccountPrefsRepo:
     """Stores theme preference per user_id in memory."""
 
     def __init__(self) -> None:
@@ -70,14 +70,14 @@ def clear_overrides():
 
 
 @pytest.fixture()
-def prefs_repo() -> StubUserPrefsRepo:
-    repo = StubUserPrefsRepo()
-    app.dependency_overrides[get_user_prefs_repo] = lambda: repo
+def prefs_repo() -> StubAccountPrefsRepo:
+    repo = StubAccountPrefsRepo()
+    app.dependency_overrides[get_account_prefs_repo] = lambda: repo
     return repo
 
 
 # ---------------------------------------------------------------------------
-# AC1 — GET /users/me/preferences returns {"theme": "system"} when no pref stored
+# AC1 — GET /accounts/me/preferences returns {"theme": "system"} when no pref stored
 # ---------------------------------------------------------------------------
 
 
@@ -88,7 +88,7 @@ async def test_get_preferences_returns_system_when_no_preference(prefs_repo) -> 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     assert response.status_code == 200
     assert response.json() == {"theme": "system"}
@@ -101,13 +101,13 @@ async def test_get_preferences_response_has_theme_key(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     assert "theme" in response.json()
 
 
 # ---------------------------------------------------------------------------
-# AC2 — PUT /users/me/preferences persists the theme and returns it
+# AC2 — PUT /accounts/me/preferences persists the theme and returns it
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +118,7 @@ async def test_put_preferences_dark_persists_and_returns_dark(prefs_repo) -> Non
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "dark"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "dark"})
 
     assert response.status_code == 200
     assert response.json() == {"theme": "dark"}
@@ -131,7 +131,7 @@ async def test_put_preferences_light_persists_and_returns_light(prefs_repo) -> N
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "light"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "light"})
 
     assert response.status_code == 200
     assert response.json() == {"theme": "light"}
@@ -146,12 +146,12 @@ async def test_put_preferences_persisted_value_visible_in_subsequent_get(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        await c.put("/users/me/preferences", json={"theme": "dark"})
+        await c.put("/accounts/me/preferences", json={"theme": "dark"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     assert response.status_code == 200
     assert response.json() == {"theme": "dark"}
@@ -164,13 +164,13 @@ async def test_put_preferences_overwrites_previous_value(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        await c.put("/users/me/preferences", json={"theme": "light"})
-        await c.put("/users/me/preferences", json={"theme": "dark"})
+        await c.put("/accounts/me/preferences", json={"theme": "light"})
+        await c.put("/accounts/me/preferences", json={"theme": "dark"})
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     assert response.json() == {"theme": "dark"}
 
@@ -182,7 +182,7 @@ async def test_put_preferences_system_round_trips(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "system"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "system"})
 
     assert response.status_code == 200
     assert response.json() == {"theme": "system"}
@@ -200,7 +200,7 @@ async def test_put_preferences_invalid_theme_returns_422(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "purple"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "purple"})
 
     assert response.status_code == 422
 
@@ -212,7 +212,7 @@ async def test_put_preferences_empty_theme_returns_422(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": ""})
+        response = await c.put("/accounts/me/preferences", json={"theme": ""})
 
     assert response.status_code == 422
 
@@ -224,13 +224,13 @@ async def test_put_preferences_missing_theme_key_returns_422(prefs_repo) -> None
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={})
+        response = await c.put("/accounts/me/preferences", json={})
 
     assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
-# AC4 — GET /users/me/preferences returns 401 for unauthenticated requests
+# AC4 — GET /accounts/me/preferences returns 401 for unauthenticated requests
 # ---------------------------------------------------------------------------
 
 
@@ -239,13 +239,13 @@ async def test_get_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# AC5 — PUT /users/me/preferences returns 401 for unauthenticated requests
+# AC5 — PUT /accounts/me/preferences returns 401 for unauthenticated requests
 # ---------------------------------------------------------------------------
 
 
@@ -254,7 +254,7 @@ async def test_put_preferences_unauthenticated_returns_401(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "dark"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "dark"})
 
     assert response.status_code == 401
 
@@ -273,7 +273,7 @@ async def test_get_preferences_sets_readable_theme_cookie(prefs_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/users/me/preferences")
+        response = await c.get("/accounts/me/preferences")
 
     set_cookie = response.headers.get("set-cookie", "")
     assert "theme=dark" in set_cookie
@@ -287,6 +287,6 @@ async def test_put_preferences_updates_the_readable_theme_cookie(prefs_repo) -> 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.put("/users/me/preferences", json={"theme": "light"})
+        response = await c.put("/accounts/me/preferences", json={"theme": "light"})
 
     assert "theme=light" in response.headers.get("set-cookie", "")

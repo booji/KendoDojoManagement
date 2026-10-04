@@ -70,7 +70,7 @@ def _create_member_record(
     emergency_contact_phone: str = "07700900000",
 ) -> dict:
     resp = requests.put(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         json={
             "first_name": first_name,
             "surname": surname,
@@ -165,7 +165,7 @@ def test_settings_backend_error_shows_inline_message(page: Page) -> None:
             body='{"detail": "Internal server error"}',
         )
 
-    page.route("**/api/users/me/member", handle_route, times=1)
+    page.route("**/api/accounts/me/member", handle_route, times=1)
 
     page.get_by_label("First name").fill("Will Fail")
     page.get_by_role("button", name="Save changes").click()
@@ -378,7 +378,7 @@ def test_settings_summary_shows_display_name_field(page: Page) -> None:
     _register_api(email)
     token = _login_api(email)
     requests.put(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         json={
             "first_name": "Taro",
             "surname": "Yamada",
@@ -404,7 +404,7 @@ def test_settings_blanking_emergency_contact_clears_it(page: Page) -> None:
     """Clearing the emergency contact name field in the edit form and saving
     must remove it from the summary and keep it cleared after a reload.
 
-    Today the backend's PUT /users/me/member strips any field whose value is
+    Today the backend's PUT /accounts/me/member strips any field whose value is
     None (issue #249), so the frontend's "blank input -> null" submission is
     silently ignored and the old value persists. This is the one criterion
     from #249 that a browser can meaningfully observe end-to-end, since the

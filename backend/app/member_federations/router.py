@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.member_federations.dependencies import get_member_federation_repo
@@ -29,8 +29,8 @@ _MfRepo = Annotated[
 ]
 _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 
 
 def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
@@ -144,7 +144,7 @@ async def admin_remove_member_federation(
 
 
 # ===========================================================================
-# Self-service endpoints — /users/me/federations
+# Self-service endpoints — /accounts/me/federations
 # ===========================================================================
 
 
@@ -159,7 +159,7 @@ async def _get_member_by_user(
     return member
 
 
-@router.get("/users/me/federations")
+@router.get("/accounts/me/federations")
 async def me_list_federations(
     claims: _Member,
     member_repo: _MemberRepo,
@@ -170,7 +170,7 @@ async def me_list_federations(
     return [_to_response(r) for r in records]
 
 
-@router.post("/users/me/federations", status_code=status.HTTP_201_CREATED)
+@router.post("/accounts/me/federations", status_code=status.HTTP_201_CREATED)
 async def me_add_federation(
     payload: MemberFederationCreate,
     claims: _Member,
@@ -186,7 +186,7 @@ async def me_add_federation(
     return _to_response(record)
 
 
-@router.put("/users/me/federations/{mf_id}")
+@router.put("/accounts/me/federations/{mf_id}")
 async def me_update_federation(
     mf_id: str,
     payload: MemberFederationUpdate,
@@ -212,7 +212,7 @@ async def me_update_federation(
 
 
 @router.delete(
-    "/users/me/federations/{mf_id}",
+    "/accounts/me/federations/{mf_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
 )

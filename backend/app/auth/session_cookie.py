@@ -18,7 +18,7 @@ COOKIE_NAME = "access_token"
 # The theme cookie is the saved preference mirrored somewhere the pre-paint
 # script (frontend/public/theme.js) can read it, so a client that has never
 # seen this user resolves their theme before first paint instead of flashing
-# the wrong one while GET /users/me/preferences is in flight (#324). Not
+# the wrong one while GET /accounts/me/preferences is in flight (#324). Not
 # HttpOnly: JS must read it, and a theme carries no auth value.
 THEME_COOKIE_NAME = "theme"
 THEME_MAX_AGE = 60 * 60 * 24 * 365

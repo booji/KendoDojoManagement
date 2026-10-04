@@ -29,7 +29,7 @@ load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from app import config as _config  # noqa: E402
-from app.auth.models import UserClaims  # noqa: E402
+from app.auth.models import AccountClaims  # noqa: E402
 from app.auth.token import encode_token  # noqa: E402
 from tests.e2e_support import complete_onboarding  # noqa: E402
 
@@ -46,7 +46,7 @@ def _make_user_with_complete_profile(role: str) -> str:
     """Create a JWT for `role` with a complete profile behind it (an Account
     and its Member, #432) so the RequireProfile gate does not redirect to
     /onboarding before the session detail / edit form can render."""
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]

@@ -2,7 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 
 
@@ -51,7 +51,7 @@ async def test_protected_route_no_token_returns_401() -> None:
 
 
 async def test_protected_route_member_token_succeeds() -> None:
-    claims = UserClaims(
+    claims = AccountClaims(
         sub="uuid-1", email="m@dojo.test", role="member", is_active=True
     )
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
@@ -66,7 +66,7 @@ async def test_protected_route_member_token_succeeds() -> None:
 async def test_admin_route_rejects_member_token() -> None:
     from app.auth.token import encode_token
 
-    member_claims = UserClaims(
+    member_claims = AccountClaims(
         sub="uuid-2", email="m@dojo.test", role="member", is_active=True
     )
     token = encode_token(member_claims)
@@ -78,7 +78,9 @@ async def test_admin_route_rejects_member_token() -> None:
 
 
 async def test_admin_route_accepts_admin_token() -> None:
-    claims = UserClaims(sub="uuid-3", email="a@dojo.test", role="admin", is_active=True)
+    claims = AccountClaims(
+        sub="uuid-3", email="a@dojo.test", role="admin", is_active=True
+    )
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"

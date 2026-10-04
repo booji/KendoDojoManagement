@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom"
 import { issueInvite, listInvites, revokeInvite } from "@/api/invites"
 import type { InviteListItem, InviteMintResponse, InviteStatus } from "@/api/invites"
 import { isApiError } from "@/api/auth"
-import type { UserClaims } from "@/api/auth"
+import type { AccountClaims } from "@/api/auth"
 import CopyButton from "@/components/CopyButton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-type LayoutContext = { user: UserClaims }
+type LayoutContext = { user: AccountClaims }
 
 const STATUS_LABEL: Record<InviteStatus, string> = {
   pending: "Pending",

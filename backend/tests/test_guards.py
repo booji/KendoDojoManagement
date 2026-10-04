@@ -16,26 +16,26 @@ import pytest
 from fastapi import HTTPException, Request
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_role
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.token import encode_recovery_token, encode_token
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
-_INACTIVE = UserClaims(
+_INACTIVE = AccountClaims(
     sub="inactive-uuid", email="inactive@dojo.test", role="admin", is_active=False
 )
 
 
-async def _call(guard, claims: UserClaims | None) -> UserClaims:
+async def _call(guard, claims: AccountClaims | None) -> AccountClaims:
     token = encode_token(claims) if claims is not None else None
     return await _invoke(guard, token)
 
 
-async def _invoke(guard, token: str | None) -> UserClaims:
+async def _invoke(guard, token: str | None) -> AccountClaims:
     """Call the guard the way FastAPI would.
 
     The request and unit of work are the sliding-renewal seam (#387); a fresh

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, field_validator
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.settings.branding import project_branding
@@ -23,8 +23,8 @@ _SettingsRepo = Annotated[
     AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)
 ]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
-_Admin = Annotated[UserClaims, Depends(REQUIRE_ADMIN)]
-_Member = Annotated[UserClaims, Depends(REQUIRE_MEMBER)]
+_Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
+_Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 
 _STATIC_DIR = os.environ.get("STATIC_DIR", "/tmp/static/logos")
 _STATIC_BACKGROUNDS_DIR = os.environ.get(

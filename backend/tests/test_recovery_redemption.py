@@ -31,8 +31,8 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import RecoveryAttempt, RecoveryCode, User
-from app.auth.models import UserClaims
+from app.auth.db_models import Account, RecoveryAttempt, RecoveryCode
+from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
@@ -41,7 +41,7 @@ from tests.account_support import seed_account
 
 _TEST_EMAIL = "musashi@dojo.test"
 
-_USER = UserClaims(
+_USER = AccountClaims(
     sub=str(uuid.uuid4()), email=_TEST_EMAIL, role="member", is_active=True
 )
 
@@ -66,8 +66,8 @@ async def _wipe_test_email(engine, email: str = _TEST_EMAIL) -> None:
     """
     async with AsyncSession(engine) as session:
         result = await session.execute(
-            select(User.id)
-            .join(Member, Member.id == User.member_id)
+            select(Account.id)
+            .join(Member, Member.id == Account.member_id)
             .where(Member.email == email)
         )
         user_ids = [row[0] for row in result.all()]
@@ -78,7 +78,7 @@ async def _wipe_test_email(engine, email: str = _TEST_EMAIL) -> None:
             await session.execute(
                 delete(RecoveryCode).where(RecoveryCode.user_id.in_(user_ids))
             )
-            await session.execute(delete(User).where(User.id.in_(user_ids)))
+            await session.execute(delete(Account).where(Account.id.in_(user_ids)))
             await session.commit()
 
 

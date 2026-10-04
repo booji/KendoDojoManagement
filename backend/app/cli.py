@@ -44,7 +44,7 @@ def create_recovery_token(email: str) -> None:
             user = await account_for_email(session, email)
 
         if user is None:
-            typer.echo(f"Error: no user found with email '{email}'", err=True)
+            typer.echo(f"Error: no account found with email '{email}'", err=True)
             raise typer.Exit(code=1)
 
         plaintext = generate_admin_token_plaintext()

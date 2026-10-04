@@ -3,7 +3,7 @@
 Tests are ordered so that "fresh instance" checks (AC1, AC3, AC4) run before
 the populate step, and "populated instance" checks (AC2) run after.
 
-The module-scoped ``fresh_db`` fixture wipes the users and passkey_credentials
+The module-scoped ``fresh_db`` fixture wipes the accounts and passkey_credentials
 tables at the start of the module so the server starts each suite group in a
 known state.
 """
@@ -47,10 +47,10 @@ async def _clear_users_async() -> None:
         await conn.execute("DELETE FROM admin_recovery_tokens")
         await conn.execute("DELETE FROM grade_history")
         await conn.execute("DELETE FROM attendance")
-        # Accounts before the Members they belong to (users.member_id is
+        # Accounts before the Members they belong to (accounts.member_id is
         # ON DELETE RESTRICT, #432); Members without an Account stay.
-        rows = await conn.fetch("SELECT member_id FROM users")
-        await conn.execute("DELETE FROM users")
+        rows = await conn.fetch("SELECT member_id FROM accounts")
+        await conn.execute("DELETE FROM accounts")
         await conn.execute(
             "DELETE FROM members WHERE id = ANY($1::uuid[])",
             [r["member_id"] for r in rows],
@@ -60,7 +60,7 @@ async def _clear_users_async() -> None:
 
 
 def _clear_users_and_credentials() -> None:
-    """Wipe users and passkey_credentials so the server reports a fresh instance."""
+    """Wipe accounts and passkey_credentials so the server reports a fresh instance."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         pool.submit(lambda: asyncio.run(_clear_users_async())).result()
 

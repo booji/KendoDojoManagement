@@ -21,11 +21,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from tests.dojo_settings_support import StubDojoSettingsRepo
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
 

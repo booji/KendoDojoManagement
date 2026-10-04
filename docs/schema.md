@@ -18,7 +18,7 @@ mermaid rendering of that, not a varchar.
 
 ```mermaid
 erDiagram
-    users {
+    accounts {
         string id PK
         string member_id FK,UK
         string role
@@ -198,13 +198,13 @@ erDiagram
         timestamptz updated_at
     }
 
-    users ||--o{ passkey_credentials : "has"
-    users ||--o{ recovery_codes : "has"
-    users ||--o{ recovery_attempts : "has"
-    users ||--o{ admin_recovery_tokens : "issued to"
-    users ||--o{ admin_recovery_tokens : "created by"
-    users ||--o{ invites : "issued by"
-    members ||--o| users : "signs in as"
+    accounts ||--o{ passkey_credentials : "has"
+    accounts ||--o{ recovery_codes : "has"
+    accounts ||--o{ recovery_attempts : "has"
+    accounts ||--o{ admin_recovery_tokens : "issued to"
+    accounts ||--o{ admin_recovery_tokens : "created by"
+    accounts ||--o{ invites : "issued by"
+    members ||--o| accounts : "signs in as"
     members ||--o{ member_federations : "belongs to"
     federations ||--o{ member_federations : "has members"
     members ||--o{ attendance : "attends"
@@ -222,7 +222,7 @@ erDiagram
 ## Notes
 
 - **Authentication has no password column.** Passkeys are the only login path
-  (#155); `users` carries the WebAuthn challenge fields and nothing else.
+  (#155); `accounts` carries the WebAuthn challenge fields and nothing else.
   `recovery_codes` and `admin_recovery_tokens` hold bcrypt hashes;
   `invites.token_hash` is a deterministic sha256 digest (it is looked up by
   value — see `app/auth/invite_service.py` for why that differs).
@@ -234,16 +234,16 @@ erDiagram
   (`IP_RETENTION` in `app/auth/attempt_repository.py`). There is no scheduler:
   the clear runs on every `log_attempt`, for all Accounts, so an address can
   outlive 30 days until the next recovery attempt anywhere on the instance.
-- **One WebAuthn ceremony per Account** (#435). `users.pending_challenge` /
+- **One WebAuthn ceremony per Account** (#435). `accounts.pending_challenge` /
   `challenge_issued_at` hold a single challenge, so a second concurrent
   registration or login for the same Account overwrites the first, which
   then fails. A known single-flight limit, accepted at dojo scale.
 - **Every Account belongs to exactly one Member** (#432, ADR-0006).
-  `users.member_id` is a live link and is enforced: NOT NULL, UNIQUE, and a
+  `accounts.member_id` is a live link and is enforced: NOT NULL, UNIQUE, and a
   foreign key to `members.id` with ON DELETE RESTRICT (Members are
   deactivated or anonymised, never hard-deleted). Most Members have no
   Account. The email lives once, on the Member — `members.email` is both the
-  contact address and the sign-in identifier; `users` has no email column.
+  contact address and the sign-in identifier; `accounts` has no email column.
 - **Audit columns are not foreign keys.** `attendance.recorded_by`,
   `grade_history.assigned_by` and `members.anonymised_by` record which Account
   acted. They are deliberately not FK-enforced, so the id outlives the

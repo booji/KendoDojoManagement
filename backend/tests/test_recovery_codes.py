@@ -29,7 +29,7 @@ from httpx import ASGITransport, AsyncClient
 # ---------------------------------------------------------------------------
 # These imports succeed already (they exist in the codebase)
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 
 # Code format: three 4-char alphanumeric segments separated by hyphens
@@ -39,10 +39,10 @@ _CODE_PATTERN = re.compile(r"^[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$")
 # Helpers
 # ---------------------------------------------------------------------------
 
-_USER_A = UserClaims(
+_USER_A = AccountClaims(
     sub="user-a-uuid", email="usera@dojo.test", role="member", is_active=True
 )
-_USER_B = UserClaims(
+_USER_B = AccountClaims(
     sub="user-b-uuid", email="userb@dojo.test", role="member", is_active=True
 )
 

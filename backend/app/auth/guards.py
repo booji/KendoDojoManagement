@@ -4,8 +4,8 @@ from typing import Annotated, Literal
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
 from app.auth.accounts import sign_in_email
-from app.auth.db_models import User
-from app.auth.models import UserClaims
+from app.auth.db_models import Account
+from app.auth.models import AccountClaims
 from app.auth.token import decode_token, encode_token, renewal_due
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -14,9 +14,9 @@ from app.dependencies import get_uow
 async def _renew(
     request: Request,
     uow: AbstractUnitOfWork,
-    claims: UserClaims,
+    claims: AccountClaims,
     session_started_at: int,
-) -> UserClaims:
+) -> AccountClaims:
     """Mint the slid token and hand back the claims it now carries.
 
     Role and ``is_active`` live in the token, so between logins the app is
@@ -30,7 +30,7 @@ async def _renew(
 
     The cookie is left to ``SessionRenewalMiddleware`` — see the reason there.
     """
-    user = await uow.session.get(User, claims.sub)
+    user = await uow.session.get(Account, claims.sub)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     # The Member's address as of now: an admin may have changed it (#432).
@@ -38,7 +38,7 @@ async def _renew(
     if email is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    fresh = UserClaims(
+    fresh = AccountClaims(
         sub=claims.sub,
         email=email,
         role=user.role,
@@ -61,7 +61,7 @@ def require_role(
         request: Request,
         uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
         access_token: Annotated[str | None, Cookie()] = None,
-    ) -> UserClaims:
+    ) -> AccountClaims:
         if access_token is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         try:

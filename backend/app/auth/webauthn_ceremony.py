@@ -238,7 +238,7 @@ class Subject:
 class Ceremony:
     """A begin response plus the challenge to persist against the account.
 
-    `challenge` is already in the form `User.pending_challenge` stores and
+    `challenge` is already in the form `Account.pending_challenge` stores and
     `decode_challenge` reads back, so no caller re-encodes it. Decoy callers
     discard it -- there is no account row to persist it against, and nothing
     verifies a decoy challenge server-side. The absent write is why the decoy

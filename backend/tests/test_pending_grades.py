@@ -24,7 +24,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo
@@ -34,10 +34,10 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Auth claim helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER_A = UserClaims(
+_MEMBER_A = AccountClaims(
     sub="member-a-uuid", email="member-a@dojo.test", role="member", is_active=True
 )
 
@@ -46,7 +46,7 @@ _MEMBER_A_ID = "00000000-0000-0000-0000-000000000001"
 _MEMBER_B_ID = "00000000-0000-0000-0000-000000000002"
 
 
-def _admin_override() -> UserClaims:
+def _admin_override() -> AccountClaims:
     return _ADMIN
 
 

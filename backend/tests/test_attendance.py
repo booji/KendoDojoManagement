@@ -27,7 +27,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.token import encode_token
 from app.main import app
 from app.members.dependencies import get_current_member_id
@@ -42,21 +42,21 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",
     is_active=True,
 )
-_OTHER_MEMBER = UserClaims(
+_OTHER_MEMBER = AccountClaims(
     sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
 )
 
 # The Member record id belonging to _MEMBER's user. attendance.member_id holds
-# a Member id, never a User id (#340), so the two must differ here for the
+# a Member id, never an Account id (#340), so the two must differ here for the
 # tests to be able to tell them apart.
 _MEMBER_RECORD_ID = "00000000-0000-0000-0000-0000000000a2"
 
@@ -206,7 +206,7 @@ async def test_member_can_checkin_to_session(
     body = response.json()
     assert "id" in body
     assert body["session_id"] == session["id"]
-    # The Member id, not the caller's User id (#340)
+    # The Member id, not the caller's Account id (#340)
     assert body["member_id"] == _MEMBER_RECORD_ID
     assert "checked_in_at" in body
     assert body["recorded_by"] == _MEMBER.sub
@@ -255,7 +255,7 @@ async def test_checkin_without_a_member_record_is_rejected(
 ) -> None:
     """A user with no Member record has nothing to key attendance by (#340).
 
-    Before the normalisation this stored the User id, which no roster, report
+    Before the normalisation this stored the Account id, which no roster, report
     or history query could resolve back to a person.
     """
     session = session_repo.seed(cancelled=False)
@@ -727,7 +727,7 @@ async def test_own_history_includes_a_self_checkin(
 ) -> None:
     """Checking yourself in must show up in your own attendance history (#340).
 
-    It did not while self check-in wrote the User id and the history query
+    It did not while self check-in wrote the Account id and the history query
     read by Member id.
     """
     session = session_repo.seed(cancelled=False)

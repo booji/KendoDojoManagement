@@ -17,7 +17,7 @@ from typing import Any
 import requests
 from playwright.sync_api import Page
 
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.token import decode_token, encode_token
 
 BASE_URL = "http://localhost:5173"
@@ -28,7 +28,7 @@ def make_token(
     role: str = "admin", *, sub: str | None = None, email: str | None = None
 ) -> str:
     """Forge a signed access token for a synthetic user."""
-    claims = UserClaims(
+    claims = AccountClaims(
         sub=sub or str(uuid.uuid4()),
         email=email or f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
@@ -74,7 +74,7 @@ def complete_onboarding(
     twice) without overwriting a name deliberately set elsewhere.
     """
     existing = requests.get(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         cookies={"access_token": token},
     )
     if existing.status_code == 200 and existing.json().get("dob"):
@@ -94,7 +94,7 @@ def complete_onboarding(
         ).raise_for_status()
 
     resp = requests.put(
-        f"{API_URL}/users/me/member",
+        f"{API_URL}/accounts/me/member",
         json={"dob": dob, **extra},
         cookies={"access_token": token},
     )

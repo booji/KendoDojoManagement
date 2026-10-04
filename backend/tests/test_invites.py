@@ -23,7 +23,7 @@ API surface assumed by these tests (chosen here, not yet built):
                                            already-redeemed) exactly like the
                                            #239 register-begin decoy.
   POST   /auth/invites/redeem/complete    body {token, credential} -> creates
-                                           User, creates-or-links Member,
+                                           Account, creates-or-links Member,
                                            completes the passkey ceremony.
 
 Token storage: a plaintext invite token is returned exactly once, at mint
@@ -43,7 +43,7 @@ Two test tiers in this file:
   - The redemption flow (AC6-10) is DB-backed against the shared PostgreSQL
     test database via the `db_client` fixture (savepoint-scoped, rolled back
     per test), because it must exercise real WebAuthn option generation,
-    User/Member creation, and the constant-time middleware floor.
+    Account/Member creation, and the constant-time middleware floor.
 """
 
 from __future__ import annotations
@@ -59,15 +59,15 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, insert, select
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
 
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
 )
-_MEMBER_CLAIMS = UserClaims(
+_MEMBER_CLAIMS = AccountClaims(
     sub=str(uuid.uuid4()), email="member@dojo.test", role="member", is_active=True
 )
 
@@ -178,22 +178,22 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
-class _NoUsersResult:
+class _NoAccountsResult:
     def scalar_one_or_none(self) -> None:
         return None
 
 
-class _NoUsersSession:
+class _NoAccountsSession:
     """Just enough session for the mint route's "does this email already have
     an account?" check, so the stub-repo tests stay DB-free."""
 
-    async def execute(self, *args: Any, **kwargs: Any) -> _NoUsersResult:
-        return _NoUsersResult()
+    async def execute(self, *args: Any, **kwargs: Any) -> _NoAccountsResult:
+        return _NoAccountsResult()
 
 
 class _StubUow:
     def __init__(self) -> None:
-        self.session = _NoUsersSession()
+        self.session = _NoAccountsSession()
 
     async def commit(self) -> None:
         return None
@@ -500,7 +500,7 @@ async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
 
 
 async def _seed_admin_user(session, email: str = "existing-admin@dojo.test") -> str:
-    """Seed an existing User+PasskeyCredential so the instance is no longer
+    """Seed an existing Account+PasskeyCredential so the instance is no longer
     in bootstrap mode, mirroring test_passkey_enumeration.py's `_seed_user`."""
     from app.auth.db_models import PasskeyCredential
 
@@ -613,7 +613,7 @@ async def test_redeem_begin_valid_token_returns_real_challenge(db_client) -> Non
 
 @pytest.mark.asyncio
 async def test_redeem_creates_user_for_invited_email(db_client) -> None:
-    from app.auth.db_models import User
+    from app.auth.db_models import Account
 
     session = db_client
     admin_id = await _seed_admin_user(session)
@@ -627,8 +627,8 @@ async def test_redeem_creates_user_for_invited_email(db_client) -> None:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-2"})
 
     result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "createuser@dojo.test")
     )
     assert result.fetchone() is not None
@@ -658,7 +658,7 @@ async def test_redeem_creates_member_when_absent(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_redeem_links_existing_member_user_id(db_client) -> None:
-    from app.auth.db_models import User
+    from app.auth.db_models import Account
     from app.members.db_models import Member
 
     session = db_client
@@ -674,8 +674,8 @@ async def test_redeem_links_existing_member_user_id(db_client) -> None:
         await c.post("/auth/invites/redeem/begin", json={"token": "valid-token-4"})
 
     user_result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "existingmember@dojo.test")
     )
     user_row = user_result.scalar_one_or_none()
@@ -776,7 +776,7 @@ async def test_redeem_expired_token_rejected(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
-    from app.auth.db_models import User
+    from app.auth.db_models import Account
 
     session = db_client
     admin_id = await _seed_admin_user(session)
@@ -797,8 +797,8 @@ async def test_redeem_begin_expired_token_writes_no_user_row(db_client) -> None:
 
     assert response.status_code == 200  # decoy shape, not an error
     result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "expiredbegin@dojo.test")
     )
     assert result.fetchone() is None
@@ -1043,7 +1043,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 #
 # Same defect as register_passkey_begin (see test_passkey_enumeration.py),
 # keyed by invite token instead of email: invite_redeem_begin's real path
-# returns the persisted User.id (stable forever for a given token, until
+# returns the persisted Account.id (stable forever for a given token, until
 # redeemed), while the decoy minted a fresh uuid4() per call. Two POSTs
 # for the same bad token plus one field comparison classifies it.
 # ---------------------------------------------------------------------------
@@ -1104,18 +1104,18 @@ async def test_redeem_begin_decoy_user_id_stable_then_secret_dependent(
 @pytest.mark.asyncio
 async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> None:
     """Sanity check on the OTHER half of AC1: the real path's user.id is the
-    persisted User.id, not a per-call value -- inherently stable, since it is
+    persisted Account.id, not a per-call value -- inherently stable, since it is
     the DB row's own primary key. (A genuine two-call replay of the same
     invite token isn't available here: invite_redeem_begin's OWN
     _create_invited_user check flips a second call for the same token onto
-    the decoy path once the first call has created the User row for that
+    the decoy path once the first call has created the Account row for that
     email -- a separate, pre-existing behaviour unrelated to #300. This test
     instead confirms the single real call returns exactly the row that got
     persisted, which is what "stable" cashes out to for a value that is a
     primary key.)"""
     import base64
 
-    from app.auth.db_models import User
+    from app.auth.db_models import Account
 
     session = db_client
     admin_id = await _seed_admin_user(session)
@@ -1136,8 +1136,8 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
 
     assert response.status_code == 200
     result = await session.execute(
-        select(User)
-        .join(Member, Member.id == User.member_id)
+        select(Account)
+        .join(Member, Member.id == Account.member_id)
         .where(Member.email == "real-redeem-stability@dojo.test")
     )
     user_row = result.scalar_one()
@@ -1240,7 +1240,7 @@ def test_invite_redemption_routes_are_rate_limited() -> None:
 
 @pytest.mark.asyncio
 async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) -> None:
-    """Erasure deletes the User row (app/members/router.py), so an unqualified
+    """Erasure deletes the Account row (app/members/router.py), so an unqualified
     FK from invites.issued_by would make an admin who ever issued an invite
     un-erasable. The issuer reference must drop to NULL and the invite survive.
 
@@ -1248,7 +1248,7 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
     `db_client` (get_uow-overriding) fixture the rest of this file uses,
     since it only needs to seed/inspect rows and never goes through the app.
     """
-    from app.auth.db_models import Invite, User
+    from app.auth.db_models import Account, Invite
 
     admin_id = str(uuid.uuid4())
     invite_id = str(uuid.uuid4())
@@ -1274,7 +1274,7 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
     )
     await db_session.flush()
 
-    await db_session.execute(delete(User).where(User.id == admin_id))
+    await db_session.execute(delete(Account).where(Account.id == admin_id))
     await db_session.flush()
 
     row = (
@@ -1373,7 +1373,7 @@ async def test_mint_invite_for_an_existing_user_is_refused(db_client) -> None:
 async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
     """The account may be created between minting and redemption, so the check
     at mint time is not enough on its own."""
-    from app.auth.db_models import PasskeyCredential, User
+    from app.auth.db_models import Account, PasskeyCredential
 
     session = db_client
     admin_id = await _seed_admin_user(session)
@@ -1385,7 +1385,7 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
         (
             await session.execute(
                 select(PasskeyCredential).join(
-                    User, User.id == PasskeyCredential.user_id
+                    Account, Account.id == PasskeyCredential.user_id
                 )
             )
         ).all()
@@ -1409,7 +1409,7 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
         (
             await session.execute(
                 select(PasskeyCredential).join(
-                    User, User.id == PasskeyCredential.user_id
+                    Account, Account.id == PasskeyCredential.user_id
                 )
             )
         ).all()

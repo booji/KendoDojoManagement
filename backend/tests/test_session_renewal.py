@@ -22,16 +22,16 @@ from starlette.responses import Response
 from app import config
 from app.auth import token as token_module
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import UserClaims
+from app.auth.models import AccountClaims
 from app.auth.session_cookie import set_session_cookie
 from app.auth.token import decode_token, encode_token, renewal_due
 from app.core.middleware import SessionRenewalMiddleware
 from app.main import app
 
-_MEMBER = UserClaims(
+_MEMBER = AccountClaims(
     sub="member-uuid", email="member@dojo.test", role="member", is_active=True
 )
-_ADMIN = UserClaims(
+_ADMIN = AccountClaims(
     sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
 )
 
@@ -60,7 +60,7 @@ def _minted_ago(seconds: int) -> Iterator[None]:
         token_module.datetime = real
 
 
-def _stale(claims: UserClaims, session_started_at: int | None = None) -> str:
+def _stale(claims: AccountClaims, session_started_at: int | None = None) -> str:
     """A valid token that is past half its life, so renewal is due."""
     with _minted_ago(int(config.JWT_EXPIRE_MINUTES * 60 * 0.75)):
         return encode_token(claims, session_started_at)
@@ -91,7 +91,7 @@ class _FakeUow:
         self.session = _FakeSession(user)
 
 
-class _UserRow:
+class _AccountRow:
     """The Account row, plus the email its Member carries (#432)."""
 
     def __init__(self, email: str, role: str, is_active: bool = True) -> None:
@@ -155,7 +155,7 @@ async def test_guard_mints_a_replacement_token_when_due() -> None:
 
     await REQUIRE_MEMBER(
         request=request,
-        uow=_FakeUow(_UserRow(_MEMBER.email, "member")),
+        uow=_FakeUow(_AccountRow(_MEMBER.email, "member")),
         access_token=_stale(_MEMBER),
     )
 
@@ -167,7 +167,7 @@ async def test_guard_leaves_a_fresh_token_alone() -> None:
 
     await REQUIRE_MEMBER(
         request=request,
-        uow=_FakeUow(_UserRow(_MEMBER.email, "member")),
+        uow=_FakeUow(_AccountRow(_MEMBER.email, "member")),
         access_token=encode_token(_MEMBER),
     )
 
@@ -180,7 +180,7 @@ async def test_renewal_rereads_the_user_row_so_a_promotion_takes_effect() -> Non
 
     claims = await REQUIRE_ADMIN(
         request=request,
-        uow=_FakeUow(_UserRow(_MEMBER.email, "admin")),
+        uow=_FakeUow(_AccountRow(_MEMBER.email, "admin")),
         access_token=_stale(_MEMBER),
     )
 
@@ -192,7 +192,7 @@ async def test_renewal_rereads_the_user_row_so_a_demotion_bites() -> None:
     with pytest.raises(HTTPException) as exc:
         await REQUIRE_ADMIN(
             request=_request(),
-            uow=_FakeUow(_UserRow(_ADMIN.email, "member")),
+            uow=_FakeUow(_AccountRow(_ADMIN.email, "member")),
             access_token=_stale(_ADMIN),
         )
 
@@ -200,7 +200,7 @@ async def test_renewal_rereads_the_user_row_so_a_demotion_bites() -> None:
 
 
 @pytest.mark.parametrize(
-    "user", [_UserRow("member@dojo.test", "member", is_active=False), None]
+    "user", [_AccountRow("member@dojo.test", "member", is_active=False), None]
 )
 async def test_a_deactivated_or_deleted_user_is_signed_out_with_401(user) -> None:
     """401, not 403: there is no session left, so the SPA must route to login."""
@@ -221,7 +221,7 @@ async def test_a_recovery_session_is_never_slid() -> None:
     with pytest.raises(HTTPException) as exc:
         await REQUIRE_MEMBER(
             request=request,
-            uow=_FakeUow(_UserRow(_MEMBER.email, "member")),
+            uow=_FakeUow(_AccountRow(_MEMBER.email, "member")),
             access_token=token_module.encode_recovery_token(_MEMBER.sub, _MEMBER.email),
         )
 
