@@ -1,33 +1,23 @@
 """
 E2e tests for issue #9 — Attendance / Check-in.
 
-Auth pattern: generate JWT tokens directly (same as test_e2e_sessions.py) and set
-them as cookies. This avoids needing real user rows in the DB for most tests.
-
-For check-in via token the backend stores any member_id string — no FK constraint —
-so synthetic UUIDs from JWT claims work fine.
+Auth pattern: signed in through the test-login endpoint (tests.e2e_support.login_as),
+which creates a real Account and its Member; the session cookie is set on the page.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
 import uuid
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-# Load the real JWT_SECRET from .env so tokens pass server-side validation.
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"

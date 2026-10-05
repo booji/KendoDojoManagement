@@ -4,30 +4,23 @@ E2E Playwright tests for issue #14 — Theme toggle.
 Each test covers one acceptance criterion.
 
 Implementation note: theme is a user preference, not an auth claim (#322).  It
-is never carried on the JWT or returned by getMe(); the server-side copy lives
+is never carried on the session or returned by getMe(); the server-side copy lives
 in `accounts.theme` and is read and written solely through
 GET/PUT /accounts/me/preferences.  These tests exercise the observable client-side
 behaviour (localStorage, dark-class toggling, cycle order, keyboard navigation,
 sidebar visibility); the server reconcile is covered by the preferences tests.
 """
 
-import os
 import uuid
 
 import requests
-from dotenv import load_dotenv
 from playwright.sync_api import BrowserContext, Page, expect
 
-# Load .env with override=True so the JWT_SECRET matches what the server uses.
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
-from tests.e2e_support import (  # noqa: E402
+from app.auth.models import AccountClaims
+from tests.e2e_support import (
     API_URL,
     complete_onboarding,
-    login_as,  # noqa: E402
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"

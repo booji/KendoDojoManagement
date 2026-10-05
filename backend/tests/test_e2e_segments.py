@@ -1,8 +1,8 @@
 """E2E tests for issue #174 — session segment model (parent PRD #172).
 
 One Playwright browser test per acceptance criterion, following the same
-fixture/driver pattern as the other test_e2e_*.py files: synthetic JWT
-tokens injected as cookies, `page.request` used to seed state via the API,
+fixture/driver pattern as the other test_e2e_*.py files: signed in through
+tests.e2e_support.login_as, `page.request` used to seed state via the API,
 then real UI assertions via Playwright (AC1/AC2/AC4). AC3 and AC5 are
 verified at the API layer with httpx, matching the style already used for
 backend-only behaviour with no dedicated UI surface (see test_ical.py).
@@ -12,21 +12,15 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import uuid
 
 import httpx
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"

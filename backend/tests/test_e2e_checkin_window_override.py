@@ -5,8 +5,8 @@ override UI (session edit form).
 Promoted from red-phase xfail stubs now that the session edit form
 (frontend/src/pages/SessionDetailPage.tsx EditForm) implements the two
 override inputs. Auth pattern follows test_e2e_session_detail.py /
-test_e2e_checkin_window.py: JWT tokens are generated directly and injected
-as cookies; sessions are created via the authenticated REST API.
+test_e2e_checkin_window.py: signed in through tests.e2e_support.login_as,
+cookie set on the page; sessions are created via the authenticated REST API.
 
 One test per acceptance criterion from issue #193:
   1. Session edit form exposes the two per-session override inputs.
@@ -18,20 +18,14 @@ One test per acceptance criterion from issue #193:
 from __future__ import annotations
 
 import json
-import os
 import uuid
 
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -42,7 +36,7 @@ API_URL = "http://localhost:8000/api"
 
 
 def _make_user_with_complete_profile(role: str) -> str:
-    """Create a JWT for `role` with a complete profile behind it (an Account
+    """Sign in as a new `role` user with a complete profile behind it (an Account
     and its Member, #432) so the RequireProfile gate does not redirect to
     /onboarding before the session detail / edit form can render."""
     claims = AccountClaims(

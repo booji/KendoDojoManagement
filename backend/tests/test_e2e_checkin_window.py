@@ -14,7 +14,7 @@ One test per relevant acceptance criterion:
      <= 1440.
 
 Auth pattern follows test_e2e_attendance.py / test_e2e_admin_settings.py:
-JWT tokens are generated directly and injected as cookies. Tests that
+signed in through tests.e2e_support.login_as, cookie set on the page. Tests that
 navigate to a profile-gated page (anything under RequireProfile in App.tsx —
 which includes /checkin/session/:id and /admin/settings) also complete the
 user's profile via tests.e2e_support.complete_onboarding, so the
@@ -30,22 +30,15 @@ near the boundary.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-# Load the real JWT_SECRET from .env so tokens pass server-side validation.
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -72,7 +65,7 @@ def _set_cookie(page: Page, token: str) -> None:
 
 
 def _make_user_with_complete_profile(role: str) -> str:
-    """Create a JWT for `role` with a complete profile behind it (an Account
+    """Sign in as a new `role` user with a complete profile behind it (an Account
     and its Member, #432) so the RequireProfile gate does not redirect to
     /onboarding before the target page can render."""
     claims = AccountClaims(

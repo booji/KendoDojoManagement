@@ -15,19 +15,13 @@ federation_membership_with_a_renewal_date` is the regression test for that
 500, driven through the UI rather than the repository.
 """
 
-import os
 import uuid
 from datetime import date, timedelta
 
 import requests
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from tests.e2e_support import (  # noqa: E402
+from tests.e2e_support import (
     API_URL,
     BASE_URL,
     authenticate,
