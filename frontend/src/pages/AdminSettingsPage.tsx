@@ -654,6 +654,8 @@ export const SessionTypesSection = () => {
   // Deletion: which type is pending confirmation, plus in-flight/error state.
   const [pendingDelete, setPendingDelete] = useState<SessionType | null>(null)
   const [deleteStatus, setDeleteStatus] = useState<"idle" | "deleting">("idle")
+  // The safe choice takes focus, so Enter on open never deletes anything.
+  const deleteCancelRef = useRef<HTMLButtonElement>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -845,7 +847,7 @@ export const SessionTypesSection = () => {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent initialFocus={deleteCancelRef}>
           <DialogHeader>
             <DialogTitle>Delete session type</DialogTitle>
           </DialogHeader>
@@ -860,6 +862,7 @@ export const SessionTypesSection = () => {
           )}
           <DialogFooter>
             <Button
+              ref={deleteCancelRef}
               variant="outline"
               onClick={() => {
                 setPendingDelete(null)

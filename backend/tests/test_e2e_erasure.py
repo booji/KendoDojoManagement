@@ -155,6 +155,9 @@ def test_erase_requires_typed_name_confirmation(page: Page) -> None:
         "button", name="Confirm delete member permanently"
     )
     expect(confirm_button).to_be_disabled()
+    # The type-to-confirm input takes focus, not Cancel: the confirm button is
+    # disabled until the name matches, so Enter on open can't erase (#492).
+    expect(page.get_by_label("Type the member's name to confirm")).to_be_focused()
 
     page.get_by_label("Type the member's name to confirm").fill(full_name)
     expect(confirm_button).to_be_enabled()

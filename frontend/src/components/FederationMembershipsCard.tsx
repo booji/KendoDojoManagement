@@ -88,6 +88,8 @@ const FederationMembershipsCard = ({ store }: FederationMembershipsCardProps) =>
   const [removeId, setRemoveId] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  // The safe choice takes focus, so Enter on open never removes anything.
+  const removeCancelRef = useRef<HTMLButtonElement>(null)
 
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -353,7 +355,7 @@ const FederationMembershipsCard = ({ store }: FederationMembershipsCardProps) =>
 
       {/* Remove confirm dialog */}
       <Dialog open={removeId !== null} onOpenChange={(o) => { if (!o) setRemoveId(null) }}>
-        <DialogContent>
+        <DialogContent initialFocus={removeCancelRef}>
           <DialogHeader>
             <DialogTitle>Remove federation membership</DialogTitle>
             <DialogDescription>
@@ -365,6 +367,7 @@ const FederationMembershipsCard = ({ store }: FederationMembershipsCardProps) =>
           )}
           <DialogFooter>
             <Button
+              ref={removeCancelRef}
               variant="outline"
               onClick={() => setRemoveId(null)}
               disabled={removing}

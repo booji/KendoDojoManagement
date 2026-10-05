@@ -168,3 +168,23 @@ def test_an_expired_renewal_date_is_flagged_on_the_member_page(page: Page) -> No
 
     expect(page.get_by_text("BKA-10003")).to_be_visible(timeout=8000)
     expect(page.get_by_text("Expired")).to_be_visible()
+
+
+def test_remove_dialog_opens_with_cancel_focused(page: Page) -> None:
+    """Removing a membership can't be undone, so the dialog opens on Cancel and
+    Enter on open never removes it (#492; CLAUDE.md, Button Ordering)."""
+    admin_token = authenticate(page, "admin")
+    member_id = _create_member(admin_token)
+    federation_id, federation_name = _create_federation(admin_token)
+    created = requests.post(
+        f"{API_URL}/members/{member_id}/federations",
+        cookies={"access_token": admin_token},
+        json={"federation_id": federation_id, "member_number": "BKA-10004"},
+    )
+    assert created.status_code == 201, created.text
+
+    page.goto(f"{BASE_URL}/members/{member_id}")
+    page.wait_for_load_state("networkidle")
+    page.get_by_role("button", name=f"Remove {federation_name} membership").click()
+
+    expect(_dialog(page).get_by_role("button", name="Cancel")).to_be_focused()
