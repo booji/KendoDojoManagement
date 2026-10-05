@@ -321,15 +321,15 @@ const SignOutEverywhere = () => {
             </p>
           )}
           <DialogFooter>
+            <Button ref={cancelRef} variant="outline" onClick={close} disabled={working}>
+              Cancel
+            </Button>
             <Button
               variant="destructive"
               onClick={() => void handleConfirm()}
               disabled={working}
             >
               {working ? "Signing out…" : "Sign out everywhere"}
-            </Button>
-            <Button ref={cancelRef} variant="outline" onClick={close} disabled={working}>
-              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

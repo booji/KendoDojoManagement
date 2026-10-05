@@ -36,6 +36,8 @@ of them anyway, migrate it.
 ### Button Ordering (macOS HIG)
 Action buttons are right-aligned (`justify-end`). Order left-to-right: most destructive → least destructive → primary/safe action. Example: `Cancel Series` | `Cancel Session` | `Edit`. The default/safe action always sits rightmost.
 
+**Confirm dialogs are the exception.** A dialog that confirms an action the user just chose puts `Cancel` leftmost and the confirming action rightmost, even when that action is destructive: `Cancel` | `Delete permanently`. This is the HIG alert rule (Cancel on the leading side, the action on the trailing side); on small screens `DialogFooter` stacks them with Cancel at the bottom. For a destructive confirm, give Cancel the initial focus (`DialogContent initialFocus={cancelRef}`) so Enter on open never confirms. A destructive option that is *not* the dialog's main action still goes leftmost: `Discard` | `Cancel` | `Save`.
+
 <!-- --8<-- [start:tdd] -->
 ## Design Philosophy
 
