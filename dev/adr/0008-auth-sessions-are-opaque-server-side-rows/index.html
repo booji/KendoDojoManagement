@@ -1425,9 +1425,13 @@ active status always come from the database.</p>
   not on every request. The cookie's <code>max_age</code> is the absolute ceiling and is
   set once, at sign-in; the server enforces the idle window. The cookie is
   never re-set mid-session, so <code>SessionRenewalMiddleware</code> and its logout race
-  go away. The cost is that a cookie can outlive its idle-expired row, which is
-  the stale cookie #397 fixed: accepted, because the id it carries is refused
-  and the SPA routes to /login on the 401.</li>
+  go away. The slide is written in the guard, before the route runs, and most
+  guarded routes are reads that never commit, so
+  <code>SqlAuthSessionRepository.slide</code> commits itself: the one repository that
+  does, and safe only because nothing else is pending at that point. The cost
+  of a cookie set only once is that it can outlive its idle-expired row, which
+  is the stale cookie #397 fixed: accepted, because the id it carries is
+  refused and the SPA routes to /login on the 401.</li>
 <li><strong>Expired rows are deleted at sign-in</strong>, in one indexed statement, and
   refused when read. There is no scheduler.</li>
 <li><strong>"Sign out everywhere" is the Account's own.</strong> An Admin version waits for a

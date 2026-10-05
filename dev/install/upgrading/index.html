@@ -1672,6 +1672,11 @@ existing host until you copy them across.</p>
 <h1 id="387-adds-session_max_minutes-default-10080-7-days-the-ceiling-on-a">387 adds <code>SESSION_MAX_MINUTES</code> (default 10080 — 7 days), the ceiling on a<a class="headerlink" href="#387-adds-session_max_minutes-default-10080-7-days-the-ceiling-on-a" title="Permanent link">&para;</a></h1>
 <p>session that sliding renewal keeps alive. It defaults in <code>app/config.py</code>, so
 an existing host needs it in the env file only to override that default.</p>
+<p><strong>#485 signs everyone out once.</strong> Sessions became server-side Auth Session
+rows (ADR-0008), and the cookies issued before it name none, so every user
+signs in again after the upgrade. <code>JWT_EXPIRE_MINUTES</code> and
+<code>SESSION_MAX_MINUTES</code> keep their names and meaning: the idle timeout and the
+absolute ceiling.</p>
 </blockquote>
 <h2 id="upgrading-a-deployment-created-before-the-alembic-baseline-issue-264">Upgrading a deployment created before the Alembic baseline (issue #264)<a class="headerlink" href="#upgrading-a-deployment-created-before-the-alembic-baseline-issue-264" title="Permanent link">&para;</a></h2>
 <p>As of issue #264, the Alembic chain has a baseline migration (<code>000000000000</code>)

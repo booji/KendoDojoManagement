@@ -1531,15 +1531,14 @@ generating the secrets.</p>
 <span class="c1"># so treat it like a password and hand it over out of band.</span>
 <span class="c1"># Generate with: openssl rand -base64 32</span>
 <span class="nv">SETUP_TOKEN</span><span class="o">=</span>&lt;your-setup-token&gt;
-<span class="c1"># Token lifetime, and so the idle timeout. A session in use slides: any</span>
-<span class="c1"># authenticated request past half the token's life re-issues the cookie (#387),</span>
-<span class="c1"># so this is a gap of inactivity rather than a cut-off mid-work. Renewal only</span>
-<span class="c1"># fires in the second half of a token's life, so the idle window a user sees is</span>
-<span class="c1"># between half this value and all of it (4-8 hours at 480), depending on when</span>
-<span class="c1"># their last request fell. 480 matches the default in app/config.py.</span>
+<span class="c1"># The idle timeout: an Auth Session unused for this long ends (ADR-0008). One in</span>
+<span class="c1"># use slides forward, so this is a gap of inactivity rather than a cut-off</span>
+<span class="c1"># mid-work. The slide is written only past half the window, so the idle window</span>
+<span class="c1"># a user sees is between half this value and all of it (4-8 hours at 480). The</span>
+<span class="c1"># name predates server-side sessions and is kept. 480 matches app/config.py.</span>
 <span class="nv">JWT_EXPIRE_MINUTES</span><span class="o">=</span><span class="m">480</span>
 <span class="c1"># The ceiling on one session however continuously it is used: past it the</span>
-<span class="c1"># cookie expires and the user signs in again. Without it sliding renewal means</span>
+<span class="c1"># Auth Session ends and the user signs in again. Without it sliding means</span>
 <span class="c1"># "signed in forever". 10080 = 7 days, matching app/config.py.</span>
 <span class="nv">SESSION_MAX_MINUTES</span><span class="o">=</span><span class="m">10080</span>
 <span class="c1"># Set to false only for local dev (localhost does not support Secure cookies)</span>
@@ -1616,17 +1615,15 @@ podman secrets under the hardened deployment, not variables in this file — see
 <span class="c1"># reachable via Traefik, which overwrites the header.</span>
 <span class="nv">TRUST_PROXY_XFF</span><span class="o">=</span><span class="nb">true</span>
 
-<span class="c1"># Token lifetime, and so the idle timeout. A session in active use slides: any</span>
-<span class="c1"># authenticated request past half the token's life re-issues the cookie,</span>
-<span class="c1"># re-reading the user row as it does (#387), so this is a gap of inactivity</span>
-<span class="c1"># rather than a cut-off mid-work, and an expiry now lands the user on the login</span>
-<span class="c1"># page rather than on "Not authorized" toasts. Renewal only fires in the second</span>
-<span class="c1"># half of a token's life, so the idle window a user sees is between half this</span>
-<span class="c1"># value and all of it (4-8 hours at 480). 480 matches app/config.py.</span>
+<span class="c1"># The idle timeout: an Auth Session unused for this long ends (ADR-0008). One in</span>
+<span class="c1"># use slides forward, so this is a gap of inactivity rather than a cut-off</span>
+<span class="c1"># mid-work. The slide is written only past half the window, so the idle window</span>
+<span class="c1"># a user sees is between half this value and all of it (4-8 hours at 480). The</span>
+<span class="c1"># name predates server-side sessions and is kept. 480 matches app/config.py.</span>
 <span class="nv">JWT_EXPIRE_MINUTES</span><span class="o">=</span><span class="m">480</span>
 <span class="c1"># The ceiling on one session however continuously it is used: past it the</span>
-<span class="c1"># cookie expires and the user signs in again (one passkey touch). Without it,</span>
-<span class="c1"># sliding renewal means "signed in forever". 10080 = 7 days.</span>
+<span class="c1"># Auth Session ends and the user signs in again (one passkey touch). Without it,</span>
+<span class="c1"># sliding means "signed in forever". 10080 = 7 days.</span>
 <span class="nv">SESSION_MAX_MINUTES</span><span class="o">=</span><span class="m">10080</span>
 <span class="nv">WEBAUTHN_CHALLENGE_TTL_SECONDS</span><span class="o">=</span><span class="m">300</span>
 <span class="c1"># Minimum wall-clock time (ms) the passkey begin endpoints take, regardless of</span>
