@@ -17,6 +17,7 @@
 | **Account** | A **Member's** means of signing in: their **Passkeys**, recovery codes and **Role**. Not a person — it always belongs to exactly one **Member**, and signs in with that Member's email | User, login |
 | **Role** | The permission level of an **Account**: either `admin` or `member` | Permission, access level |
 | **Passkey** | A WebAuthn credential stored on a device, used for passwordless authentication | Biometric login, FIDO key |
+| **Auth Session** | One signed-in device: an **Account** and the **Passkey** it signed in with, until logout, expiry or revocation. Stored as a row in `auth_sessions`; the cookie holds only its random id | Session, login session, token |
 | **First-registered Admin** | The first **Member** to register on a fresh instance: their **Member** and **Account** are created together when they claim it, with the `admin` **Role** | Superuser, root user |
 
 ## Membership
@@ -128,6 +129,7 @@ stacks, so they are pinned here.
 - **"Settings"**: Used unqualified for both per-user preferences and dojo-wide configuration. Always qualify: **User Settings** or **Dojo Settings**.
 - **"Delete" vs "Deactivate"**: The API endpoint `DELETE /members/{id}` performs a **Deactivation**, not a deletion. The word "delete" must not be used for this operation in any user-facing text, documentation, or domain discussion.
 - **"Profile"**: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is **Member**. Avoid bare "profile" and the retired "Member Profile".
+- **"Session"**: A **Session** is a training event. Signed-in state is an **Auth Session**, always qualified, in code and discussion alike (#455).
 - **"Grading"**: Used in two senses — the event type (a session where grades are awarded) and the act of awarding a grade. Use **Session Type: Grading** for the event and **Promotion** for the act.
 - **"Guest"** and **"Visitor"**: Used interchangeably in early discussion. The canonical term is **Visitor**.
 - **"Rank"** and **"Grade"**: The canonical term is **Grade**, to align with kendo federation terminology.
