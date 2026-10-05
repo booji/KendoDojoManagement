@@ -43,11 +43,10 @@ JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 SETUP_TOKEN: str = os.getenv("SETUP_TOKEN") or ""
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
-# The ceiling on a single session, however continuously it is used. Sliding
-# renewal (#387) keeps an active session alive by re-issuing the cookie, which
-# would mean "signed in forever" without this cap. A re-issued token's own
-# expiry is clamped to the ceiling too, so this is the real maximum, not the
-# maximum plus one more JWT_EXPIRE_MINUTES. Past it the user signs in again —
+# An Auth Session's idle window is JWT_EXPIRE_MINUTES (the name predates
+# ADR-0008 and is deployment surface). This is its absolute ceiling, however
+# continuously it is used: sliding keeps an active Auth Session alive, which would
+# mean "signed in forever" without this cap. Past it the user signs in again —
 # one passkey touch.
 SESSION_MAX_MINUTES: int = int(os.getenv("SESSION_MAX_MINUTES", str(60 * 24 * 7)))
 COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
@@ -172,7 +171,7 @@ CORS_ORIGINS: list[str] = (
 # Names of module-level globals in this file that MUST hold a non-blank
 # string at startup. A misconfigured deployment (unset/empty/whitespace-only)
 # must fail fast here rather than boot cleanly and fail later at first use
-# (e.g. JWT_SECRET only used to raise on first encode_token() call). Add
+# (e.g. JWT_SECRET only used to raise on first token encode). Add
 # future required secrets to this tuple — validate_startup_config() reads
 # each by name from this module's globals at call time, so no other wiring
 # is needed.

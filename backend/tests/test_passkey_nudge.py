@@ -25,9 +25,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
 from tests.account_support import seed_account
+from tests.auth_support import sign_in
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -273,7 +273,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test/api",
-            cookies={"access_token": encode_token(claims)},
+            cookies={"access_token": sign_in(claims)},
         ) as c:
             response = await c.post(
                 "/auth/passkeys/register/complete",

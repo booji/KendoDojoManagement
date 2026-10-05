@@ -23,7 +23,6 @@ from app.attendance.dependencies import (
 )
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
 from app.members.dependencies import get_current_member_id
 from app.sessions.dependencies import (
@@ -32,6 +31,7 @@ from app.sessions.dependencies import (
     get_session_type_repo,
 )
 from app.sessions.models import SessionInstanceRead
+from tests.auth_support import sign_in
 from tests.fake_repositories import (
     InMemoryAttendanceRepository,
     InMemorySessionInstanceRepository,
@@ -238,7 +238,7 @@ async def test_list_sessions_includes_is_checked_in_for_member(
     # Check in the member only to the first session
     await attendance_repo.check_in(checked_in_session["id"], _MEMBER_ID, _MEMBER_ID)
 
-    token = encode_token(_MEMBER)
+    token = sign_in(_MEMBER)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -343,9 +343,7 @@ async def test_admin_marked_member_sees_themselves_as_checked_in(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get(
-            "/sessions", cookies={"access_token": encode_token(_MEMBER)}
-        )
+        response = await c.get("/sessions", cookies={"access_token": sign_in(_MEMBER)})
 
     assert response.status_code == 200, response.text
     target = next(s for s in response.json() if s["id"] == session["id"])

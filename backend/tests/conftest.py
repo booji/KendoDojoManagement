@@ -54,22 +54,22 @@ def pytest_collection_modifyitems(items: list) -> None:
 
 @pytest.fixture()
 def cookies_for():
-    """Build a real signed access-token cookie for the given claims.
+    """Build a session cookie the real guard accepts for the given claims.
 
     Use this for any test asserting an *authorization* outcome. Overriding the
     guard under test (e.g. ``dependency_overrides[REQUIRE_ADMIN] = a member
     stub``) replaces the code that produces the 403, so the assertion ends up
     exercising whatever redundant role check happens to sit inside the route
     instead — such a test passes even if the route's guard is removed. Handing
-    the real guard a real member token keeps the check honest.
+    the real guard a real Auth Session keeps the check honest.
 
-    No DB is involved: the token is signed with the JWT_SECRET set above.
+    No DB is involved: see ``tests.auth_support.sign_in``.
     """
     from app.auth.models import AccountClaims
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     def _make(claims: "AccountClaims") -> dict[str, str]:
-        return {"access_token": encode_token(claims)}
+        return {"access_token": sign_in(claims)}
 
     return _make
 

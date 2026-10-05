@@ -27,12 +27,11 @@ _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
-from app import config as _config  # noqa: E402
 from app.auth.models import AccountClaims  # noqa: E402
-from app.auth.token import encode_token  # noqa: E402
-from tests.e2e_support import complete_onboarding  # noqa: E402
-
-_config.JWT_SECRET = os.environ["JWT_SECRET"]
+from tests.e2e_support import (
+    complete_onboarding,  # noqa: E402
+    login_as,  # noqa: E402
+)
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000/api"
@@ -50,7 +49,7 @@ def _make_token(role: str, sub: str | None = None) -> str:
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    return login_as(claims)
 
 
 def _cookie_dict(token: str) -> dict:

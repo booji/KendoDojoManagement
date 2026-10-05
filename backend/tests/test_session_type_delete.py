@@ -28,13 +28,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
     get_session_type_repo,
 )
+from tests.auth_support import sign_in
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
@@ -270,7 +270,7 @@ async def test_delete_session_type_forbidden_for_member(
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    member_token = encode_token(member_claims)
+    member_token = sign_in(member_claims)
     st = await _seed_type(type_repo, name="Naginata")
 
     async with AsyncClient(

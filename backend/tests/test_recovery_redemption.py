@@ -285,7 +285,11 @@ async def test_redeem_token_expires_in_15_minutes(db_client) -> None:
 
 @pytest.mark.asyncio
 async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> None:
-    """GET /auth/me with a recovery JWT should return 403."""
+    """GET /auth/me with a recovery JWT in the cookie is refused.
+
+    401 since #485: the cookie holds an Auth Session id, and a recovery token
+    names none. #486 makes recovery tokens rows, and this 403 again.
+    """
     from app.auth.token import encode_recovery_token  # red — doesn't exist yet
 
     user_id = str(uuid.uuid4())
@@ -299,12 +303,16 @@ async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> Non
     ) as c:
         response = await c.get("/auth/me")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_recovery_token_blocked_on_members_list(db_client) -> None:
-    """GET /members with a recovery JWT should return 403."""
+    """GET /members with a recovery JWT in the cookie is refused.
+
+    401 since #485: the cookie holds an Auth Session id, and a recovery token
+    names none. #486 makes recovery tokens rows, and this 403 again.
+    """
     from app.auth.token import encode_recovery_token  # red
 
     user_id = str(uuid.uuid4())
@@ -318,7 +326,7 @@ async def test_recovery_token_blocked_on_members_list(db_client) -> None:
     ) as c:
         response = await c.get("/members")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 # ── AC5 — Used code rejected with 401 ─────────────────────────────────────────

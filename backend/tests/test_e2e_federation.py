@@ -27,14 +27,11 @@ _dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path=_dotenv_path, override=False)
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
-from app import config as _config  # noqa: E402
 from tests.e2e_support import (  # noqa: E402
     API_URL,
     BASE_URL,
     authenticate,
 )
-
-_config.JWT_SECRET = os.environ["JWT_SECRET"]
 
 
 def _create_member(admin_token: str) -> str:

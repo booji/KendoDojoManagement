@@ -21,9 +21,10 @@ from sqlalchemy import delete, func, insert, select, update
 
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
 from app.auth.models import AccountClaims
-from app.auth.token import encode_recovery_token, encode_token
+from app.auth.token import encode_recovery_token
 from app.main import app
 from tests.account_support import seed_account
+from tests.auth_support import sign_in
 
 _CREDENTIAL = {
     "id": "bmV3LWNyZWQ",
@@ -111,7 +112,7 @@ async def test_unauthenticated_registration_cannot_add_to_an_account_with_a_pass
 
 def _session_cookie(user_id: str, email: str) -> dict[str, str]:
     claims = AccountClaims(sub=user_id, email=email, role="member", is_active=True)
-    return {"access_token": encode_token(claims)}
+    return {"access_token": sign_in(claims)}
 
 
 async def _add_passkey(**auth) -> tuple[int, int]:

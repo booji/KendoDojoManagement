@@ -377,9 +377,9 @@ async def test_member_cannot_create_session_with_segments(
     type_repo, instance_repo
 ) -> None:
     """Members must not be able to create sessions, segment-based or not."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER)
+    token = sign_in(_MEMBER)
     type_ids = [t["id"] for t in await type_repo.list()]
     payload = {
         "title": "Member Attempt",

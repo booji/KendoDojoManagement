@@ -26,10 +26,10 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import StubDojoSettingsRepository
+from tests.auth_support import sign_in
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -52,7 +52,7 @@ def _member_override():
 
 
 def _member_token() -> str:
-    return encode_token(_MEMBER)
+    return sign_in(_MEMBER)
 
 
 # ---------------------------------------------------------------------------

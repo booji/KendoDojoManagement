@@ -7,7 +7,7 @@ description: FastAPI/Python backend specialist for KendoDojoManagement. Knows th
 
 ## Stack
 - Python 3.13, FastAPI, SQLAlchemy 2.0 async, Alembic
-- Auth: `webauthn` (passkeys — the only login path), `joserfc` (session JWTs), `bcrypt` (recovery codes and admin recovery tokens). There is no password login (#155)
+- Auth: `webauthn` (passkeys — the only login path), Auth Sessions as opaque server-side rows (ADR-0008), `joserfc` (recovery-token JWTs, until #486), `bcrypt` (recovery codes and admin recovery tokens). There is no password login (#155)
 - DB driver: `asyncpg` (PostgreSQL everywhere — dev, test, prod), via `DATABASE_URL`
 
 ## Core pattern

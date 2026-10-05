@@ -150,3 +150,36 @@ class AdminRecoveryToken(UUIDBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
+
+
+class AuthSession(UUIDBase):
+    """One signed-in device (#455, ADR-0008).
+
+    The cookie carries a random id; only its SHA-256 is stored, so a dump of
+    this table yields no live Auth Session. Both foreign keys cascade, and
+    that is the revocation: erasing the Account, or removing the passkey a
+    device signed in with, ends the Auth Sessions that depend on it.
+    """
+
+    __tablename__ = "auth_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    account_id: Mapped[str] = mapped_column(
+        UUIDType(),
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # NULL where no passkey was used: the test-only login.
+    passkey_id: Mapped[str | None] = mapped_column(
+        UUIDType(),
+        ForeignKey("passkey_credentials.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )

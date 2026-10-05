@@ -148,9 +148,9 @@ async def test_create_member_response_schema_has_all_required_fields(
 
 
 async def test_member_cannot_create_member(member_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -401,7 +401,7 @@ async def test_update_member_not_found_returns_404(member_repo) -> None:
 
 
 async def test_member_cannot_update_member(member_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     async with AsyncClient(
@@ -411,7 +411,7 @@ async def test_member_cannot_update_member(member_repo) -> None:
     member_id = create_resp.json()["id"]
 
     del app.dependency_overrides[REQUIRE_ADMIN]
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

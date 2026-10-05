@@ -32,13 +32,13 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
     get_session_type_repo,
 )
+from tests.auth_support import sign_in
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
@@ -66,7 +66,7 @@ def _member_override() -> AccountClaims:
 
 
 def _member_cookie() -> dict[str, str]:
-    return {"access_token": encode_token(_MEMBER)}
+    return {"access_token": sign_in(_MEMBER)}
 
 
 # ---------------------------------------------------------------------------

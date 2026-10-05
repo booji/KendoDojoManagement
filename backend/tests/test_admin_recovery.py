@@ -326,12 +326,12 @@ async def test_admin_token_expires_in_60_minutes(db_client) -> None:
 
 async def test_non_admin_cannot_generate_admin_token() -> None:
     """POST /auth/recovery/admin-token returns 403 for a member-role token."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub=str(uuid.uuid4()), email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -728,12 +728,12 @@ async def test_used_admin_token_is_rejected(db_client) -> None:
 
 async def test_non_admin_cannot_call_generate_endpoint() -> None:
     """Unit: member-role token → 403 on POST /auth/recovery/admin-token."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub=str(uuid.uuid4()), email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

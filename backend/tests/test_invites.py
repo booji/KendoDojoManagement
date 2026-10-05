@@ -290,9 +290,9 @@ async def test_mint_invite_unauthenticated_returns_401(invite_repo) -> None:
 
 async def test_mint_invite_non_admin_returns_403(invite_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = REQUIRE_ADMIN  # not overridden
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -313,9 +313,9 @@ async def test_list_invites_unauthenticated_returns_401(invite_repo) -> None:
 
 
 async def test_list_invites_non_admin_returns_403(invite_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -332,9 +332,9 @@ async def test_revoke_invite_unauthenticated_returns_401(invite_repo) -> None:
 
 
 async def test_revoke_invite_non_admin_returns_403(invite_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

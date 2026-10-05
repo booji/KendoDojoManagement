@@ -1,4 +1,5 @@
-"""In-memory fakes for the session, attendance and member repository interfaces.
+"""In-memory fakes for the session, attendance, member and Auth Session
+repository interfaces.
 
 These are *fakes*, not stubs: a working implementation of the whole interface,
 not canned answers for the two methods one test happens to call. That
@@ -683,3 +684,67 @@ class InMemoryMemberRepository:
                 or term in (r["email"] or "").lower()
             ]
         return [dict(r) for r in rows]
+
+
+class InMemoryAuthSessionRepository:
+    """In-memory implementation of ``AbstractAuthSessionRepository``.
+
+    ``find`` joins the Account in SQL; here ``seed_account`` stands in for the
+    accounts table, so a test can change an Account's role or active flag
+    under a live Auth Session. ``sign_in`` is the front door: it seeds the
+    Account and stores a row built by the same ``new_auth_session`` that
+    production sign-in uses.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[str, dict[str, Any]] = {}
+        self._accounts: dict[str, Any] = {}
+
+    # -- seeding ------------------------------------------------------------
+
+    def seed_account(self, claims: Any) -> None:
+        self._accounts[claims.sub] = claims
+
+    def sign_in(
+        self,
+        claims: Any,
+        *,
+        passkey_id: str | None = None,
+        now: datetime | None = None,
+    ) -> str:
+        """Start an Auth Session for ``claims`` and return its cookie value."""
+        from app.auth.auth_sessions import new_auth_session
+
+        self.seed_account(claims)
+        value, row = new_auth_session(claims.sub, passkey_id, now or datetime.now(UTC))
+        self._store[row["token_hash"]] = row
+        return value
+
+    # -- interface ----------------------------------------------------------
+
+    async def add(self, row: dict[str, Any]) -> None:
+        self._store[row["token_hash"]] = dict(row)
+
+    async def find(self, token_hash: str) -> dict[str, Any] | None:
+        row = self._store.get(token_hash)
+        account = self._accounts.get(row["account_id"]) if row else None
+        if account is None:
+            return None
+        return {
+            **row,
+            "role": account.role,
+            "is_active": account.is_active,
+            "email": account.email,
+        }
+
+    async def slide(self, token_hash: str, expires_at: datetime) -> None:
+        if token_hash in self._store:
+            self._store[token_hash]["expires_at"] = expires_at
+
+    async def delete(self, token_hash: str) -> None:
+        self._store.pop(token_hash, None)
+
+    async def delete_expired(self, now: datetime) -> None:
+        self._store = {
+            h: row for h, row in self._store.items() if row["expires_at"] > now
+        }

@@ -184,6 +184,12 @@ podman exec kendo-app printenv APP_ENV JWT_EXPIRE_MINUTES
 > #387 adds `SESSION_MAX_MINUTES` (default 10080 — 7 days), the ceiling on a
 > session that sliding renewal keeps alive. It defaults in `app/config.py`, so
 > an existing host needs it in the env file only to override that default.
+>
+> **#485 signs everyone out once.** Sessions became server-side Auth Session
+> rows (ADR-0008), and the cookies issued before it name none, so every user
+> signs in again after the upgrade. `JWT_EXPIRE_MINUTES` and
+> `SESSION_MAX_MINUTES` keep their names and meaning: the idle timeout and the
+> absolute ceiling.
 
 ## Upgrading a deployment created before the Alembic baseline (issue #264)
 
