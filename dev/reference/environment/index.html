@@ -1524,6 +1524,9 @@ generating the secrets.</p>
 <span class="nv">POSTGRES_PASSWORD</span><span class="o">=</span>&lt;your-db-password&gt;
 <span class="nv">POSTGRES_DB</span><span class="o">=</span>kendo
 <span class="c1"># Required — the app refuses to start if this is unset/blank.</span>
+<span class="c1"># Keys the HMAC behind the decoy user ids that keep passkey sign-in from</span>
+<span class="c1"># revealing which emails are registered. It no longer signs any token</span>
+<span class="c1"># (ADR-0008); the name is kept so existing env files keep working.</span>
 <span class="c1"># Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"</span>
 <span class="nv">JWT_SECRET</span><span class="o">=</span>&lt;your-jwt-secret&gt;
 <span class="c1"># Required — the app refuses to start if this is unset/blank, claimed or not.</span>
