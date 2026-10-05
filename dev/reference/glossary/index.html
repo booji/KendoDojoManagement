@@ -1746,6 +1746,11 @@
 <td>Biometric login, FIDO key</td>
 </tr>
 <tr>
+<td><strong>Auth Session</strong></td>
+<td>One signed-in device: an <strong>Account</strong> and the <strong>Passkey</strong> it signed in with, until logout, expiry or revocation. Stored as a row in <code>auth_sessions</code>; the cookie holds only its random id</td>
+<td>Session, login session, token</td>
+</tr>
+<tr>
 <td><strong>First-registered Admin</strong></td>
 <td>The first <strong>Member</strong> to register on a fresh instance: their <strong>Member</strong> and <strong>Account</strong> are created together when they claim it, with the <code>admin</code> <strong>Role</strong></td>
 <td>Superuser, root user</td>
@@ -2021,6 +2026,7 @@ stacks, so they are pinned here.</p>
 <li><strong>"Settings"</strong>: Used unqualified for both per-user preferences and dojo-wide configuration. Always qualify: <strong>User Settings</strong> or <strong>Dojo Settings</strong>.</li>
 <li><strong>"Delete" vs "Deactivate"</strong>: The API endpoint <code>DELETE /members/{id}</code> performs a <strong>Deactivation</strong>, not a deletion. The word "delete" must not be used for this operation in any user-facing text, documentation, or domain discussion.</li>
 <li><strong>"Profile"</strong>: Used loosely to mean the auth account, the member record, or both. The canonical term for the dojo record is <strong>Member</strong>. Avoid bare "profile" and the retired "Member Profile".</li>
+<li><strong>"Session"</strong>: A <strong>Session</strong> is a training event. Signed-in state is an <strong>Auth Session</strong>, always qualified, in code and discussion alike (#455).</li>
 <li><strong>"Grading"</strong>: Used in two senses — the event type (a session where grades are awarded) and the act of awarding a grade. Use <strong>Session Type: Grading</strong> for the event and <strong>Promotion</strong> for the act.</li>
 <li><strong>"Guest"</strong> and <strong>"Visitor"</strong>: Used interchangeably in early discussion. The canonical term is <strong>Visitor</strong>.</li>
 <li><strong>"Rank"</strong> and <strong>"Grade"</strong>: The canonical term is <strong>Grade</strong>, to align with kendo federation terminology.</li>
