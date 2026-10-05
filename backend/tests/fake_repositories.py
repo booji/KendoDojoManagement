@@ -747,6 +747,11 @@ class InMemoryAuthSessionRepository:
     async def delete(self, token_hash: str) -> bool:
         return self._store.pop(token_hash, None) is not None
 
+    async def delete_for_account(self, account_id: str) -> None:
+        self._store = {
+            h: row for h, row in self._store.items() if row["account_id"] != account_id
+        }
+
     async def delete_expired(self, now: datetime) -> None:
         self._store = {
             h: row for h, row in self._store.items() if row["expires_at"] > now

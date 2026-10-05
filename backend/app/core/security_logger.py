@@ -17,6 +17,7 @@ _VALID_EVENT_TYPES = frozenset(
         "invite_revoked",
         "invite_redeemed",
         "setup_claim",
+        "sign_out_everywhere",
     }
 )
 

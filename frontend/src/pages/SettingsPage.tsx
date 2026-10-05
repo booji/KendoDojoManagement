@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
-import { isApiError, getMe, performPasskeyAdd } from "@/api/auth"
+import { isApiError, getMe, performPasskeyAdd, signOutEverywhere } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import type { AccountClaims } from "@/api/auth"
 import { listPasskeys, renamePasskey, deletePasskey, getSecurityStatus } from "@/api/passkeys"
@@ -264,6 +265,79 @@ const PasskeyRow = ({ passkey, isOnly, onRename, onDelete }: PasskeyRowProps) =>
   )
 }
 
+// ── Sign out everywhere ───────────────────────────────────────────────────────
+
+// Ends every sign-in of this Account, this device's included, then leaves for
+// /login the way LogoutButton does. On failure nothing was signed out, so the
+// user stays put with the error rather than landing on a login page while
+// still signed in.
+const SignOutEverywhere = () => {
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [working, setWorking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // The safe choice takes focus, so Enter on open never signs anyone out.
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  const close = () => {
+    setOpen(false)
+    setError(null)
+  }
+
+  const handleConfirm = async () => {
+    setError(null)
+    setWorking(true)
+    try {
+      await signOutEverywhere()
+      navigate("/login", { replace: true })
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't sign out everywhere"))
+      setWorking(false)
+    }
+  }
+
+  return (
+    <div className="border-t pt-4">
+      <p className="text-xs text-muted-foreground mb-2">Signed-in devices</p>
+      <p className="text-sm mb-3">
+        Sign out on every device where you are signed in, including this one.
+      </p>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        Sign out everywhere
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => { if (!o) close() }}>
+        <DialogContent initialFocus={cancelRef}>
+          <DialogHeader>
+            <DialogTitle>Sign out everywhere?</DialogTitle>
+            <DialogDescription>
+              Every device signed in to your account, this one included, will need a
+              passkey to sign in again.
+            </DialogDescription>
+          </DialogHeader>
+          {error !== null && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              onClick={() => void handleConfirm()}
+              disabled={working}
+            >
+              {working ? "Signing out…" : "Sign out everywhere"}
+            </Button>
+            <Button ref={cancelRef} variant="outline" onClick={close} disabled={working}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // ── Security card ─────────────────────────────────────────────────────────────
 
 type PasskeyLoadState =
@@ -498,6 +572,12 @@ const SecurityCard = () => {
                   </Button>
                 )}
               </div>
+            </div>
+          )}
+          {/* Outside the load states: a failed passkey load must not hide it. */}
+          {state.status !== "loading" && (
+            <div className="mt-4">
+              <SignOutEverywhere />
             </div>
           )}
         </CardContent>
