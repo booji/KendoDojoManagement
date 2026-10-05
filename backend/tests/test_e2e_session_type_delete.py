@@ -120,6 +120,8 @@ def test_admin_can_delete_unreferenced_session_type(page: Page) -> None:
     page.get_by_role("button", name=f"Delete {name}").click()
     dialog = page.get_by_role("dialog")
     expect(dialog).to_be_visible()
+    # Opens on Cancel, so Enter on open never deletes (#492).
+    expect(dialog.get_by_role("button", name="Cancel")).to_be_focused()
     dialog.get_by_role("button", name="Delete", exact=True).click()
 
     # The type disappears from the list (its delete control is gone).
