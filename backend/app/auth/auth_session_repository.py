@@ -26,6 +26,10 @@ class AbstractAuthSessionRepository(Protocol):
         """Whether a row was deleted."""
         ...
 
+    async def delete_for_account(self, account_id: str) -> None:
+        """Every row of the Account, of either kind."""
+        ...
+
     async def delete_expired(self, now: datetime) -> None: ...
 
 
@@ -74,6 +78,11 @@ class SqlAuthSessionRepository:
             delete(AuthSession).where(AuthSession.token_hash == token_hash)
         )
         return result.rowcount > 0
+
+    async def delete_for_account(self, account_id: str) -> None:
+        await self._session.execute(
+            delete(AuthSession).where(AuthSession.account_id == account_id)
+        )
 
     async def delete_expired(self, now: datetime) -> None:
         await self._session.execute(

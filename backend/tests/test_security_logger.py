@@ -398,6 +398,7 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
         "admin_token_generated",
         "passkey_registered",
         "passkey_deleted",
+        "sign_out_everywhere",
     ],
 )
 def test_all_event_types_accepted(

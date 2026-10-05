@@ -123,6 +123,19 @@ async def resolve_auth_session(
     )
 
 
+async def end_every_auth_session(
+    repo: AbstractAuthSessionRepository, account_id: str
+) -> None:
+    """Sign the Account out on every device, this one included (#487).
+
+    Recovery tokens go too (ADR-0008). Someone signing out everywhere may
+    be doing it because their Account is compromised, and a recovery token
+    left alive would give an attacker 15 minutes to enrol a passkey. The cost
+    is a genuine recovery in flight elsewhere, which then needs a fresh code.
+    """
+    await repo.delete_for_account(account_id)
+
+
 async def end_auth_session(repo: AbstractAuthSessionRepository, value: str) -> bool:
     """Delete the Auth Session behind ``value``; whether there was one to end."""
     return await repo.delete(hash_token(value))

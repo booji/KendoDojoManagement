@@ -1,4 +1,4 @@
-import { apiFetch } from "@/api/client"
+import { apiFetch, throwApiError } from "@/api/client"
 
 import type { ApiError } from "@/api/client"
 
@@ -40,6 +40,12 @@ export const getMe = async (): Promise<AccountClaims> => {
 
 export const logout = async (): Promise<void> => {
   await apiFetch("/api/auth/logout", { method: "POST" })
+}
+
+// Ends every sign-in of the caller's Account, this device's included (#487).
+export const signOutEverywhere = async (): Promise<void> => {
+  const res = await apiFetch("/api/auth/sign-out-everywhere", { method: "POST" })
+  if (!res.ok) await throwApiError(res, "Couldn't sign out everywhere")
 }
 
 // --- WebAuthn helpers ---

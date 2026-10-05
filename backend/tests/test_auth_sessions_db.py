@@ -168,3 +168,30 @@ async def test_a_role_change_bites_on_the_next_request(db_client) -> None:
     )
 
     assert await _status("/auth/admin/invites", cookie) == 403
+
+
+# ── Sign out everywhere (#487) ────────────────────────────────────────────────
+
+
+async def test_signing_out_everywhere_deletes_every_row_of_the_account(
+    db_client,
+) -> None:
+    """Recovery tokens included (ADR-0008): someone signing out everywhere
+    because their Account is compromised must not leave an attacker's
+    recovery token 15 minutes to enrol a passkey. Another Account's rows stay."""
+    from app.auth.auth_session_repository import SqlAuthSessionRepository
+    from app.auth.auth_sessions import start_auth_session
+
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    other_email, other_id, (_, theirs), _ = await _member_with_two_passkeys(db_client)
+    signed_in = await _sign_in(email, phone)
+    await _sign_in(other_email, theirs)
+    await start_auth_session(
+        SqlAuthSessionRepository(db_client), user_id, kind="recovery"
+    )
+
+    assert await _status("/auth/sign-out-everywhere", signed_in, "POST") == 200
+
+    owners = (await db_client.execute(select(AuthSession.account_id))).scalars().all()
+    assert user_id not in owners
+    assert other_id in owners

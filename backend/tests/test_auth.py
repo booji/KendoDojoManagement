@@ -167,3 +167,46 @@ async def test_logout_clears_the_readable_theme_cookie() -> None:
     theme_header = next((h for h in headers if h.startswith("theme=")), None)
     assert theme_header is not None, "logout must send a Set-Cookie clearing theme"
     assert "Max-Age=0" in theme_header or "max-age=0" in theme_header.lower()
+
+
+# ── Sign out everywhere (#487) ────────────────────────────────────────────────
+
+
+def _member(sub: str) -> AccountClaims:
+    return AccountClaims(
+        sub=sub, email=f"{sub}@dojo.test", role="member", is_active=True
+    )
+
+
+async def _me(c: AsyncClient, token: str) -> int:
+    c.cookies.set("access_token", token)
+    return (await c.get("/auth/me")).status_code
+
+
+async def test_sign_out_everywhere_ends_every_device_of_the_account() -> None:
+    from tests.auth_support import sign_in
+
+    this_device = sign_in(_member("owner"))
+    other_device = sign_in(_member("owner"))
+    someone_else = sign_in(_member("someone-else"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        c.cookies.set("access_token", this_device)
+        response = await c.post("/auth/sign-out-everywhere")
+        assert response.status_code == 200
+        assert "access_token=" in response.headers.get("set-cookie", "")
+
+        assert await _me(c, this_device) == 401
+        assert await _me(c, other_device) == 401
+        assert await _me(c, someone_else) == 200
+
+
+async def test_sign_out_everywhere_needs_a_sign_in() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post("/auth/sign-out-everywhere")
+
+    assert response.status_code == 401

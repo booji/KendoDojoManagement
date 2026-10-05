@@ -20,7 +20,11 @@ from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.auth_session_repository import (
     AbstractAuthSessionRepository,
 )
-from app.auth.auth_sessions import end_auth_session, start_auth_session
+from app.auth.auth_sessions import (
+    end_auth_session,
+    end_every_auth_session,
+    start_auth_session,
+)
 from app.auth.db_models import Account
 from app.auth.dependencies import (
     get_admin_token_repo,
@@ -106,6 +110,22 @@ async def logout(
         await uow.commit()
     clear_session_cookie(response)
     return {"detail": "logged out"}
+
+
+@router.post("/sign-out-everywhere", status_code=200)
+async def sign_out_everywhere(
+    response: Response,
+    claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
+    auth_sessions: Annotated[
+        AbstractAuthSessionRepository, Depends(get_auth_session_repo)
+    ],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> dict:
+    await end_every_auth_session(auth_sessions, claims.sub)
+    await uow.commit()
+    log_security_event("sign_out_everywhere", "success", user_id=claims.sub)
+    clear_session_cookie(response)
+    return {"detail": "signed out everywhere"}
 
 
 @router.get("/me", response_model=AccountClaims)
