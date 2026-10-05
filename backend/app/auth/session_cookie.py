@@ -11,7 +11,6 @@ changes. Issuing and clearing both go through here so the two can never drift.
 from fastapi import Response
 
 from app import config
-from app.auth.token import seconds_until_expiry
 
 COOKIE_NAME = "access_token"
 
@@ -35,17 +34,18 @@ _THEME_ATTRS: dict = {**_ATTRS, "httponly": False}
 
 
 def set_session_cookie(response: Response, token: str) -> None:
-    """Issue the session cookie carrying ``token``.
+    """Issue the session cookie carrying Auth Session id ``token``.
 
-    ``max_age`` comes from the token rather than from JWT_EXPIRE_MINUTES: near
-    the session ceiling the token's ``exp`` is clamped, and the two must not
-    drift apart.
+    Set once, at sign-in, and never re-set mid-session (ADR-0008): ``max_age``
+    is the absolute ceiling, and the server enforces the idle window. So a
+    cookie can outlive an idle-expired Auth Session; the id it carries is then
+    refused, and the SPA routes to /login on the 401.
     """
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         secure=config.COOKIE_SECURE,
-        max_age=seconds_until_expiry(token),
+        max_age=60 * config.SESSION_MAX_MINUTES,
         **_ATTRS,
     )
 

@@ -23,13 +23,11 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 from playwright.sync_api import expect  # noqa: E402
 
-from app import config as _config  # noqa: E402
 from app.auth.models import AccountClaims  # noqa: E402
-from app.auth.token import encode_token  # noqa: E402
-from tests.e2e_support import complete_onboarding  # noqa: E402
-
-# Patch the cached module-level variable in case unit tests ran first.
-_config.JWT_SECRET = os.environ["JWT_SECRET"]
+from tests.e2e_support import (
+    complete_onboarding,  # noqa: E402
+    login_as,  # noqa: E402
+)
 
 BASE_URL = "http://localhost:5173"
 
@@ -46,7 +44,7 @@ def _make_token(role: str = "member") -> str:
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    token = encode_token(claims)
+    token = login_as(claims)
     # Seed the acting user's Member profile so the RequireProfile gate does
     # not bounce every navigation to /onboarding before assertions run (#221).
     complete_onboarding(token)

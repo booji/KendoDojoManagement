@@ -7,17 +7,17 @@ from sqlalchemy import exists, func, select
 from app import config
 from app.auth.aaguid import label_from_aaguid
 from app.auth.accounts import account_for_email, account_for_member
+from app.auth.auth_session_repository import SqlAuthSessionRepository
+from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
 from app.auth.member_directory import MemberDirectory, member_directory_for
 from app.auth.models import (
-    AccountClaims,
     PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,
     PasskeyRegisterCompleteResponse,
     TokenResponse,
 )
-from app.auth.token import encode_token
 from app.auth.webauthn_ceremony import (
     Subject,
     decode_challenge,
@@ -339,13 +339,10 @@ async def login_passkey_complete(
     stored_cred.sign_count = verified.new_sign_count
     stored_cred.last_used_at = datetime.now(UTC)
     user.pending_challenge = None
+    token = await start_auth_session(
+        SqlAuthSessionRepository(uow.session), user.id, stored_cred.id
+    )
     await uow.commit()
 
-    claims = AccountClaims(
-        sub=user.id,
-        email=payload.email,
-        role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
-    )
     log_security_event("login_passkey", "success", user_id=user.id)
-    return TokenResponse(access_token=encode_token(claims), theme=user.theme)
+    return TokenResponse(access_token=token, theme=user.theme)

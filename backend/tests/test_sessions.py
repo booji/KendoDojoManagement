@@ -135,12 +135,12 @@ async def test_admin_can_create_session_type(type_repo) -> None:
 
 async def test_member_cannot_create_session_type(type_repo) -> None:
     """Members must receive 403 when attempting to create a session type."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -208,12 +208,12 @@ async def test_admin_can_create_session_template(
 
 
 async def test_member_cannot_create_session_template(template_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     payload = {
         "title": "Attempt",
         "start_date": "2026-05-06",
@@ -347,12 +347,12 @@ async def test_create_adhoc_session_rejects_a_date_that_is_not_real(
 
 
 async def test_member_cannot_create_adhoc_session(type_repo, instance_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     payload = {
         "title": "Attempt",
         "date": "2026-06-15",
@@ -483,7 +483,7 @@ async def test_cancel_nonexistent_instance_returns_404(instance_repo) -> None:
 
 
 async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     # Create an instance first using admin override
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
@@ -507,7 +507,7 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

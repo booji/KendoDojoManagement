@@ -3,6 +3,10 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.auth.attempt_repository import AbstractAttemptRepository, SqlAttemptRepository
+from app.auth.auth_session_repository import (
+    AbstractAuthSessionRepository,
+    SqlAuthSessionRepository,
+)
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.passkey_repository import AbstractPasskeyRepository, SqlPasskeyRepository
 from app.auth.recovery_repository import (
@@ -43,3 +47,9 @@ def get_invite_repo(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> AbstractInviteRepository:
     return SqlInviteRepository(uow.session)
+
+
+def get_auth_session_repo(
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+) -> AbstractAuthSessionRepository:
+    return SqlAuthSessionRepository(uow.session)

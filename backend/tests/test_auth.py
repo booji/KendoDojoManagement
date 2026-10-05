@@ -64,12 +64,12 @@ async def test_protected_route_member_token_succeeds() -> None:
 
 
 async def test_admin_route_rejects_member_token() -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub="uuid-2", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -105,10 +105,16 @@ async def test_logout_clears_access_token_cookie() -> None:
     a same-named Set-Cookie header, which is what actually clears the cookie
     client-side — the 200 status/body alone would not.
     """
+    from tests.auth_support import sign_in
+
+    token = sign_in(
+        AccountClaims(sub="uuid-4", email="m@dojo.test", role="member", is_active=True)
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/auth/logout", cookies={"access_token": "some-token"})
+        c.cookies.set("access_token", token)
+        response = await c.post("/auth/logout")
 
     assert response.status_code == 200
     set_cookie = response.headers.get("set-cookie")

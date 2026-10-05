@@ -28,7 +28,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app import config
 from app.auth.accounts import account_for_member, delete_account
+from app.auth.auth_session_repository import AbstractAuthSessionRepository
+from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential
+from app.auth.dependencies import get_auth_session_repo
 from app.auth.models import (
     AccountClaims,
     PasskeyRegisterCompleteRequest,
@@ -36,7 +39,6 @@ from app.auth.models import (
 )
 from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
 from app.auth.session_cookie import set_session_cookie
-from app.auth.token import encode_token
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -166,6 +168,9 @@ async def setup_passkey_complete(
     payload: PasskeyRegisterCompleteRequest,
     response: Response,
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    auth_sessions: Annotated[
+        AbstractAuthSessionRepository, Depends(get_auth_session_repo)
+    ],
     x_setup_token: SetupTokenHeader = None,
 ) -> AccountClaims:
     """Complete passkey registration, promote user to admin, set cookie."""
@@ -190,6 +195,20 @@ async def setup_passkey_complete(
             is_active=claims.is_active,
         )
 
+    # Signed in before the tidy-up below, which may roll back: the claim has
+    # succeeded, so its Auth Session must not depend on the clean-up. The
+    # passkey is the one just enrolled; a fresh claim's Account has no other.
+    passkey_id = (
+        await uow.session.execute(
+            select(PasskeyCredential.id)
+            .where(PasskeyCredential.user_id == claims.sub)
+            .order_by(PasskeyCredential.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one()
+    token = await start_auth_session(auth_sessions, claims.sub, passkey_id)
+    await uow.commit()
+
     # After the admin grant has committed, and best-effort: the claim has
     # succeeded, and a failure tidying up must not turn it into an error the
     # claimant cannot retry (setup now answers 404).
@@ -200,6 +219,5 @@ async def setup_passkey_complete(
         _log.exception("Could not remove abandoned setup claim attempts")
 
     log_security_event("setup_claim", "success", user_id=claims.sub)
-    token = encode_token(claims)
     set_session_cookie(response, token)
     return claims

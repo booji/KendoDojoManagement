@@ -214,9 +214,9 @@ async def test_create_federation_unauthenticated_returns_401(fed_repo) -> None:
 
 
 async def test_member_cannot_create_federation(fed_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER)
+    token = sign_in(_MEMBER)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -266,10 +266,10 @@ async def test_edit_federation_unauthenticated_returns_401(fed_repo) -> None:
 
 
 async def test_member_cannot_edit_federation(fed_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     record = await fed_repo.add({"name": "Test Fed"})
-    token = encode_token(_MEMBER)
+    token = sign_in(_MEMBER)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -351,10 +351,10 @@ async def test_delete_federation_unauthenticated_returns_401(fed_repo) -> None:
 
 
 async def test_member_cannot_delete_federation(fed_repo) -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     record = await fed_repo.add({"name": "Test Fed"})
-    token = encode_token(_MEMBER)
+    token = sign_in(_MEMBER)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

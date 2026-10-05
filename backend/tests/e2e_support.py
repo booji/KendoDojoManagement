@@ -18,23 +18,38 @@ import requests
 from playwright.sync_api import Page
 
 from app.auth.models import AccountClaims
-from app.auth.token import decode_token, encode_token
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000/api"
 
 
+def login_as(claims: AccountClaims) -> str:
+    """Sign in as ``claims`` and return the session cookie value.
+
+    Session cookies are Auth Session ids with a row behind them (#485), so a
+    token can no longer be forged: the test-login endpoint creates the Account
+    ``claims`` names, with its Member, and signs it in. An Account that
+    already exists for the email is signed in as it is.
+    """
+    r = requests.post(
+        f"{API_URL}/auth/login/test",
+        json={"email": claims.email, "role": claims.role, "sub": claims.sub},
+    )
+    r.raise_for_status()
+    return r.cookies["access_token"]
+
+
 def make_token(
     role: str = "admin", *, sub: str | None = None, email: str | None = None
 ) -> str:
-    """Forge a signed access token for a synthetic user."""
+    """Sign in as a new synthetic user and return the session cookie value."""
     claims = AccountClaims(
         sub=sub or str(uuid.uuid4()),
         email=email or f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
         is_active=True,
     )
-    return encode_token(claims)
+    return login_as(claims)
 
 
 def set_cookie(page: Page, token: str) -> None:
@@ -63,11 +78,10 @@ def complete_onboarding(
 ) -> dict[str, Any]:
     """Ensure the acting user has a complete Member so RequireProfile lets them through.
 
-    Tokens here are forged, so at first no Account stands behind them. Every
-    Account belongs to a Member (#432), so the test-login endpoint makes the
-    forged subject a real Account with a Member of this name; the date of
-    birth onboarding asks for is then filled in through the same endpoint the
-    onboarding page posts to.
+    Signing in through the test-login endpoint (``login_as``) already made the
+    Account and its Member (#432). The name and the date of birth onboarding
+    asks for are filled in through the same endpoint the onboarding page posts
+    to.
 
     Non-clobbering: a profile that is already complete is left untouched and
     returned, so callers can seed the same user repeatedly (e.g. mint-token
@@ -80,22 +94,11 @@ def complete_onboarding(
     if existing.status_code == 200 and existing.json().get("dob"):
         return existing.json()
 
-    if existing.status_code == 404:
-        claims = decode_token(token)
-        requests.post(
-            f"{API_URL}/auth/login/test",
-            json={
-                "email": claims.email,
-                "role": claims.role,
-                "sub": claims.sub,
-                "first_name": first_name,
-                "surname": surname,
-            },
-        ).raise_for_status()
+    existing.raise_for_status()
 
     resp = requests.put(
         f"{API_URL}/accounts/me/member",
-        json={"dob": dob, **extra},
+        json={"first_name": first_name, "surname": surname, "dob": dob, **extra},
         cookies={"access_token": token},
     )
     resp.raise_for_status()
@@ -109,7 +112,7 @@ def authenticate(
     with_profile: bool = True,
     **profile: Any,
 ) -> str:
-    """Forge a token, set the cookie, and (by default) put the user past the
+    """Sign in, set the cookie, and (by default) put the user past the
     onboarding gate. Returns the token so the caller can drive the API too.
 
     Pass ``with_profile=False`` for the handful of tests that deliberately

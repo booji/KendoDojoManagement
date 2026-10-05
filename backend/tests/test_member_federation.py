@@ -349,9 +349,9 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
     member_repo, fed_repo, mf_repo
 ) -> None:
     """AC10: Member cannot add to another member's federations via /members/{id}/federations."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
-    token = encode_token(_MEMBER_A)
+    token = sign_in(_MEMBER_A)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

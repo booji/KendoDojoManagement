@@ -3,15 +3,28 @@ import uuid
 from typing import Annotated, Any, Literal
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, Field
 
 from app.auth.accounts import account_for_email, account_for_member, sign_in_email
 from app.auth.attempt_repository import AbstractAttemptRepository
+from app.auth.auth_session_repository import (
+    AbstractAuthSessionRepository,
+)
+from app.auth.auth_sessions import end_auth_session, start_auth_session
 from app.auth.db_models import Account
 from app.auth.dependencies import (
     get_admin_token_repo,
     get_attempt_repo,
+    get_auth_session_repo,
     get_invite_repo,
     get_passkey_repo,
     get_recovery_repo,
@@ -70,7 +83,7 @@ from app.auth.session_cookie import (
     set_session_cookie,
     set_theme_cookie,
 )
-from app.auth.token import encode_recovery_token, encode_token
+from app.auth.token import encode_recovery_token
 from app.core.request_ip import client_ip
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -82,7 +95,15 @@ _ALLOW_TEST_AUTH = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 
 @router.post("/logout", status_code=200)
-async def logout(response: Response) -> dict:
+async def logout(
+    response: Response,
+    repo: Annotated[AbstractAuthSessionRepository, Depends(get_auth_session_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    access_token: Annotated[str | None, Cookie()] = None,
+) -> dict:
+    if access_token is not None:
+        await end_auth_session(repo, access_token)
+        await uow.commit()
     clear_session_cookie(response)
     return {"detail": "logged out"}
 
@@ -222,11 +243,13 @@ async def update_passkey_label(
     payload: _LabelUpdate,
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
     record = await repo.get(passkey_id)
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = await repo.update_label(passkey_id, claims.sub, payload.label)
+    await uow.commit()
     return _passkey_to_response(updated)  # type: ignore[arg-type]
 
 
@@ -236,6 +259,7 @@ async def delete_passkey(
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
+    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> None:
     record = await repo.get(passkey_id)
     if record is None or record["user_id"] != claims.sub:
@@ -248,7 +272,9 @@ async def delete_passkey(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot delete your only passkey without recovery codes",
             )
+    # The Auth Sessions this passkey signed in go with it (FK cascade).
     await repo.delete(passkey_id, claims.sub)
+    await uow.commit()
     log_security_event("passkey_deleted", "success", user_id=claims.sub)
 
 
@@ -505,8 +531,8 @@ if _ALLOW_TEST_AUTH:
     class _TestLoginRequest(BaseModel):
         email: LenientEmail
         role: Literal["admin", "member"] = "admin"
-        # e2e helpers forge tokens before any row exists; passing the forged
-        # subject makes the Account it names real, so the two agree.
+        # e2e helpers pick an Account id up front: the first sign-in creates
+        # the Account with it, a later one signs that Account in again.
         sub: str | None = None
         first_name: str = "Test"
         surname: str = "User"
@@ -516,13 +542,18 @@ if _ALLOW_TEST_AUTH:
         payload: _TestLoginRequest,
         response: Response,
         uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+        auth_sessions: Annotated[
+            AbstractAuthSessionRepository, Depends(get_auth_session_repo)
+        ],
     ) -> dict:
-        """Create-or-get a Member and its Account, and return a JWT cookie.
+        """Create-or-get a Member and its Account, and sign it in.
 
         Test builds only. Every Account belongs to a Member (#432), so the
         Member is created too when the email has none.
         """
         user = await account_for_email(uow.session, payload.email)
+        if user is None and payload.sub is not None:
+            user = await uow.session.get(Account, payload.sub)
         if user is None:
             member_id = await member_directory_for(uow).ensure_member(
                 payload.email, payload.first_name, payload.surname
@@ -535,15 +566,8 @@ if _ALLOW_TEST_AUTH:
             )
             uow.session.add(user)
             await uow.session.flush()
+        token = await start_auth_session(auth_sessions, user.id)
         await uow.commit()
-        token = encode_token(
-            AccountClaims(
-                sub=user.id,
-                email=payload.email,
-                role=user.role,
-                is_active=user.is_active,
-            )
-        )
         set_session_cookie(response, token)
         set_theme_cookie(response, user.theme)
         return {"detail": "logged in", "sub": user.id}

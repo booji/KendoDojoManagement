@@ -1,0 +1,170 @@
+"""Auth Sessions against PostgreSQL (#485): sign-in, revocation, the join.
+
+Through the real routes, so the cookie a sign-in sets is the one the guard
+later resolves. The cascades are the revocation for erasure and for passkey
+removal, and only real foreign keys can show them working.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, insert, select, update
+
+from app.auth.accounts import delete_account
+from app.auth.db_models import Account, AuthSession, PasskeyCredential
+from app.main import app
+from tests.account_support import seed_account
+
+
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    # On entry too: an in-memory Auth Session fake another file left installed
+    # (tests.auth_support.sign_in) would quietly stand in for PostgreSQL here.
+    app.dependency_overrides.clear()
+    yield
+    app.dependency_overrides.clear()
+
+
+def _client() -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test/api")
+
+
+async def _add_passkey(session, user_id: str, credential_id: bytes) -> str:
+    passkey_id = str(uuid.uuid4())
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=passkey_id,
+            user_id=user_id,
+            credential_id=credential_id,
+            public_key=b"public-key",
+            sign_count=0,
+            created_at=datetime.now(UTC),
+        )
+    )
+    return passkey_id
+
+
+async def _sign_in(email: str, credential_id: bytes) -> str:
+    """Sign in with a passkey and return the session cookie it set."""
+    b64 = __import__("base64").urlsafe_b64encode(credential_id).decode().rstrip("=")
+    async with _client() as c:
+        begin = await c.post("/auth/login/passkey/begin", json={"email": email})
+        assert begin.status_code == 200
+        verified = MagicMock(credential_id=credential_id, new_sign_count=1)
+        with patch("webauthn.verify_authentication_response", return_value=verified):
+            done = await c.post(
+                "/auth/login/passkey/complete",
+                json={
+                    "email": email,
+                    "credential": {
+                        "id": b64,
+                        "rawId": b64,
+                        "response": {
+                            "clientDataJSON": "dGVzdA",
+                            "authenticatorData": "dGVzdA",
+                            "signature": "dGVzdA",
+                        },
+                        "type": "public-key",
+                    },
+                },
+            )
+    assert done.status_code == 200, done.text
+    return done.cookies["access_token"]
+
+
+async def _status(path: str, cookie: str, method: str = "GET") -> int:
+    async with _client() as c:
+        c.cookies.set("access_token", cookie)
+        r = await c.request(method, path)
+    return r.status_code
+
+
+async def _member_with_two_passkeys(session, role: str = "member"):
+    email = f"ken-{uuid.uuid4().hex[:6]}@dojo.test"
+    user_id = await seed_account(session, email, role=role)
+    first = await _add_passkey(session, user_id, b"phone-" + uuid.uuid4().bytes)
+    second = await _add_passkey(session, user_id, b"laptop-" + uuid.uuid4().bytes)
+    creds = {
+        pid: (
+            await session.execute(
+                select(PasskeyCredential.credential_id).where(
+                    PasskeyCredential.id == pid
+                )
+            )
+        ).scalar_one()
+        for pid in (first, second)
+    }
+    return email, user_id, (first, creds[first]), (second, creds[second])
+
+
+async def test_signing_in_stores_only_the_hash_of_the_cookie(db_client) -> None:
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+
+    cookie = await _sign_in(email, phone)
+
+    assert await _status("/auth/me", cookie) == 200
+    hashes = (
+        (
+            await db_client.execute(
+                select(AuthSession.token_hash).where(AuthSession.account_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(hashes) == 1 and cookie not in hashes
+
+
+async def test_logout_ends_the_auth_session(db_client) -> None:
+    email, _, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    cookie = await _sign_in(email, phone)
+
+    assert await _status("/auth/logout", cookie, "POST") == 200
+
+    assert await _status("/auth/me", cookie) == 401
+
+
+async def test_removing_a_passkey_ends_only_its_auth_sessions(db_client) -> None:
+    email, _, (phone_id, phone), (_, laptop) = await _member_with_two_passkeys(
+        db_client
+    )
+    on_phone = await _sign_in(email, phone)
+    on_laptop = await _sign_in(email, laptop)
+
+    assert await _status(f"/auth/passkeys/{phone_id}", on_laptop, "DELETE") == 204
+
+    assert await _status("/auth/me", on_phone) == 401
+    assert await _status("/auth/me", on_laptop) == 200
+
+
+async def test_deleting_the_account_deletes_its_auth_sessions(db_client) -> None:
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    await _sign_in(email, phone)
+
+    await delete_account(db_client, user_id)
+
+    left = await db_client.execute(
+        select(func.count())
+        .select_from(AuthSession)
+        .where(AuthSession.account_id == user_id)
+    )
+    assert left.scalar_one() == 0
+
+
+async def test_a_role_change_bites_on_the_next_request(db_client) -> None:
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(
+        db_client, role="admin"
+    )
+    cookie = await _sign_in(email, phone)
+    assert await _status("/auth/admin/invites", cookie) == 200
+
+    await db_client.execute(
+        update(Account).where(Account.id == user_id).values(role="member")
+    )
+
+    assert await _status("/auth/admin/invites", cookie) == 403

@@ -17,9 +17,11 @@ description: Security reviewer for KendoDojoManagement. Checks OWASP top 10 issu
 - [ ] `.env` is in `.gitignore`; `.env.example` has no real values
 - [ ] Default values in code never work in production
 
-### Auth & JWT
-- [ ] JWT signature validated on every protected route
-- [ ] JWT expiry (`exp`) checked
+### Auth & sessions
+- [ ] Every protected route goes through `REQUIRE_MEMBER` / `REQUIRE_ADMIN`, which resolve the cookie to an `auth_sessions` row (ADR-0008) — never trust a cookie or token without that lookup
+- [ ] Role and active status read from the Account per request, never snapshotted into a cookie or token
+- [ ] Auth Session ids stored only as SHA-256 hashes; revocation is deleting rows
+- [ ] Recovery tokens (JWT until #486): signature and `exp` checked, Bearer header only
 - [ ] Passkey ceremonies use the `webauthn` library correctly — no hand-rolled crypto
 - [ ] No password login exists (#155) — don't add one; passkeys are the only login path
 - [ ] Recovery codes and admin recovery tokens hashed with `bcrypt` — no MD5/SHA1/plaintext

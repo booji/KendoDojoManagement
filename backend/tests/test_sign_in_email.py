@@ -19,7 +19,6 @@ from sqlalchemy import insert, select
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
-from app.auth.token import decode_token
 from app.main import app
 from tests.account_support import seed_account
 
@@ -96,10 +95,10 @@ async def test_an_admin_email_change_moves_sign_in_to_the_new_address(
 
         assert (await _sign_in(c, old)).status_code == 401
         signed_in = await _sign_in(c, new)
+        assert signed_in.status_code == 200, signed_in.text
+        me = (await c.get("/auth/me")).json()
 
-    assert signed_in.status_code == 200, signed_in.text
-    claims = decode_token(signed_in.cookies["access_token"])
-    assert (claims.sub, claims.email) == (user_id, new)
+    assert (me["sub"], me["email"]) == (user_id, new)
 
 
 async def test_an_admin_entered_email_is_stored_as_sign_in_will_look_it_up(

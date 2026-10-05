@@ -217,10 +217,10 @@ def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
 
 
 async def test_erase_as_non_admin_returns_403() -> None:
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     _override_member_repo({"member-1": _member()})
-    token = encode_token(_MEMBER_CLAIMS)
+    token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:

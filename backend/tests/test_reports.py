@@ -21,8 +21,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
-from app.auth.token import encode_token
 from app.main import app
+from tests.auth_support import sign_in
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -41,7 +41,7 @@ def _admin_override():
 
 
 def _member_token() -> str:
-    return encode_token(_MEMBER)
+    return sign_in(_MEMBER)
 
 
 # ---------------------------------------------------------------------------

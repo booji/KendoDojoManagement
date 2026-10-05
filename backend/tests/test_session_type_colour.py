@@ -180,12 +180,12 @@ async def test_put_session_type_colour_not_found(type_repo) -> None:
 
 async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     """PUT /session-types/{id} must return 403 for a non-admin user."""
-    from app.auth.token import encode_token
+    from tests.auth_support import sign_in
 
     member_claims = AccountClaims(
         sub="member-uuid", email="m@dojo.test", role="member", is_active=True
     )
-    token = encode_token(member_claims)
+    token = sign_in(member_claims)
     st = await _seed_type(type_repo, name="Kendo")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
