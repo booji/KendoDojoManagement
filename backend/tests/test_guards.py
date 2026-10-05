@@ -19,7 +19,6 @@ from fastapi import HTTPException
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_role
 from app.auth.models import AccountClaims
-from app.auth.token import encode_recovery_token
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
 _ADMIN = AccountClaims(
@@ -134,41 +133,18 @@ async def test_inactive_user_returns_401(guard) -> None:
 
 
 @pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
-async def test_recovery_token_in_the_cookie_returns_401(guard) -> None:
-    """A recovery token is a Bearer credential for passkey enrolment only; in
-    the cookie it names no Auth Session."""
-    token = encode_recovery_token("member-uuid", "member@dojo.test")
+async def test_recovery_auth_session_returns_403(guard) -> None:
+    """A recovery Auth Session may only enrol a passkey, never reach the app.
+
+    403, not 401: it is a real, live Auth Session, just not for this route.
+    """
+    repo = InMemoryAuthSessionRepository()
+    token = repo.sign_in(_MEMBER, kind="recovery")
 
     with pytest.raises(HTTPException) as exc:
-        await _invoke(guard, token)
+        await _invoke(guard, token, repo)
 
-    assert exc.value.status_code == 401
-
-
-@pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
-async def test_signed_jwt_from_before_auth_sessions_returns_401(guard) -> None:
-    """Session cookies minted before #485 were signed JWTs. Deploying signs
-    everyone out once: a still-valid one names no Auth Session."""
-    from joserfc import jwt
-    from joserfc.jwk import OctKey
-
-    from app import config
-
-    old = jwt.encode(
-        {"alg": "HS256"},
-        {
-            "sub": "admin-uuid",
-            "email": "admin@dojo.test",
-            "role": "admin",
-            "is_active": True,
-            "exp": 4102444800,
-        },
-        OctKey.import_key(config.JWT_SECRET.encode()),
-    )
-    with pytest.raises(HTTPException) as exc:
-        await _invoke(guard, old)
-
-    assert exc.value.status_code == 401
+    assert exc.value.status_code == 403
 
 
 # ---------------------------------------------------------------------------

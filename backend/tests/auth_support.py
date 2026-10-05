@@ -10,15 +10,15 @@ cleanup removes it again.
 from __future__ import annotations
 
 from app.auth.dependencies import get_auth_session_repo
-from app.auth.models import AccountClaims
+from app.auth.models import AccountClaims, AuthSessionKind
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
 
-def sign_in(claims: AccountClaims) -> str:
+def sign_in(claims: AccountClaims, *, kind: AuthSessionKind = "sign_in") -> str:
     from app.main import app
 
     override = app.dependency_overrides.get(get_auth_session_repo)
     if override is None:
         fake = InMemoryAuthSessionRepository()
         override = app.dependency_overrides[get_auth_session_repo] = lambda: fake
-    return override().sign_in(claims)
+    return override().sign_in(claims, kind=kind)

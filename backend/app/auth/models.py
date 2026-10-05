@@ -15,6 +15,11 @@ def _validate_email(v: object) -> str:
 LenientEmail = Annotated[str, BeforeValidator(_validate_email)]
 
 
+# What an Auth Session is for (#486): signing in, or a recovery token good
+# only for enrolling one passkey.
+AuthSessionKind = Literal["sign_in", "recovery"]
+
+
 class AccountClaims(BaseModel):
     sub: str  # Account id
     email: str

@@ -8,7 +8,6 @@ from app.auth.auth_sessions import resolve_auth_session
 from app.auth.db_models import Account
 from app.auth.dependencies import get_auth_session_repo
 from app.auth.models import AccountClaims
-from app.auth.token import decode_token
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 
@@ -29,10 +28,15 @@ def require_role(
         if access_token is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         claims = await resolve_auth_session(repo, access_token)
+        if claims is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        if claims.recovery_session:
+            # Good only for enrolling a passkey (#486), never the app.
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         # 401, not 403, for a deactivated Account as for a missing Auth Session:
         # it has none either way, so the SPA must route to /login rather
         # than leave the app rendered behind a "Not authorized" toast (#396).
-        if claims is None or not claims.is_active:
+        if not claims.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         # The role check stays a 403: the Auth Session is valid, this route is not.
         if role == "admin" and claims.role != "admin":
@@ -57,33 +61,27 @@ async def require_passkey_enrolment(
 ) -> Account:
     """The Account the caller may add a passkey to (#443).
 
-    Either the one their Auth Session names, or the one a recovery token
-    names: redeeming a recovery code hands the SPA that token, which it sends
-    as a Bearer header (it is never a cookie), and enrolling a new passkey is
-    the only thing it is good for. Each is accepted only where it arrives —
-    a recovery token in the cookie names no Auth Session, and only a recovery
-    token is accepted in the header — so neither can stand in for the other.
+    Either the one their Auth Session names, or the one a recovery Auth
+    Session names: redeeming a recovery code hands the SPA that token, which
+    it sends as a Bearer header (it is never a cookie), and enrolling a new
+    passkey is the only thing it is good for. Each kind is accepted only where
+    it arrives — a session in the cookie, a recovery token in the header — so
+    neither can stand in for the other.
 
-    The Account is re-read rather than trusted from the token: one deleted
-    or deactivated since the token was minted gets nothing.
+    The Account is re-read rather than trusted from the Auth Session: one
+    deleted or deactivated since gets nothing.
     """
     if authorization is not None and authorization.startswith("Bearer "):
-        try:
-            claims = decode_token(authorization.removeprefix("Bearer "))
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-        if not claims.recovery_session:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-        account_id = claims.sub
+        token, expect_recovery = authorization.removeprefix("Bearer "), True
     elif access_token is not None:
-        session_claims = await resolve_auth_session(repo, access_token)
-        if session_claims is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-        account_id = session_claims.sub
+        token, expect_recovery = access_token, False
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    claims = await resolve_auth_session(repo, token)
+    if claims is None or claims.recovery_session != expect_recovery:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    account = await uow.session.get(Account, account_id)
+    account = await uow.session.get(Account, claims.sub)
     if account is None or not account.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     return account

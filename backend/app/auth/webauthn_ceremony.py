@@ -194,8 +194,8 @@ def _decoy_user_id(identifier: str) -> str:
     in isolation.
 
     b"decoy-user-id-v1" domain-separates this derivation from any other use
-    of JWT_SECRET (token signing) so the two uses can never collide or be
-    swapped for one another.
+    of JWT_SECRET, should one ever be added again (it signed tokens until
+    #486), so the two can never collide or be swapped for one another.
 
     Truncated to 16 bytes and formatted as a UUID string to match the byte
     width py_webauthn encodes a real UUID id at -- a decoy id of a different

@@ -22,7 +22,9 @@ class AbstractAuthSessionRepository(Protocol):
 
     async def slide(self, token_hash: str, expires_at: datetime) -> None: ...
 
-    async def delete(self, token_hash: str) -> None: ...
+    async def delete(self, token_hash: str) -> bool:
+        """Whether a row was deleted."""
+        ...
 
     async def delete_expired(self, now: datetime) -> None: ...
 
@@ -39,6 +41,7 @@ class SqlAuthSessionRepository:
         result = await self._session.execute(
             select(
                 AuthSession.account_id,
+                AuthSession.kind,
                 AuthSession.created_at,
                 AuthSession.expires_at,
                 Account.role,
@@ -66,10 +69,11 @@ class SqlAuthSessionRepository:
         )
         await self._session.commit()
 
-    async def delete(self, token_hash: str) -> None:
-        await self._session.execute(
+    async def delete(self, token_hash: str) -> bool:
+        result = await self._session.execute(
             delete(AuthSession).where(AuthSession.token_hash == token_hash)
         )
+        return result.rowcount > 0
 
     async def delete_expired(self, now: datetime) -> None:
         await self._session.execute(

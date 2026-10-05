@@ -7,6 +7,7 @@ from fastapi import (
     APIRouter,
     Cookie,
     Depends,
+    Header,
     HTTPException,
     Request,
     Response,
@@ -83,7 +84,6 @@ from app.auth.session_cookie import (
     set_session_cookie,
     set_theme_cookie,
 )
-from app.auth.token import encode_recovery_token
 from app.core.request_ip import client_ip
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
@@ -169,7 +169,21 @@ async def passkey_add_complete(
     payload: PasskeyAddCompleteRequest,
     account: Annotated[Account, Depends(require_passkey_enrolment)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
+    auth_sessions: Annotated[
+        AbstractAuthSessionRepository, Depends(get_auth_session_repo)
+    ],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> PasskeyRegisterCompleteResponse:
+    if authorization is not None and authorization.startswith("Bearer "):
+        # Single use (#486): the recovery Auth Session ends with the passkey
+        # it enrols. Deleted first, so the enrolment's commit carries both,
+        # and a failed ceremony rolls the deletion back for a retry. Of two
+        # concurrent enrolments with one token, the second delete waits on
+        # the first's row lock and then finds nothing: that one is refused.
+        if not await end_auth_session(
+            auth_sessions, authorization.removeprefix("Bearer ")
+        ):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     email = await _enrolment_email(account, uow)
     return await add_passkey_complete(account, email, payload.credential, uow)
 
@@ -338,6 +352,9 @@ async def redeem_recovery_code(
     admin_token_repo: Annotated[
         AbstractAdminTokenRepository, Depends(get_admin_token_repo)
     ],
+    auth_sessions: Annotated[
+        AbstractAuthSessionRepository, Depends(get_auth_session_repo)
+    ],
 ) -> dict[str, str]:
     ip = client_ip(request)
 
@@ -360,9 +377,9 @@ async def redeem_recovery_code(
     if matched_id is not None:
         await recovery_repo.mark_used(matched_id)
         await attempt_repo.log_attempt(user.id, ip, success=True)
+        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
         await uow.commit()
         log_security_event("recovery_redeem", "success", user_id=user.id)
-        token = encode_recovery_token(user_id=user.id, email=payload.email)
         return {"access_token": token, "token_type": "bearer"}
 
     # Try admin tokens
@@ -377,9 +394,9 @@ async def redeem_recovery_code(
     if matched_admin_id is not None:
         await admin_token_repo.mark_admin_token_used(matched_admin_id)
         await attempt_repo.log_attempt(user.id, ip, success=True)
+        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
         await uow.commit()
         log_security_event("recovery_redeem", "success", user_id=user.id)
-        token = encode_recovery_token(user_id=user.id, email=payload.email)
         return {"access_token": token, "token_type": "bearer"}
 
     await attempt_repo.log_attempt(user.id, ip, success=False)

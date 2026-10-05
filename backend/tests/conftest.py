@@ -7,7 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-# Must be set before any app imports so token.py can read it
+# Must be set before any app imports: config reads it at import time, and
+# the decoy-id HMAC in webauthn_ceremony.py is keyed with it
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
 
 _DATABASE_URL = os.environ.get("DATABASE_URL", "")

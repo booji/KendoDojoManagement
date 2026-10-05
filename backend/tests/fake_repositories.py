@@ -710,13 +710,16 @@ class InMemoryAuthSessionRepository:
         claims: Any,
         *,
         passkey_id: str | None = None,
+        kind: str = "sign_in",
         now: datetime | None = None,
     ) -> str:
         """Start an Auth Session for ``claims`` and return its cookie value."""
         from app.auth.auth_sessions import new_auth_session
 
         self.seed_account(claims)
-        value, row = new_auth_session(claims.sub, passkey_id, now or datetime.now(UTC))
+        value, row = new_auth_session(
+            claims.sub, passkey_id, now or datetime.now(UTC), kind=kind
+        )
         self._store[row["token_hash"]] = row
         return value
 
@@ -741,8 +744,8 @@ class InMemoryAuthSessionRepository:
         if token_hash in self._store:
             self._store[token_hash]["expires_at"] = expires_at
 
-    async def delete(self, token_hash: str) -> None:
-        self._store.pop(token_hash, None)
+    async def delete(self, token_hash: str) -> bool:
+        return self._store.pop(token_hash, None) is not None
 
     async def delete_expired(self, now: datetime) -> None:
         self._store = {
