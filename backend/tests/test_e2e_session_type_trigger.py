@@ -11,22 +11,15 @@ the new control:
   3. Dropdown list items display session type names
 """
 
-import os
 import re
 import uuid
 
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-# Load the real JWT_SECRET from .env so tokens pass server-side validation.
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"

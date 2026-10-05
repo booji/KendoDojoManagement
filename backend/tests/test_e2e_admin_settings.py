@@ -11,20 +11,14 @@ Acceptance criteria covered here (criteria 6-9):
   9. Visiting /admin/settings as a regular member is redirected (not accessible).
 """
 
-import os
 import uuid
 
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"

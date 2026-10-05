@@ -9,28 +9,21 @@ ACs covered:
   AC5 — GET /members/{id}/attendance returns full history (admin any; member own only)
   AC6 — Member cannot access another member's attendance history (403)
 
-Auth pattern: synthetic JWT tokens injected as cookies (same as test_e2e_attendance.py).
-No real user registration required. members.user_id has no FK constraint so synthetic
-UUIDs from JWT claims can link member records without a real accounts row.
+Auth pattern: signed in through the test-login endpoint (tests.e2e_support.login_as),
+which creates a real Account and its Member; the session cookie is set on the page.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import requests
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -311,7 +304,7 @@ def test_member_can_view_own_attendance_history(page: Page) -> None:
     session = _api_create_session(admin_token, date="2299-06-06")
     session_id = session["id"]
 
-    # Create member with user_id = member_sub (FK removed, no real user needed)
+    # An Account with id member_sub, and its Member, via the test-login endpoint
     member_sub = str(uuid.uuid4())
     suffix = uuid.uuid4().hex[:8]
     member = _api_create_member_with_user_id(member_sub, f"Member AC5b {suffix}")
@@ -319,7 +312,7 @@ def test_member_can_view_own_attendance_history(page: Page) -> None:
 
     _api_mark_attended(admin_token, session_id, member_id)
 
-    # Inject member JWT — get_by_user_id(member_sub) finds this member → 200
+    # Signed in as member_sub — get_by_user_id(member_sub) finds this member → 200
     member_token = _make_token("member", sub=member_sub)
     _inject_cookie(page, member_token)
     page.goto(BASE_URL)
@@ -354,7 +347,7 @@ def test_member_cannot_view_other_member_attendance_history(page: Page) -> None:
     target_member_id = target_member["id"]
     _api_mark_attended(admin_token, session_id, target_member_id)
 
-    # Viewer has JWT but no linked member record → get_by_user_id returns None → 403
+    # The viewer's own Member (made at sign-in, #432) isn't the target → 403
     viewer_token = _make_token("member")
     _inject_cookie(page, viewer_token)
     page.goto(BASE_URL)

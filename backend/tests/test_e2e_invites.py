@@ -56,7 +56,12 @@ import requests
 from playwright.sync_api import Page, expect
 
 from app.auth.invite_service import hash_invite_token
-from tests.e2e_support import API_URL, BASE_URL, authenticate, complete_onboarding
+from tests.e2e_support import (
+    API_URL,
+    BASE_URL,
+    authenticate,
+    make_token,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -96,49 +101,10 @@ def _stub_navigator_credentials(page: Page) -> None:
     """)
 
 
-def _real_login(role: str = "admin") -> str:
-    """Create-or-get a real, DB-backed user via the test-only login endpoint
-    and return the session token.
-
-    Needed anywhere a forged-but-unbacked JWT (tests.e2e_support.make_token)
-    won't do: invites.issued_by is a foreign key to accounts.id, so minting an
-    invite as a user with no row in `accounts` fails the FK with a 500.
-    """
-    email = f"{role}-{uuid.uuid4().hex[:8]}@dojo.test"
-    resp = requests.post(
-        f"{API_URL}/auth/login/test",
-        json={"email": email, "role": role},
-        timeout=5,
-    )
-    resp.raise_for_status()
-    return resp.cookies["access_token"]
-
-
-def _login_admin_in_browser(page: Page) -> str:
-    """Real DB-backed admin login (see _real_login), with the session cookie
-    attached to the browser context and onboarding completed so RequireProfile
-    doesn't redirect away from /settings/invites."""
-    token = _real_login("admin")
-    page.context.add_cookies(
-        [
-            {
-                "name": "access_token",
-                "value": token,
-                "domain": "localhost",
-                "path": "/",
-                "httpOnly": True,
-                "sameSite": "Strict",
-            }
-        ]
-    )
-    complete_onboarding(token)
-    return token
-
-
 def _mint_invite(email: str) -> str:
     """Mint an invite via the real admin API (no browser involved). Returns
     the plaintext token."""
-    admin_token = _real_login("admin")
+    admin_token = make_token("admin")
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
         json={"email": email, "first_name": "Test", "surname": "Invitee"},
@@ -189,7 +155,7 @@ def _mark_invite_expired(token: str) -> None:
 
 
 def test_admin_invite_ui_never_displays_a_token_hash(page: Page) -> None:
-    _login_admin_in_browser(page)
+    authenticate(page)
     page.goto(f"{BASE_URL}/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
     page.fill('[data-testid="invite-first-name-input"]', "Test")
@@ -206,7 +172,7 @@ def test_admin_invite_ui_never_displays_a_token_hash(page: Page) -> None:
 
 
 def test_admin_can_issue_invite_and_sees_copyable_link_once(page: Page) -> None:
-    _login_admin_in_browser(page)
+    authenticate(page)
     page.goto(f"{BASE_URL}/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
     page.fill('[data-testid="invite-first-name-input"]', "Test")
@@ -238,7 +204,7 @@ def test_non_admin_cannot_reach_invites_settings_page(page: Page) -> None:
 
 
 def test_invite_list_shows_status_and_no_token(page: Page) -> None:
-    admin_token = _login_admin_in_browser(page)
+    admin_token = authenticate(page)
     email = f"list-{uuid.uuid4().hex[:8]}@dojo.test"
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
@@ -260,7 +226,7 @@ def test_invite_list_shows_status_and_no_token(page: Page) -> None:
 
 
 def test_admin_can_revoke_invite_from_list(page: Page) -> None:
-    admin_token = _login_admin_in_browser(page)
+    admin_token = authenticate(page)
     email = f"revoke-{uuid.uuid4().hex[:8]}@dojo.test"
     resp = requests.post(
         f"{API_URL}/auth/admin/invites",
@@ -398,7 +364,7 @@ def test_invite_landing_page_does_not_visibly_stall_for_bad_token(page: Page) ->
 
 
 def test_admin_can_issue_list_and_revoke_invite_end_to_end(page: Page) -> None:
-    _login_admin_in_browser(page)
+    authenticate(page)
     email = f"roundtrip-{uuid.uuid4().hex[:8]}@dojo.test"
 
     page.goto(f"{BASE_URL}/settings/invites")

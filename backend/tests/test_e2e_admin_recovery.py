@@ -9,21 +9,15 @@ AC5: Admin member detail view has a "Generate recovery token" button, and
 from __future__ import annotations
 
 import json
-import os
 import uuid
 
 import pytest
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -106,8 +100,8 @@ def _generate_token_for_a_registered_member(page: Page) -> str:
     """Drive the member page's generate flow; the plaintext token shown."""
     admin_token = _make_token("admin")
     complete_onboarding(admin_token)
-    # A Member who has registered: complete_onboarding makes their forged
-    # subject a real Account, so there is an Account to recover.
+    # A Member who has registered: signing in (_make_token) made their
+    # Account, so there is an Account to recover.
     member_id = complete_onboarding(_make_token("member"))["id"]
 
     _set_cookie(page, admin_token)

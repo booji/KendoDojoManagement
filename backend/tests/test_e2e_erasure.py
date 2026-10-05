@@ -1,9 +1,8 @@
 """
 Playwright browser tests for issue #229 — GDPR erasure UI.
 
-Auth pattern: synthetic JWT tokens injected as cookies (same as
-test_e2e_members.py / test_e2e_attendance_admin.py). No real user
-registration required.
+Auth pattern: signed in through the test-login endpoint (tests.e2e_support.login_as),
+which creates a real Account and its Member; the session cookie is set on the page.
 
 Acceptance criteria covered, one test each:
   1. "Delete permanently" affordance only visible when member is Archived.
@@ -13,21 +12,15 @@ Acceptance criteria covered, one test each:
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import requests
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -59,8 +52,9 @@ def _ensure_admin_profile(admin_token: str) -> None:
 
     RequireProfile (frontend App.tsx) redirects any authenticated user whose
     own member record is incomplete to /onboarding — including admins.
-    Synthetic admin tokens have no Account behind them, so tests that navigate
-    to admin-gated pages make one (with its Member) first.
+    Signing in makes the admin's Account and Member (#432) but not the name
+    and date of birth, so tests that navigate to admin-gated pages fill those
+    in first.
     """
     complete_onboarding(
         admin_token, first_name="Admin", surname="Test", dob="1980-01-01"

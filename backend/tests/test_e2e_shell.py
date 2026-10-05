@@ -2,26 +2,15 @@
 E2E tests for Issue #13 — AppShell & role-aware navigation.
 """
 
-import os
 import uuid
 
 import pytest
-from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
 
-# Load .env with override=True so os.environ reflects the real JWT_SECRET.
-# The conftest.py sets a stub secret for unit tests; e2e tests need the real
-# key from .env so tokens generated here pass server-side validation.
-# We also patch config.JWT_SECRET because it is a module-level variable that
-# may already have been cached (with the stub) if unit tests ran first.
-_dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(dotenv_path=_dotenv_path, override=False)
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
-
-from app.auth.models import AccountClaims  # noqa: E402 (after env var set)
+from app.auth.models import AccountClaims
 from tests.e2e_support import (
-    complete_onboarding,  # noqa: E402
-    login_as,  # noqa: E402
+    complete_onboarding,
+    login_as,
 )
 
 BASE_URL = "http://localhost:5173"
