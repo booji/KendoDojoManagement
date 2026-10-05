@@ -41,7 +41,6 @@ JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
 # delete the secret after claiming — which boots fine until the database is
 # restored or wiped, and then reopens the claim to whoever finds it first.
 SETUP_TOKEN: str = os.getenv("SETUP_TOKEN") or ""
-JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 # An Auth Session's idle window is JWT_EXPIRE_MINUTES (the name predates
 # ADR-0008 and is deployment surface). This is its absolute ceiling, however
@@ -171,7 +170,7 @@ CORS_ORIGINS: list[str] = (
 # Names of module-level globals in this file that MUST hold a non-blank
 # string at startup. A misconfigured deployment (unset/empty/whitespace-only)
 # must fail fast here rather than boot cleanly and fail later at first use
-# (e.g. JWT_SECRET only used to raise on first token encode). Add
+# (e.g. JWT_SECRET only used at the first passkey ceremony for an unknown email). Add
 # future required secrets to this tuple — validate_startup_config() reads
 # each by name from this module's globals at call time, so no other wiring
 # is needed.

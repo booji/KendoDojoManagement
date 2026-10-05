@@ -31,7 +31,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import Account, RecoveryAttempt, RecoveryCode
+from app.auth.db_models import Account, AuthSession, RecoveryAttempt, RecoveryCode
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
@@ -221,19 +221,12 @@ async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     assert "access_token" in body
 
 
-@pytest.mark.asyncio
-async def test_redeem_token_has_recovery_session_claim(db_client) -> None:
-    """Returned JWT must carry recovery_session: true."""
-    from joserfc import jwt
-    from joserfc.jwk import OctKey
-
-    from app import config
-
+async def _redeemed_token(db_client) -> tuple[str, str]:
+    """(Account id, recovery token) after redeeming a fresh recovery code."""
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
     plaintext = "abcd-efgh-ijkl"
     await _seed_recovery_code(db_client, user_id, plaintext)
-
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -241,92 +234,56 @@ async def test_redeem_token_has_recovery_session_claim(db_client) -> None:
             "/auth/recovery/redeem",
             json={"email": "musashi@dojo.test", "code": plaintext},
         )
-
     assert response.status_code == 200
-    token = response.json()["access_token"]
-    key = OctKey.import_key(config.JWT_SECRET.encode())
-    decoded = jwt.decode(token, key, algorithms=["HS256"])
-    assert decoded.claims.get("recovery_session") is True
+    return user_id, response.json()["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_redeem_token_is_a_recovery_auth_session(db_client) -> None:
+    """The token names an Auth Session row of kind ``recovery`` (#486)."""
+    user_id, _ = await _redeemed_token(db_client)
+
+    async with db_client.connect() as conn:
+        result = await conn.execute(
+            select(AuthSession.kind).where(AuthSession.account_id == user_id)
+        )
+        kinds = result.scalars().all()
+    assert kinds == ["recovery"]
 
 
 @pytest.mark.asyncio
 async def test_redeem_token_expires_in_15_minutes(db_client) -> None:
-    """Returned JWT must expire in approximately 15 minutes."""
-    from joserfc import jwt
-    from joserfc.jwk import OctKey
+    user_id, _ = await _redeemed_token(db_client)
 
-    from app import config
-
-    user_id = str(uuid.uuid4())
-    await _seed_user(db_client, "musashi@dojo.test", user_id)
-    plaintext = "abcd-efgh-ijkl"
-    await _seed_recovery_code(db_client, user_id, plaintext)
-
-    before = datetime.now(UTC)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": "musashi@dojo.test", "code": plaintext},
-        )
-
-    assert response.status_code == 200
-    token = response.json()["access_token"]
-    key = OctKey.import_key(config.JWT_SECRET.encode())
-    decoded = jwt.decode(token, key, algorithms=["HS256"])
-    exp = datetime.fromtimestamp(decoded.claims["exp"], tz=UTC)
-    delta = exp - before
-    assert timedelta(minutes=14) < delta < timedelta(minutes=16)
+    async with db_client.connect() as conn:
+        created_at, expires_at = (
+            await conn.execute(
+                select(AuthSession.created_at, AuthSession.expires_at).where(
+                    AuthSession.account_id == user_id
+                )
+            )
+        ).one()
+    assert expires_at - created_at == timedelta(minutes=15)
 
 
-# ── AC3 — Route guard blocks recovery JWT on regular endpoints ─────────────────
+# ── AC3 — Route guard blocks a recovery token on regular endpoints ────────────
 
 
 @pytest.mark.asyncio
-async def test_recovery_token_blocked_on_regular_guarded_route(db_client) -> None:
-    """GET /auth/me with a recovery JWT in the cookie is refused.
-
-    401 since #485: the cookie holds an Auth Session id, and a recovery token
-    names none. #486 makes recovery tokens rows, and this 403 again.
-    """
-    from app.auth.token import encode_recovery_token  # red — doesn't exist yet
-
-    user_id = str(uuid.uuid4())
-    await _seed_user(db_client, "musashi@dojo.test", user_id)
-    token = encode_recovery_token(user_id=user_id, email="musashi@dojo.test")
+@pytest.mark.parametrize("path", ["/auth/me", "/members"])
+async def test_recovery_token_blocked_on_guarded_routes(db_client, path) -> None:
+    """A recovery token is a live Auth Session, but only for enrolling a
+    passkey: on any other route it is a 403, wherever it is sent."""
+    _, token = await _redeemed_token(db_client)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test/api",
         cookies={"access_token": token},
     ) as c:
-        response = await c.get("/auth/me")
+        response = await c.get(path)
 
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_recovery_token_blocked_on_members_list(db_client) -> None:
-    """GET /members with a recovery JWT in the cookie is refused.
-
-    401 since #485: the cookie holds an Auth Session id, and a recovery token
-    names none. #486 makes recovery tokens rows, and this 403 again.
-    """
-    from app.auth.token import encode_recovery_token  # red
-
-    user_id = str(uuid.uuid4())
-    await _seed_user(db_client, "musashi@dojo.test", user_id)
-    token = encode_recovery_token(user_id=user_id, email="musashi@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test/api",
-        cookies={"access_token": token},
-    ) as c:
-        response = await c.get("/members")
-
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 # ── AC5 — Used code rejected with 401 ─────────────────────────────────────────

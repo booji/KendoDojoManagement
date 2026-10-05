@@ -14,6 +14,7 @@ import pytest
 
 from app import config
 from app.auth.auth_sessions import (
+    end_auth_session,
     hash_token,
     resolve_auth_session,
     slid_expiry,
@@ -97,6 +98,46 @@ async def test_a_request_past_halfway_slides_the_expiry() -> None:
     await resolve_auth_session(repo, token)
 
     assert (await repo.find(hash_token(token)))["expires_at"] > before
+
+
+async def test_a_recovery_auth_session_lasts_15_minutes() -> None:
+    repo = InMemoryAuthSessionRepository()
+    live = repo.sign_in(_MEMBER, kind="recovery", now=datetime.now(UTC) - _minutes(14))
+    dead = repo.sign_in(_MEMBER, kind="recovery", now=datetime.now(UTC) - _minutes(16))
+
+    assert (await resolve_auth_session(repo, live)).recovery_session is True
+    assert await resolve_auth_session(repo, dead) is None
+
+
+async def test_a_recovery_auth_session_never_slides() -> None:
+    """Past half its life, but a recovery token is short-lived on purpose."""
+    repo = InMemoryAuthSessionRepository()
+    token = repo.sign_in(_MEMBER, kind="recovery", now=datetime.now(UTC) - _minutes(10))
+    before = (await repo.find(hash_token(token)))["expires_at"]
+
+    await resolve_auth_session(repo, token)
+
+    assert (await repo.find(hash_token(token)))["expires_at"] == before
+
+
+async def test_a_recovery_token_leaves_other_auth_sessions_alone() -> None:
+    """Redeeming is not a revocation: "sign out everywhere" is that tool."""
+    repo = InMemoryAuthSessionRepository()
+    signed_in = repo.sign_in(_MEMBER)
+
+    await start_auth_session(repo, _MEMBER.sub, kind="recovery")
+
+    assert await resolve_auth_session(repo, signed_in) == _MEMBER
+
+
+async def test_an_auth_session_ends_only_once() -> None:
+    """Single use rests on this: of two concurrent enrolments with one
+    recovery token, only the first delete reports that it ended anything."""
+    repo = InMemoryAuthSessionRepository()
+    token = repo.sign_in(_MEMBER, kind="recovery")
+
+    assert await end_auth_session(repo, token) is True
+    assert await end_auth_session(repo, token) is False
 
 
 async def test_starting_an_auth_session_sweeps_expired_rows() -> None:

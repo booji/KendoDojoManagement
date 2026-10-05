@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -162,6 +163,11 @@ class AuthSession(UUIDBase):
     """
 
     __tablename__ = "auth_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('sign_in', 'recovery')", name="ck_auth_sessions_kind"
+        ),
+    )
 
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     account_id: Mapped[str] = mapped_column(
@@ -176,6 +182,11 @@ class AuthSession(UUIDBase):
         ForeignKey("passkey_credentials.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
+    )
+    # `recovery`: redeemed from a recovery code or admin recovery token, good
+    # only for enrolling one passkey (#486).
+    kind: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="sign_in"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

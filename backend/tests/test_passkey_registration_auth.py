@@ -21,7 +21,6 @@ from sqlalchemy import delete, func, insert, select, update
 
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
 from app.auth.models import AccountClaims
-from app.auth.token import encode_recovery_token
 from app.main import app
 from tests.account_support import seed_account
 from tests.auth_support import sign_in
@@ -110,9 +109,16 @@ async def test_unauthenticated_registration_cannot_add_to_an_account_with_a_pass
     assert await _passkey_count(db_client, user_id) == 1
 
 
+def _claims(user_id: str, email: str) -> AccountClaims:
+    return AccountClaims(sub=user_id, email=email, role="member", is_active=True)
+
+
 def _session_cookie(user_id: str, email: str) -> dict[str, str]:
-    claims = AccountClaims(sub=user_id, email=email, role="member", is_active=True)
-    return {"access_token": sign_in(claims)}
+    return {"access_token": sign_in(_claims(user_id, email))}
+
+
+def _recovery_token(user_id: str, email: str) -> str:
+    return sign_in(_claims(user_id, email), kind="recovery")
 
 
 async def _add_passkey(**auth) -> tuple[int, int]:
@@ -151,11 +157,22 @@ async def test_a_recovery_token_adds_a_passkey(db_client) -> None:
     recovery token, sent as a Bearer header, is what names their Account."""
     email = "lost-device@dojo.test"
     user_id = await _seed_account_with_passkey(db_client, email)
-    token = encode_recovery_token(user_id=user_id, email=email)
+    token = _recovery_token(user_id, email)
 
     statuses = await _add_passkey(headers={"Authorization": f"Bearer {token}"})
 
     assert statuses == (200, 201)
+    assert await _passkey_count(db_client, user_id) == 2
+
+
+async def test_a_recovery_token_enrols_only_one_passkey(db_client) -> None:
+    """Single use: the recovery Auth Session ends with the passkey it enrolled."""
+    email = "lost-device@dojo.test"
+    user_id = await _seed_account_with_passkey(db_client, email)
+    bearer = {"Authorization": f"Bearer {_recovery_token(user_id, email)}"}
+    assert await _add_passkey(headers=bearer) == (200, 201)
+
+    assert await _add_passkey(headers=bearer) == (401, 401)
     assert await _passkey_count(db_client, user_id) == 2
 
 
@@ -169,7 +186,7 @@ async def test_a_recovery_token_adds_a_passkey(db_client) -> None:
         ),
         pytest.param(
             lambda uid, email: {
-                "cookies": {"access_token": encode_recovery_token(uid, email)}
+                "cookies": {"access_token": _recovery_token(uid, email)}
             },
             id="recovery-token-as-cookie",
         ),
@@ -197,7 +214,7 @@ async def test_adding_a_passkey_needs_the_callers_own_session(db_client, auth) -
 async def test_a_deactivated_account_cannot_add_a_passkey(db_client) -> None:
     email = "left@dojo.test"
     user_id = await _seed_account_with_passkey(db_client, email)
-    token = encode_recovery_token(user_id=user_id, email=email)
+    token = _recovery_token(user_id, email)
     await db_client.execute(
         update(Account).where(Account.id == user_id).values(is_active=False)
     )
