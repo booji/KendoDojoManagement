@@ -6,6 +6,7 @@
 #   ./setup.sh --quadlet    # hardened: podman secrets + ~/kendo + Quadlet units
 #   ./setup.sh check [--quadlet]   # advisory preflight, any time (#413)
 #   ./setup.sh upgrade              # quick self-host: back up, pull, migrate (#414)
+#   ./setup.sh backup-key [--quadlet]  # new backup encryption key, e.g. lost or leaked (#500)
 #
 # Both modes ask the same questions and derive WEBAUTHN_RP_ID /
 # WEBAUTHN_ORIGIN / CORS_ORIGINS from one domain answer — an RP_ID typo is the
@@ -25,7 +26,9 @@ case "${1-}${2+ $2}" in
   check) action=check ;;
   'check --quadlet') action=check mode=quadlet ;;
   upgrade) action=upgrade ;;
-  *) echo "Usage: $0 [check] [--quadlet]  |  $0 upgrade" >&2; exit 2 ;;
+  backup-key) action=backup-key ;;
+  'backup-key --quadlet') action=backup-key mode=quadlet ;;
+  *) echo "Usage: $0 [check|backup-key] [--quadlet]  |  $0 upgrade" >&2; exit 2 ;;
 esac
 
 cd "$(dirname "$0")"
@@ -358,26 +361,41 @@ refresh_bundle() { # refresh_bundle PREV NEXT
   fi
 }
 
+# Run kendo-backup.sh against this stack and print what it wrote. Its output is
+# left in backup_out, and the names it was run with in backup_names, so a caller
+# can say exactly how to restore or re-run it. The Quadlet defaults are the
+# script's own; the Compose stack's are project-scoped.
+backup_out="" backup_names="" backup_script=deploy/bin/kendo-backup.sh
+run_backup() {
+  if [ "$mode" = compose ]; then
+    # The backup needs the database up; `up -d db` is a no-op when it already is.
+    podman-compose up -d db >/dev/null
+    local db
+    db=$(compose_container db)
+    # Compose volumes are project-scoped: `static_uploads` is kendodojo_static_uploads.
+    backup_names="KENDO_DB_CONTAINER=${db:-<db container>} KENDO_UPLOADS_VOLUME=${project}_static_uploads"
+    [ -n "$db" ] || { echo "No db container in the Compose project \`$project\` — run this where the stack runs." >&2; return 1; }
+    podman wait --condition=healthy "$db" >/dev/null
+  fi
+  backup_out=$(env $backup_names bash "$backup_script") || return 1
+  printf '%s\n' "$backup_out" | sed 's/^/  /'
+}
+
 run_upgrade() {
   [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
   command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
 
-  # The backup needs the database up; `up -d db` is a no-op when it already is.
-  podman-compose up -d db >/dev/null
-  local db
-  db=$(compose_container db)
-  [ -n "$db" ] || { echo "No db container in the Compose project \`$project\` — run this where the stack runs." >&2; exit 1; }
-  podman wait --condition=healthy "$db" >/dev/null
-
+  [ -z "${KENDO_BACKUP_RECIPIENT:-}$(backup_recipient)" ] ||
+    echo "Backups are encrypted: have your backup key ready in case you need to roll back."
   echo "Backing up before anything changes:"
-  # Compose volumes are project-scoped: `static_uploads` is kendodojo_static_uploads.
-  local names="KENDO_DB_CONTAINER=$db KENDO_UPLOADS_VOLUME=${project}_static_uploads" out
-  out=$(env $names bash deploy/bin/kendo-backup.sh) ||
-    { echo "Backup failed — nothing was upgraded." >&2; exit 1; }
-  printf '%s\n' "$out" | sed 's/^/  /'
-  local dump uploads
-  dump=$(printf '%s\n' "$out" | sed -n 's/^written: \(.*\.dump\) (.*/\1/p')
-  uploads=$(printf '%s\n' "$out" | sed -n 's/^written: \(.*\.tar\) (.*/\1/p')
+  run_backup || { echo "Backup failed — nothing was upgraded." >&2; exit 1; }
+  local names=$backup_names out=$backup_out
+  local dump uploads key_note=""
+  # .age when a backup key is set (#500): only its private half, which is not
+  # on this host, can restore it.
+  dump=$(printf '%s\n' "$out" | sed -En 's/^written: (.*\.dump(\.age)?) \(.*/\1/p')
+  uploads=$(printf '%s\n' "$out" | sed -En 's/^written: (.*\.tar(\.age)?) \(.*/\1/p')
+  case $dump in *.age) key_note="  (encrypted: kendo-restore.sh says how to use your backup key)" ;; esac
 
   # The digest of what is running now, before a pull moves the tag: restoring
   # the data is only half a rollback, as the new image would migrate it again.
@@ -416,6 +434,7 @@ run_upgrade() {
       echo "To roll back to the backup taken above:"
       echo "  podman-compose stop app"
       echo "  $names bash deploy/bin/kendo-restore.sh $(printf '%q' "$dump")${uploads:+ $(printf '%q' "$uploads")}"
+      [ -z "$key_note" ] || echo "$key_note"
       [ -z "$previous" ] || echo "  then set KENDO_IMAGE=$previous in .env — the image that was running —"
       echo "  and: podman-compose up -d --force-recreate"
     } >&2
@@ -426,9 +445,134 @@ run_upgrade() {
   echo "The backup stays in $(dirname "$dump"). \`./setup.sh check\` confirms the rest."
 }
 
+# ------------------------------------------------------------- backup key -----
+# Backups are encrypted with age to a key's public half (#500), kept in
+# backup_config for kendo-backup.sh. The private half is shown here once and
+# never written down on this host, so a stolen host cannot read a single
+# backup — and a lost key cannot restore one, hence the confirmation.
+backup_config=${KENDO_BACKUP_CONFIG:-$HOME/.config/kendo/backup.env}
+backup_dir=${KENDO_BACKUP_DIR:-$HOME/backups}
+mode_flag=$([ "$mode" = quadlet ] && echo " --quadlet" || true)
+age_install="sudo dnf install -y age   # or: sudo apt install -y age"
+
+backup_recipient() { [ ! -f "$backup_config" ] || env_value "$backup_config" KENDO_BACKUP_RECIPIENT; }
+
+# The secret only ever passes through pipes and variables: no heredoc or
+# here-string near it, as bash may back those with a temporary file.
+new_backup_key() {
+  local secret public typed
+  secret=$(age-keygen 2>/dev/null | grep '^AGE-SECRET-KEY-') || { echo "age-keygen failed — no key was set." >&2; return 1; }
+  public=$(printf '%s\n' "$secret" | age-keygen -y) || { echo "age-keygen failed — no key was set." >&2; return 1; }
+  echo
+  echo "Backup key — shown once. Save it now in a password manager, or print it."
+  echo "Without it, no backup made from now on can be restored. Name it with"
+  echo "today's date, e.g. \"Kendo backup key (from $(date +%F))\"."
+  echo
+  printf '  %s\n' "$secret"
+  echo
+  while :; do
+    printf 'Once it is saved, type its last 6 characters (blank to give up): '
+    # Not `ask`: running out of input here means give up, not abort the run.
+    IFS= read -r typed || [ -n "$typed" ] || { echo; typed=""; }
+    [ -n "$typed" ] || { echo "  No key was set."; return 1; }
+    [ "${typed^^}" = "${secret: -6}" ] && break
+    echo "  That does not match the end of the key above — check what you saved."
+  done
+  mkdir -p "$(dirname "$backup_config")"
+  touch "$backup_config"
+  if grep -q '^KENDO_BACKUP_RECIPIENT=' "$backup_config"; then
+    sed -i "s|^KENDO_BACKUP_RECIPIENT=.*|KENDO_BACKUP_RECIPIENT=$public|" "$backup_config"
+  else
+    printf 'KENDO_BACKUP_RECIPIENT=%s\n' "$public" >> "$backup_config"
+  fi
+  echo "  wrote the public half to $backup_config"
+}
+
+# A lost key, a leaked one, a volunteer handing over: a new key, then a backup
+# under it straight away, so the old key stops mattering for anything new.
+run_backup_key() {
+  command -v age-keygen >/dev/null || { echo "\`age\` is not installed: $age_install" >&2; exit 1; }
+  # Everything that could stop the backup below is checked before a key exists:
+  # a key set with no backup under it is one more thing to explain.
+  [ -z "${KENDO_BACKUP_RECIPIENT:-}" ] || {
+    echo "KENDO_BACKUP_RECIPIENT is set in this environment and wins over $backup_config, so a new key would never be used. Unset it — and remove it from kendo-backup.service if it is there — then re-run." >&2
+    exit 1
+  }
+  if [ "$mode" = compose ]; then
+    [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
+    command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
+  else
+    [ -f deploy/bin/kendo-backup.sh ] || { echo "Missing deploy/bin/kendo-backup.sh — run this from the deployment bundle or a checkout." >&2; exit 1; }
+  fi
+  # Taken before the new backup exists, so it is exactly what the old key made.
+  local older
+  mapfile -t older < <(ls -1d "$backup_dir"/kendo-*.dump* "$backup_dir"/kendo-uploads-*.tar* 2>/dev/null)
+  new_backup_key || exit 1
+
+  if [ "$mode" = quadlet ]; then
+    # The timer runs the installed copy, and one from before #500 ignores the key.
+    install -m 755 deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh "$HOME/.local/bin/"
+    echo "  refreshed kendo-backup.sh and kendo-restore.sh in $HOME/.local/bin, which the timer runs"
+    backup_script=$HOME/.local/bin/kendo-backup.sh
+  fi
+
+  echo
+  echo "Backing up under the new key:"
+  if ! run_backup; then
+    {
+      echo "The new key is set, but that backup failed. Nothing older was touched."
+      echo "Once the database is up, take one:"
+      echo "  ${backup_names:+$backup_names }bash $backup_script"
+    } >&2
+    exit 1
+  fi
+  [ ${#older[@]} -gt 0 ] || return 0
+
+  echo
+  echo "These backups predate the new key; an encrypted one opens only with the key it was made under:"
+  printf '  %s\n' "${older[@]##*/}"
+  echo "Keep them while the old key is still safe. If it leaked, delete them — and any copies elsewhere."
+  local reply=""
+  printf 'Delete them? [y/N]: '
+  IFS= read -r reply || true
+  case $reply in
+    [yY]*) rm -f -- "${older[@]}"; echo "  deleted ${#older[@]} file(s)" ;;
+    *) echo "  kept; they age out with the usual pruning" ;;
+  esac
+}
+
+# Install offers a key rather than requiring one: skipping leaves backups as
+# they were, with kendo-backup.sh warning on every run.
+offer_backup_key() {
+  echo
+  if [ -n "$(backup_recipient)" ]; then
+    echo "Backups: kept the existing backup key ($backup_config)."
+    return 0
+  fi
+  if ! command -v age-keygen >/dev/null; then
+    echo "Backups will not be encrypted: \`age\` is not installed. Install it ($age_install),"
+    echo "  then run ./setup.sh backup-key$mode_flag."
+    return 0
+  fi
+  # Only to a person at a terminal: a scripted install's stdout is a log, and a
+  # key printed there lands on disk.
+  if ! { [ -t 0 ] && [ -t 1 ]; }; then
+    echo "Backups are not encrypted yet: run ./setup.sh backup-key$mode_flag to set a key."
+    return 0
+  fi
+  local reply=""
+  printf 'Encrypt backups? You will be shown a key to save [Y/n]: '
+  IFS= read -r reply || [ -n "$reply" ] || { echo; reply=n; }
+  case $reply in
+    [nN]*) echo "  Backups stay unencrypted until you run ./setup.sh backup-key$mode_flag." ;;
+    *) new_backup_key || true ;;
+  esac
+}
+
 case $action in
   check) run_check; exit ;;
   upgrade) run_upgrade; exit ;;
+  backup-key) run_backup_key; exit ;;
 esac
 
 echo "KendoDojoManagement — $([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host") setup"
@@ -757,6 +901,7 @@ else
 fi
 
 report_prerequisites
+offer_backup_key
 
 echo
 case $tls_choice in

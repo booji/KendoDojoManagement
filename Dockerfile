@@ -15,8 +15,10 @@ COPY backend/requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 # curl belongs to this stage rather than the e2e one below: run_tests.sh gates
 # on `curl http://localhost:8000/health` before pytest (#316), and the
-# backend-only CI job (#336) runs that script against this image.
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+# backend-only CI job (#336) runs that script against this image. age is here
+# so the backup tests encrypt and decrypt for real rather than against a stub
+# (#500).
+RUN apt-get update && apt-get install -y --no-install-recommends curl age && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 FROM backend-dev-deps AS backend-e2e-deps

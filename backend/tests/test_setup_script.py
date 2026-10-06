@@ -19,6 +19,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tests.backup_support import decrypt, keypair
+
 ROOT = (
     Path(os.environ["REPO_ROOT"])
     if "REPO_ROOT" in os.environ
@@ -1096,6 +1098,26 @@ def test_a_failed_migration_prints_the_exact_restore_for_the_backup_just_taken(
     assert "KENDO_IMAGE=ghcr.io/booji/kendodojomanagement@sha256:0ld" in out.stderr
 
 
+def test_a_failed_upgrade_names_the_encrypted_backup_and_the_key_it_needs(
+    tmp_path,
+):
+    # With a backup key (#500) the artefacts end in .age; the rollback has to
+    # name them, and the operator needs the key in hand to use it.
+    _, public = keypair()
+    up = Upgrade(tmp_path)
+    config = up.home / ".config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    config.write_text(f"KENDO_BACKUP_RECIPIENT={public}\n")
+
+    out = up.run(MIGRATE_EXIT="1")
+
+    assert out.returncode == 1
+    [dump] = (up.home / "backups").glob("kendo-*.dump.age")
+    [uploads] = (up.home / "backups").glob("kendo-uploads-*.tar.age")
+    assert f"bash deploy/bin/kendo-restore.sh {dump} {uploads}" in out.stderr
+    assert "backup key" in out.stderr
+
+
 BYO_MOUNT = "      - ./deploy/certs:/etc/traefik/certs:ro\n"
 
 
@@ -1145,3 +1167,203 @@ def test_upgrade_keeps_an_edited_file_the_release_did_not_change(tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     assert compose.read_text() == edited
     assert "Deployment bundle unchanged" in out.stdout
+
+
+# ------------------------------------------------------------- backup-key ---
+# `./setup.sh backup-key` (#500): a new backup key, shown once and confirmed,
+# of which only the public half is kept. age-keygen is stubbed to hand out a
+# real key the test already knows, so the test can type the confirmation; `-y`
+# goes to the real one.
+
+KEYGEN_STUB = """#!/bin/sh
+[ "$1" = -y ] && exec "$REAL_AGE_KEYGEN" -y
+printf '# created: now\\n# public key: %s\\n%s\\n' "$KEY_PUBLIC" "$KEY_SECRET"
+"""
+
+
+def rotate(up: Upgrade, *answers: str, **env: str) -> subprocess.CompletedProcess:
+    secret, public = up.key
+    return subprocess.run(
+        ["bash", str(up.src / "setup.sh"), "backup-key"],
+        input="".join(f"{a}\n" for a in answers),
+        capture_output=True,
+        text=True,
+        cwd=up.src,
+        env={**up.env, "KEY_SECRET": secret, "KEY_PUBLIC": public, **env},
+        check=False,
+    )
+
+
+def with_keygen(up: Upgrade) -> Upgrade:
+    stub = up.log.parent / "upgrade-bin/age-keygen"
+    stub.write_text(KEYGEN_STUB)
+    stub.chmod(0o755)
+    up.env["REAL_AGE_KEYGEN"] = shutil.which("age-keygen")
+    up.key = keypair()
+    return up
+
+
+def no_file_holds(root: Path, secret: str) -> bool:
+    return not any(
+        secret.encode() in p.read_bytes() for p in root.rglob("*") if p.is_file()
+    )
+
+
+def test_backup_key_confirms_the_saved_key_then_backs_up_under_it(tmp_path):
+    up = with_keygen(Upgrade(tmp_path))
+    secret, public = up.key
+    backups = up.home / "backups"
+    backups.mkdir()
+    (backups / "kendo-20260101-000000.dump").write_text("old")
+
+    out = rotate(up, "WRONG1", secret[-6:], "y")
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.count(secret) == 1
+    assert "does not match" in out.stdout
+    config = (up.home / ".config/kendo/backup.env").read_text()
+    assert f"KENDO_BACKUP_RECIPIENT={public}" in config
+    assert no_file_holds(tmp_path, secret)
+    # A backup under the new key at once, so a lost key costs nothing more.
+    [dump] = backups.glob("kendo-*.dump.age")
+    (tmp_path / "scratch").mkdir()
+    assert decrypt(dump, secret, tmp_path / "scratch") == "PGDMP\n"
+    assert not (backups / "kendo-20260101-000000.dump").exists()
+
+
+def test_giving_up_on_the_confirmation_keeps_the_old_key(tmp_path):
+    up = with_keygen(Upgrade(tmp_path))
+    config = up.home / ".config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    config.write_text("KENDO_BACKUP_RECIPIENT=age1old\n")
+
+    out = rotate(up, "")
+
+    assert out.returncode == 1
+    assert config.read_text() == "KENDO_BACKUP_RECIPIENT=age1old\n"
+    assert not any(c.startswith("podman exec") for c in up.calls())
+
+
+def test_a_failed_backup_after_a_new_key_touches_nothing_older(tmp_path):
+    # Deleting the old backups with no new one to stand in for them would
+    # leave nothing to restore.
+    up = with_keygen(Upgrade(tmp_path))
+    secret, public = up.key
+    backups = up.home / "backups"
+    backups.mkdir()
+    (backups / "kendo-20260101-000000.dump").write_text("old")
+
+    out = rotate(up, secret[-6:], "y", BACKUP_FAILS="1")
+
+    assert out.returncode == 1
+    assert "The new key is set" in out.stderr
+    assert "bash deploy/bin/kendo-backup.sh" in out.stderr
+    assert public in (up.home / ".config/kendo/backup.env").read_text()
+    assert (backups / "kendo-20260101-000000.dump").exists()
+
+
+def test_older_backups_are_kept_unless_the_operator_says_delete(tmp_path):
+    up = with_keygen(Upgrade(tmp_path))
+    secret, _ = up.key
+    backups = up.home / "backups"
+    backups.mkdir()
+    (backups / "kendo-20260101-000000.dump").write_text("old")
+
+    out = rotate(up, secret[-6:])
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "kendo-20260101-000000.dump" in out.stdout
+    assert (backups / "kendo-20260101-000000.dump").exists()
+
+
+def test_install_offers_a_backup_key_and_a_rerun_keeps_it(tmp_path):
+    host = Host(tmp_path)
+    secret, public = keypair()
+    stub = tmp_path / "bin/age-keygen"
+    stub.write_text(KEYGEN_STUB)
+    stub.chmod(0o755)
+    host.env |= {
+        "REAL_AGE_KEYGEN": shutil.which("age-keygen"),
+        "KEY_SECRET": secret,
+        "KEY_PUBLIC": public,
+    }
+
+    # At a terminal, as an operator would be: script(1) gives setup.sh a pty.
+    command = f"bash {host.src / 'setup.sh'} --quadlet"
+    answers = ("dojo.example.com", "1", "1", "admin@example.com", "", secret[-6:])
+    out = subprocess.run(
+        ["script", "-qec", command, "/dev/null"],
+        input="".join(f"{a}\n" for a in answers),
+        capture_output=True,
+        text=True,
+        cwd=host.src,
+        env=host.env,
+        check=False,
+    )
+    assert out.returncode == 0, out.stdout
+
+    config = host.home / ".config/kendo/backup.env"
+    assert config.read_text() == f"KENDO_BACKUP_RECIPIENT={public}\n"
+    assert no_file_holds(tmp_path, secret)
+
+    again = host.run("dojo.example.com", "1", "1", "admin@example.com")
+    assert "kept the existing backup key" in again.stdout
+    assert config.read_text() == f"KENDO_BACKUP_RECIPIENT={public}\n"
+
+
+def test_a_piped_install_never_offers_a_backup_key(tmp_path):
+    # A scripted install's stdout is a log, not a person: a key printed there
+    # lands on disk, and the confirmation it waits for never comes.
+    host = Host(tmp_path)
+
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com", "", "")
+
+    assert "AGE-SECRET-KEY-" not in out.stdout
+    assert "setup.sh backup-key --quadlet" in out.stdout
+    assert not (host.home / ".config/kendo/backup.env").exists()
+
+
+def test_backup_key_refuses_while_the_environment_pins_a_recipient(tmp_path):
+    # A recipient in the environment wins over backup.env, so the "new" key
+    # would never be used — not by the backup taken now, nor any after it.
+    up = with_keygen(Upgrade(tmp_path))
+    secret, _ = up.key
+
+    out = rotate(up, secret[-6:], KENDO_BACKUP_RECIPIENT="age1pinned")
+
+    assert out.returncode == 1
+    assert "KENDO_BACKUP_RECIPIENT" in out.stderr
+    assert secret not in out.stdout
+    assert not (up.home / ".config/kendo/backup.env").exists()
+
+
+def test_quadlet_backup_key_refreshes_the_script_the_timer_runs(tmp_path):
+    # The timer runs ~/.local/bin/kendo-backup.sh, copied at install: a copy
+    # from before #500 would ignore the key and go on writing plaintext.
+    host = Host(tmp_path)
+    secret, public = keypair()
+    stub = tmp_path / "bin/age-keygen"
+    stub.write_text(KEYGEN_STUB)
+    stub.chmod(0o755)
+    installed = host.home / ".local/bin/kendo-backup.sh"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("#!/bin/sh\necho old copy\n")
+
+    out = subprocess.run(
+        ["bash", str(host.src / "setup.sh"), "backup-key", "--quadlet"],
+        input=f"{secret[-6:]}\n",
+        capture_output=True,
+        text=True,
+        cwd=host.src,
+        env={
+            **host.env,
+            "REAL_AGE_KEYGEN": shutil.which("age-keygen"),
+            "KEY_SECRET": secret,
+            "KEY_PUBLIC": public,
+        },
+        check=False,
+    )
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert installed.read_text() == (ROOT / "deploy/bin/kendo-backup.sh").read_text()
+    assert list((host.home / "backups").glob("kendo-*.dump.age"))

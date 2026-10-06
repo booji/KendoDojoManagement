@@ -27,6 +27,19 @@ uploads="${2:-}"
 [[ -f "$dump" ]] || { echo "no such file: $dump" >&2; exit 1; }
 [[ -z "$uploads" || -f "$uploads" ]] || { echo "no such file: $uploads" >&2; exit 1; }
 
+# An encrypted backup (#500) is refused here, before the database is dropped:
+# fed ciphertext, pg_restore fails only after the DROP. Decrypting in place is
+# #501; until then, decrypt by hand with the backup key and pass the result.
+for f in "$dump" "$uploads"; do
+  if [[ "$f" == *.age ]]; then
+    {
+      echo "$f is encrypted. Decrypt it with your backup key, then pass the decrypted file:"
+      echo "  age -d -i <file holding your backup key> -o ${f%.age} $f"
+    } >&2
+    exit 1
+  fi
+done
+
 read -rp "This will DROP and recreate the 'kendo' database. Type 'yes' to proceed: " ok
 [[ "$ok" == "yes" ]] || { echo "aborted"; exit 1; }
 
