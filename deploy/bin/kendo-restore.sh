@@ -8,6 +8,11 @@
 # volume. Pass the tarball sharing the dump's timestamp; omit it to restore the
 # database alone.
 #
+# Encrypted backups (.dump.age / .tar.age) are restored the same way: it asks
+# for the backup key — the AGE-SECRET-KEY-1... line saved when the key was set
+# — and checks it before anything is changed. Paste it at the prompt; it is
+# not echoed and is never written to disk.
+#
 # DESTRUCTIVE: drops and recreates the `kendo` database. Stop the app first so
 # nothing writes mid-restore:
 #     systemctl --user stop kendo-app
@@ -27,18 +32,41 @@ uploads="${2:-}"
 [[ -f "$dump" ]] || { echo "no such file: $dump" >&2; exit 1; }
 [[ -z "$uploads" || -f "$uploads" ]] || { echo "no such file: $uploads" >&2; exit 1; }
 
-# An encrypted backup (#500) is refused here, before the database is dropped:
-# fed ciphertext, pg_restore fails only after the DROP. Decrypting in place is
-# #501; until then, decrypt by hand with the backup key and pass the result.
-for f in "$dump" "$uploads"; do
-  if [[ "$f" == *.age ]]; then
-    {
-      echo "$f is encrypted. Decrypt it with your backup key, then pass the decrypted file:"
-      echo "  age -d -i <file holding your backup key> -o ${f%.age} $f"
-    } >&2
-    exit 1
+# Encrypted backups (#500): the private half of the backup key is pasted here —
+# it is never kept on this host — and passes only through pipes, as does what
+# it decrypts. Each encrypted input is decrypted in full to /dev/null first, so
+# a wrong key or a truncated file stops the restore before the DROP below
+# rather than after it.
+key=""
+
+# The contents of an artefact, decrypted on the way out when it is a .age.
+open_artefact() {
+  if [[ "$1" == *.age ]]; then
+    age -d -i <(printf '%s\n' "$key") "$1"
+  else
+    cat -- "$1"
   fi
-done
+}
+
+if [[ "$dump" == *.age || "$uploads" == *.age ]]; then
+  command -v age >/dev/null ||
+    { echo "This backup is encrypted, and \`age\` is not installed: sudo dnf install -y age   # or: sudo apt install -y age" >&2; exit 1; }
+  read -rsp "Backup is encrypted. Paste your backup key (AGE-SECRET-KEY-1...): " key
+  echo
+  for f in "$dump" "$uploads"; do
+    [[ "$f" == *.age ]] || continue
+    if ! err=$(open_artefact "$f" 2>&1 >/dev/null); then
+      case $err in
+        *"no identity matched"*)
+          echo "This backup was encrypted with a different key. If keys were rotated, use the key that was active on the date in the filename." >&2 ;;
+        *"malformed secret key"*|*"no secret keys"*|*"unknown identity type"*)
+          echo "That is not a valid backup key: paste the whole AGE-SECRET-KEY-1... line, exactly as saved. Nothing was changed." >&2 ;;
+        *) echo "Could not decrypt $f — nothing was changed: $err" >&2 ;;
+      esac
+      exit 1
+    fi
+  done
+fi
 
 read -rp "This will DROP and recreate the 'kendo' database. Type 'yes' to proceed: " ok
 [[ "$ok" == "yes" ]] || { echo "aborted"; exit 1; }
@@ -51,8 +79,12 @@ DROP DATABASE IF EXISTS kendo;
 CREATE DATABASE kendo OWNER kendo;
 SQL
 
-# Restore the custom-format dump.
-podman exec -i "$DB" pg_restore -U kendo -d kendo --no-owner <"$dump"
+# Restore the custom-format dump. Past the DROP, a failure leaves the database
+# empty or partial, and the operator has to hear that, not just an exit code.
+if ! open_artefact "$dump" | podman exec -i "$DB" pg_restore -U kendo -d kendo --no-owner; then
+  echo "Restore failed after the database was dropped: it is now empty or partial. Fix the error above and re-run this restore from $dump." >&2
+  exit 1
+fi
 
 echo "restore complete from: $dump"
 
@@ -60,6 +92,6 @@ echo "restore complete from: $dump"
 # unpacks over the existing contents; it does not empty the volume first, so any
 # file added since the backup survives.
 if [[ -n "$uploads" ]]; then
-  podman volume import "$UPLOADS_VOLUME" "$uploads"
+  open_artefact "$uploads" | podman volume import "$UPLOADS_VOLUME" -
   echo "uploads restored from: $uploads"
 fi
