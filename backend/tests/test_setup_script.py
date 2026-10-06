@@ -19,7 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from tests.backup_support import decrypt, keypair
+from tests.backup_support import decrypt, keypair, no_file_holds
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -1201,12 +1201,6 @@ def with_keygen(up: Upgrade) -> Upgrade:
     up.env["REAL_AGE_KEYGEN"] = shutil.which("age-keygen")
     up.key = keypair()
     return up
-
-
-def no_file_holds(root: Path, secret: str) -> bool:
-    return not any(
-        secret.encode() in p.read_bytes() for p in root.rglob("*") if p.is_file()
-    )
 
 
 def test_backup_key_confirms_the_saved_key_then_backs_up_under_it(tmp_path):

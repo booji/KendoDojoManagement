@@ -29,3 +29,9 @@ def decrypt(path: Path, secret: str, tmp_path: Path) -> str:
         text=True,
         check=True,
     ).stdout
+
+
+def no_file_holds(root: Path, secret: str) -> bool:
+    return not any(
+        secret.encode() in p.read_bytes() for p in root.rglob("*") if p.is_file()
+    )

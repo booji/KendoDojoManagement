@@ -395,7 +395,7 @@ run_upgrade() {
   # on this host, can restore it.
   dump=$(printf '%s\n' "$out" | sed -En 's/^written: (.*\.dump(\.age)?) \(.*/\1/p')
   uploads=$(printf '%s\n' "$out" | sed -En 's/^written: (.*\.tar(\.age)?) \(.*/\1/p')
-  case $dump in *.age) key_note="  (encrypted: kendo-restore.sh says how to use your backup key)" ;; esac
+  case $dump in *.age) key_note="  (encrypted: kendo-restore.sh asks for your backup key)" ;; esac
 
   # The digest of what is running now, before a pull moves the tag: restoring
   # the data is only half a rollback, as the new image would migrate it again.
