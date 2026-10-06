@@ -22,6 +22,15 @@
 #     KENDO_BACKUP_RECIPIENT=age1...
 # to KENDO_BACKUP_CONFIG (default: ~/.config/kendo/backup.env). A value already
 # in the environment wins over the file.
+#
+# Off-site (#502), optional, in the same file:
+#     KENDO_BACKUP_REMOTE=gdrive:kendo-backups   an rclone remote and path
+#     KENDO_BACKUP_REMOTE_KEEP_DAYS=90           expire copies older than this
+# Each run's encrypted artefacts are copied there with rclone (the kendo user's
+# own rclone.conf). Plaintext never leaves the host. An off-site failure keeps
+# the local backup and exits 75 (EX_TEMPFAIL), which setup.sh carries on past —
+# a code nothing in the local half exits with by accident. systemd shows it as
+# a failed run like any other, which is the point: someone should look.
 set -euo pipefail
 
 BACKUP_DIR="${KENDO_BACKUP_DIR:-$HOME/backups}"
@@ -29,11 +38,18 @@ KEEP="${KENDO_BACKUP_KEEP:-14}"
 DB="${KENDO_DB_CONTAINER:-kendo-db}"
 UPLOADS_VOLUME="${KENDO_UPLOADS_VOLUME:-kendo-app-uploads}"
 CONFIG="${KENDO_BACKUP_CONFIG:-$HOME/.config/kendo/backup.env}"
-# Read, not sourced: the file holds settings, never code.
-if [[ -z "${KENDO_BACKUP_RECIPIENT:-}" && -f "$CONFIG" ]]; then
-  KENDO_BACKUP_RECIPIENT=$(sed -n 's/^KENDO_BACKUP_RECIPIENT=//p' "$CONFIG" | tail -1)
-fi
-RECIPIENT="${KENDO_BACKUP_RECIPIENT:-}"
+# setting NAME — the environment's value, else the config file's. Read, not
+# sourced: the file holds settings, never code.
+setting() {
+  local value="${!1:-}"
+  if [[ -z "$value" && -f "$CONFIG" ]]; then
+    value=$(sed -n "s/^$1=//p" "$CONFIG" | tail -1)
+  fi
+  printf '%s' "$value"
+}
+RECIPIENT=$(setting KENDO_BACKUP_RECIPIENT)
+REMOTE=$(setting KENDO_BACKUP_REMOTE)
+KEEP_DAYS=$(setting KENDO_BACKUP_REMOTE_KEEP_DAYS)
 # No key still backs up: no backup is worse than a plaintext one, and failing
 # would break the nightly timer of every install from before #500. A key with
 # no `age` to use it fails, though — that operator asked for encryption.
@@ -55,6 +71,8 @@ out="$BACKUP_DIR/kendo-${stamp}.dump"
 # target before the command runs, so without this a failure would leave a
 # truncated file that prune counts — and restore trusts — as a real backup.
 # With a key, encryption happens in the pipe: plaintext never touches disk.
+# Each artefact this run wrote is kept in `written`, for the off-site copy.
+written=()
 write_artefact() {
   local dest="$1"
   shift
@@ -65,6 +83,7 @@ write_artefact() {
     "$@" >"$dest.partial"
   fi
   mv -- "$dest.partial" "$dest"
+  written+=("$dest")
   echo "written: $dest ($(du -h "$dest" | cut -f1))"
 }
 
@@ -94,5 +113,43 @@ prune() {
 prune 'kendo-*.dump*' "dump(s)"
 prune 'kendo-uploads-*.tar*' "uploads archive(s)"
 
-# REMINDER: copy $BACKUP_DIR off-box (rsync/restic/object storage). A backup on
-# the same host does not survive host loss. (Out of scope to implement here.)
+# A backup on this host does not survive losing it.
+if [[ -z "$REMOTE" ]]; then
+  echo "no off-site copy configured"
+  exit 0
+fi
+if [[ -z "$RECIPIENT" ]]; then
+  echo "off-site copy skipped: these backups are not encrypted, and plaintext never leaves this host. Set a backup key with \`setup.sh backup-key\`." >&2
+  exit 0
+fi
+offsite_failed() {
+  echo "Off-site copy to $REMOTE failed: $1 The local backup is complete and kept." >&2
+  exit 75
+}
+# An rclone remote is name:path. A local path would pass, and `delete` below
+# would then expire this host's own backups; a leading - would be a flag.
+remote_form='^[[:alnum:]_.+@][[:alnum:]_.+@ -]*:'
+[[ "$REMOTE" =~ $remote_form ]] ||
+  offsite_failed "KENDO_BACKUP_REMOTE must be an rclone remote and path, like gdrive:kendo-backups — not '$REMOTE'."
+command -v rclone >/dev/null ||
+  offsite_failed "KENDO_BACKUP_REMOTE is set, but rclone is not installed (sudo dnf install -y rclone   # or: sudo apt install -y rclone)."
+# It reaches --min-age, so only a plain number: 0 would expire this run's own
+# copies, and anything else is a typo that must not widen a deletion.
+[[ -z "$KEEP_DAYS" || "$KEEP_DAYS" =~ ^[1-9][0-9]*$ ]] ||
+  offsite_failed "KENDO_BACKUP_REMOTE_KEEP_DAYS must be a whole number of days, 1 or more — not '$KEEP_DAYS'."
+
+# Only this run's artefacts: `rclone copy` of the directory would also carry
+# any plaintext backup from before the key was set.
+for f in "${written[@]}"; do
+  rclone copy "$f" "$REMOTE" ||
+    offsite_failed "rclone could not copy $f; check the remote with: rclone lsf $REMOTE."
+done
+echo "copied to $REMOTE"
+# `rclone copy` never deletes, so copies expire here, or by the provider's
+# lifecycle rule when the credentials cannot delete (leave KEEP_DAYS unset).
+# Only our own encrypted artefacts, and nothing below the remote's top level:
+# it may be a folder shared with other things.
+if [[ -n "$KEEP_DAYS" ]]; then
+  rclone delete "$REMOTE" --min-age "${KEEP_DAYS}d" --max-depth 1 --include 'kendo-*.age' ||
+    offsite_failed "rclone could not expire copies older than $KEEP_DAYS days; check the remote with: rclone lsf $REMOTE."
+fi

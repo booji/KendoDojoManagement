@@ -274,6 +274,34 @@ run_check() {
     warn "No \`ss\` here to tell whether 80/443 are already taken."
   fi
 
+  # Backups (#500, #502): warnings only — an unencrypted, on-host backup is
+  # still a backup, and better than none.
+  local remote newest days
+  if [ -n "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then ok "Backups are encrypted"
+  else warn "Backups are not encrypted — set a key with ./setup.sh backup-key$mode_flag"; fi
+  # The same conditions kendo-backup.sh copies under: never an ok it would not earn.
+  remote=$(backup_setting KENDO_BACKUP_REMOTE)
+  if [ -z "$remote" ]; then
+    warn "No off-site copy configured — backups do not survive losing this host (docs/install/backups.md)"
+  elif [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then
+    warn "Off-site copy to $remote is skipped: backups are not encrypted, and plaintext never leaves this host"
+  elif ! command -v rclone >/dev/null; then
+    warn "KENDO_BACKUP_REMOTE is set, but rclone is not installed — nothing is copied off-site"
+  else
+    ok "Backups are copied off-site to $remote"
+  fi
+  # Only Quadlet has a nightly timer; on Compose a backup is taken by upgrade.
+  if [ "$mode" = quadlet ]; then
+    newest=$(ls -1t "$backup_dir"/kendo-*.dump "$backup_dir"/kendo-*.dump.age 2>/dev/null | head -1 || true)
+    if [ -z "$newest" ]; then
+      warn "No backups in $backup_dir yet — is kendo-backup.timer enabled? (docs/install/backups.md)"
+    else
+      days=$(( ($(date +%s) - $(stat -c %Y "$newest")) / 86400 ))
+      if [ "$days" -ge 2 ]; then warn "The newest backup is $days days old — check: systemctl --user status kendo-backup"
+      else ok "Newest backup: ${newest##*/}"; fi
+    fi
+  fi
+
   detect_prerequisites
   for item in "${outstanding[@]}"; do fail "$item"; done
   for item in "${unverified[@]}"; do warn "$item"; done
@@ -377,7 +405,11 @@ run_backup() {
     [ -n "$db" ] || { echo "No db container in the Compose project \`$project\` — run this where the stack runs." >&2; return 1; }
     podman wait --condition=healthy "$db" >/dev/null
   fi
-  backup_out=$(env $backup_names bash "$backup_script") || return 1
+  # Exit 75 is kendo-backup.sh's "the local backup is complete, the off-site
+  # copy failed" (#502): already reported on stderr, and not a reason to stop.
+  local status=0
+  backup_out=$(env $backup_names bash "$backup_script") || status=$?
+  [ "$status" = 0 ] || [ "$status" = 75 ] || return 1
   printf '%s\n' "$backup_out" | sed 's/^/  /'
 }
 
@@ -385,7 +417,7 @@ run_upgrade() {
   [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
   command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
 
-  [ -z "${KENDO_BACKUP_RECIPIENT:-}$(backup_recipient)" ] ||
+  [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ] ||
     echo "Backups are encrypted: have your backup key ready in case you need to roll back."
   echo "Backing up before anything changes:"
   run_backup || { echo "Backup failed — nothing was upgraded." >&2; exit 1; }
@@ -455,7 +487,13 @@ backup_dir=${KENDO_BACKUP_DIR:-$HOME/backups}
 mode_flag=$([ "$mode" = quadlet ] && echo " --quadlet" || true)
 age_install="sudo dnf install -y age   # or: sudo apt install -y age"
 
-backup_recipient() { [ ! -f "$backup_config" ] || env_value "$backup_config" KENDO_BACKUP_RECIPIENT; }
+# backup_setting NAME — the environment's value, else backup_config's, as
+# kendo-backup.sh reads it.
+backup_setting() {
+  if [ -n "${!1:-}" ]; then printf '%s' "${!1}"
+  elif [ -f "$backup_config" ]; then env_value "$backup_config" "$1"
+  fi
+}
 
 # The secret only ever passes through pipes and variables: no heredoc or
 # here-string near it, as bash may back those with a temporary file.
@@ -516,6 +554,15 @@ run_backup_key() {
     backup_script=$HOME/.local/bin/kendo-backup.sh
   fi
 
+  # Before the backup, which can fail: this holds either way.
+  local remote
+  remote=$(backup_setting KENDO_BACKUP_REMOTE)
+  if [ -n "$remote" ]; then
+    echo
+    echo "Copies at $remote made under the old key are untouched. If it leaked, delete"
+    echo "  them there, and empty the provider's trash or recycle bin too."
+  fi
+
   echo
   echo "Backing up under the new key:"
   if ! run_backup; then
@@ -545,7 +592,7 @@ run_backup_key() {
 # they were, with kendo-backup.sh warning on every run.
 offer_backup_key() {
   echo
-  if [ -n "$(backup_recipient)" ]; then
+  if [ -n "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then
     echo "Backups: kept the existing backup key ($backup_config)."
     return 0
   fi
