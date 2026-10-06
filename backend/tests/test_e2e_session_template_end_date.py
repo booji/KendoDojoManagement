@@ -33,6 +33,7 @@ from app.auth.models import AccountClaims
 from tests.e2e_support import (
     complete_onboarding,
     login_as,
+    select_segment_type,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -71,13 +72,6 @@ def _get_type_id(page: Page, token: str) -> str:
     resp = page.request.get(f"{API_URL}/session-types", headers=_api_headers(token))
     assert resp.status == 200
     return resp.json()[0]["id"]
-
-
-def _select_segment_type(page: Page, segment, type_name: str) -> None:
-    """Tick a session type for a segment via its SessionTypeMultiSelect popover."""
-    segment.get_by_role("button", name="Session types").click()
-    page.get_by_role("checkbox", name=type_name, exact=True).click()
-    page.keyboard.press("Escape")
 
 
 def _create_template_via_api(
@@ -148,7 +142,7 @@ def test_create_dialog_rejects_end_date_beyond_six_month_cap(page: Page) -> None
 
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    _select_segment_type(page, seg1, type_name)
+    select_segment_type(page, seg1, type_name)
 
     dialog.get_by_text("Mon", exact=True).click()
 
@@ -194,7 +188,7 @@ def test_creating_template_populates_sessions_for_full_date_range(
 
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    _select_segment_type(page, seg1, type_name)
+    select_segment_type(page, seg1, type_name)
 
     dialog.get_by_text("Mon", exact=True).click()
 

@@ -17,6 +17,7 @@ from app.auth.models import AccountClaims
 from tests.e2e_support import (
     complete_onboarding,
     login_as,
+    select_segment_type,
 )
 
 BASE_URL = "http://localhost:5173"
@@ -68,21 +69,6 @@ def _get_types(page: Page, admin_token: str, count: int = 2) -> list[dict]:
 
 def _get_type_ids(page: Page, admin_token: str, count: int = 2) -> list[str]:
     return [t["id"] for t in _get_types(page, admin_token, count)]
-
-
-def _select_segment_type(page: Page, segment, type_name: str) -> None:
-    """Tick a session type for a segment via its SessionTypeMultiSelect popover.
-
-    Each segment embeds a ``SessionTypeMultiSelect`` (trigger button labelled
-    "Session types"; options are checkboxes labelled by type name). The popover
-    content is portalled to the document body, so the checkbox is located at the
-    page level. Escape closes the popover so it doesn't overlay other controls.
-    """
-    segment.get_by_role("button", name="Session types").click()
-    # exact match: one type name can be a prefix of another ("Kihon" vs
-    # "Kihon-Keiko-Ho"), and accessible-name matching is substring by default.
-    page.get_by_role("checkbox", name=type_name, exact=True).click()
-    page.keyboard.press("Escape")
 
 
 def _create_session(page: Page, admin_token: str, payload: dict) -> dict:
@@ -144,7 +130,7 @@ def test_create_dialog_supports_adding_and_removing_multiple_segments(
     dialog.get_by_label("Date").fill("2099-11-01")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    _select_segment_type(page, seg1, type_name)
+    select_segment_type(page, seg1, type_name)
     dialog.get_by_role("button", name="Create Session").click()
 
     # Dialog closes; session appears in the list. Assert the visible desktop-table
@@ -183,8 +169,8 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     dialog.get_by_label("Date").fill("2099-11-02")
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
-    _select_segment_type(page, seg1, type_a)
-    _select_segment_type(page, seg1, type_b)
+    select_segment_type(page, seg1, type_a)
+    select_segment_type(page, seg1, type_b)
     # Both selected types appear as badges in the segment's trigger
     trigger1 = seg1.get_by_role("button", name="Session types")
     expect(trigger1).to_contain_text(type_a)
@@ -194,7 +180,7 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
     dialog.get_by_role("button", name="Add segment").click()
     seg2 = dialog.locator('[aria-label="Segment 2"]')
     # New segment starts with no type; select type_a (same as segment 1)
-    _select_segment_type(page, seg2, type_a)
+    select_segment_type(page, seg2, type_a)
 
     # 4. Set both segments to the same start_time (overlapping) — no validation error
     seg2.get_by_label("Start time").fill("19:00")
@@ -336,7 +322,7 @@ def test_single_segment_create_is_a_simple_one_screen_flow(
     seg1 = dialog.locator('[aria-label="Segment 1"]')
     seg1.get_by_label("Start time").fill("19:00")
     seg1.get_by_label("Duration (minutes)").fill("90")
-    _select_segment_type(page, seg1, type_name)
+    select_segment_type(page, seg1, type_name)
 
     # 4. Submit button is enabled (not disabled before submission)
     submit_btn = dialog.get_by_role("button", name="Create Session")
@@ -412,7 +398,7 @@ def test_edit_form_replaces_full_segment_set_on_save(
     expect(new_seg).to_be_visible()
     new_seg.get_by_label("Start time").fill("20:00")
     # Select type_b for the new segment (different from the seeded segment 2's type)
-    _select_segment_type(page, new_seg, type_b_name)
+    select_segment_type(page, new_seg, type_b_name)
 
     # 6. Save
     page.get_by_role("button", name="Save").click()

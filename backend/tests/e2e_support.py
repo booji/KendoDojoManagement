@@ -7,6 +7,9 @@ synthetic users, so without seeding that profile every navigation lands on
 ``/onboarding`` and every assertion fails identically ("Locator expected to be
 visible"). This module centralises the seeding so a test can put its acting user
 past the gate in one call. See issue #221.
+
+It also holds UI-driving helpers shared across e2e files, such as
+``select_segment_type``.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import uuid
 from typing import Any
 
 import requests
-from playwright.sync_api import Page
+from playwright.sync_api import Locator, Page, expect
 
 from app.auth.models import AccountClaims
 
@@ -123,3 +126,21 @@ def authenticate(
     if with_profile:
         complete_onboarding(token, **profile)
     return token
+
+
+def select_segment_type(page: Page, segment: Locator, type_name: str) -> None:
+    """Tick a session type for ``segment`` via its SessionTypeMultiSelect popover.
+
+    The popover is portalled to ``<body>``, so its checkbox is located at page
+    level. Escape closes the popover, which then animates out before it
+    unmounts; waiting for the checkbox to go means the next call's page-level
+    locator can never also match options in this still-closing popover
+    (strict-mode violation, #493).
+    """
+    segment.get_by_role("button", name="Session types").click()
+    # exact match: one type name can be a prefix of another ("Kihon" vs
+    # "Kihon-Keiko-Ho"), and accessible-name matching is substring by default.
+    option = page.get_by_role("checkbox", name=type_name, exact=True)
+    option.click()
+    page.keyboard.press("Escape")
+    expect(option).to_be_hidden()
