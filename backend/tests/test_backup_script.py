@@ -32,6 +32,11 @@ case "$*" in
 esac
 """
 
+RCLONE_STUB = """#!/bin/sh
+echo "$*" >> "$RCLONE_CALLS"
+[ -z "$RCLONE_FAILS" ]
+"""
+
 
 class Backup:
     """A fake HOME and a stubbed podman around the real backup and restore
@@ -48,23 +53,29 @@ class Backup:
         self.calls = tmp_path / "podman.log"
         stubs = tmp_path / "bin"
         stubs.mkdir()
-        (stubs / "podman").write_text(PODMAN_STUB)
-        (stubs / "podman").chmod(0o755)
+        for name, body in (("podman", PODMAN_STUB), ("rclone", RCLONE_STUB)):
+            (stubs / name).write_text(body)
+            (stubs / name).chmod(0o755)
+        self.rclone_log = tmp_path / "rclone.log"
         self.env = {
             **os.environ,
             "HOME": str(self.home),
             "PATH": f"{stubs}:{os.environ['PATH']}",
             "PODMAN_CALLS": str(self.calls),
             "RESTORED": str(self.restored),
+            "RCLONE_CALLS": str(self.rclone_log),
             # Inside tmp_path, so a key or plaintext spilled to a temp file is
             # caught by the scans below.
             "TMPDIR": str(self.tmp),
         }
 
-    def configure(self, recipient: str) -> None:
+    def configure(self, recipient: str | None = None, **settings: str) -> None:
+        """Write backup.env: the recipient, plus any KENDO_BACKUP_<NAME>=."""
+        lines = [f"KENDO_BACKUP_RECIPIENT={recipient}"] if recipient else []
+        lines += [f"KENDO_BACKUP_{k.upper()}={v}" for k, v in settings.items()]
         config = self.home / ".config/kendo/backup.env"
-        config.parent.mkdir(parents=True)
-        config.write_text(f"KENDO_BACKUP_RECIPIENT={recipient}\n")
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text("".join(f"{line}\n" for line in lines))
 
     def run(self, **env: str) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -84,6 +95,11 @@ class Backup:
             text=True,
             env=self.env,
             check=False,
+        )
+
+    def rclone_calls(self) -> list[str]:
+        return (
+            self.rclone_log.read_text().splitlines() if self.rclone_log.exists() else []
         )
 
     def podman_calls(self) -> list[str]:
@@ -271,3 +287,129 @@ def test_a_restore_failing_after_the_drop_says_the_database_is_now_partial(
     assert out.returncode == 1
     assert "dropped" in out.stderr
     assert str(dump) in out.stderr
+
+
+# ---------------------------------------------------------------- off-site ---
+# An optional rclone copy of each run's encrypted artefacts (#502). rclone is
+# stubbed: what is asserted is what it was asked to copy and delete.
+
+
+def test_without_a_remote_the_backup_says_so_and_calls_no_rclone(tmp_path):
+    backup = Backup(tmp_path)
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    assert "no off-site copy configured" in out.stdout
+    assert backup.rclone_calls() == []
+
+
+def test_a_remote_gets_only_this_runs_encrypted_artefacts(tmp_path):
+    # Older plaintext backups from before the key share the directory; they
+    # must never leave the host.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.dir.mkdir()
+    (backup.dir / "kendo-20260101-000000.dump").write_text("plaintext")
+    backup.configure(public, remote="gdrive:kendo-backups")
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    [dump] = backup.dir.glob("kendo-2026*-*.dump.age")
+    [uploads] = backup.dir.glob("kendo-uploads-*.tar.age")
+    assert backup.rclone_calls() == [
+        f"copy {dump} gdrive:kendo-backups",
+        f"copy {uploads} gdrive:kendo-backups",
+    ]
+
+
+def test_a_remote_without_a_key_uploads_nothing_and_says_why(tmp_path):
+    backup = Backup(tmp_path)
+    backup.configure(remote="gdrive:kendo-backups")
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    assert backup.rclone_calls() == []
+    assert "off-site copy skipped" in out.stderr
+    assert list(backup.dir.glob("kendo-*.dump"))
+
+
+def test_keep_days_expires_only_old_kendo_artefacts_on_the_remote(tmp_path):
+    # The remote may be a shared folder: nothing but our own encrypted
+    # artefacts, and nothing below it, is ever deleted.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups", remote_keep_days="90")
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    calls = backup.rclone_calls()
+    assert calls[-1] == (
+        "delete gdrive:kendo-backups --min-age 90d --max-depth 1"
+        " --include kendo-*.age"
+    )
+    assert [c.split()[0] for c in calls] == ["copy", "copy", "delete"]
+
+
+def test_a_failed_upload_keeps_the_local_backup_and_exits_75(tmp_path):
+    # 75 (EX_TEMPFAIL), not 1: the backup itself is complete, and setup.sh tells
+    # the two apart. A code nothing in the local half can exit with by accident.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups")
+
+    out = backup.run(RCLONE_FAILS="1")
+
+    assert out.returncode == 75
+    assert "gdrive:kendo-backups" in out.stderr
+    assert "local backup" in out.stderr
+    assert list(backup.dir.glob("kendo-*.dump.age"))
+    assert list(backup.dir.glob("kendo-uploads-*.tar.age"))
+
+
+def test_a_remote_with_no_rclone_installed_names_the_setting(tmp_path):
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups")
+    (tmp_path / "bin/rclone").unlink()
+
+    out = backup.run()
+
+    assert out.returncode == 75
+    assert "KENDO_BACKUP_REMOTE" in out.stderr
+    assert "rclone" in out.stderr
+    assert list(backup.dir.glob("kendo-*.dump.age"))
+
+
+def test_keep_days_that_is_not_a_number_deletes_nothing(tmp_path):
+    # It reaches `rclone delete --min-age`; a typo there must not become a
+    # wider deletion than the operator meant.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(
+        public, remote="gdrive:kendo-backups", remote_keep_days="90 --dry-run=false"
+    )
+
+    out = backup.run()
+
+    assert out.returncode == 75
+    assert "KENDO_BACKUP_REMOTE_KEEP_DAYS" in out.stderr
+    assert not any(c.startswith("delete") for c in backup.rclone_calls())
+
+
+def test_a_remote_that_is_not_an_rclone_remote_is_refused(tmp_path):
+    # A local path would pass to rclone and have `delete` expire this host's
+    # own backups; a leading - would be read as a flag.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote=str(backup.dir), remote_keep_days="1")
+
+    out = backup.run()
+
+    assert out.returncode == 75
+    assert "KENDO_BACKUP_REMOTE" in out.stderr
+    assert backup.rclone_calls() == []
+    assert list(backup.dir.glob("kendo-*.dump.age"))
