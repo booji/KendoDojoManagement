@@ -7,6 +7,8 @@
 | Restart app | `systemctl --user restart kendo-app` |
 | **Upgrade** — the full procedure is [Upgrading](../install/upgrading.md#hardened-deployment-quadlet) | `podman pull ghcr.io/booji/kendodojomanagement:1 && systemctl --user restart kendo-migrate kendo-app` |
 | Stop all | `systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db` |
+| Back up now | `systemctl --user start kendo-backup.service` |
+| New backup key — see [Backups](../install/backups.md#lost-or-leaked-key) | `./setup.sh backup-key --quadlet` (from the deployment bundle) |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
 > The pin is the `Image=` line in the two Quadlet units, and the documented
