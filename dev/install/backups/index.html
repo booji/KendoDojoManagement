@@ -1779,7 +1779,7 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>list-timers<span 
 systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-backup.service
 ls<span class="w"> </span>-lh<span class="w"> </span>~/backups
 </code></pre></div>
-<p><code>./setup.sh check --quadlet</code> warns when backups are not encrypted, when nothing is copied off-site, and when the newest backup is two or more days old.</p>
+<p><code>./setup.sh check --quadlet</code> warns when backups are not encrypted, when an off-site copy is not set up or would be refused, when the newest backup is two or more days old, and when the last run failed — including a failed off-site copy, which leaves the local backup fresh.</p>
 <h2 id="the-backup-key">The backup key<a class="headerlink" href="#the-backup-key" title="Permanent link">&para;</a></h2>
 <p>Backups hold every Member's personal data, including under-18 and safeguarding data, so they are encrypted with <a href="https://github.com/FiloSottile/age"><code>age</code></a>. Install offers to set a key; to set one later, or replace one, run from the deployment bundle:</p>
 <div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>age<span class="w">   </span><span class="c1"># or: sudo apt install -y age</span>
@@ -1831,11 +1831,11 @@ rm<span class="w"> </span>key.txt
 <div class="highlight"><pre><span></span><code><span class="nv">KENDO_BACKUP_REMOTE</span><span class="o">=</span>gdrive:kendo-backups
 <span class="nv">KENDO_BACKUP_REMOTE_KEEP_DAYS</span><span class="o">=</span><span class="m">90</span>
 </code></pre></div>
-<p>The file is read line by line, not run as a script: write each value bare, with no quotes and no comment on the same line.</p>
 <ul>
-<li>Only that run's <code>.age</code> files are copied. <strong>Plaintext never leaves the host:</strong> with no backup key, the copy is skipped and the log says why.</li>
+<li>Encrypted (<code>.age</code>) files from the last 7 days that the remote does not have yet are copied, so a copy that failed one night goes up with the next. <strong>Plaintext never leaves the host:</strong> with no backup key, the copy is skipped and the log says why, and plaintext backups from before the key are never copied.</li>
 <li><code>KENDO_BACKUP_REMOTE_KEEP_DAYS</code> deletes <code>kendo-*.age</code> files older than that many days, in that folder only. About 90 is a good value: it also limits how long an erased Member's data survives in backups. Leave it unset if the credential cannot delete (see below).</li>
 <li>If the copy fails, the local backup is kept, the run shows as failed in <code>systemctl --user status kendo-backup</code>, and <code>./setup.sh upgrade</code> carries on regardless.</li>
+<li>Each rclone call is stopped after an hour, so a stalled upload cannot block the next night's backup. On a slow link, raise it with <code>KENDO_BACKUP_REMOTE_TIMEOUT=2h</code> (or <code>30m</code>, <code>90s</code>).</li>
 </ul>
 <p>rclone runs as <code>kendo</code>, with <code>kendo</code>'s own config. Install it and add a remote from a <code>machinectl</code> shell:</p>
 <div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>rclone<span class="w">   </span><span class="c1"># or: sudo apt install -y rclone</span>
