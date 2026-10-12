@@ -44,9 +44,11 @@ if [ "$mode" = quadlet ]; then
             deploy/quadlet/kendo-db-data.volume
             deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh)
 else
-  required=(.env.example "$selfhost/traefik.yml.example" "$selfhost/dynamic/kendo.yml.example")
+  required=(.env.example "$selfhost/traefik.yml.example" "$selfhost/dynamic/kendo.yml.example"
+            deploy/bin/kendo-backup.sh)
 fi
-[ "$action" = setup ] || required=()
+# Every action reads backup.env through kendo-backup.sh (backup_setting).
+[ "$action" = setup ] || required=(deploy/bin/kendo-backup.sh)
 for f in "${required[@]}"; do
   [ -f "$f" ] || { echo "Missing $f — run this from the deployment bundle or a checkout." >&2; exit 1; }
 done
@@ -276,20 +278,16 @@ run_check() {
 
   # Backups (#500, #502): warnings only — an unencrypted, on-host backup is
   # still a backup, and better than none.
-  local remote newest days
-  if [ -n "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then ok "Backups are encrypted"
-  else warn "Backups are not encrypted — set a key with ./setup.sh backup-key$mode_flag"; fi
-  # The same conditions kendo-backup.sh copies under: never an ok it would not earn.
-  remote=$(backup_setting KENDO_BACKUP_REMOTE)
-  if [ -z "$remote" ]; then
-    warn "No off-site copy configured — backups do not survive losing this host (docs/install/backups.md)"
-  elif [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then
-    warn "Off-site copy to $remote is skipped: backups are not encrypted, and plaintext never leaves this host"
-  elif ! command -v rclone >/dev/null; then
-    warn "KENDO_BACKUP_REMOTE is set, but rclone is not installed — nothing is copied off-site"
-  else
-    ok "Backups are copied off-site to $remote"
-  fi
+  local offsite newest days
+  if [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ]; then
+    warn "Backups are not encrypted — set a key with ./setup.sh backup-key$mode_flag"
+  elif ! command -v age >/dev/null; then
+    warn "A backup key is set, but \`age\` is not installed — every backup fails until it is: $age_install"
+  else ok "Backups are encrypted"; fi
+  # Asked of kendo-backup.sh, the code that decides it every night, so the two
+  # rules cannot drift. It reads backup.env; a setting given only through
+  # Environment= in kendo-backup.service is not seen here.
+  if offsite=$(bash "$backup_script" --check-offsite); then ok "$offsite"; else warn "$offsite"; fi
   # Only Quadlet has a nightly timer; on Compose a backup is taken by upgrade.
   if [ "$mode" = quadlet ]; then
     newest=$(ls -1t "$backup_dir"/kendo-*.dump "$backup_dir"/kendo-*.dump.age 2>/dev/null | head -1 || true)
@@ -299,6 +297,15 @@ run_check() {
       days=$(( ($(date +%s) - $(stat -c %Y "$newest")) / 86400 ))
       if [ "$days" -ge 2 ]; then warn "The newest backup is $days days old — check: systemctl --user status kendo-backup"
       else ok "Newest backup: ${newest##*/}"; fi
+    fi
+    # A fresh dump says nothing about the remote: a copy that fails every
+    # night (an expired rclone token, say) shows only as a failed unit.
+    if command -v systemctl >/dev/null && systemctl --user is-failed --quiet kendo-backup.service 2>/dev/null; then
+      if [ "$(systemctl --user show -P ExecMainStatus kendo-backup.service 2>/dev/null)" = 75 ]; then
+        warn "The last backup could not be copied off-site — check: journalctl --user -u kendo-backup"
+      else
+        warn "The last backup run failed — check: systemctl --user status kendo-backup"
+      fi
     fi
   fi
 
@@ -487,13 +494,10 @@ backup_dir=${KENDO_BACKUP_DIR:-$HOME/backups}
 mode_flag=$([ "$mode" = quadlet ] && echo " --quadlet" || true)
 age_install="sudo dnf install -y age   # or: sudo apt install -y age"
 
-# backup_setting NAME — the environment's value, else backup_config's, as
-# kendo-backup.sh reads it.
-backup_setting() {
-  if [ -n "${!1:-}" ]; then printf '%s' "${!1}"
-  elif [ -f "$backup_config" ]; then env_value "$backup_config" "$1"
-  fi
-}
+# backup_setting NAME — the environment's value, else backup_config's. Asked
+# of kendo-backup.sh itself, so quotes or a comment in the file mean the same
+# here as to the backup.
+backup_setting() { bash "$backup_script" --setting "$1"; }
 
 # The secret only ever passes through pipes and variables: no heredoc or
 # here-string near it, as bash may back those with a temporary file.
@@ -543,8 +547,9 @@ run_backup_key() {
     [ -f deploy/bin/kendo-backup.sh ] || { echo "Missing deploy/bin/kendo-backup.sh — run this from the deployment bundle or a checkout." >&2; exit 1; }
   fi
   # Taken before the new backup exists, so it is exactly what the old key made.
-  local older
+  local older old_key
   mapfile -t older < <(ls -1d "$backup_dir"/kendo-*.dump* "$backup_dir"/kendo-uploads-*.tar* 2>/dev/null)
+  old_key=$(backup_setting KENDO_BACKUP_RECIPIENT)
   new_backup_key || exit 1
 
   if [ "$mode" = quadlet ]; then
@@ -554,10 +559,11 @@ run_backup_key() {
     backup_script=$HOME/.local/bin/kendo-backup.sh
   fi
 
-  # Before the backup, which can fail: this holds either way.
+  # Before the backup, which can fail: this holds either way. With no old key,
+  # backups were plaintext and never left the host, so nothing is off-site.
   local remote
   remote=$(backup_setting KENDO_BACKUP_REMOTE)
-  if [ -n "$remote" ]; then
+  if [ -n "$remote" ] && [ -n "$old_key" ]; then
     echo
     echo "Copies at $remote made under the old key are untouched. If it leaked, delete"
     echo "  them there, and empty the provider's trash or recycle bin too."

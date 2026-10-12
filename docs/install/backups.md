@@ -23,7 +23,7 @@ systemctl --user start kendo-backup.service
 ls -lh ~/backups
 ```
 
-`./setup.sh check --quadlet` warns when backups are not encrypted, when nothing is copied off-site, and when the newest backup is two or more days old.
+`./setup.sh check --quadlet` warns when backups are not encrypted, when an off-site copy is not set up or would be refused, when the newest backup is two or more days old, and when the last run failed — including a failed off-site copy, which leaves the local backup fresh.
 
 ## The backup key
 
@@ -101,11 +101,10 @@ KENDO_BACKUP_REMOTE=gdrive:kendo-backups
 KENDO_BACKUP_REMOTE_KEEP_DAYS=90
 ```
 
-The file is read line by line, not run as a script: write each value bare, with no quotes and no comment on the same line.
-
-- Only that run's `.age` files are copied. **Plaintext never leaves the host:** with no backup key, the copy is skipped and the log says why.
+- Encrypted (`.age`) files from the last 7 days that the remote does not have yet are copied, so a copy that failed one night goes up with the next. **Plaintext never leaves the host:** with no backup key, the copy is skipped and the log says why, and plaintext backups from before the key are never copied.
 - `KENDO_BACKUP_REMOTE_KEEP_DAYS` deletes `kendo-*.age` files older than that many days, in that folder only. About 90 is a good value: it also limits how long an erased Member's data survives in backups. Leave it unset if the credential cannot delete (see below).
 - If the copy fails, the local backup is kept, the run shows as failed in `systemctl --user status kendo-backup`, and `./setup.sh upgrade` carries on regardless.
+- Each rclone call is stopped after an hour, so a stalled upload cannot block the next night's backup. On a slow link, raise it with `KENDO_BACKUP_REMOTE_TIMEOUT=2h` (or `30m`, `90s`).
 
 rclone runs as `kendo`, with `kendo`'s own config. Install it and add a remote from a `machinectl` shell:
 
