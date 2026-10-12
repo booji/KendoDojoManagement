@@ -1422,6 +1422,14 @@
 <td><code>systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db</code></td>
 </tr>
 <tr>
+<td>Back up now</td>
+<td><code>systemctl --user start kendo-backup.service</code></td>
+</tr>
+<tr>
+<td>New backup key — see <a href="../../install/backups/#lost-or-leaked-key">Backups</a></td>
+<td><code>./setup.sh backup-key --quadlet</code> (from the deployment bundle)</td>
+</tr>
+<tr>
 <td>Break-glass recovery</td>
 <td><code>podman exec kendo-app python -m app.cli create-recovery-token &lt;email&gt;</code></td>
 </tr>

@@ -1546,6 +1546,9 @@ recreated. Merge the two, re-run <code>./setup.sh upgrade</code>, and it carries
 digest of the image that was running, to pin back to. Restoring the data alone
 is only half a rollback, because the new image would migrate it straight back
 up.</p>
+<p>If your backups are encrypted, have the backup key to hand before you start:
+a rollback restores the backup just taken, and <code>kendo-restore.sh</code> asks for the
+key. <code>setup.sh upgrade</code> reminds you. See <a href="../backups/#the-backup-key">Backups</a>.</p>
 <p>Some migrations check your data before changing the schema, and stop if they
 find rows only you can decide about — for example an account that belongs to no
 member, or a member whose email differs from the account that signs in as them
