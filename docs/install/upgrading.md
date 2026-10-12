@@ -75,6 +75,9 @@ cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
 systemctl --user daemon-reload
 
+# Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.
+install -m 755 deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh ~/.local/bin/
+
 # Traefik dynamic config — keep your Host() rule, take the rest. Traefik
 # watches this directory, so no restart is needed once the file lands.
 diff deploy/traefik/dynamic/kendo.yml ~/kendo/traefik/dynamic/kendo.yml

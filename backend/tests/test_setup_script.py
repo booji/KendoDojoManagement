@@ -41,6 +41,8 @@ def bundle(tmp_path: Path) -> Path:
     for example in (ROOT / SELFHOST / "dynamic").glob("*.example"):
         shutil.copy(example, home / SELFHOST / "dynamic")
     (home / "deploy" / "sysctl-99-kendo-rootless-ports.conf").touch()
+    # setup.sh reads backup.env through kendo-backup.sh, in every mode.
+    shutil.copytree(ROOT / "deploy/bin", home / "deploy/bin")
     return home
 
 
@@ -341,7 +343,7 @@ class Host:
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
-        for sub in ("quadlet", "env", "bin"):
+        for sub in ("quadlet", "env"):
             shutil.copytree(ROOT / "deploy" / sub, self.src / "deploy" / sub)
         (self.src / "deploy/traefik/dynamic").mkdir()
         shutil.copy(ROOT / "deploy/traefik/traefik.yml", self.src / "deploy/traefik")
@@ -971,7 +973,7 @@ class Upgrade:
         self.prev = bundle(tmp_path / "prev")
         self.new = bundle(tmp_path / "next")
         for home in (self.src, self.prev, self.new):
-            for sub in ("bin", "quadlet"):
+            for sub in ("quadlet",):
                 shutil.copytree(ROOT / "deploy" / sub, home / "deploy" / sub)
             shutil.copy(ROOT / "docker-compose.yml", home)
         stubs = tmp_path / "upgrade-bin"
@@ -1389,7 +1391,10 @@ def test_backup_key_says_off_site_copies_are_cleared_by_hand(tmp_path):
     secret, _ = up.key
     config = up.home / ".config/kendo/backup.env"
     config.parent.mkdir(parents=True)
-    config.write_text("KENDO_BACKUP_REMOTE=gdrive:kendo\n")
+    _, old_key = keypair()
+    config.write_text(
+        f"KENDO_BACKUP_RECIPIENT={old_key}\nKENDO_BACKUP_REMOTE=gdrive:kendo\n"
+    )
 
     out = rotate(up, secret[-6:])
 
@@ -1417,7 +1422,7 @@ def test_check_warns_about_unencrypted_backups_and_no_off_site_copy(tmp_path):
     # A remote with no key uploads nothing: plaintext never leaves the host.
     config.write_text("KENDO_BACKUP_REMOTE=gdrive:kendo\n")
     no_key = check(home, env)
-    assert "ok    Backups are copied off-site" not in no_key.stdout
+    assert "ok    Off-site copy configured" not in no_key.stdout
     assert "warn  Off-site copy to gdrive:kendo is skipped" in no_key.stdout
 
     _, public = keypair()
@@ -1434,7 +1439,7 @@ def test_check_warns_about_unencrypted_backups_and_no_off_site_copy(tmp_path):
     assert "warn  Backups" not in configured.stdout
     assert "warn  No off-site" not in configured.stdout
     assert "ok    Backups are encrypted" in configured.stdout
-    assert "ok    Backups are copied off-site to gdrive:kendo" in configured.stdout
+    assert "ok    Off-site copy configured: gdrive:kendo" in configured.stdout
 
 
 def test_check_quadlet_warns_while_the_nightly_backup_is_missing_or_stale(tmp_path):
@@ -1463,9 +1468,111 @@ def test_backup_key_says_so_even_when_the_backup_under_it_fails(tmp_path):
     secret, _ = up.key
     config = up.home / ".config/kendo/backup.env"
     config.parent.mkdir(parents=True)
-    config.write_text("KENDO_BACKUP_REMOTE=gdrive:kendo\n")
+    _, old_key = keypair()
+    config.write_text(
+        f"KENDO_BACKUP_RECIPIENT={old_key}\nKENDO_BACKUP_REMOTE=gdrive:kendo\n"
+    )
 
     out = rotate(up, secret[-6:], BACKUP_FAILS="1")
 
     assert out.returncode == 1
     assert "Copies at gdrive:kendo" in out.stdout
+
+
+def test_check_reads_backup_env_the_way_the_backup_does(tmp_path):
+    # One reading of the file: a quoted, commented value means to check what
+    # it means to kendo-backup.sh.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    _, public = keypair()
+    config = tmp_path / "home/.config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        f'KENDO_BACKUP_RECIPIENT="{public}"\n'
+        "KENDO_BACKUP_REMOTE='gdrive:kendo'   # the club Drive\n"
+    )
+
+    out = check(home, host_env(tmp_path, rclone="exit 0"))
+
+    assert "  ok    Off-site copy configured: gdrive:kendo" in (
+        out.stdout.splitlines()
+    ), out.stdout
+
+
+def test_check_never_passes_an_off_site_setting_the_backup_would_refuse(tmp_path):
+    # check asks kendo-backup.sh, so the two cannot drift: anything that makes
+    # the nightly run exit 75 is a warning here, never an ok.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    _, public = keypair()
+    config = tmp_path / "home/.config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    env = host_env(tmp_path, rclone="exit 0")
+
+    for setting, named in (
+        ("KENDO_BACKUP_REMOTE=/mnt/nas:backups", "KENDO_BACKUP_REMOTE"),
+        (
+            "KENDO_BACKUP_REMOTE=gdrive:kendo\nKENDO_BACKUP_REMOTE_KEEP_DAYS=0",
+            "KENDO_BACKUP_REMOTE_KEEP_DAYS",
+        ),
+    ):
+        config.write_text(f"KENDO_BACKUP_RECIPIENT={public}\n{setting}\n")
+
+        out = check(home, env)
+
+        assert (
+            "off-site"
+            not in "".join(
+                line for line in out.stdout.splitlines() if " ok " in line
+            ).lower()
+        ), out.stdout
+        assert any(
+            line.startswith("  warn") and named in line
+            for line in out.stdout.splitlines()
+        ), out.stdout
+
+
+def test_check_quadlet_reports_a_failed_last_backup_run(tmp_path):
+    # A fresh local dump says nothing about the remote: an expired rclone token
+    # fails every night's copy (exit 75) while the dump keeps getting newer.
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    (host.home / "backups/kendo-20260101-000000.dump.age").write_text("x")
+
+    def last_run(failed: bool, status: int) -> str:
+        return check(
+            host.src,
+            host_env(
+                tmp_path,
+                systemctl=f"""case "$*" in
+  *is-failed*) exit {0 if failed else 1} ;;
+  *ExecMainStatus*) echo {status} ;;
+esac""",
+            ),
+            "--quadlet",
+        ).stdout
+
+    offsite = last_run(failed=True, status=75)
+    assert "warn  The last backup could not be copied off-site" in offsite, offsite
+
+    local = last_run(failed=True, status=1)
+    assert "warn  The last backup run failed" in local, local
+
+    healthy = last_run(failed=False, status=0)
+    assert "last backup" not in healthy.lower(), healthy
+
+
+def test_a_first_backup_key_mentions_no_old_copies_off_site(tmp_path):
+    # Before any key, backups were plaintext and never left the host, so
+    # there is nothing off-site to clear.
+    up = with_keygen(Upgrade(tmp_path))
+    secret, _ = up.key
+    config = up.home / ".config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    config.write_text("KENDO_BACKUP_REMOTE=gdrive:kendo\n")
+
+    out = rotate(up, secret[-6:])
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Copies at" not in out.stdout
+    assert "trash" not in out.stdout

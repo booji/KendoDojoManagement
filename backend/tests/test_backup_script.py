@@ -11,7 +11,10 @@ is real.
 
 import os
 import subprocess
+import time
 from pathlib import Path
+
+import pytest
 
 from tests.backup_support import decrypt, keypair, no_file_holds
 
@@ -34,6 +37,7 @@ esac
 
 RCLONE_STUB = """#!/bin/sh
 echo "$*" >> "$RCLONE_CALLS"
+[ -z "$RCLONE_HANGS" ] || exec sleep 60
 [ -z "$RCLONE_FAILS" ]
 """
 
@@ -300,28 +304,48 @@ def test_without_a_remote_the_backup_says_so_and_calls_no_rclone(tmp_path):
     out = backup.run()
 
     assert out.returncode == 0, out.stderr
-    assert "no off-site copy configured" in out.stdout
+    assert "No off-site copy configured" in out.stdout
     assert backup.rclone_calls() == []
 
 
-def test_a_remote_gets_only_this_runs_encrypted_artefacts(tmp_path):
-    # Older plaintext backups from before the key share the directory; they
-    # must never leave the host.
+def test_a_remote_gets_every_recent_encrypted_artefact_and_never_plaintext(
+    tmp_path,
+):
+    # The whole directory, filtered: a copy that failed last night goes up
+    # with tonight's (rclone skips what the remote already has), while older
+    # plaintext backups from before the key never match the filter.
     _, public = keypair()
     backup = Backup(tmp_path)
     backup.dir.mkdir()
     (backup.dir / "kendo-20260101-000000.dump").write_text("plaintext")
     backup.configure(public, remote="gdrive:kendo-backups")
+    week_ago = time.time() - 8 * 86400
+    os.utime(backup.home / ".config/kendo/backup.env", (week_ago, week_ago))
 
     out = backup.run()
 
     assert out.returncode == 0, out.stderr
-    [dump] = backup.dir.glob("kendo-2026*-*.dump.age")
-    [uploads] = backup.dir.glob("kendo-uploads-*.tar.age")
     assert backup.rclone_calls() == [
-        f"copy {dump} gdrive:kendo-backups",
-        f"copy {uploads} gdrive:kendo-backups",
+        f"copy {backup.dir} gdrive:kendo-backups --max-depth 1"
+        " --include kendo-*.age --max-age 604800s"
     ]
+
+
+def test_the_catch_up_window_never_reaches_past_keep_days(tmp_path):
+    # Otherwise a copy expired on the remote is uploaded again the next night,
+    # only to be expired again.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups", remote_keep_days="3")
+    week_ago = time.time() - 8 * 86400
+    os.utime(backup.home / ".config/kendo/backup.env", (week_ago, week_ago))
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    [copy, delete] = backup.rclone_calls()
+    assert copy.endswith(" --max-age 259200s")
+    assert " --min-age 3d " in delete
 
 
 def test_a_remote_without_a_key_uploads_nothing_and_says_why(tmp_path):
@@ -332,7 +356,7 @@ def test_a_remote_without_a_key_uploads_nothing_and_says_why(tmp_path):
 
     assert out.returncode == 0, out.stderr
     assert backup.rclone_calls() == []
-    assert "off-site copy skipped" in out.stderr
+    assert "Off-site copy to gdrive:kendo-backups is skipped" in out.stderr
     assert list(backup.dir.glob("kendo-*.dump"))
 
 
@@ -351,7 +375,7 @@ def test_keep_days_expires_only_old_kendo_artefacts_on_the_remote(tmp_path):
         "delete gdrive:kendo-backups --min-age 90d --max-depth 1"
         " --include kendo-*.age"
     )
-    assert [c.split()[0] for c in calls] == ["copy", "copy", "delete"]
+    assert [c.split()[0] for c in calls] == ["copy", "delete"]
 
 
 def test_a_failed_upload_keeps_the_local_backup_and_exits_75(tmp_path):
@@ -413,3 +437,129 @@ def test_a_remote_that_is_not_an_rclone_remote_is_refused(tmp_path):
     assert "KENDO_BACKUP_REMOTE" in out.stderr
     assert backup.rclone_calls() == []
     assert list(backup.dir.glob("kendo-*.dump.age"))
+
+
+def test_backup_env_values_survive_quotes_comments_and_crlf(tmp_path):
+    # backup.env looks like a shell env file, so it gets written like one:
+    # quoted, commented, or saved on Windows. None of that is the value.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    config = backup.home / ".config/kendo/backup.env"
+    config.parent.mkdir(parents=True)
+    config.write_bytes(
+        (
+            f"KENDO_BACKUP_RECIPIENT='{public}'\r\n"
+            'KENDO_BACKUP_REMOTE="gdrive:kendo-backups"   # the club Drive\r\n'
+            "KENDO_BACKUP_REMOTE_KEEP_DAYS=90 # about three months\r\n"
+        ).encode()
+    )
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    assert list(backup.dir.glob("kendo-*.dump.age"))
+    calls = backup.rclone_calls()
+    assert all(" gdrive:kendo-backups" in c for c in calls), calls
+    assert calls[-1].startswith("delete gdrive:kendo-backups --min-age 90d ")
+
+
+def test_a_hung_remote_is_cut_off_and_reported_as_an_off_site_failure(tmp_path):
+    # A stalled upload would otherwise hold the oneshot unit "activating"
+    # forever: no next night's backup, and `setup.sh upgrade` waiting on it.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups", remote_timeout="1s")
+
+    started = time.monotonic()
+    out = backup.run(RCLONE_HANGS="1")
+
+    assert time.monotonic() - started < 30
+    assert out.returncode == 75
+    assert "did not finish within 1s" in out.stderr
+    assert list(backup.dir.glob("kendo-*.dump.age"))
+
+
+def test_a_timeout_that_is_not_a_duration_is_refused(tmp_path):
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups", remote_timeout="1 hour")
+
+    out = backup.run()
+
+    assert out.returncode == 75
+    assert "KENDO_BACKUP_REMOTE_TIMEOUT" in out.stderr
+    assert backup.rclone_calls() == []
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        "gdrive:kendo-backups",
+        "b2,hard_delete=true:kendo-bucket",
+        ":s3,provider=Cloudflare,env_auth=true:kendo-bucket",
+        "my nas:backups",
+    ],
+)
+def test_any_rclone_remote_form_is_accepted(tmp_path, remote):
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote=remote)
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    assert [c.split(" ")[0] for c in backup.rclone_calls()] == ["copy"]
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        "/mnt/nas:backups",
+        "./backups:old",
+        "-x:y",
+        ":local:/home/kendo",
+        ":alias,remote=/home/kendo/backups:",
+        '"gdrive:kendo-backups',
+    ],
+)
+def test_a_local_path_or_flag_is_never_taken_for_a_remote(tmp_path, remote):
+    # Each would reach the local disk (or rclone's flags), and the expiry
+    # would delete there.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote=remote, remote_keep_days="1")
+
+    out = backup.run()
+
+    assert out.returncode == 75, out.stderr
+    assert "KENDO_BACKUP_REMOTE" in out.stderr
+    assert backup.rclone_calls() == []
+
+
+def test_catch_up_never_reaches_back_past_the_last_change_to_backup_env(tmp_path):
+    # A new key rewrites backup.env. Copies under the old key that the
+    # operator deleted off-site after a leak must not be sent back up.
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote="gdrive:kendo-backups")
+    day_ago = time.time() - 86400
+    os.utime(backup.home / ".config/kendo/backup.env", (day_ago, day_ago))
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    [copy] = backup.rclone_calls()
+    window = int(copy.rsplit(" --max-age ", 1)[1].removesuffix("s"))
+    assert 86400 <= window < 86400 + 60
+
+
+def test_a_quoted_value_keeps_a_hash_inside_its_quotes(tmp_path):
+    _, public = keypair()
+    backup = Backup(tmp_path)
+    backup.configure(public, remote='"gdrive:Club #1"  # the club Drive')
+
+    out = backup.run()
+
+    assert out.returncode == 0, out.stderr
+    [copy] = backup.rclone_calls()
+    assert " gdrive:Club #1 --max-depth 1 " in copy
