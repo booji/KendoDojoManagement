@@ -330,8 +330,23 @@ security events are one JSON object per line:
 ```
 
 `timestamp` (UTC, ISO 8601), `event_type` and `result` are always there.
-`user_id`, `ip_address` and `detail` appear when they apply. To see only these
-lines:
+`user_id`, `ip_address` and `detail` appear when they apply; every event raised
+while serving a request carries the client's `ip_address`.
+
+Admin writes and exports are logged too, with the Admin as `user_id`:
+
+| `event_type` | When | `detail` |
+|---|---|---|
+| `member_created` | an Admin adds a Member | `member_id` |
+| `member_updated` | an Admin edits a Member, including changing their status (deactivation, archiving) | `member_id`, `changed_fields` |
+| `member_erased` | an Admin erases a Member | `member_id` |
+| `dojo_settings_updated` | an Admin changes dojo settings, or uploads a logo or login background | `changed_fields` |
+| `report_exported` | an Admin downloads a CSV report | `report`, and `date_from` / `date_to` for attendance |
+
+`changed_fields` lists field names only. The values, old or new, are never
+logged. Reading data is not logged.
+
+To see only these lines:
 
 ```bash
 journalctl --user-unit kendo-app -o cat --grep '"event_type"'

@@ -25,6 +25,7 @@ _VALID_EVENT_TYPES = frozenset(
         "member_updated",
         "member_erased",
         "dojo_settings_updated",
+        "report_exported",
     }
 )
 

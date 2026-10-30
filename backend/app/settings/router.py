@@ -141,9 +141,7 @@ async def update_dojo_settings(
         "dojo_settings_updated",
         "success",
         user_id=claims.sub,
-        detail={
-            "changed_fields": sorted(k for k in data if before[k] != settings[k])
-        },
+        detail={"changed_fields": sorted(k for k in data if before[k] != settings[k])},
     )
     return {
         "dojo_name": settings["dojo_name"],

@@ -18,6 +18,7 @@ from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
+from app.reports.dependencies import get_report_repo
 from app.settings.dependencies import get_dojo_settings_repo
 from tests.dojo_settings_support import StubDojoSettingsRepo, default_dojo_settings
 from tests.fake_repositories import InMemoryMemberRepository
@@ -160,7 +161,9 @@ async def test_settings_edit_logs_only_the_names_of_fields_that_changed(
         async with _client() as c:
             response = await c.put(
                 "/settings/dojo",
-                json=default_dojo_settings(dojo_name="Renshinkan", login_show_logo=True),
+                json=default_dojo_settings(
+                    dojo_name="Renshinkan", login_show_logo=True
+                ),
             )
 
     assert response.status_code == 200
@@ -201,5 +204,45 @@ async def test_branding_upload_is_logged(
             "user_id": "admin-uuid",
             "ip_address": _IP,
             "detail": {"changed_fields": [field]},
+        }
+    ]
+
+
+class _EmptyReportRepo:
+    async def attendance_report(self, date_from: str, date_to: str) -> list:
+        return []
+
+    async def members_report(self) -> list:
+        return []
+
+
+@pytest.mark.parametrize(
+    ("url", "detail"),
+    [
+        (
+            "/reports/attendance/csv?date_from=2026-01-01&date_to=2026-03-31",
+            {
+                "report": "attendance",
+                "date_from": "2026-01-01",
+                "date_to": "2026-03-31",
+            },
+        ),
+        ("/reports/members/csv", {"report": "members"}),
+    ],
+)
+async def test_report_export_is_logged(caplog, url: str, detail: dict) -> None:
+    app.dependency_overrides[get_report_repo] = _EmptyReportRepo
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with _client() as c:
+            response = await c.get(url)
+
+    assert response.status_code == 200
+    assert _events(caplog, "report_exported") == [
+        {
+            "event_type": "report_exported",
+            "result": "success",
+            "user_id": "admin-uuid",
+            "ip_address": _IP,
+            "detail": detail,
         }
     ]
