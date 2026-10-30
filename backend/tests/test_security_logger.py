@@ -35,6 +35,8 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
 
+pytestmark = pytest.mark.usefixtures("security_events_to_caplog")
+
 # ---------------------------------------------------------------------------
 # Stubs
 # ---------------------------------------------------------------------------
@@ -159,12 +161,6 @@ class StubAttemptRepo:
 def clear_overrides():
     yield
     app.dependency_overrides.clear()
-
-
-@pytest.fixture(autouse=True)
-def _propagate_to_caplog(monkeypatch: pytest.MonkeyPatch) -> None:
-    """caplog listens on the root logger, which production cuts off (#461)."""
-    monkeypatch.setattr(logging.getLogger("security_events"), "propagate", True)
 
 
 # ---------------------------------------------------------------------------
@@ -778,3 +774,58 @@ async def test_admin_token_generation_emits_log(
         and log["detail"] == {"target_user_id": target_user_id}
         for log in logs
     ), f"Expected admin_token_generated/success event, got: {logs}"
+
+
+# ===========================================================================
+# #460 — every event raised while serving a request carries the client IP
+# ===========================================================================
+
+_FAKE_PASSKEY_LOGIN = {
+    "email": "passkey_ip@dojo.test",
+    "credential": {
+        "id": "fake",
+        "rawId": "fake",
+        "response": {
+            "clientDataJSON": "fake",
+            "authenticatorData": "fake",
+            "signature": "fake",
+        },
+        "type": "public-key",
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_sign_in_event_carries_client_ip(
+    db_client, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with AsyncClient(
+            transport=ASGITransport(app=app, client=("203.0.113.7", 4242)),
+            base_url="http://test/api",
+        ) as c:
+            await c.post("/auth/login/passkey/complete", json=_FAKE_PASSKEY_LOGIN)
+
+    events = [
+        e for e in _capture_security_logs(caplog) if e["event_type"] == "login_passkey"
+    ]
+    assert events and all(e["ip_address"] == "203.0.113.7" for e in events), events
+
+
+@pytest.mark.asyncio
+async def test_event_after_a_request_does_not_inherit_its_ip(
+    db_client, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The bound IP ends with its request: a later event outside one has none."""
+    from app.core.security_logger import log_security_event
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, client=("203.0.113.7", 4242)),
+        base_url="http://test/api",
+    ) as c:
+        await c.post("/auth/login/passkey/complete", json=_FAKE_PASSKEY_LOGIN)
+
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        log_security_event("login_passkey", "failure")
+
+    assert "ip_address" not in _capture_security_logs(caplog)[-1]

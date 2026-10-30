@@ -33,6 +33,7 @@ from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import API_PREFIX, CORS_ORIGINS, validate_startup_config
 from app.core.middleware import (
+    ClientIPMiddleware,
     ConstantTimeAuthMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -135,6 +136,7 @@ app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(IntegrityError, _constraint_conflict_handler)
+app.add_middleware(ClientIPMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 # Added after SlowAPI so it sits *outside* it: the constant-time floor must

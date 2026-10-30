@@ -10,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.settings.branding import project_branding
@@ -133,8 +134,15 @@ async def update_dojo_settings(
     ):
         if field in fields_set:
             data[field] = getattr(payload, field)
+    before = await repo.get()
     settings = await repo.update(data)
     await uow.commit()
+    log_security_event(
+        "dojo_settings_updated",
+        "success",
+        user_id=claims.sub,
+        detail={"changed_fields": sorted(k for k in data if before[k] != settings[k])},
+    )
     return {
         "dojo_name": settings["dojo_name"],
         "logo_url": settings["logo_url"],
@@ -190,6 +198,12 @@ async def upload_logo(
     logo_url = f"/static/logos/{filename}"
     await repo.update({"logo_url": logo_url})
     await uow.commit()
+    log_security_event(
+        "dojo_settings_updated",
+        "success",
+        user_id=claims.sub,
+        detail={"changed_fields": ["logo_url"]},
+    )
     return {"logo_url": logo_url}
 
 
@@ -228,4 +242,10 @@ async def upload_background(
     background_image_url = f"/static/backgrounds/{filename}"
     await repo.update({"background_image_url": background_image_url})
     await uow.commit()
+    log_security_event(
+        "dojo_settings_updated",
+        "success",
+        user_id=claims.sub,
+        detail={"changed_fields": ["background_image_url"]},
+    )
     return {"background_image_url": background_image_url}

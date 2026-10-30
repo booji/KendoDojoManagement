@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 _VALID_EVENT_TYPES = frozenset(
@@ -19,8 +20,19 @@ _VALID_EVENT_TYPES = frozenset(
         "invite_redeemed",
         "setup_claim",
         "sign_out_everywhere",
+        # Admin writes and exports (#460)
+        "member_created",
+        "member_updated",
+        "member_erased",
+        "dojo_settings_updated",
+        "report_exported",
     }
 )
+
+# The client IP of the request being served, bound by ClientIPMiddleware, so
+# every event raised during a request records where it came from without each
+# call site threading the IP through (#460). None outside a request.
+request_ip: ContextVar[str | None] = ContextVar("security_event_ip", default=None)
 
 # Own stdout handler (#461): nothing configures the root logger, so without
 # one every INFO event fell through to logging.lastResort and was dropped.
@@ -52,6 +64,7 @@ def log_security_event(
     }
     if user_id is not None:
         entry["user_id"] = user_id
+    ip_address = ip_address or request_ip.get()
     if ip_address is not None:
         entry["ip_address"] = ip_address
     if detail is not None:
