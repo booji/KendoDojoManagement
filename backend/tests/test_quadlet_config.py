@@ -553,3 +553,28 @@ def test_hardened_units_cap_pids_and_memory(service: str):
     args = " ".join(_hardened_container(service).get("PodmanArgs", []))
     assert re.search(r"--pids-limit=\d+\b", args), args
     assert re.search(r"--memory=\d+[kmg]\b", args), args
+
+
+# systemd has no inline comments: in `Persistent=true  # catch up`, everything
+# after `=` is the value, so the boolean fails to parse and systemd ignores
+# the setting with only a log warning. kendo-backup.timer shipped that way.
+UNIT_FILES = sorted(
+    p
+    for d in (QUADLET_DIR, ROOT / "deploy" / "systemd")
+    for p in d.iterdir()
+    if p.is_file()
+)
+
+
+@pytest.mark.parametrize("path", UNIT_FILES, ids=lambda p: p.name)
+def test_unit_settings_carry_no_inline_comment(path: Path):
+    offenders = [
+        line
+        for line in path.read_text().splitlines()
+        if "=" in line
+        and not line.lstrip().startswith(("#", ";"))
+        and re.search(r"\s[#;]", line.split("=", 1)[1])
+    ]
+    assert (
+        not offenders
+    ), f"{path.name}: move the comment onto its own line: {offenders}"
