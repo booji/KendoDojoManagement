@@ -31,6 +31,15 @@ UAT and PROD are **separate hosts, one instance each**. The Quadlet units, Traef
 
 ## 1. One-time host preparation (as an admin / sudo user)
 
+### 1.0 Encrypt the disk
+
+The Postgres data volume, the uploads volume and the local backups all sit on this host's disk and hold every Member's personal data, including under-18 and safeguarding data. Use full-disk encryption, so a stolen disk, a copied VM snapshot or a decommissioned drive gives none of it away:
+
+- **Your own hardware or hypervisor:** choose LUKS ("Encrypt my data" in the AlmaLinux installer) when installing the OS; adding it later means a reinstall. The host then waits for the passphrase at every boot. For unattended reboots, bind it to the TPM with Clevis.
+- **Cloud VM:** turn on the provider's encrypted volumes for the boot disk and any data disks.
+
+This protects the disk while it is powered off, not a running host. Backups leave the disk, so they carry their own encryption: see [The backup key](install/backups.md#the-backup-key) and [Off-site copies](install/backups.md#off-site-copies-optional).
+
 ### 1.1 Install Podman
 
 ```bash

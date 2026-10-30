@@ -758,10 +758,19 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
 
 
 def _env_keys_and_values(service: dict) -> dict[str, str]:
+    """What the container actually sees: its env_file entries, overridden by
+    its environment: block — the env_file half is what #483 slipped through."""
+    env_files = service.get("env_file", [])
+    if isinstance(env_files, str):
+        env_files = [env_files]
+    merged: dict[str, str] = {}
+    for entry in env_files:
+        path = entry["path"] if isinstance(entry, dict) else entry
+        merged |= _env_values(ROOT / path)
     env = service.get("environment", {})
     if isinstance(env, list):
-        return dict(entry.split("=", 1) for entry in env)
-    return {k: str(v) for k, v in env.items()}
+        return merged | dict(entry.split("=", 1) for entry in env)
+    return merged | {k: str(v) for k, v in env.items()}
 
 
 @pytest.mark.parametrize(
@@ -771,8 +780,25 @@ def _env_keys_and_values(service: dict) -> dict[str, str]:
 )
 def test_compose_app_never_sees_the_superuser_login(load, service: str):
     env = _env_keys_and_values(load()["services"][service])
-    assert "MIGRATION_DATABASE_URL" not in env, env
+    for superuser_var in (
+        "MIGRATION_DATABASE_URL",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ):
+        assert superuser_var not in env, env
     assert "POSTGRES_PASSWORD" not in env["DATABASE_URL"], env["DATABASE_URL"]
+
+
+def test_dev_backend_still_gets_every_app_setting_from_env_dev():
+    """Dropping env_file (#483) must not drop the app's own settings with it:
+    everything in .env.dev except the superuser and host-tooling values."""
+    env = _env_keys_and_values(load_dev_compose()["services"]["backend"])
+    wanted = {
+        key
+        for key in _env_values(ENV_DEV)
+        if not key.startswith("POSTGRES_") and key != "MIGRATION_DATABASE_URL"
+    }
+    assert wanted <= env.keys(), wanted - env.keys()
 
 
 @pytest.mark.parametrize("load", [load_compose, load_dev_compose], ids=["prod", "dev"])
