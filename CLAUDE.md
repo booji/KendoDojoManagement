@@ -22,21 +22,10 @@ Any domain "type" (e.g. session type, grading, shogo, officer roles, membership 
 
 Planned future types: Grading, Shogo, Officer Roles, Membership Type.
 
-## UI Conventions
+## UI conventions
 
-### Desktop Layout
-Pages use full-width layout with `px-4` padding. No `max-w-*` constraint on page wrappers — content fills the available space beside the sidebar. Use responsive grid (`md:grid-cols-2`, `md:grid-cols-4` etc.) to structure content on wider screens rather than capping width.
-
-### Copy to Clipboard
-Clipboard copying goes through `frontend/src/components/CopyButton.tsx` — do
-not hand-roll `navigator.clipboard.writeText` with its own `copied` state. Four
-pages predate the component and still do (issue #367); if you are editing one
-of them anyway, migrate it.
-
-### Button Ordering (macOS HIG)
-Action buttons are right-aligned (`justify-end`). Order left-to-right: most destructive → least destructive → primary/safe action. Example: `Cancel Series` | `Cancel Session` | `Edit`. The default/safe action always sits rightmost.
-
-**Confirm dialogs are the exception.** A dialog that confirms an action the user just chose puts `Cancel` leftmost and the confirming action rightmost, even when that action is destructive: `Cancel` | `Delete permanently`. This is the HIG alert rule (Cancel on the leading side, the action on the trailing side); on small screens `DialogFooter` stacks them with Cancel at the bottom. For a destructive confirm, give Cancel the initial focus (`DialogContent initialFocus={cancelRef}`) so Enter on open never confirms. This follows the WAI-ARIA APG (focus the least destructive action) rather than the HIG's "no default button", which has no web equivalent short of focusing nothing. The exception: a dialog with an input, such as type-to-confirm, lets the input take focus instead. A destructive option that is *not* the dialog's main action still goes leftmost: `Discard` | `Cancel` | `Save`.
+Layout, clipboard and button-ordering rules live in `CODING_STANDARDS.md`.
+Read it before writing UI; the reviewer enforces it.
 
 <!-- --8<-- [start:tdd] -->
 ## Design Philosophy
@@ -123,7 +112,7 @@ podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
 ```
 
 ```bash
-# Backend only — no frontend install, no Vite, no e2e collection (~1 minute)
+# Backend only — no frontend install, no Vite, no e2e collection
 podman-compose -f docker-compose.test.yml run --rm test-backend
 ```
 
@@ -150,12 +139,20 @@ connection-refused — which looks like a large regression but is only a
 misconfigured run. If you genuinely want backend-only tests, keep the entrypoint
 and set `PYTEST_TARGET`, or add `--ignore-glob='tests/test_e2e_*.py'`.
 
-A full run takes ~11 minutes. Do not pipe it through `tail` — the summary line
+Do not pipe a run through `tail` — the summary line
 is what you need and it is easy to truncate away. Redirect to a file instead.
+
+A run that exits 126 with `unable to get systemd connection ... systemd/private:
+connect: connection refused` is the host, not the code or the sandbox: the
+systemd user manager has lost its private socket, and Podman needs it for the
+`db` healthcheck. `systemctl --user daemon-reexec` restores it. Check Quadlet
+units with `QUADLET_UNIT_DIRS=$PWD/deploy/quadlet /usr/libexec/podman/quadlet
+-dryrun -user`, which touches no running manager.
 
 ### Lint, format, dev servers
 
-These run on the host from `backend/` with the venv active:
+These run on the host from `backend/` with the venv active. CI
+(`backend-tests.yml`) runs `ruff check` and `ruff format --check` on every push.
 
 ```bash
 # Backend
