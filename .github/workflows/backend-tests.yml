@@ -33,6 +33,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Lint and format check (ruff)
+        # The ruff version comes from requirements-dev.txt, so CI and the
+        # local venv cannot drift apart.
+        working-directory: backend
+        run: |
+          spec="$(grep '^ruff==' requirements-dev.txt)"
+          pipx run --spec "$spec" ruff check .
+          pipx run --spec "$spec" ruff format --check .
+
       - name: Run the backend tests
         # The test-backend service builds the backend-dev-deps stage and runs
         # backend/run_tests.sh with BACKEND_ONLY=1: uvicorn still comes up (a
