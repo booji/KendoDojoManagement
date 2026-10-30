@@ -145,8 +145,7 @@ new secret — and `systemctl --user restart kendo-migrate kendo-app`.
 ## Upgrading to secrets as mounted files (#462)
 
 The app's secrets are now mounted into its containers as files, not passed as
-environment variables, which show up in `podman inspect` and are inherited by
-every process the app starts. Nothing about the secrets themselves changes.
+environment variables. Nothing about the secrets themselves changes.
 
 **Quick self-host (Compose).** Nothing to do: `./setup.sh upgrade` writes the
 new `secrets/` directory from your `.env` before it recreates the stack. If you

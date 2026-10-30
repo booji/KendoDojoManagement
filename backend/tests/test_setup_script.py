@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 from tests.backup_support import decrypt, keypair, no_file_holds
+from tests.deploy_contract import ALL_SECRETS
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -111,7 +112,7 @@ def test_writes_the_secret_files_compose_mounts(tmp_path):
 
     env = env_of(home)
     secrets = home / "secrets"
-    for key in ("DATABASE_URL", "MIGRATION_DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"):
+    for key in ALL_SECRETS:
         assert (secrets / key.lower()).read_text() == env[key], key
     # Other host users are kept out by the directory; the files have to be
     # readable by the app's uid 1001, which does not own them.
