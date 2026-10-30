@@ -120,3 +120,23 @@ async def test_member_edit_logs_only_the_names_of_fields_that_changed(
         }
     ]
     assert "Suzuki" not in caplog.text and "Yamada" not in caplog.text
+
+
+async def test_member_erasure_is_logged(member_repo, caplog) -> None:
+    member = member_repo.seed(
+        **_member_payload(membership_status="archived"), id=str(uuid.uuid4())
+    )
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with _client() as c:
+            response = await c.post(f"/members/{member['id']}/erase")
+
+    assert response.status_code == 200
+    assert _events(caplog, "member_erased") == [
+        {
+            "event_type": "member_erased",
+            "result": "success",
+            "user_id": "admin-uuid",
+            "ip_address": _IP,
+            "detail": {"member_id": member["id"]},
+        }
+    ]

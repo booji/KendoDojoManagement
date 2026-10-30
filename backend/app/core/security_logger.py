@@ -22,6 +22,7 @@ _VALID_EVENT_TYPES = frozenset(
         # Admin writes and exports (#460)
         "member_created",
         "member_updated",
+        "member_erased",
     }
 )
 

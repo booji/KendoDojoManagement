@@ -251,4 +251,7 @@ async def erase_member(
     }
     updated = await repo.update(member_id, scrub)
     await uow.commit()
+    log_security_event(
+        "member_erased", "success", user_id=claims.sub, detail={"member_id": member_id}
+    )
     return _to_response(updated)
