@@ -270,7 +270,8 @@ the app clears it to NULL once the row is 30 days old (#434). `kendo-app` does
 that on every start; `kendo-ip-retention.timer` runs `kendo-ip-retention.service`
 (`python -m app.cli clear-expired-ip-addresses`, then exits) daily, so the
 limit holds on an instance that is never restarted. `Persistent=true` catches up
-a run missed while the host was off.
+a run missed while the host was off. `./setup.sh check --quadlet` fails while
+the timer is not installed or not enabled.
 
 ```bash
 systemctl --user list-timers kendo-ip-retention.timer --no-pager

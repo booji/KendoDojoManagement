@@ -504,6 +504,17 @@ def test_quadlet_enables_the_daily_ip_retention_timer(tmp_path):
     assert f"--user enable --now {timer}" in calls[reload + 1 :], calls
 
 
+def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
+    host = Host(tmp_path)
+    (tmp_path / "bin/systemctl").write_text(
+        SYSTEMCTL_STUB + 'case "$*" in *enable*) exit 1 ;; esac\n'
+    )
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    assert "enable --now kendo-ip-retention.timer` failed" in out.stdout
+    assert "daemon-reload` failed" not in out.stdout
+
+
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
     # A drop-in, not an edit to the unit: docs/install/upgrading.md tells an
     # operator to re-copy the units on upgrade, which would revert an edit made here.
@@ -693,6 +704,8 @@ GREEN_HOST = {
     "getent": 'echo "203.0.113.7     STREAM $2"',
     "hostname": "echo 192.168.1.5 203.0.113.7",
     "ss": "exit 0",
+    # Every unit enabled, none failed.
+    "systemctl": 'case "$*" in *is-failed*) exit 1 ;; esac',
 }
 
 
@@ -872,6 +885,28 @@ def test_check_quadlet_passes_its_own_setup_and_names_a_missing_secret(tmp_path)
     out = check(host.src, env, "--quadlet")
     assert out.returncode == 1
     assert "podman secret missing: kendo_jwt_secret" in out.stdout
+
+
+def test_check_quadlet_fails_until_the_ip_retention_timer_is_enabled(tmp_path):
+    """Without it, recovery-attempt IPs outlive 30 days on an instance nobody
+    restarts (#467)."""
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+
+    disabled = check(
+        host.src,
+        host_env(
+            tmp_path, systemctl='case "$*" in *is-enabled*|*is-failed*) exit 1 ;; esac'
+        ),
+        "--quadlet",
+    )
+    assert disabled.returncode == 1
+    assert "systemctl --user enable --now kendo-ip-retention.timer" in disabled.stdout
+
+    (host.home / ".config/systemd/user/kendo-ip-retention.timer").unlink()
+    missing = check(host.src, host_env(tmp_path), "--quadlet")
+    assert missing.returncode == 1
+    assert "kendo-ip-retention.timer is not installed" in missing.stdout
 
 
 def test_check_fails_a_domain_that_does_not_resolve(tmp_path):
