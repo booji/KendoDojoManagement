@@ -36,6 +36,17 @@ Volume=kendo-app-uploads.volume:/app/uploads:U
 Secret=kendo_database_url,type=env,target=DATABASE_URL
 Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
 Secret=kendo_setup_token,type=env,target=SETUP_TOKEN
+# Hardening (#458): read-only root, so a breach cannot write tools into the
+# image; /tmp is the only scratch space (Starlette spools uploads there).
+ReadOnly=true
+Tmpfs=/tmp
+# No capabilities and no setuid escalation: it runs as an unprivileged user
+# and needs none.
+DropCapability=ALL
+NoNewPrivileges=true
+# Bounds a fork bomb or a leak to this container. Fixed defaults; tune them
+# per host with a drop-in (docs/deployment.md, "Container limits").
+PodmanArgs=--pids-limit=256 --memory=512m
 
 [Service]
 Restart=always
