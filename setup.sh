@@ -926,8 +926,13 @@ quadlet_install() {
   # documented major pin, which is right for a release and wrong for a
   # prerelease rehearsal.
   [ -z "$image" ] || sed -i "s|^Image=ghcr.io/booji/kendodojomanagement:.*|Image=$image|" \
-    "$units/kendo-app.container" "$units/kendo-migrate.container"
+    "$units/kendo-app.container" "$units/kendo-migrate.container" \
+    "$units/kendo-ip-retention.container"
   echo "  installed the Quadlet units in $units"
+  # Quadlet generates no timers: the daily IP-retention trigger (#467) is a
+  # plain user unit, enabled below once the reload has generated its service.
+  install -D -m 644 deploy/systemd/kendo-ip-retention.timer \
+    "$HOME/.config/systemd/user/kendo-ip-retention.timer"
 
   # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
   # operator to re-copy the units on upgrade, which would silently revert an edit made
@@ -968,6 +973,8 @@ DROPIN
   # user session (`su - kendo` rather than `machinectl shell kendo@`) this is the
   # step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
+  [ -n "$reload_failed" ] ||
+    systemctl --user enable --now kendo-ip-retention.timer || reload_failed=1
 }
 
 if [ "$mode" = compose ]; then
@@ -1015,8 +1022,9 @@ fi
 echo
 if [ "$mode" = quadlet ]; then
   [ -z "$reload_failed" ] || echo "FIRST: \`systemctl --user daemon-reload\` failed, so no units have been generated
-  yet. Run it from a \`machinectl shell kendo@\` session — \`su - kendo\` leaves
-  systemctl --user broken — before anything below will work.
+  yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer\`, from
+  a \`machinectl shell kendo@\` session — \`su - kendo\` leaves systemctl --user
+  broken — before anything below will work.
 "
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"

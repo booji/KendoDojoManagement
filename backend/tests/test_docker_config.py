@@ -690,6 +690,7 @@ MAJOR_PIN = f"{PUBLISHED_IMAGE}:1"
 QUADLET_UNITS = [
     ROOT / "deploy" / "quadlet" / "kendo-app.container",
     ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
+    ROOT / "deploy" / "quadlet" / "kendo-ip-retention.container",
 ]
 
 
@@ -708,7 +709,7 @@ def test_env_example_pins_the_same_image_as_the_compose_default():
 
 @pytest.mark.parametrize("unit", QUADLET_UNITS, ids=lambda p: p.name)
 def test_quadlet_units_run_the_published_image(unit: Path):
-    """Both units, always the same tag: the migration chain and the code that
+    """Every app-image unit, always the same tag: the migration chain and the code that
     runs against it have to come from one artefact."""
     text = unit.read_text()
     assert f"\nImage={MAJOR_PIN}\n" in text, text
