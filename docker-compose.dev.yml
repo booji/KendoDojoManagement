@@ -40,8 +40,21 @@ services:
       # name on the internal network. The restricted app user (ADR-0007), as in
       # production: the app refuses to start as the superuser.
       DATABASE_URL: "postgresql+asyncpg://kendo_app:kendo_app_password@db:5432/${POSTGRES_DB:-kendo_dev}"
-    env_file:
-      - .env.dev
+      # Listed one by one instead of `env_file: .env.dev`, which would also hand
+      # this container MIGRATION_DATABASE_URL and POSTGRES_USER/PASSWORD — the
+      # superuser login only `migrate` may hold, as in production (#483). Values
+      # are interpolated from `--env-file .env.dev`, which the Makefile passes.
+      APP_ENV: "${APP_ENV}"
+      JWT_SECRET: "${JWT_SECRET}"
+      SETUP_TOKEN: "${SETUP_TOKEN}"
+      JWT_EXPIRE_MINUTES: "${JWT_EXPIRE_MINUTES}"
+      COOKIE_SECURE: "${COOKIE_SECURE}"
+      WEBAUTHN_RP_ID: "${WEBAUTHN_RP_ID}"
+      WEBAUTHN_ORIGIN: "${WEBAUTHN_ORIGIN}"
+      WEBAUTHN_CHALLENGE_TTL_SECONDS: "${WEBAUTHN_CHALLENGE_TTL_SECONDS}"
+      CORS_ORIGINS: "${CORS_ORIGINS}"
+      TRUST_PROXY_XFF: "${TRUST_PROXY_XFF}"
+      STATIC_DIR: "${STATIC_DIR}"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:

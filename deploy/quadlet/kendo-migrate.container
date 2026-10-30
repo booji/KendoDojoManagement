@@ -38,6 +38,17 @@ Exec=-m app.db.bootstrap
 # The image has no HEALTHCHECK and this container exits; without this Quadlet's
 # default Type=notify would wait for a readiness notification that never comes.
 Notify=no
+# Hardening (#458): read-only root, so a breach cannot write tools into the
+# image; /tmp is the only scratch space (Starlette spools uploads there).
+ReadOnly=true
+Tmpfs=/tmp
+# No capabilities and no setuid escalation: it runs as an unprivileged user
+# and needs none.
+DropCapability=ALL
+NoNewPrivileges=true
+# Bounds a fork bomb or a leak to this container. Fixed defaults; tune them
+# per host with a drop-in (docs/deployment.md, "Container limits").
+PodmanArgs=--pids-limit=256 --memory=512m
 
 [Service]
 Type=oneshot

@@ -760,10 +760,19 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
 
 
 def _env_keys_and_values(service: dict) -> dict[str, str]:
+    """What the container actually sees: its env_file entries, overridden by
+    its environment: block — the env_file half is what #483 slipped through."""
+    env_files = service.get("env_file", [])
+    if isinstance(env_files, str):
+        env_files = [env_files]
+    merged: dict[str, str] = {}
+    for entry in env_files:
+        path = entry["path"] if isinstance(entry, dict) else entry
+        merged |= _env_values(ROOT / path)
     env = service.get("environment", {})
     if isinstance(env, list):
-        return dict(entry.split("=", 1) for entry in env)
-    return {k: str(v) for k, v in env.items()}
+        return merged | dict(entry.split("=", 1) for entry in env)
+    return merged | {k: str(v) for k, v in env.items()}
 
 
 @pytest.mark.parametrize(
@@ -775,9 +784,27 @@ def test_compose_app_never_sees_the_superuser_login(load, service: str):
     svc = load()["services"][service]
     env = _env_keys_and_values(svc)
     # Prod names a mounted file (<NAME>_FILE, #462), dev passes the value.
-    assert "MIGRATION_DATABASE_URL" not in {k.removesuffix("_FILE") for k in env}
+    names = {k.removesuffix("_FILE") for k in env}
+    for superuser_var in (
+        "MIGRATION_DATABASE_URL",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ):
+        assert superuser_var not in names, env
     assert "migration_database_url" not in svc.get("secrets", []), svc
     assert "POSTGRES_PASSWORD" not in env.get("DATABASE_URL", ""), env
+
+
+def test_dev_backend_still_gets_every_app_setting_from_env_dev():
+    """Dropping env_file (#483) must not drop the app's own settings with it:
+    everything in .env.dev except the superuser and host-tooling values."""
+    env = _env_keys_and_values(load_dev_compose()["services"]["backend"])
+    wanted = {
+        key
+        for key in _env_values(ENV_DEV)
+        if not key.startswith("POSTGRES_") and key != "MIGRATION_DATABASE_URL"
+    }
+    assert wanted <= env.keys(), wanted - env.keys()
 
 
 @pytest.mark.parametrize("load", [load_compose, load_dev_compose], ids=["prod", "dev"])
@@ -831,3 +858,92 @@ def test_env_files_split_the_app_and_migration_logins(env_file: str):
     migration = make_url(values["MIGRATION_DATABASE_URL"])
     assert migration.username == values["POSTGRES_USER"]
     assert migration.password == values["POSTGRES_PASSWORD"]
+
+
+# ---------------------------------------------------------------------------
+# Container hardening: assume the app is breached (#458). Postgres is out of
+# scope here — its entrypoint's user switch needs its own capability set.
+# ---------------------------------------------------------------------------
+
+HARDENED_UNITS = [
+    ROOT / "deploy" / "quadlet" / name
+    for name in (
+        "kendo-app.container",
+        "kendo-migrate.container",
+        "kendo-traefik.container",
+    )
+]
+HARDENED_SERVICES = ["app", "migrate", "proxy"]
+
+
+def _container_section(unit: Path) -> dict[str, list[str]]:
+    from tests.test_quadlet_config import _parse_unit
+
+    return _parse_unit(unit.read_text())["Container"]
+
+
+@pytest.mark.parametrize("unit", HARDENED_UNITS, ids=lambda p: p.name)
+def test_quadlet_units_run_with_a_read_only_root(unit: Path):
+    """An attacker with code execution cannot drop tools into the image
+    filesystem. /tmp stays writable (Starlette spools uploads there); the
+    uploads and ACME volumes are mounts and stay writable too."""
+    container = _container_section(unit)
+    assert container.get("ReadOnly") == ["true"], container
+    assert "/tmp" in container.get("Tmpfs", []), container
+
+
+@pytest.mark.parametrize("service", HARDENED_SERVICES)
+def test_compose_services_run_with_a_read_only_root(service: str):
+    spec = load_compose()["services"][service]
+    assert spec.get("read_only") is True, spec
+    assert "/tmp" in spec.get("tmpfs", []), spec
+
+
+# Traefik binds 80/443 inside its own namespace; nothing else needs a capability.
+CAPABILITIES_ADDED_BACK = {
+    "kendo-app.container": [],
+    "kendo-migrate.container": [],
+    "kendo-traefik.container": ["NET_BIND_SERVICE"],
+}
+SERVICE_CAPABILITIES_ADDED_BACK = {
+    "app": [],
+    "migrate": [],
+    "proxy": ["NET_BIND_SERVICE"],
+}
+
+
+@pytest.mark.parametrize("unit", HARDENED_UNITS, ids=lambda p: p.name)
+def test_quadlet_units_drop_every_capability_and_privilege_escalation(unit: Path):
+    container = _container_section(unit)
+    assert container.get("DropCapability") == ["ALL"], container
+    assert container.get("AddCapability", []) == CAPABILITIES_ADDED_BACK[unit.name]
+    assert container.get("NoNewPrivileges") == ["true"], container
+
+
+@pytest.mark.parametrize("service", HARDENED_SERVICES)
+def test_compose_services_drop_every_capability_and_privilege_escalation(
+    service: str,
+):
+    spec = load_compose()["services"][service]
+    assert spec.get("cap_drop") == ["ALL"], spec
+    assert spec.get("cap_add", []) == SERVICE_CAPABILITIES_ADDED_BACK[service]
+    assert "no-new-privileges:true" in spec.get("security_opt", []), spec
+
+
+@pytest.mark.parametrize("unit", HARDENED_UNITS, ids=lambda p: p.name)
+def test_quadlet_units_cap_pids_and_memory(unit: Path):
+    """A breached container cannot fork-bomb or exhaust the host. PodmanArgs
+    rather than the PidsLimit=/Memory= keys: Memory= is not in Podman 4.9
+    (Ubuntu 24.04), and an unknown key stops Quadlet generating the unit. A
+    later `PodmanArgs=--memory=…` in a drop-in wins, which is how hosts tune it.
+    """
+    args = " ".join(_container_section(unit).get("PodmanArgs", []))
+    assert _re.search(r"--pids-limit=\d+\b", args), args
+    assert _re.search(r"--memory=\d+[kmg]\b", args), args
+
+
+@pytest.mark.parametrize("service", HARDENED_SERVICES)
+def test_compose_services_cap_pids_and_memory(service: str):
+    spec = load_compose()["services"][service]
+    assert isinstance(spec.get("pids_limit"), int), spec
+    assert _re.fullmatch(r"\d+[kmg]", str(spec.get("mem_limit"))), spec
