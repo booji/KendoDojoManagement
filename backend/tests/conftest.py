@@ -75,6 +75,19 @@ def cookies_for():
     return _make
 
 
+@pytest.fixture()
+def security_events_to_caplog(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let caplog see security events.
+
+    caplog listens on the root logger, which production cuts the
+    security_events logger off from (#461). Use with
+    ``pytestmark = pytest.mark.usefixtures("security_events_to_caplog")``.
+    """
+    import logging
+
+    monkeypatch.setattr(logging.getLogger("security_events"), "propagate", True)
+
+
 @pytest.fixture(autouse=True)
 def _default_attendance_repo():
     """Install an empty attendance fake so tests that don't wire one don't hit the DB.

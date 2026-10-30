@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
@@ -31,8 +32,16 @@ _VALID_EVENT_TYPES = frozenset(
 # call site threading the IP through (#460). None outside a request.
 request_ip: ContextVar[str | None] = ContextVar("security_event_ip", default=None)
 
+# Own stdout handler (#461): nothing configures the root logger, so without
+# one every INFO event fell through to logging.lastResort and was dropped.
+# The container's stdout is the journal (docs/deployment.md, "Logs").
+# propagate=False so a later root config cannot print each event twice.
 _logger = logging.getLogger("security_events")
 _logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+_logger.addHandler(_handler)
+_logger.propagate = False
 
 
 def log_security_event(

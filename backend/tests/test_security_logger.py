@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
+import sys
 import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,6 +34,8 @@ from app.auth.dependencies import (
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
+
+pytestmark = pytest.mark.usefixtures("security_events_to_caplog")
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -187,6 +192,37 @@ def test_log_security_event_is_callable() -> None:
     from app.core.security_logger import log_security_event
 
     assert callable(log_security_event)
+
+
+# Production wiring (#461): nothing configures the root logger, so without its
+# own handler every INFO event fell through to logging.lastResort (WARNING+)
+# and was dropped. caplog attaches a handler of its own and hid that, so this
+# runs a fresh interpreter with only uvicorn's logging config, as in the
+# container, and reads the process's real stdout.
+_PRODUCTION_LOGGING = """
+import logging, logging.config, sys
+from uvicorn.config import LOGGING_CONFIG
+logging.config.dictConfig(LOGGING_CONFIG)
+import app.main
+from app.core.security_logger import log_security_event
+# A later root config must not print the event a second time.
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+log_security_event("setup_claim", "success")
+"""
+
+
+def test_security_event_reaches_stdout_once_under_uvicorn_logging() -> None:
+    out = subprocess.run(
+        [sys.executable, "-c", _PRODUCTION_LOGGING],
+        cwd=Path(__file__).parent.parent,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    events = [line for line in out.splitlines() if "setup_claim" in line]
+    assert len(events) == 1, out
+    event = json.loads(events[0])
+    assert (event["event_type"], event["result"]) == ("setup_claim", "success")
 
 
 # ===========================================================================

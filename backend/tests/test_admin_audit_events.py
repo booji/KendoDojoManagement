@@ -25,6 +25,8 @@ _ADMIN = AccountClaims(
 )
 _IP = "203.0.113.9"
 
+pytestmark = pytest.mark.usefixtures("security_events_to_caplog")
+
 
 @pytest.fixture(autouse=True)
 def as_admin():
