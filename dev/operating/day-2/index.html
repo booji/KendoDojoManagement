@@ -1419,7 +1419,7 @@
 </tr>
 <tr>
 <td>Stop all</td>
-<td><code>systemctl --user stop kendo-traefik kendo-app kendo-migrate kendo-db</code></td>
+<td><code>systemctl --user stop kendo-ip-retention.timer kendo-traefik kendo-app kendo-migrate kendo-db</code> — the timer first, or its daily run starts <code>kendo-db</code> again</td>
 </tr>
 <tr>
 <td>Back up now</td>
@@ -1436,7 +1436,8 @@
 </tbody>
 </table>
 <blockquote>
-<p>The pin is the <code>Image=</code> line in the two Quadlet units, and the documented
+<p>The pin is the <code>Image=</code> line in the three app-image Quadlet units (<code>kendo-app</code>,
+<code>kendo-migrate</code>, <code>kendo-ip-retention</code>), and the documented
 value is the <strong>major</strong> tag <code>:1</code> — fixes and features, but no migration that
 needs a restore from backup to undo. Moving to <code>:2</code> is a deliberate edit made
 after reading the release notes. Building from source still works

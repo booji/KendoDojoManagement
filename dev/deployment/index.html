@@ -637,6 +637,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="2-4. Lay it all down (as kendo)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ip-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IP retention
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -680,6 +697,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Logs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Logs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#security-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-long-they-survive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How long they survive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collecting-them-off-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collecting them off the host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1653,6 +1720,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="2-4. Lay it all down (as kendo)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ip-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IP retention
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1696,6 +1780,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Logs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Logs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#security-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security events
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-long-they-survive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How long they survive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collecting-them-off-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collecting them off the host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1838,7 +1972,8 @@ transcription here:</p>
   Plus <code>~/backups</code> and the backup/restore scripts in <code>~/.local/bin</code>.</li>
 <li><strong>the Quadlet units</strong> — copied into <code>~/.config/containers/systemd/</code>, pinned
   to the tag the bundle was extracted from, then <code>systemctl --user
-  daemon-reload</code>.</li>
+  daemon-reload</code>. Plus <code>kendo-ip-retention.timer</code> in <code>~/.config/systemd/user/</code>,
+  enabled — see <a href="#ip-retention">IP retention</a> below.</li>
 </ul>
 <p>It never escalates: the host prerequisites from section 1 are detected and the
 exact <code>sudo</code> command printed for you to run.</p>
@@ -1923,6 +2058,13 @@ cp<span class="w"> </span>deploy/quadlet/kendo-*.container<span class="w"> </spa
 
 <span class="c1"># Quadlet generates systemd units from these files on daemon-reload.</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
+
+<span class="c1"># Quadlet generates no timers, so the daily IP-retention trigger is a plain</span>
+<span class="c1"># user unit (see IP retention below).</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>~/.config/systemd/user
+cp<span class="w"> </span>deploy/systemd/kendo-ip-retention.timer<span class="w"> </span>~/.config/systemd/user/
+systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-ip-retention.timer
 </code></pre></div>
 
 </details>
@@ -1946,6 +2088,18 @@ upgrade head</code> and exits, and <code>kendo-app</code> is ordered after it, s
 never serves against a half-migrated schema and a failed migration shows up
 as a failed <code>kendo-migrate.service</code> rather than as an app crash (#391).
 <code>systemctl --user status kendo-migrate --no-pager</code> shows the last run.</p>
+<h3 id="ip-retention">IP retention<a class="headerlink" href="#ip-retention" title="Permanent link">&para;</a></h3>
+<p><code>recovery_attempts</code> stores the IP address of each recovery-code attempt, and
+the app clears it to NULL once the row is 30 days old (#434). <code>kendo-app</code> does
+that on every start; <code>kendo-ip-retention.timer</code> runs <code>kendo-ip-retention.service</code>
+(<code>python -m app.cli clear-expired-ip-addresses</code>, then exits) daily, so the
+limit holds on an instance that is never restarted. <code>Persistent=true</code> catches up
+a run missed while the host was off. <code>./setup.sh check --quadlet</code> fails while
+the timer is not installed or not enabled.</p>
+<div class="highlight"><pre><span></span><code>systemctl<span class="w"> </span>--user<span class="w"> </span>list-timers<span class="w"> </span>kendo-ip-retention.timer<span class="w"> </span>--no-pager
+systemctl<span class="w"> </span>--user<span class="w"> </span>status<span class="w"> </span>kendo-ip-retention<span class="w"> </span>--no-pager<span class="w">   </span><span class="c1"># the last run</span>
+</code></pre></div>
+<p>The Compose stack has no timer: there the clear runs only when the app starts.</p>
 <h2 id="5-tls-options">5. TLS options<a class="headerlink" href="#5-tls-options" title="Permanent link">&para;</a></h2>
 <p><code>setup.sh --quadlet</code> asks this question and writes the answer; this section is
 what it writes, for a deployment configured by hand or changed later.</p>
@@ -1969,14 +2123,106 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<spa
 <h2 id="7-a-note-on-cors">7. A note on CORS<a class="headerlink" href="#7-a-note-on-cors" title="Permanent link">&para;</a></h2>
 <p>The SPA is served <strong>same-origin</strong> with the API (both under <code>https://&lt;your-domain&gt;</code>), so CORS never fires in normal operation. Keep <code>CORS_ORIGINS</code> pinned to the single canonical origin (never <code>*</code>) — auth is cookie-based, and <code>*</code> + credentials is both invalid and a credential-leak risk. Pinning means any accidental cross-origin path fails closed.</p>
 <h2 id="8-container-limits">8. Container limits<a class="headerlink" href="#8-container-limits" title="Permanent link">&para;</a></h2>
-<p><code>kendo-app</code>, <code>kendo-migrate</code> and <code>kendo-traefik</code> assume they may be breached (#458): a read-only root filesystem (<code>/tmp</code> and the volumes are the only writable paths), every capability dropped (Traefik keeps <code>NET_BIND_SERVICE</code> for 80/443), <code>NoNewPrivileges=true</code>, and a cap of 256 pids and 512 MiB memory each. <code>kendo-db</code> is not hardened yet.</p>
+<p><code>kendo-app</code>, <code>kendo-migrate</code>, <code>kendo-ip-retention</code> and <code>kendo-traefik</code> assume they may be breached (#458): a read-only root filesystem (<code>/tmp</code> and the volumes are the only writable paths), every capability dropped (Traefik keeps <code>NET_BIND_SERVICE</code> for 80/443), <code>NoNewPrivileges=true</code>, and a cap of 256 pids and 512 MiB memory each. <code>kendo-db</code> is not hardened yet.</p>
 <p>The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later <code>PodmanArgs=</code> flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:</p>
 <div class="highlight"><pre><span></span><code><span class="nv">d</span><span class="o">=</span>~/.config/containers/systemd/kendo-app.container.d<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">"</span>
 <span class="nb">printf</span><span class="w"> </span><span class="s1">'[Container]\nPodmanArgs=--memory=1g --pids-limit=512\n'</span><span class="w"> </span>&gt;<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">/30-limits.conf"</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-app
 </code></pre></div>
 <p>The Compose stack carries the same settings (<code>x-hardening</code> in <code>docker-compose.yml</code>). There, set <code>mem_limit:</code> or <code>pids_limit:</code> on the service itself, which wins over the merged defaults.</p>
-<hr />
+<h2 id="9-logs">9. Logs<a class="headerlink" href="#9-logs" title="Permanent link">&para;</a></h2>
+<p>The app writes its logs to the container's stdout. Podman's default <code>journald</code>
+log driver hands them to the <code>kendo</code> user's journal, tagged with the
+<code>kendo-app</code> unit, so the journal on the device is where they live. Nothing is
+written to a log file inside the container (the root filesystem is read-only).</p>
+<div class="highlight"><pre><span></span><code>podman<span class="w"> </span>logs<span class="w"> </span>kendo-app<span class="w">                    </span><span class="c1"># this container's output since it started</span>
+journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w">         </span><span class="c1"># the unit's history, across restarts</span>
+</code></pre></div>
+<p>Use <code>--user-unit</code>, not <code>--user -u</code>. <code>--user</code> reads only the per-user journal
+file, which journald creates only when journal storage is persistent. On a host
+without it, everything is in the system journal and <code>--user -u</code> shows nothing.
+<code>--user-unit</code> works either way.</p>
+<h3 id="security-events">Security events<a class="headerlink" href="#security-events" title="Permanent link">&para;</a></h3>
+<p>Sign-ins, recovery, passkey and invite changes, the setup claim and the other
+security events are one JSON object per line:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"timestamp"</span><span class="p">:</span><span class="s2">"2026-10-30T21:31:58.723232+00:00"</span><span class="p">,</span><span class="nt">"event_type"</span><span class="p">:</span><span class="s2">"setup_claim"</span><span class="p">,</span><span class="nt">"result"</span><span class="p">:</span><span class="s2">"success"</span><span class="p">}</span>
+</code></pre></div>
+<p><code>timestamp</code> (UTC, ISO 8601), <code>event_type</code> and <code>result</code> are always there.
+<code>user_id</code>, <code>ip_address</code> and <code>detail</code> appear when they apply; every event raised
+while serving a request carries the client's <code>ip_address</code>.</p>
+<p>Admin writes and exports are logged too, with the Admin as <code>user_id</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>event_type</code></th>
+<th>When</th>
+<th><code>detail</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>member_created</code></td>
+<td>an Admin adds a Member</td>
+<td><code>member_id</code></td>
+</tr>
+<tr>
+<td><code>member_updated</code></td>
+<td>an Admin edits a Member, including changing their status (deactivation, archiving)</td>
+<td><code>member_id</code>, <code>changed_fields</code></td>
+</tr>
+<tr>
+<td><code>member_erased</code></td>
+<td>an Admin erases a Member</td>
+<td><code>member_id</code></td>
+</tr>
+<tr>
+<td><code>dojo_settings_updated</code></td>
+<td>an Admin changes dojo settings, or uploads a logo or login background</td>
+<td><code>changed_fields</code></td>
+</tr>
+<tr>
+<td><code>report_exported</code></td>
+<td>an Admin downloads a CSV report</td>
+<td><code>report</code>, and <code>date_from</code> / <code>date_to</code> for attendance</td>
+</tr>
+</tbody>
+</table>
+<p><code>changed_fields</code> lists field names only. The values, old or new, are never
+logged. Reading data is not logged.</p>
+<p>To see only these lines:</p>
+<div class="highlight"><pre><span></span><code>journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span>
+<span class="c1"># or pretty-print them, if jq is installed</span>
+journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+</code></pre></div>
+<h3 id="how-long-they-survive">How long they survive<a class="headerlink" href="#how-long-they-survive" title="Permanent link">&para;</a></h3>
+<p>journald decides, not the app. Check two things as an admin user:</p>
+<ul>
+<li><strong>Storage is persistent.</strong> If <code>/var/log/journal</code> does not exist, the journal
+  lives in <code>/run</code> and every event is gone at reboot. Create it with
+  <code>sudo mkdir -p /var/log/journal &amp;&amp; sudo systemctl restart systemd-journald</code>,
+  or set <code>Storage=persistent</code> in <code>/etc/systemd/journald.conf</code>.</li>
+<li><strong>Size caps.</strong> <code>SystemMaxUse</code> and <code>SystemMaxFileSize</code> in
+  <code>/etc/systemd/journald.conf</code> bound the journal's disk use. When the cap is
+  hit the oldest entries go first, so on a small or busy disk events can
+  vanish sooner than you expect. Check with <code>journalctl --disk-usage</code>.</li>
+</ul>
+<p>Events carry client IP addresses, which are personal data, so keep them no
+longer than you need. The app clears IPs from its own recovery-attempt records
+after 30 days; matching that in the journal is a drop-in:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/etc/systemd/journald.conf.d
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'[Journal]\nMaxRetentionSec=30day\n'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>/etc/systemd/journald.conf.d/30-retention.conf
+sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>systemd-journald
+</code></pre></div>
+<p><code>MaxRetentionSec</code> is host-wide: it applies to every service's logs, not just
+<code>kendo-app</code>.</p>
+<h3 id="collecting-them-off-the-host">Collecting them off the host<a class="headerlink" href="#collecting-them-off-the-host" title="Permanent link">&para;</a></h3>
+<p>Optional. Any collector that reads the journal works, and the app needs no
+configuration for it: for example <a href="https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/">Grafana Alloy</a>
+into Loki, <a href="https://go2docs.graylog.org/current/getting_in_log_data/ingest_journald.html">Graylog</a>,
+or <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-journal-remote.service.html"><code>systemd-journal-remote</code></a>.</p>
+<p>The limit to be honest about: anyone who controls the host can delete events
+the collector has not pulled yet. Pulling often keeps that window small; it
+does not close it.</p>
 <hr />
 <h2 id="appendix-debian-ubuntu-stub-not-the-primary-target">Appendix — Debian / Ubuntu stub (not the primary target)<a class="headerlink" href="#appendix-debian-ubuntu-stub-not-the-primary-target" title="Permanent link">&para;</a></h2>
 <p>The above is written for AlmaLinux 10. On Debian/Ubuntu the shape is identical; the differences:</p>
