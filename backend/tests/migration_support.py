@@ -7,7 +7,6 @@ and the database do, not what the app checks first.
 """
 
 import asyncio
-import os
 from collections.abc import Callable
 
 from sqlalchemy import text
@@ -38,16 +37,7 @@ def app_url(url: str, user: str = APP_USER, password: str = APP_PASSWORD) -> str
 def _migrate_blocking(
     url: str, migrate: Callable[[Config, str], None], revision: str
 ) -> None:
-    cfg = _alembic_config(url)
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = url
-    try:
-        migrate(cfg, revision)
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
+    migrate(_alembic_config(url), revision)
 
 
 async def upgrade(url: str, revision: str = "head") -> None:

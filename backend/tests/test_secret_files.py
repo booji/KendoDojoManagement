@@ -65,14 +65,22 @@ def test_each_secret_setting_is_read_from_its_file(name, tmp_path, monkeypatch):
         importlib.reload(config)
 
 
-def test_alembic_reads_the_database_url_file(tmp_path):
+_UNREACHABLE_URL = "postgresql+asyncpg://nobody:nothing@127.0.0.1:1/none"
+
+
+@pytest.mark.parametrize(
+    "variable", [None, _UNREACHABLE_URL], ids=["file-only", "file-and-variable"]
+)
+def test_alembic_reads_the_database_url_file(tmp_path, variable):
     """`podman exec kendo-app alembic ...` (docs/install/upgrading.md) runs
-    where only DATABASE_URL_FILE is set. Without it alembic.ini's placeholder
-    URL is used and the command fails."""
+    where DATABASE_URL_FILE is set. The file wins over the variable, as it
+    does for the app: one rule, read_secret's."""
     url_file = tmp_path / "database_url"
     url_file.write_text(os.environ["DATABASE_URL"])
     env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
     env["DATABASE_URL_FILE"] = str(url_file)
+    if variable is not None:
+        env["DATABASE_URL"] = variable
 
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "current"],
@@ -84,3 +92,19 @@ def test_alembic_reads_the_database_url_file(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_migrations_ignore_the_app_login_the_environment_names(tmp_path, monkeypatch):
+    """ADR-0007: migrations run as the superuser login bootstrap is handed, even
+    in kendo-migrate, where DATABASE_URL_FILE names the app user's login. A
+    migration run as the app user would fail on its first CREATE."""
+    from alembic import command
+    from app.db.bootstrap import _alembic_config
+
+    migration_url = os.environ["DATABASE_URL"]
+    app_login = tmp_path / "database_url"
+    app_login.write_text(_UNREACHABLE_URL)
+    monkeypatch.setenv("DATABASE_URL", _UNREACHABLE_URL)
+    monkeypatch.setenv("DATABASE_URL_FILE", str(app_login))
+
+    command.current(_alembic_config(migration_url))  # connects, or raises
