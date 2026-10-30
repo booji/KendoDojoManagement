@@ -73,7 +73,10 @@ cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
 cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
+cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
+# Idempotent; enables the IP-retention timer on an install that predates it (#467).
+systemctl --user enable --now kendo-ip-retention.timer
 
 # Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.
 install -m 755 deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh ~/.local/bin/

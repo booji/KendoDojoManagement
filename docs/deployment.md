@@ -132,7 +132,8 @@ transcription here:
   Plus `~/backups` and the backup/restore scripts in `~/.local/bin`.
 - **the Quadlet units** — copied into `~/.config/containers/systemd/`, pinned
   to the tag the bundle was extracted from, then `systemctl --user
-  daemon-reload`.
+  daemon-reload`. Plus `kendo-ip-retention.timer` in `~/.config/systemd/user/`,
+  enabled — see [IP retention](#ip-retention) below.
 
 It never escalates: the host prerequisites from section 1 are detected and the
 exact `sudo` command printed for you to run.
@@ -226,6 +227,13 @@ cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
 
 # Quadlet generates systemd units from these files on daemon-reload.
 systemctl --user daemon-reload
+
+# Quadlet generates no timers, so the daily IP-retention trigger is a plain
+# user unit (see IP retention below).
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now kendo-ip-retention.timer
 ```
 
 </details>
@@ -254,6 +262,22 @@ upgrade head` and exits, and `kendo-app` is ordered after it, so the app
 never serves against a half-migrated schema and a failed migration shows up
 as a failed `kendo-migrate.service` rather than as an app crash (#391).
 `systemctl --user status kendo-migrate --no-pager` shows the last run.
+
+### IP retention
+
+`recovery_attempts` stores the IP address of each recovery-code attempt, and
+the app clears it to NULL once the row is 30 days old (#434). `kendo-app` does
+that on every start; `kendo-ip-retention.timer` runs `kendo-ip-retention.service`
+(`python -m app.cli clear-expired-ip-addresses`, then exits) daily, so the
+limit holds on an instance that is never restarted. `Persistent=true` catches up
+a run missed while the host was off.
+
+```bash
+systemctl --user list-timers kendo-ip-retention.timer --no-pager
+systemctl --user status kendo-ip-retention --no-pager   # the last run
+```
+
+The Compose stack has no timer: there the clear runs only when the app starts.
 
 
 ## 5. TLS options
@@ -291,7 +315,7 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 
 ## 8. Container limits
 
-`kendo-app`, `kendo-migrate` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
+`kendo-app`, `kendo-migrate`, `kendo-ip-retention` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
 
 The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:
 
