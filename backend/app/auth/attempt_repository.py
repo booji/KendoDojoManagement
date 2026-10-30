@@ -43,21 +43,32 @@ class SqlAttemptRepository:
             count += 1
         return count
 
+    async def clear_expired_ip_addresses(self) -> None:
+        """NULL the IP of every Account's attempt row older than IP_RETENTION.
+
+        Run at startup and by the daily kendo-ip-retention timer (#467), not by
+        log_attempt. SKIP LOCKED: a row a concurrent redemption holds is being
+        deleted or will be cleared next run, and never waiting is what keeps
+        this from deadlocking with that redemption's DELETE.
+        """
+        expired = (
+            select(RecoveryAttempt.id)
+            .where(
+                RecoveryAttempt.attempted_at < datetime.now(UTC) - IP_RETENTION,
+                RecoveryAttempt.ip_address.is_not(None),
+            )
+            .with_for_update(skip_locked=True)
+        )
+        await self._session.execute(
+            update(RecoveryAttempt)
+            .where(RecoveryAttempt.id.in_(expired.scalar_subquery()))
+            .values(ip_address=None)
+        )
+
     async def log_attempt(
         self, user_id: str, ip_address: str, *, success: bool
     ) -> None:
         now = datetime.now(UTC)
-        # No scheduler in the app, so retention runs whenever an attempt is
-        # logged, for every Account. It runs before the DELETE below so
-        # concurrent redemptions take row locks in the same order.
-        await self._session.execute(
-            update(RecoveryAttempt)
-            .where(
-                RecoveryAttempt.attempted_at < now - IP_RETENTION,
-                RecoveryAttempt.ip_address.is_not(None),
-            )
-            .values(ip_address=None)
-        )
         if success:
             # Earlier rows no longer count toward lockout; they are only
             # stored IP addresses (#434).

@@ -31,6 +31,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.db_models import Account, AuthSession, RecoveryAttempt, RecoveryCode
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
@@ -573,12 +574,14 @@ async def test_success_deletes_the_accounts_earlier_attempts(db_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_attempt_clears_ip_addresses_older_than_30_days(db_client) -> None:
-    """Every Account's aged rows lose their IP; the rows themselves stay."""
+async def test_clear_expired_ip_addresses_clears_every_accounts_aged_ips(
+    db_client,
+) -> None:
+    """Aged rows lose their IP, recent ones keep it; the rows themselves stay
+    (#434), with no recovery attempt needed to trigger it (#467)."""
     now = datetime.now(UTC)
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
-    await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
     await _seed_failed_attempt(
         db_client, user_id, attempted_at=now - timedelta(days=29)
     )
@@ -591,18 +594,63 @@ async def test_log_attempt_clears_ip_addresses_older_than_30_days(db_client) -> 
             db_client, other_id, attempted_at=now - timedelta(days=31)
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test/api"
-        ) as c:
-            r = await c.post(
-                "/auth/recovery/redeem",
-                json={"email": "musashi@dojo.test", "code": "wrong-code-yyyy"},
-            )
-        assert r.status_code == 401
+        await _clear_expired_ip_addresses(db_client)
 
         others = await _attempts_for(db_client, other_id)
         assert [(a.ip_address, a.success) for a in others] == [(None, False)]
         mine = await _attempts_for(db_client, user_id)
-        assert [a.ip_address for a in mine] == ["127.0.0.1", "127.0.0.1"]
+        assert [a.ip_address for a in mine] == ["127.0.0.1"]
     finally:
         await _wipe_test_email(db_client, other_email)
+
+
+async def _clear_expired_ip_addresses(engine) -> None:
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session, session.begin():
+        await SqlAttemptRepository(session).clear_expired_ip_addresses()
+
+
+@pytest.mark.asyncio
+async def test_startup_clears_aged_ip_addresses(db_client, monkeypatch) -> None:
+    """A quiet instance still clears on every app start (#467)."""
+    import app.main as main_module
+
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    await _seed_failed_attempt(
+        db_client, user_id, attempted_at=datetime.now(UTC) - timedelta(days=31)
+    )
+    monkeypatch.setattr(main_module, "engine", db_client)
+
+    # pytest's login is the superuser, which the app rightly refuses (#453).
+    async def _allow(conn) -> None:
+        return None
+
+    monkeypatch.setattr(main_module, "_refuse_superuser", _allow)
+
+    await main_module._init_db()
+
+    assert [a.ip_address for a in await _attempts_for(db_client, user_id)] == [None]
+
+
+@pytest.mark.asyncio
+async def test_cli_clears_aged_ip_addresses(db_client, database_url) -> None:
+    """What kendo-ip-retention.service runs daily (#467)."""
+    from typer.testing import CliRunner
+
+    from app.cli import app as cli_app
+
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    await _seed_failed_attempt(
+        db_client, user_id, attempted_at=datetime.now(UTC) - timedelta(days=31)
+    )
+
+    result = CliRunner().invoke(
+        cli_app,
+        ["clear-expired-ip-addresses"],
+        env={"DATABASE_URL": database_url},
+    )
+
+    assert result.exit_code == 0, f"output={result.output!r} exc={result.exception}"
+    assert [a.ip_address for a in await _attempts_for(db_client, user_id)] == [None]

@@ -1,14 +1,19 @@
-"""Break-glass CLI for admin recovery token generation."""
+"""Operator CLI: break-glass admin recovery tokens, and the recovery-attempt IP
+retention job kendo-ip-retention.timer runs daily (#467)."""
 
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import uuid
+from collections.abc import Coroutine
+from typing import Any
 
 import typer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.auth.accounts import account_for_email
+from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.db_models import AdminRecoveryToken
 from app.auth.recovery_service import (
     admin_token_expiry,
@@ -30,16 +35,34 @@ def _make_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-@app.command()
-def create_recovery_token(email: str) -> None:
-    """Generate a break-glass admin recovery token for the user with EMAIL."""
+def _database_url() -> str:
     # Read now, not at import: DATABASE_URL_FILE in the hardened container.
     url = read_secret("DATABASE_URL")
     if not url:
         typer.echo("Error: DATABASE_URL (or DATABASE_URL_FILE) is not set.", err=True)
         raise typer.Exit(code=1)
+    return url
 
-    async def _run() -> None:
+
+def _run(coro: Coroutine[Any, Any, None]) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(asyncio.run, coro).result()
+    else:
+        asyncio.run(coro)
+
+
+@app.command()
+def create_recovery_token(email: str) -> None:
+    """Generate a break-glass admin recovery token for the user with EMAIL."""
+    url = _database_url()
+
+    async def _create() -> None:
         factory = _make_session_factory(url)
         async with factory() as session:
             user = await account_for_email(session, email)
@@ -66,19 +89,19 @@ def create_recovery_token(email: str) -> None:
 
         typer.echo(plaintext)
 
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
+    _run(_create())
 
-    if loop is not None and loop.is_running():
-        import concurrent.futures
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, _run())
-            future.result()
-    else:
-        asyncio.run(_run())
+@app.command()
+def clear_expired_ip_addresses() -> None:
+    """Clear recovery-attempt IP addresses older than IP_RETENTION (#467)."""
+    url = _database_url()
+
+    async def _clear() -> None:
+        async with _make_session_factory(url)() as session, session.begin():
+            await SqlAttemptRepository(session).clear_expired_ip_addresses()
+
+    _run(_clear())
 
 
 if __name__ == "__main__":
