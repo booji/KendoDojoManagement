@@ -10,7 +10,7 @@ from sqlalchemy import delete
 from app.auth.accounts import delete_account
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
-from app.core.security_logger import log_security_event
+from app.core.security_logger import changed_fields, log_admin_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
@@ -90,12 +90,7 @@ async def create_member(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
-    log_security_event(
-        "member_created",
-        "success",
-        user_id=claims.sub,
-        detail={"member_id": record["id"]},
-    )
+    log_admin_event("member_created", claims.sub, member_id=record["id"])
     return _to_response(record)
 
 
@@ -170,16 +165,15 @@ async def update_member(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     record = await repo.update(str(member_id), data)
+    if record is None:  # deleted between the read and the write
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    # Before the commit: a write that commits always gets its event.
+    changed = changed_fields(before, record, data)
     await uow.commit()
-    log_security_event(
-        "member_updated",
-        "success",
-        user_id=claims.sub,
-        detail={
-            "member_id": record["id"],
-            # Names only: the values are the personal data being audited.
-            "changed_fields": sorted(k for k in data if before[k] != record[k]),
-        },
+    log_admin_event(
+        "member_updated", claims.sub, member_id=record["id"], changed_fields=changed
     )
     return _to_response(record)
 
@@ -251,7 +245,5 @@ async def erase_member(
     }
     updated = await repo.update(member_id, scrub)
     await uow.commit()
-    log_security_event(
-        "member_erased", "success", user_id=claims.sub, detail={"member_id": member_id}
-    )
+    log_admin_event("member_erased", claims.sub, member_id=member_id)
     return _to_response(updated)
