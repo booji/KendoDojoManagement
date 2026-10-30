@@ -558,6 +558,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#10-encrypt-the-disk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0 Encrypt the disk
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#11-install-podman" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -655,6 +666,17 @@
     <span class="md-ellipsis">
       
         7. A note on CORS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-container-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Container limits
       
     </span>
   </a>
@@ -1552,6 +1574,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#10-encrypt-the-disk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0 Encrypt the disk
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#11-install-podman" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1656,6 +1689,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#8-container-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Container limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#appendix-debian-ubuntu-stub-not-the-primary-target" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1718,6 +1762,13 @@
 <p>UAT and PROD are <strong>separate hosts, one instance each</strong>. The Quadlet units, Traefik config, and scripts are identical between them — only the per-host env file values and secrets differ.</p>
 <hr />
 <h2 id="1-one-time-host-preparation-as-an-admin-sudo-user">1. One-time host preparation (as an admin / sudo user)<a class="headerlink" href="#1-one-time-host-preparation-as-an-admin-sudo-user" title="Permanent link">&para;</a></h2>
+<h3 id="10-encrypt-the-disk">1.0 Encrypt the disk<a class="headerlink" href="#10-encrypt-the-disk" title="Permanent link">&para;</a></h3>
+<p>The Postgres data volume, the uploads volume and the local backups all sit on this host's disk and hold every Member's personal data, including under-18 and safeguarding data. Use full-disk encryption, so a stolen disk, a copied VM snapshot or a decommissioned drive gives none of it away:</p>
+<ul>
+<li><strong>Your own hardware or hypervisor:</strong> choose LUKS ("Encrypt my data" in the AlmaLinux installer) when installing the OS; adding it later means a reinstall. The host then waits for the passphrase at every boot. For unattended reboots, bind it to the TPM with Clevis.</li>
+<li><strong>Cloud VM:</strong> turn on the provider's encrypted volumes for the boot disk and any data disks.</li>
+</ul>
+<p>This protects the disk while it is powered off, not a running host. Backups leave the disk, so they carry their own encryption: see <a href="../install/backups/#the-backup-key">The backup key</a> and <a href="../install/backups/#off-site-copies-optional">Off-site copies</a>.</p>
 <h3 id="11-install-podman">1.1 Install Podman<a class="headerlink" href="#11-install-podman" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>podman<span class="w">   </span><span class="c1"># AlmaLinux 10 ships Podman 5.x</span>
 podman<span class="w"> </span>--version<span class="w">             </span><span class="c1"># confirm &gt;= 4.4 (Quadlet); 5.x expected</span>
@@ -1857,6 +1908,12 @@ openssl<span class="w"> </span>rand<span class="w"> </span>-base64<span class="w
 
 A sixth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
 
+The units mount each secret as a file under `/run/secrets`, readable only by
+the app's user, and tell the app where it is with `<NAME>_FILE` (for example
+`JWT_SECRET_FILE=/run/secrets/jwt_secret`). None is passed as an environment
+variable, so none shows up in `podman inspect` or is inherited by a process
+the app starts (#462).
+
 Then the units:
 
 <div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>~/.config/containers/systemd
@@ -1911,6 +1968,14 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<spa
 <p>This is safe <strong>only because</strong> of the network design: the app publishes no host ports and is reachable solely through Traefik, which overwrites any client-supplied <code>X-Forwarded-For</code> (do <strong>not</strong> enable <code>forwardedHeaders.insecure</code> on Traefik's entrypoints). The flag defaults to <code>false</code> so local dev — where the app is directly reachable — stays spoof-proof.</p>
 <h2 id="7-a-note-on-cors">7. A note on CORS<a class="headerlink" href="#7-a-note-on-cors" title="Permanent link">&para;</a></h2>
 <p>The SPA is served <strong>same-origin</strong> with the API (both under <code>https://&lt;your-domain&gt;</code>), so CORS never fires in normal operation. Keep <code>CORS_ORIGINS</code> pinned to the single canonical origin (never <code>*</code>) — auth is cookie-based, and <code>*</code> + credentials is both invalid and a credential-leak risk. Pinning means any accidental cross-origin path fails closed.</p>
+<h2 id="8-container-limits">8. Container limits<a class="headerlink" href="#8-container-limits" title="Permanent link">&para;</a></h2>
+<p><code>kendo-app</code>, <code>kendo-migrate</code> and <code>kendo-traefik</code> assume they may be breached (#458): a read-only root filesystem (<code>/tmp</code> and the volumes are the only writable paths), every capability dropped (Traefik keeps <code>NET_BIND_SERVICE</code> for 80/443), <code>NoNewPrivileges=true</code>, and a cap of 256 pids and 512 MiB memory each. <code>kendo-db</code> is not hardened yet.</p>
+<p>The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later <code>PodmanArgs=</code> flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">d</span><span class="o">=</span>~/.config/containers/systemd/kendo-app.container.d<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">"</span>
+<span class="nb">printf</span><span class="w"> </span><span class="s1">'[Container]\nPodmanArgs=--memory=1g --pids-limit=512\n'</span><span class="w"> </span>&gt;<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">/30-limits.conf"</span>
+systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-app
+</code></pre></div>
+<p>The Compose stack carries the same settings (<code>x-hardening</code> in <code>docker-compose.yml</code>). There, set <code>mem_limit:</code> or <code>pids_limit:</code> on the service itself, which wins over the merged defaults.</p>
 <hr />
 <hr />
 <h2 id="appendix-debian-ubuntu-stub-not-the-primary-target">Appendix — Debian / Ubuntu stub (not the primary target)<a class="headerlink" href="#appendix-debian-ubuntu-stub-not-the-primary-target" title="Permanent link">&para;</a></h2>

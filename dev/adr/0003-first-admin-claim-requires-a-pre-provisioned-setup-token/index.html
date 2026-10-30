@@ -1510,9 +1510,9 @@
 
 <h1 id="claiming-the-first-admin-account-requires-a-pre-provisioned-setup-token">Claiming the first admin account requires a pre-provisioned setup token<a class="headerlink" href="#claiming-the-first-admin-account-requires-a-pre-provisioned-setup-token" title="Permanent link">&para;</a></h1>
 <p>The operator provisions a <code>SETUP_TOKEN</code> before first boot — a podman secret
-injected as env under Quadlet, a value in the env file for the Compose
-self-host — and <code>POST /api/setup/passkey/complete</code> requires it. The app reads
-it from config like any other secret, compares it in constant time, and
+under Quadlet, a value in <code>.env</code> for the Compose self-host, each reaching the
+app as a mounted file — and <code>POST /api/setup/passkey/complete</code> requires it.
+The app reads it from config like any other secret, compares it in constant time, and
 refuses to start without it. <code>/api/setup/passkey/begin</code> requires it too (see
 the amendment under Consequences); <code>GET /api/setup</code> is unchanged, and the existing
 <code>_has_registered_user()</code> guard still runs first, so a claimed instance stays
@@ -1540,13 +1540,24 @@ exposure but not in the right policy: the LAN box is simply one the attacker
 rarely reaches, and a policy that only PROD gets is a policy that is wrong on
 the day a UAT box gets a public DNS name. One policy covers both.</p>
 <p>The deployment already has the shape this needs.
-<code>deploy/quadlet/kendo-app.container</code> injects two podman secrets as environment:</p>
-<div class="highlight"><pre><span></span><code>Secret=kendo_database_url,type=env,target=DATABASE_URL
-Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
+<code>deploy/quadlet/kendo-app.container</code> mounts each podman secret as a file
+readable only by the app's uid, and names the file to the app in <code>&lt;NAME&gt;_FILE</code>:</p>
+<div class="highlight"><pre><span></span><code>Secret=kendo_jwt_secret,type=mount,target=jwt_secret,uid=1001,gid=1001,mode=0400
+Environment=JWT_SECRET_FILE=/run/secrets/jwt_secret
 </code></pre></div>
-<p>A third entry is a line of unit file and a <code>podman secret create</code>. Nothing in
-the app has to learn a new way to hold a secret, and nothing has to learn a new
-way to hand one to the operator.</p>
+<p>The Compose self-host mounts the same files from <code>secrets/</code>, which <code>setup.sh</code>
+writes from <code>.env</code>. <code>app/config.py</code> resolves every secret through
+<code>read_secret</code>: <code>&lt;NAME&gt;_FILE</code> when set, the plain <code>&lt;NAME&gt;</code> variable otherwise
+(the fallback dev and test use). A new secret is a pair of unit lines, a
+<code>podman secret create</code> and a <code>read_secret</code> call. Nothing in the app has to
+learn a new way to hold a secret, and nothing has to learn a new way to hand
+one to the operator.</p>
+<blockquote>
+<p>When this was decided, secrets reached the app as environment variables
+(<code>type=env</code>). #462 moved them to mounted files, because a variable shows up
+in <code>podman inspect</code> and <code>/proc/&lt;pid&gt;/environ</code> and is inherited by every child
+process. The decision is unchanged.</p>
+</blockquote>
 <h2 id="considered-options">Considered options<a class="headerlink" href="#considered-options" title="Permanent link">&para;</a></h2>
 <p><strong>A pre-provisioned <code>SETUP_TOKEN</code> (chosen).</strong> It is config, not state: no
 table, no migration, no process-scoped value to re-fetch, and no retrieval path
@@ -1559,8 +1570,9 @@ secretary. Rotation is <code>podman secret rm</code>/<code>create</code> plus a 
 deployment runbook must carry. The plaintext exists wherever the operator
 generated it — shell history, unless they pipe it (<code>openssl rand -base64 32 |
 podman secret create kendo_setup_token -</code>). Under Compose there are no podman
-secrets, so it lives in the same env file that already holds the database
-password: the same exposure class as what is there, not a new one.</p>
+secrets, so it lives in <code>.env</code> (and the <code>secrets/</code> file <code>setup.sh</code> writes from
+it) beside the database password: the same exposure class as what is there,
+not a new one.</p>
 <p><strong>A token generated at boot and printed to the container log.</strong> Attractive
 because <code>podman logs kendo-app</code> is already in the day-2 table, and it needs no
 provisioning step. Rejected on the Quadlet specifics. Container stdout goes to
@@ -1574,8 +1586,8 @@ operator copied a minute ago and failing their correctly-filled form with a
 is a bad instruction to have to give during first setup.</p>
 <p><strong>A token minted through the CLI</strong> (<code>app/cli.py</code>, alongside
 <code>create-recovery-token</code>), retrieved with <code>podman exec kendo-app ...</code>. This
-works with no extra wiring — <code>DATABASE_URL</code> is already injected as env and
-exec inherits it — and keeps the secret out of the journal. Rejected because it
+works with no extra wiring — <code>podman exec</code> sees the same <code>DATABASE_URL_FILE</code>
+the app reads — and keeps the secret out of the journal. Rejected because it
 needs persisted token state, a table and a migration, to deliver a secret that
 config can carry for free, and because it makes shell access a hard requirement
 for first setup, which forecloses handing a URL to a non-technical dojo

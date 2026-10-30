@@ -1490,10 +1490,19 @@ next to the value it ships with. They are included here as they are in the
 release you are reading.</p>
 <h2 id="quick-self-host-env">Quick self-host — <code>.env</code><a class="headerlink" href="#quick-self-host-env" title="Permanent link">&para;</a></h2>
 <p><code>./setup.sh</code> writes <code>.env</code> from this template, filling in the domain and
-generating the secrets.</p>
+generating the secrets. It then writes <code>DATABASE_URL</code>,
+<code>MIGRATION_DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> to files in
+<code>secrets/</code>, which <code>docker-compose.yml</code> mounts under <code>/run/secrets</code> instead of
+passing them as environment variables. After changing one of them in <code>.env</code>,
+re-run <code>./setup.sh</code> so the files match.</p>
+<p>The app reads each of those four from the file <code>&lt;NAME&gt;_FILE</code> names when that is
+set, and from <code>&lt;NAME&gt;</code> otherwise. The dev and test stacks use <code>&lt;NAME&gt;</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Template for the production Compose stack (docker-compose.yml).</span>
 <span class="c1"># Start it with: podman-compose --env-file .env up -d</span>
 <span class="c1"># Copy to .env and fill in real values — .env is gitignored, never commit it.</span>
+<span class="c1"># DATABASE_URL, MIGRATION_DATABASE_URL, JWT_SECRET and SETUP_TOKEN reach the</span>
+<span class="c1"># containers as files, not environment: ./setup.sh writes them from this file to</span>
+<span class="c1"># secrets/ (#462). After changing one here, re-run ./setup.sh.</span>
 
 <span class="c1"># The image docker-compose.yml runs, for `app` and `migrate` alike. The</span>
 <span class="c1"># documented pin is the MAJOR tag (ADR-0004): `:1` takes fixes and features but</span>
@@ -1515,7 +1524,8 @@ generating the secrets.</p>
 <span class="c1"># Required — the app refuses to start if this is unset/blank, or if it names a</span>
 <span class="c1"># superuser. The restricted app user (ADR-0007), which can only read and write</span>
 <span class="c1"># rows: the migrate service creates it and sets its password from this URL on</span>
-<span class="c1"># every start, so changing the password here and restarting rotates it.</span>
+<span class="c1"># every start, so changing the password here, re-running ./setup.sh and</span>
+<span class="c1"># restarting rotates it.</span>
 <span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo_app:&lt;your-app-db-password&gt;@db:5432/kendo
 <span class="c1"># The superuser login, given to the migrate service only. Must embed</span>
 <span class="c1"># POSTGRES_USER and POSTGRES_PASSWORD below.</span>
@@ -1586,7 +1596,7 @@ podman secrets under the hardened deployment, not variables in this file — see
 <a href="../../deployment/">Hardened deployment</a>.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Non-sensitive app config for UAT/PROD. Copy to ~kendo/kendo/kendo-app.env and</span>
 <span class="c1"># edit the domain values. Secrets (DATABASE_URL, JWT_SECRET) are NOT here — they</span>
-<span class="c1"># are podman secrets injected by the Quadlet unit.</span>
+<span class="c1"># are podman secrets the Quadlet unit mounts as files (&lt;NAME&gt;_FILE, #462).</span>
 <span class="c1">#</span>
 <span class="c1"># Per-host file: UAT and PROD differ ONLY in the domain-derived values below.</span>
 

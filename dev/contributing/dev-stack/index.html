@@ -1642,7 +1642,11 @@ bundle (<a href="../../install/quick-self-host/">Quick self-host</a>). Contribut
 <p>Copy the dev env file (safe to commit — contains no real secrets):
 <div class="highlight"><pre><span></span><code>cp<span class="w"> </span>.env.dev<span class="w"> </span>.env.dev.local<span class="w">   </span><span class="c1"># optional local overrides</span>
 </code></pre></div></p>
-<p><code>.env.dev</code> is already wired into <code>docker-compose.dev.yml</code>. No edits needed to get started.</p>
+<p>No edits needed to get started, but the backend container does not load
+<code>.env.dev</code> (only <code>db</code> does): its settings are interpolated from it, which needs
+<code>--env-file .env.dev</code> on every Compose command. <code>make dev</code> passes it; a bare
+<code>podman-compose -f docker-compose.dev.yml up</code> starts the backend with
+<code>JWT_SECRET</code>, <code>SETUP_TOKEN</code> and the rest blank (#483).</p>
 <h2 id="start-the-dev-stack">Start the dev stack<a class="headerlink" href="#start-the-dev-stack" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>make<span class="w"> </span>dev
 </code></pre></div>

@@ -607,6 +607,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upgrading-to-secrets-as-mounted-files-462" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to secrets as mounted files (#462)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1490,6 +1501,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#upgrading-to-secrets-as-mounted-files-462" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to secrets as mounted files (#462)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1641,6 +1663,17 @@ podman<span class="w"> </span>secret<span class="w"> </span>rm<span class="w"> <
 </code></pre></div>
 <p>Then refresh the units as above — <code>kendo-migrate.container</code> now attaches the
 new secret — and <code>systemctl --user restart kendo-migrate kendo-app</code>.</p>
+<h2 id="upgrading-to-secrets-as-mounted-files-462">Upgrading to secrets as mounted files (#462)<a class="headerlink" href="#upgrading-to-secrets-as-mounted-files-462" title="Permanent link">&para;</a></h2>
+<p>The app's secrets are now mounted into its containers as files, not passed as
+environment variables. Nothing about the secrets themselves changes.</p>
+<p><strong>Quick self-host (Compose).</strong> Nothing to do: <code>./setup.sh upgrade</code> writes the
+new <code>secrets/</code> directory from your <code>.env</code> before it recreates the stack. If you
+start the stack yourself instead, run <code>./setup.sh</code> first (it keeps every
+secret it finds in <code>.env</code>), or <code>podman-compose up</code> fails on the missing
+secret files.</p>
+<p><strong>Hardened deployment (Quadlet).</strong> Refresh the units as above. The podman
+secrets keep their names, so none needs recreating, then
+<code>systemctl --user restart kendo-migrate kendo-app</code>.</p>
 <h2 id="refreshing-the-env-file-after-an-upgrade">Refreshing the env file after an upgrade<a class="headerlink" href="#refreshing-the-env-file-after-an-upgrade" title="Permanent link">&para;</a></h2>
 <p>Re-extracting the bundle updates <code>deploy/env/kendo-app.env.example</code> in
 <code>~/src</code>. It does not update <code>~/kendo/kendo-app.env</code> — that file is yours, per

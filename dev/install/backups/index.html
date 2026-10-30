@@ -1885,7 +1885,7 @@ rclone<span class="w"> </span>lsf<span class="w"> </span>gdrive:kendo-backups
 <h3 id="pulling-instead-of-pushing">Pulling instead of pushing<a class="headerlink" href="#pulling-instead-of-pushing" title="Permanent link">&para;</a></h3>
 <p>A NAS or another always-on machine can pull the encrypted backups from <code>~/backups</code> on its own schedule, instead of the host pushing them. The host then holds no credential that can reach the copies. How to set that up depends on the machine and is not covered here. <code>./setup.sh check</code> will still warn that no off-site copy is configured, because the host cannot see the pull.</p>
 <h2 id="the-disk-itself">The disk itself<a class="headerlink" href="#the-disk-itself" title="Permanent link">&para;</a></h2>
-<p>Encrypted backups do not protect the live database or the uploads volume on the host's disk. Full-disk encryption on the host (LUKS, or your cloud provider's encrypted volumes) covers a stolen disk or a decommissioned drive (#465).</p>
+<p>Encrypted backups do not protect the live database or the uploads volume on the host's disk. Full-disk encryption on the host (LUKS, or your cloud provider's encrypted volumes) covers a stolen disk or a decommissioned drive: see <a href="../../deployment/#10-encrypt-the-disk">Encrypt the disk</a>.</p>
 
 
 
