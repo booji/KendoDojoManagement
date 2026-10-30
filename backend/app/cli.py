@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 
 import typer
@@ -16,6 +15,7 @@ from app.auth.recovery_service import (
     generate_admin_token_plaintext,
     hash_admin_token,
 )
+from app.config import read_secret
 
 app = typer.Typer()
 
@@ -33,9 +33,10 @@ def _make_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
 @app.command()
 def create_recovery_token(email: str) -> None:
     """Generate a break-glass admin recovery token for the user with EMAIL."""
-    url = os.environ.get("DATABASE_URL")
+    # Read now, not at import: DATABASE_URL_FILE in the hardened container.
+    url = read_secret("DATABASE_URL")
     if not url:
-        typer.echo("Error: DATABASE_URL environment variable is not set.", err=True)
+        typer.echo("Error: DATABASE_URL (or DATABASE_URL_FILE) is not set.", err=True)
         raise typer.Exit(code=1)
 
     async def _run() -> None:

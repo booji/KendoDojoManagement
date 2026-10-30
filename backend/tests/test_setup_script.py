@@ -103,6 +103,21 @@ def test_generates_the_three_secrets_and_keeps_env_unreadable_to_others(tmp_path
     assert (home / ".env").stat().st_mode & 0o077 == 0
 
 
+def test_writes_the_secret_files_compose_mounts(tmp_path):
+    # docker-compose.yml mounts these at /run/secrets instead of passing the
+    # values as environment (#462).
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    env = env_of(home)
+    secrets = home / "secrets"
+    for key in ("DATABASE_URL", "MIGRATION_DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"):
+        assert (secrets / key.lower()).read_text() == env[key], key
+    # Other host users are kept out by the directory; the files have to be
+    # readable by the app's uid 1001, which does not own them.
+    assert secrets.stat().st_mode & 0o777 == 0o700
+
+
 def test_rerunning_changes_the_domain_without_clobbering_the_secrets(tmp_path):
     home = bundle(tmp_path)
     run(home, "dojo.example.com", "1", "1", "admin@example.com")

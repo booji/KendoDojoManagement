@@ -142,6 +142,22 @@ printf '%s' "postgresql+asyncpg://kendo_app:$(od -An -vtx1 -N24 /dev/urandom | t
 Then refresh the units as above — `kendo-migrate.container` now attaches the
 new secret — and `systemctl --user restart kendo-migrate kendo-app`.
 
+## Upgrading to secrets as mounted files (#462)
+
+The app's secrets are now mounted into its containers as files, not passed as
+environment variables, which show up in `podman inspect` and are inherited by
+every process the app starts. Nothing about the secrets themselves changes.
+
+**Quick self-host (Compose).** Nothing to do: `./setup.sh upgrade` writes the
+new `secrets/` directory from your `.env` before it recreates the stack. If you
+start the stack yourself instead, run `./setup.sh` first (it keeps every
+secret it finds in `.env`), or `podman-compose up` fails on the missing
+secret files.
+
+**Hardened deployment (Quadlet).** Refresh the units as above. The podman
+secrets keep their names, so none needs recreating, then
+`systemctl --user restart kendo-migrate kendo-app`.
+
 ## Refreshing the env file after an upgrade
 
 Re-extracting the bundle updates `deploy/env/kendo-app.env.example` in

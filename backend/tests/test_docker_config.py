@@ -100,9 +100,11 @@ def test_compose_has_named_postgres_volume():
 # ---------------------------------------------------------------------------
 
 REQUIRED_APP_ENV_VARS = [
-    "DATABASE_URL",
-    "JWT_SECRET",
-    "SETUP_TOKEN",
+    # The secrets themselves are mounted files (#462): the environment only
+    # names where they are.
+    "DATABASE_URL_FILE",
+    "JWT_SECRET_FILE",
+    "SETUP_TOKEN_FILE",
     "JWT_EXPIRE_MINUTES",
     "COOKIE_SECURE",
     "SESSION_MAX_MINUTES",
@@ -779,14 +781,18 @@ def _env_keys_and_values(service: dict) -> dict[str, str]:
     ids=["compose-app", "dev-backend"],
 )
 def test_compose_app_never_sees_the_superuser_login(load, service: str):
-    env = _env_keys_and_values(load()["services"][service])
+    svc = load()["services"][service]
+    env = _env_keys_and_values(svc)
+    # Prod names a mounted file (<NAME>_FILE, #462), dev passes the value.
+    names = {k.removesuffix("_FILE") for k in env}
     for superuser_var in (
         "MIGRATION_DATABASE_URL",
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",
     ):
-        assert superuser_var not in env, env
-    assert "POSTGRES_PASSWORD" not in env["DATABASE_URL"], env["DATABASE_URL"]
+        assert superuser_var not in names, env
+    assert "migration_database_url" not in svc.get("secrets", []), svc
+    assert "POSTGRES_PASSWORD" not in env.get("DATABASE_URL", ""), env
 
 
 def test_dev_backend_still_gets_every_app_setting_from_env_dev():
@@ -804,7 +810,34 @@ def test_dev_backend_still_gets_every_app_setting_from_env_dev():
 @pytest.mark.parametrize("load", [load_compose, load_dev_compose], ids=["prod", "dev"])
 def test_compose_migrate_gets_both_logins(load):
     env = _env_keys_and_values(load()["services"]["migrate"])
-    assert {"DATABASE_URL", "MIGRATION_DATABASE_URL"} <= env.keys(), env
+    names = {k.removesuffix("_FILE") for k in env}
+    assert {"DATABASE_URL", "MIGRATION_DATABASE_URL"} <= names, env
+
+
+# ---------------------------------------------------------------------------
+# Prod secrets are mounted files, not environment (#462)
+# ---------------------------------------------------------------------------
+# An environment variable shows up in `podman inspect` and /proc/<pid>/environ
+# and is inherited by every child process. Compose mounts a file-backed secret
+# at /run/secrets/<name>; setup.sh writes the files under ./secrets.
+
+_COMPOSE_SECRET_FILES = {
+    "app": ["DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"],
+    "migrate": ["MIGRATION_DATABASE_URL", "DATABASE_URL"],
+}
+
+
+@pytest.mark.parametrize("service", sorted(_COMPOSE_SECRET_FILES))
+def test_compose_secrets_are_mounted_files(service: str):
+    compose = load_compose()
+    svc = compose["services"][service]
+    env = _env_keys_and_values(svc)
+    for var in _COMPOSE_SECRET_FILES[service]:
+        name = var.lower()
+        assert var not in env, f"{service} still passes {var} as environment"
+        assert env.get(f"{var}_FILE") == f"/run/secrets/{name}", env
+        assert name in svc.get("secrets", []), svc
+        assert compose["secrets"][name] == {"file": f"./secrets/{name}"}
 
 
 def test_dev_backend_waits_for_migrate():
