@@ -283,6 +283,20 @@ This is safe **only because** of the network design: the app publishes no host p
 
 The SPA is served **same-origin** with the API (both under `https://<your-domain>`), so CORS never fires in normal operation. Keep `CORS_ORIGINS` pinned to the single canonical origin (never `*`) — auth is cookie-based, and `*` + credentials is both invalid and a credential-leak risk. Pinning means any accidental cross-origin path fails closed.
 
+## 8. Container limits
+
+`kendo-app`, `kendo-migrate` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
+
+The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:
+
+```bash
+d=~/.config/containers/systemd/kendo-app.container.d && mkdir -p "$d"
+printf '[Container]\nPodmanArgs=--memory=1g --pids-limit=512\n' > "$d/30-limits.conf"
+systemctl --user daemon-reload && systemctl --user restart kendo-app
+```
+
+The Compose stack carries the same settings (`x-hardening` in `docker-compose.yml`). There, set `mem_limit:` or `pids_limit:` on the service itself, which wins over the merged defaults.
+
 ---
 
 
