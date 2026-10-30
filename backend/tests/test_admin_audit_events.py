@@ -18,6 +18,8 @@ from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_member_repo
+from app.settings.dependencies import get_dojo_settings_repo
+from tests.dojo_settings_support import StubDojoSettingsRepo, default_dojo_settings
 from tests.fake_repositories import InMemoryMemberRepository
 
 _ADMIN = AccountClaims(
@@ -140,5 +142,64 @@ async def test_member_erasure_is_logged(member_repo, caplog) -> None:
             "user_id": "admin-uuid",
             "ip_address": _IP,
             "detail": {"member_id": member["id"]},
+        }
+    ]
+
+
+@pytest.fixture()
+def settings_repo() -> StubDojoSettingsRepo:
+    repo = StubDojoSettingsRepo()
+    app.dependency_overrides[get_dojo_settings_repo] = lambda: repo
+    return repo
+
+
+async def test_settings_edit_logs_only_the_names_of_fields_that_changed(
+    settings_repo, caplog
+) -> None:
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with _client() as c:
+            response = await c.put(
+                "/settings/dojo",
+                json=default_dojo_settings(dojo_name="Renshinkan", login_show_logo=True),
+            )
+
+    assert response.status_code == 200
+    assert _events(caplog, "dojo_settings_updated") == [
+        {
+            "event_type": "dojo_settings_updated",
+            "result": "success",
+            "user_id": "admin-uuid",
+            "ip_address": _IP,
+            "detail": {"changed_fields": ["dojo_name", "login_show_logo"]},
+        }
+    ]
+    assert "Renshinkan" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "field"),
+    [
+        ("/settings/logo", "logo_url"),
+        ("/settings/background", "background_image_url"),
+    ],
+)
+async def test_branding_upload_is_logged(
+    settings_repo, caplog, endpoint: str, field: str
+) -> None:
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with _client() as c:
+            response = await c.post(
+                endpoint, files={"file": ("brand.png", png, "image/png")}
+            )
+
+    assert response.status_code == 200
+    assert _events(caplog, "dojo_settings_updated") == [
+        {
+            "event_type": "dojo_settings_updated",
+            "result": "success",
+            "user_id": "admin-uuid",
+            "ip_address": _IP,
+            "detail": {"changed_fields": [field]},
         }
     ]
