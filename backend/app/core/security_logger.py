@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 _VALID_EVENT_TYPES = frozenset(
@@ -20,6 +21,11 @@ _VALID_EVENT_TYPES = frozenset(
         "sign_out_everywhere",
     }
 )
+
+# The client IP of the request being served, bound by ClientIPMiddleware, so
+# every event raised during a request records where it came from without each
+# call site threading the IP through (#460). None outside a request.
+request_ip: ContextVar[str | None] = ContextVar("security_event_ip", default=None)
 
 _logger = logging.getLogger("security_events")
 _logger.setLevel(logging.INFO)
@@ -43,6 +49,7 @@ def log_security_event(
     }
     if user_id is not None:
         entry["user_id"] = user_id
+    ip_address = ip_address or request_ip.get()
     if ip_address is not None:
         entry["ip_address"] = ip_address
     if detail is not None:
