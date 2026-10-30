@@ -1,8 +1,8 @@
 # Claiming the first admin account requires a pre-provisioned setup token
 
 The operator provisions a `SETUP_TOKEN` before first boot — a podman secret
-injected as env under Quadlet, a value in the env file for the Compose
-self-host — and `POST /api/setup/passkey/complete` requires it. The app reads
+under Quadlet, a value in the env file for the Compose self-host, each now
+reaching the app as a mounted file (see the amendment under Context) — and `POST /api/setup/passkey/complete` requires it. The app reads
 it from config like any other secret, compares it in constant time, and
 refuses to start without it. `/api/setup/passkey/begin` requires it too (see
 the amendment under Consequences); `GET /api/setup` is unchanged, and the existing
@@ -47,6 +47,17 @@ Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
 A third entry is a line of unit file and a `podman secret create`. Nothing in
 the app has to learn a new way to hold a secret, and nothing has to learn a new
 way to hand one to the operator.
+
+> **Amended by #462.** Secrets no longer reach the app as environment
+> variables, so the `type=env` lines above, "injected as env" and "exec
+> inherits it" below describe the deployment as it was when this was decided.
+> Quadlet mounts each podman secret as a file (`type=mount`, readable only by
+> the app's uid) and names it in `<NAME>_FILE`; the Compose self-host mounts
+> files from `secrets/`, which `setup.sh` writes from `.env`. `app/config.py`
+> reads `<NAME>_FILE` when set and `<NAME>` otherwise (`read_secret`, which
+> also says why). The decision stands: `SETUP_TOKEN` is still config, held and
+> rotated like the other secrets, and `create-recovery-token` under `podman
+> exec` reads the same file.
 
 ## Considered options
 
