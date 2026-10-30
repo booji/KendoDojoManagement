@@ -369,18 +369,18 @@ def test_optional_user_id_included_when_passed(
     assert logs[0].get("user_id") == "test-user-123"
 
 
-def test_optional_ip_address_included_when_passed(
+def test_ip_address_included_when_a_request_bound_one(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """ip_address must appear in the log when explicitly provided."""
-    from app.core.security_logger import log_security_event
+    """ip_address is the IP ClientIPMiddleware bound for the request."""
+    from app.core.security_logger import log_security_event, request_ip
 
-    with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(
-            event_type="login_passkey",
-            result="failure",
-            ip_address="192.168.1.1",
-        )
+    token = request_ip.set("192.168.1.1")
+    try:
+        with caplog.at_level(logging.INFO, logger="security_events"):
+            log_security_event(event_type="login_passkey", result="failure")
+    finally:
+        request_ip.reset(token)
 
     logs = _capture_security_logs(caplog)
     assert logs[0].get("ip_address") == "192.168.1.1"
@@ -402,7 +402,7 @@ def test_optional_detail_included_when_passed(caplog: pytest.LogCaptureFixture) 
 
 
 def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -> None:
-    """All optional keys included when all three are provided."""
+    """Both optional keys included when both are provided."""
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
@@ -410,14 +410,12 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
             event_type="admin_token_generated",
             result="success",
             user_id="admin-456",
-            ip_address="10.0.0.1",
             detail="session abc",
         )
 
     logs = _capture_security_logs(caplog)
     entry = logs[0]
     assert entry.get("user_id") == "admin-456"
-    assert entry.get("ip_address") == "10.0.0.1"
     assert entry.get("detail") == "session abc"
 
 

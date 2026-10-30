@@ -249,3 +249,25 @@ async def test_report_export_is_logged(caplog, url: str, detail: dict) -> None:
             "detail": detail,
         }
     ]
+
+
+async def test_member_edit_of_a_member_gone_mid_request_is_404_and_not_logged(
+    caplog,
+) -> None:
+    """The Member is read, then deleted before the update lands."""
+
+    class _VanishingRepo(InMemoryMemberRepository):
+        async def update(self, member_id, data):
+            return None
+
+    repo = _VanishingRepo()
+    member = repo.seed(**_member_payload())
+    app.dependency_overrides[get_member_repo] = lambda: repo
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with _client() as c:
+            response = await c.put(
+                f"/members/{member['id']}", json=_member_payload(surname="Suzuki")
+            )
+
+    assert response.status_code == 404
+    assert _events(caplog, "member_updated") == []

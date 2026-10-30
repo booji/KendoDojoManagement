@@ -247,6 +247,14 @@ run_check() {
       if [ -z "$absent" ]; then ok "Every podman secret the units name exists"
       else fail "podman secret missing:$absent — re-run $rerun, or create it for your own drop-in"; fi
     fi
+    # Without the daily timer, recovery-attempt IPs are cleared only when
+    # kendo-app restarts, and can outlive their 30 days (#467).
+    local timer=kendo-ip-retention.timer
+    if [ ! -f "$HOME/.config/systemd/user/$timer" ]; then
+      fail "$timer is not installed — re-run $rerun"
+    elif command -v systemctl >/dev/null && ! systemctl --user is-enabled --quiet "$timer" 2>/dev/null; then
+      fail "$timer is not enabled — run: systemctl --user enable --now $timer"
+    else ok "$timer is installed and enabled"; fi
   elif [ -f "$env_file" ]; then
     for s in POSTGRES_PASSWORD JWT_SECRET SETUP_TOKEN; do
       [ -n "$(env_value "$env_file" "$s")" ] || absent+=" $s"
@@ -844,7 +852,7 @@ put_secret() { # put_secret NAME VALUE
 }
 
 new_setup_token=""
-reload_failed=""
+reload_failed="" timer_failed=""
 quadlet_install() {
   command -v podman >/dev/null || {
     echo "Podman is not installed, and the hardened deployment is nothing but podman secrets and Quadlet units. Nothing was written." >&2
@@ -974,7 +982,7 @@ DROPIN
   # step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
   [ -n "$reload_failed" ] ||
-    systemctl --user enable --now kendo-ip-retention.timer || reload_failed=1
+    systemctl --user enable --now kendo-ip-retention.timer || timer_failed=1
 }
 
 if [ "$mode" = compose ]; then
@@ -1025,6 +1033,10 @@ if [ "$mode" = quadlet ]; then
   yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer\`, from
   a \`machinectl shell kendo@\` session — \`su - kendo\` leaves systemctl --user
   broken — before anything below will work.
+"
+  [ -z "$timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-ip-retention.timer\` failed, so
+  recovery-attempt IPs are only cleared when kendo-app restarts. Run it again from
+  a \`machinectl shell kendo@\` session and read the error it gives.
 "
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
