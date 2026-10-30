@@ -1,9 +1,9 @@
 # Claiming the first admin account requires a pre-provisioned setup token
 
 The operator provisions a `SETUP_TOKEN` before first boot — a podman secret
-injected as env under Quadlet, a value in the env file for the Compose
-self-host — and `POST /api/setup/passkey/complete` requires it. The app reads
-it from config like any other secret, compares it in constant time, and
+under Quadlet, a value in `.env` for the Compose self-host, each reaching the
+app as a mounted file — and `POST /api/setup/passkey/complete` requires it.
+The app reads it from config like any other secret, compares it in constant time, and
 refuses to start without it. `/api/setup/passkey/begin` requires it too (see
 the amendment under Consequences); `GET /api/setup` is unchanged, and the existing
 `_has_registered_user()` guard still runs first, so a claimed instance stays
@@ -37,16 +37,26 @@ rarely reaches, and a policy that only PROD gets is a policy that is wrong on
 the day a UAT box gets a public DNS name. One policy covers both.
 
 The deployment already has the shape this needs.
-`deploy/quadlet/kendo-app.container` injects two podman secrets as environment:
+`deploy/quadlet/kendo-app.container` mounts each podman secret as a file
+readable only by the app's uid, and names the file to the app in `<NAME>_FILE`:
 
 ```
-Secret=kendo_database_url,type=env,target=DATABASE_URL
-Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
+Secret=kendo_jwt_secret,type=mount,target=jwt_secret,uid=1001,gid=1001,mode=0400
+Environment=JWT_SECRET_FILE=/run/secrets/jwt_secret
 ```
 
-A third entry is a line of unit file and a `podman secret create`. Nothing in
-the app has to learn a new way to hold a secret, and nothing has to learn a new
-way to hand one to the operator.
+The Compose self-host mounts the same files from `secrets/`, which `setup.sh`
+writes from `.env`. `app/config.py` resolves every secret through
+`read_secret`: `<NAME>_FILE` when set, the plain `<NAME>` variable otherwise
+(the fallback dev and test use). A new secret is a pair of unit lines, a
+`podman secret create` and a `read_secret` call. Nothing in the app has to
+learn a new way to hold a secret, and nothing has to learn a new way to hand
+one to the operator.
+
+> When this was decided, secrets reached the app as environment variables
+> (`type=env`). #462 moved them to mounted files, because a variable shows up
+> in `podman inspect` and `/proc/<pid>/environ` and is inherited by every child
+> process. The decision is unchanged.
 
 ## Considered options
 
@@ -62,8 +72,9 @@ Its costs are real and accepted. It adds a step before first boot, which the
 deployment runbook must carry. The plaintext exists wherever the operator
 generated it — shell history, unless they pipe it (`openssl rand -base64 32 |
 podman secret create kendo_setup_token -`). Under Compose there are no podman
-secrets, so it lives in the same env file that already holds the database
-password: the same exposure class as what is there, not a new one.
+secrets, so it lives in `.env` (and the `secrets/` file `setup.sh` writes from
+it) beside the database password: the same exposure class as what is there,
+not a new one.
 
 **A token generated at boot and printed to the container log.** Attractive
 because `podman logs kendo-app` is already in the day-2 table, and it needs no
@@ -79,8 +90,8 @@ is a bad instruction to have to give during first setup.
 
 **A token minted through the CLI** (`app/cli.py`, alongside
 `create-recovery-token`), retrieved with `podman exec kendo-app ...`. This
-works with no extra wiring — `DATABASE_URL` is already injected as env and
-exec inherits it — and keeps the secret out of the journal. Rejected because it
+works with no extra wiring — `podman exec` sees the same `DATABASE_URL_FILE`
+the app reads — and keeps the secret out of the journal. Rejected because it
 needs persisted token state, a table and a migration, to deliver a secret that
 config can carry for free, and because it makes shell access a hard requirement
 for first setup, which forecloses handing a URL to a non-technical dojo

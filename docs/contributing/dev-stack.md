@@ -23,7 +23,11 @@ Copy the dev env file (safe to commit — contains no real secrets):
 cp .env.dev .env.dev.local   # optional local overrides
 ```
 
-`.env.dev` is already wired into `docker-compose.dev.yml`. No edits needed to get started.
+No edits needed to get started, but the backend container does not load
+`.env.dev` (only `db` does): its settings are interpolated from it, which needs
+`--env-file .env.dev` on every Compose command. `make dev` passes it; a bare
+`podman-compose -f docker-compose.dev.yml up` starts the backend with
+`JWT_SECRET`, `SETUP_TOKEN` and the rest blank (#483).
 
 ## Start the dev stack
 

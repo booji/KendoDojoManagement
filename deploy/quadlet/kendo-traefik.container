@@ -23,6 +23,20 @@ PublishPort=443:443
 Volume=kendo-traefik-acme.volume:/acme
 Volume=%h/kendo/traefik/traefik.yml:/etc/traefik/traefik.yml:ro,Z
 Volume=%h/kendo/traefik/dynamic:/etc/traefik/dynamic:ro,Z
+# Hardening (#458). The same block is in kendo-app, kendo-migrate and
+# kendo-traefik: Quadlet has no include or anchor, so change all three.
+# Read-only root, so a breach cannot write tools into the image. ACME state
+# lives on its volume; /tmp is the only scratch space.
+ReadOnly=true
+Tmpfs=/tmp
+# Every capability dropped but the one that binds 80/443 inside its own
+# namespace; no setuid escalation.
+DropCapability=ALL
+AddCapability=NET_BIND_SERVICE
+NoNewPrivileges=true
+# Bounds a fork bomb or a leak to this container. Fixed defaults; tune them
+# per host with a drop-in (docs/deployment.md, "Container limits").
+PodmanArgs=--pids-limit=256 --memory=512m
 
 [Service]
 Restart=always

@@ -86,30 +86,14 @@ def _run_alembic_upgrade_head(database_url: str) -> None:
     from alembic import command
 
     cfg = _alembic_config(database_url)
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = database_url
-    try:
-        command.upgrade(cfg, "head")
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
+    command.upgrade(cfg, "head")
 
 
 def _run_alembic_stamp_head(database_url: str) -> None:
     from alembic import command
 
     cfg = _alembic_config(database_url)
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = database_url
-    try:
-        command.stamp(cfg, "head")
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
+    command.stamp(cfg, "head")
 
 
 def _current_head_revision() -> str:

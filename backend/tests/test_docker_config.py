@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.deploy_contract import CAPABILITIES_ADDED_BACK, SECRETS
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -100,9 +102,11 @@ def test_compose_has_named_postgres_volume():
 # ---------------------------------------------------------------------------
 
 REQUIRED_APP_ENV_VARS = [
-    "DATABASE_URL",
-    "JWT_SECRET",
-    "SETUP_TOKEN",
+    # The secrets themselves are mounted files (#462): the environment only
+    # names where they are.
+    "DATABASE_URL_FILE",
+    "JWT_SECRET_FILE",
+    "SETUP_TOKEN_FILE",
     "JWT_EXPIRE_MINUTES",
     "COOKIE_SECURE",
     "SESSION_MAX_MINUTES",
@@ -417,7 +421,7 @@ DEV_HOST = "dojo.localhost"
 DEV_ORIGIN = "https://dojo.localhost:8443"
 
 
-def _env_values(path: Path) -> dict[str, str]:
+def _read_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for line in path.read_text().splitlines():
         line = line.strip()
@@ -523,7 +527,7 @@ DEV_ENV_EXPECTATIONS = {
 
 @pytest.mark.parametrize("key,expected", sorted(DEV_ENV_EXPECTATIONS.items()))
 def test_env_dev_matches_the_proxied_origin(key: str, expected: str):
-    assert _env_values(ENV_DEV).get(key) == expected
+    assert _read_env_file(ENV_DEV).get(key) == expected
 
 
 def test_dev_backend_and_frontend_keep_their_direct_ports():
@@ -757,11 +761,20 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
 # ---------------------------------------------------------------------------
 
 
-def _env_keys_and_values(service: dict) -> dict[str, str]:
+def _container_env(service: dict) -> dict[str, str]:
+    """What the container actually sees: its env_file entries, overridden by
+    its environment: block — the env_file half is what #483 slipped through."""
+    env_files = service.get("env_file", [])
+    if isinstance(env_files, str):
+        env_files = [env_files]
+    merged: dict[str, str] = {}
+    for entry in env_files:
+        path = entry["path"] if isinstance(entry, dict) else entry
+        merged |= _read_env_file(ROOT / path)
     env = service.get("environment", {})
     if isinstance(env, list):
-        return dict(entry.split("=", 1) for entry in env)
-    return {k: str(v) for k, v in env.items()}
+        return merged | dict(entry.split("=", 1) for entry in env)
+    return merged | {k: str(v) for k, v in env.items()}
 
 
 @pytest.mark.parametrize(
@@ -770,15 +783,57 @@ def _env_keys_and_values(service: dict) -> dict[str, str]:
     ids=["compose-app", "dev-backend"],
 )
 def test_compose_app_never_sees_the_superuser_login(load, service: str):
-    env = _env_keys_and_values(load()["services"][service])
-    assert "MIGRATION_DATABASE_URL" not in env, env
-    assert "POSTGRES_PASSWORD" not in env["DATABASE_URL"], env["DATABASE_URL"]
+    spec = load()["services"][service]
+    env = _container_env(spec)
+    # Prod names a mounted file (<NAME>_FILE, #462), dev passes the value.
+    names = {k.removesuffix("_FILE") for k in env}
+    for superuser_var in (
+        "MIGRATION_DATABASE_URL",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ):
+        assert superuser_var not in names, env
+    assert "migration_database_url" not in spec.get("secrets", []), spec
+    assert "POSTGRES_PASSWORD" not in env.get("DATABASE_URL", ""), env
+
+
+def test_dev_backend_still_gets_every_app_setting_from_env_dev():
+    """Dropping env_file (#483) must not drop the app's own settings with it:
+    everything in .env.dev except the superuser and host-tooling values."""
+    env = _container_env(load_dev_compose()["services"]["backend"])
+    wanted = {
+        key
+        for key in _read_env_file(ENV_DEV)
+        if not key.startswith("POSTGRES_") and key != "MIGRATION_DATABASE_URL"
+    }
+    assert wanted <= env.keys(), wanted - env.keys()
 
 
 @pytest.mark.parametrize("load", [load_compose, load_dev_compose], ids=["prod", "dev"])
 def test_compose_migrate_gets_both_logins(load):
-    env = _env_keys_and_values(load()["services"]["migrate"])
-    assert {"DATABASE_URL", "MIGRATION_DATABASE_URL"} <= env.keys(), env
+    env = _container_env(load()["services"]["migrate"])
+    names = {k.removesuffix("_FILE") for k in env}
+    assert {"DATABASE_URL", "MIGRATION_DATABASE_URL"} <= names, env
+
+
+# ---------------------------------------------------------------------------
+# Prod secrets are mounted files, not environment (#462)
+# ---------------------------------------------------------------------------
+# Compose mounts a file-backed secret at /run/secrets/<name>; setup.sh writes
+# the files under ./secrets.
+
+
+@pytest.mark.parametrize("service", sorted(SECRETS))
+def test_compose_secrets_are_mounted_files(service: str):
+    compose = load_compose()
+    spec = compose["services"][service]
+    env = _container_env(spec)
+    for var in SECRETS[service]:
+        name = var.lower()
+        assert var not in env, f"{service} still passes {var} as environment"
+        assert env.get(f"{var}_FILE") == f"/run/secrets/{name}", env
+        assert name in spec.get("secrets", []), spec
+        assert compose["secrets"][name] == {"file": f"./secrets/{name}"}
 
 
 def test_dev_backend_waits_for_migrate():
@@ -794,8 +849,38 @@ def test_dev_backend_waits_for_migrate():
 def test_env_files_split_the_app_and_migration_logins(env_file: str):
     from sqlalchemy.engine.url import make_url
 
-    values = _env_values(ROOT / env_file)
+    values = _read_env_file(ROOT / env_file)
     assert make_url(values["DATABASE_URL"]).username == "kendo_app"
     migration = make_url(values["MIGRATION_DATABASE_URL"])
     assert migration.username == values["POSTGRES_USER"]
     assert migration.password == values["POSTGRES_PASSWORD"]
+
+
+# ---------------------------------------------------------------------------
+# Container hardening: assume the app is breached (#458). The same settings on
+# the Quadlet units are checked in test_quadlet_config.py.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_compose_services_run_with_a_read_only_root(service: str):
+    spec = load_compose()["services"][service]
+    assert spec.get("read_only") is True, spec
+    assert "/tmp" in spec.get("tmpfs", []), spec
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_compose_services_drop_every_capability_and_privilege_escalation(
+    service: str,
+):
+    spec = load_compose()["services"][service]
+    assert spec.get("cap_drop") == ["ALL"], spec
+    assert spec.get("cap_add", []) == CAPABILITIES_ADDED_BACK[service]
+    assert "no-new-privileges:true" in spec.get("security_opt", []), spec
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_compose_services_cap_pids_and_memory(service: str):
+    spec = load_compose()["services"][service]
+    assert isinstance(spec.get("pids_limit"), int), spec
+    assert _re.fullmatch(r"\d+[kmg]", str(spec.get("mem_limit"))), spec

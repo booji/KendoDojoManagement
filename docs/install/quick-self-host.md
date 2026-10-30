@@ -30,7 +30,9 @@ It asks for your domain and an ACME email, generates `POSTGRES_PASSWORD`,
 connects as `kendo_app`, which can only read and write rows, and the superuser
 login goes to the `migrate` service alone — and writes `.env` plus
 `deploy/traefik/selfhost/traefik.yml` and `dynamic/kendo.yml` from their
-`.example` files. One domain answer reaches all three passkey-bound settings
+`.example` files. The app's secrets also go to files in `secrets/`, which the
+containers get mounted as files rather than as environment variables; after
+changing one in `.env`, re-run `./setup.sh` so they match. One domain answer reaches all three passkey-bound settings
 (`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS`) and the Traefik `Host()`
 rule — an `RP_ID` typo is the whole "passkeys silently don't work" failure
 class, so it is worth not typing four times.

@@ -1,10 +1,28 @@
 # Production stack (app + PostgreSQL). Config comes from a .env file next to
-# this one — copy .env.example to .env and fill it in before `up`. For the
-# Podman/Quadlet + Traefik deployment instead, see deploy/ and docs/deployment.md.
+# this one, and secrets from the files in ./secrets — run ./setup.sh, which
+# writes both, before `up`. For the Podman/Quadlet + Traefik deployment
+# instead, see deploy/ and docs/deployment.md.
 # Explicit project name so the prod, dev and test stacks never share
 # containers, networks or volumes. Without it Compose falls back to the
 # directory name and all three collide — see #274.
 name: kendodojo
+
+# Container hardening (#458), merged into app, migrate and proxy below and
+# mirroring deploy/quadlet. Assume one of them is breached: a read-only root
+# means no tools written into the image (/tmp is the only scratch space;
+# volumes stay writable); no capabilities (proxy adds one back) and no setuid
+# escalation; pid and memory caps so it cannot exhaust the host. To tune a
+# limit, override it on the service — keys set there win over the merge.
+x-hardening: &hardening
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  mem_limit: 512m
 
 # Two networks, mirroring the Quadlet deployment in deploy/quadlet
 # (kendo-edge + kendo-backend) — see #278. `app` straddles both; `db` is on the
@@ -12,6 +30,7 @@ name: kendodojo
 # cannot call home.
 services:
   app:
+    <<: *hardening
     # Published release image, pinned by major tag (ADR-0004): `:1` means fixes
     # and features but no migration that needs a restore to undo. Override
     # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
@@ -28,14 +47,16 @@ services:
       # defaults still in place — a misconfiguration that otherwise produces a
       # healthy-looking deploy that rejects every passkey ceremony.
       APP_ENV: ${APP_ENV:-production}
-      # The restricted app user's login (ADR-0007), never the superuser's: the
-      # app refuses to start as a superuser, and MIGRATION_DATABASE_URL is given
-      # to `migrate` alone so its password never reaches this container.
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      # Gates claiming the first admin account (ADR-0003). Required whether or
-      # not the instance is already claimed.
-      SETUP_TOKEN: ${SETUP_TOKEN}
+      # Secrets are files mounted from ./secrets (see `secrets:` below), named
+      # here by <NAME>_FILE — never values in the environment (#462).
+      # DATABASE_URL is the restricted app user's login (ADR-0007), never the
+      # superuser's: the app refuses to start as a superuser, and
+      # migration_database_url is given to `migrate` alone so its password
+      # never reaches this container. SETUP_TOKEN gates claiming the first admin
+      # account (ADR-0003), required whether or not the instance is claimed.
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      SETUP_TOKEN_FILE: /run/secrets/setup_token
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
       SESSION_MAX_MINUTES: ${SESSION_MAX_MINUTES:-10080}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
@@ -67,6 +88,10 @@ services:
       # they live outside /app/static so they cannot shadow the built SPA.
       STATIC_DIR: /app/uploads/logos
       STATIC_BACKGROUNDS_DIR: /app/uploads/backgrounds
+    secrets:
+      - database_url
+      - jwt_secret
+      - setup_token
     volumes:
       - static_uploads:/app/uploads
     depends_on:
@@ -88,6 +113,7 @@ services:
   # docker compose. The migration window itself is unchanged; removing it would
   # need two app instances plus an advisory lock in app/db/bootstrap.py.
   migrate:
+    <<: *hardening
     # Same image as `app` — the migration chain and the code that runs against
     # it must come from one artefact.
     image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:1}
@@ -95,8 +121,11 @@ services:
       - backend
     environment:
       TZ: ${TZ:-UTC}
-      DATABASE_URL: ${DATABASE_URL}
-      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
+    secrets:
+      - database_url
+      - migration_database_url
     entrypoint: ["python", "-m", "app.db.bootstrap"]
     restart: "no"
     depends_on:
@@ -109,7 +138,11 @@ services:
   # so an upgrade cannot revert them, and the bind mounts below will otherwise
   # create empty directories where Traefik expects its config.
   proxy:
+    <<: *hardening
     image: docker.io/library/traefik:v3.3
+    # The one capability back: binding 80/443 inside its own namespace.
+    cap_add:
+      - NET_BIND_SERVICE
     # Edge only — never the network the database is on, as in deploy/quadlet.
     networks:
       - edge
@@ -169,6 +202,22 @@ networks:
   backend:
     driver_opts:
       isolate: "true"
+
+# Mounted read-only at /run/secrets/<name> in the services that list them, so
+# no secret sits in a container's environment (#462). ./setup.sh writes these
+# files from .env, on every run and on `./setup.sh upgrade`; edit .env and
+# re-run it rather than editing them. The directory is 0700 and the files
+# 0644: a file-backed secret is a bind mount that keeps its host mode, and the
+# app's uid 1001 is not the host user who owns it.
+secrets:
+  database_url:
+    file: ./secrets/database_url
+  migration_database_url:
+    file: ./secrets/migration_database_url
+  jwt_secret:
+    file: ./secrets/jwt_secret
+  setup_token:
+    file: ./secrets/setup_token
 
 volumes:
   postgres_data:

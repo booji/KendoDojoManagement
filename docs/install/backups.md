@@ -180,4 +180,4 @@ A NAS or another always-on machine can pull the encrypted backups from `~/backup
 
 ## The disk itself
 
-Encrypted backups do not protect the live database or the uploads volume on the host's disk. Full-disk encryption on the host (LUKS, or your cloud provider's encrypted volumes) covers a stolen disk or a decommissioned drive (#465).
+Encrypted backups do not protect the live database or the uploads volume on the host's disk. Full-disk encryption on the host (LUKS, or your cloud provider's encrypted volumes) covers a stolen disk or a decommissioned drive: see [Encrypt the disk](../deployment.md#10-encrypt-the-disk).

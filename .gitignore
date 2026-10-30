@@ -250,3 +250,6 @@ deploy/traefik/selfhost/dynamic/*.yml
 deploy/traefik/selfhost/*.bak
 deploy/traefik/selfhost/dynamic/*.bak
 .image-tag
+
+# The Compose stack's secret files, written from .env by setup.sh (#462).
+/secrets/

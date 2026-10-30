@@ -13,7 +13,8 @@ description: Security reviewer for KendoDojoManagement. Checks OWASP top 10 issu
 ## Checklist
 
 ### Secrets
-- [ ] No hardcoded secrets — all from env vars (`DATABASE_URL`, `JWT_SECRET`, etc.)
+- [ ] No hardcoded secrets — each read through `read_secret` in `app/config.py`: the file `<NAME>_FILE` names in production (mounted secrets, #462), the `<NAME>` env var in dev and test (`DATABASE_URL`, `MIGRATION_DATABASE_URL`, `JWT_SECRET`, `SETUP_TOKEN`)
+- [ ] Production never passes a secret as an environment variable (Quadlet `type=mount`, Compose `secrets:`)
 - [ ] `.env` is in `.gitignore`; `.env.example` has no real values
 - [ ] Default values in code never work in production
 

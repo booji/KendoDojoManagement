@@ -218,20 +218,9 @@ def _run_alembic(database_url: str, action, *args) -> None:
     call in this module goes through this helper for that reason (mirrors
     app.db.bootstrap's own `_run_alembic_upgrade`).
     """
-    import os
-
     from app.db.bootstrap import _alembic_config
 
-    cfg = _alembic_config(database_url)
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = database_url
-    try:
-        action(cfg, *args)
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
+    action(_alembic_config(database_url), *args)
 
 
 # ---------------------------------------------------------------------------

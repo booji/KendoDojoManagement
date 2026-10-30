@@ -31,6 +31,15 @@ UAT and PROD are **separate hosts, one instance each**. The Quadlet units, Traef
 
 ## 1. One-time host preparation (as an admin / sudo user)
 
+### 1.0 Encrypt the disk
+
+The Postgres data volume, the uploads volume and the local backups all sit on this host's disk and hold every Member's personal data, including under-18 and safeguarding data. Use full-disk encryption, so a stolen disk, a copied VM snapshot or a decommissioned drive gives none of it away:
+
+- **Your own hardware or hypervisor:** choose LUKS ("Encrypt my data" in the AlmaLinux installer) when installing the OS; adding it later means a reinstall. The host then waits for the passphrase at every boot. For unattended reboots, bind it to the TPM with Clevis.
+- **Cloud VM:** turn on the provider's encrypted volumes for the boot disk and any data disks.
+
+This protects the disk while it is powered off, not a running host. Backups leave the disk, so they carry their own encryption: see [The backup key](install/backups.md#the-backup-key) and [Off-site copies](install/backups.md#off-site-copies-optional).
+
 ### 1.1 Install Podman
 
 ```bash
@@ -201,6 +210,12 @@ openssl rand -base64 32 | tr -d '\n' \
 
 A sixth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
 
+The units mount each secret as a file under `/run/secrets`, readable only by
+the app's user, and tell the app where it is with `<NAME>_FILE` (for example
+`JWT_SECRET_FILE=/run/secrets/jwt_secret`). None is passed as an environment
+variable, so none shows up in `podman inspect` or is inherited by a process
+the app starts (#462).
+
 Then the units:
 
 ```bash
@@ -273,6 +288,20 @@ This is safe **only because** of the network design: the app publishes no host p
 ## 7. A note on CORS
 
 The SPA is served **same-origin** with the API (both under `https://<your-domain>`), so CORS never fires in normal operation. Keep `CORS_ORIGINS` pinned to the single canonical origin (never `*`) — auth is cookie-based, and `*` + credentials is both invalid and a credential-leak risk. Pinning means any accidental cross-origin path fails closed.
+
+## 8. Container limits
+
+`kendo-app`, `kendo-migrate` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
+
+The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:
+
+```bash
+d=~/.config/containers/systemd/kendo-app.container.d && mkdir -p "$d"
+printf '[Container]\nPodmanArgs=--memory=1g --pids-limit=512\n' > "$d/30-limits.conf"
+systemctl --user daemon-reload && systemctl --user restart kendo-app
+```
+
+The Compose stack carries the same settings (`x-hardening` in `docker-compose.yml`). There, set `mem_limit:` or `pids_limit:` on the service itself, which wins over the merged defaults.
 
 ---
 
