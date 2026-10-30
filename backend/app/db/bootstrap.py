@@ -71,10 +71,9 @@ def _alembic_config(database_url: str):
     cfg = Config()
     cfg.set_main_option("script_location", os.path.join(_BACKEND_DIR, "alembic"))
     cfg.set_main_option("version_path_separator", "os")
-    # alembic/env.py reads the target URL from the DATABASE_URL env var
-    # (falling back to alembic.ini's placeholder otherwise), so the caller
-    # is responsible for having that env var point at `database_url` for the
-    # duration of the command — see _upgrade_head.
+    # alembic/env.py migrates the URL set here and nothing in the environment:
+    # in kendo-migrate DATABASE_URL(_FILE) is the app user's login, and the
+    # migration must run as the superuser it is handed (ADR-0007).
     cfg.set_main_option("sqlalchemy.url", database_url)
     return cfg
 
@@ -87,19 +86,7 @@ def _run_alembic_upgrade(database_url: str) -> None:
     """
     from alembic import command
 
-    cfg = _alembic_config(database_url)
-
-    # env.py prefers the DATABASE_URL env var over alembic.ini, so pin it to
-    # the target database for the duration of the call and restore it after.
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = database_url
-    try:
-        command.upgrade(cfg, "head")
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
+    command.upgrade(_alembic_config(database_url), "head")
 
 
 async def _upgrade_head(database_url: str) -> None:

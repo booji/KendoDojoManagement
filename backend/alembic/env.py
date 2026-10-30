@@ -1,5 +1,4 @@
 import asyncio
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -10,15 +9,14 @@ from app.config import read_secret
 
 config = context.config
 
+# A caller that builds its own Config (app/db/bootstrap.py) has no alembic.ini
+# and puts the URL to migrate in it. The alembic CLI reads alembic.ini, whose
+# URL is a placeholder: it connects the way the app does instead.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
-# The variable first: app/db/bootstrap.py pins it to the superuser login to
-# migrate as, over the app user's DATABASE_URL_FILE. Otherwise the mounted
-# file (#462), as in `podman exec kendo-app alembic ...`.
-_db_url = os.environ.get("DATABASE_URL") or read_secret("DATABASE_URL")
-if _db_url:
-    config.set_main_option("sqlalchemy.url", _db_url)
+    _db_url = read_secret("DATABASE_URL")
+    if _db_url:
+        config.set_main_option("sqlalchemy.url", _db_url)
 
 target_metadata = None
 

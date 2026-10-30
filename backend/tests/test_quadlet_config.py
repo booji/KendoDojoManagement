@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.deploy_contract import CAPABILITIES_ADDED_BACK, QUADLET_UNITS, SECRETS
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -429,21 +431,8 @@ def test_superuser_login_is_attached_to_the_migrate_unit_only():
 # ---------------------------------------------------------------------------
 # Secrets reach the app as files, never as environment (#462)
 # ---------------------------------------------------------------------------
-# An environment variable shows up in `podman inspect` and /proc/<pid>/environ
-# and is inherited by every child process. A mounted secret is a file under
-# /run/secrets, and app/config.py reads its path from <NAME>_FILE.
-
-_SECRET_FILES = {
-    "kendo-app.container": {
-        "DATABASE_URL": "kendo_database_url",
-        "JWT_SECRET": "kendo_jwt_secret",
-        "SETUP_TOKEN": "kendo_setup_token",
-    },
-    "kendo-migrate.container": {
-        "MIGRATION_DATABASE_URL": "kendo_migration_database_url",
-        "DATABASE_URL": "kendo_database_url",
-    },
-}
+# A mounted secret is a file under /run/secrets, and app/config.py reads its
+# path from <NAME>_FILE.
 
 
 def _secret_options(container: dict[str, list[str]]) -> dict[str, dict[str, str]]:
@@ -455,20 +444,64 @@ def _secret_options(container: dict[str, list[str]]) -> dict[str, dict[str, str]
     return out
 
 
-@pytest.mark.parametrize("cname", sorted(_SECRET_FILES))
-def test_app_secrets_are_mounted_files_named_in_their_file_variable(cname: str):
-    container = load_units()[cname]["Container"]
+@pytest.mark.parametrize("service", sorted(SECRETS))
+def test_app_secrets_are_mounted_files_named_in_their_file_variable(service: str):
+    unit = QUADLET_UNITS[service]
+    container = load_units()[unit]["Container"]
     env = dict(e.split("=", 1) for e in container.get("Environment", []))
     secrets = _secret_options(container)
 
-    for var, secret in _SECRET_FILES[cname].items():
+    for var in SECRETS[service]:
+        secret = f"kendo_{var.lower()}"
         opts = secrets[secret]
-        assert opts.get("type") == "mount", f"{cname}: {secret} {opts}"
+        assert opts.get("type") == "mount", f"{unit}: {secret} {opts}"
         # Readable by the image's unprivileged user (uid 1001) and nobody else.
         assert (opts.get("uid"), opts.get("gid"), opts.get("mode")) == (
             "1001",
             "1001",
             "0400",
-        ), f"{cname}: {secret} {opts}"
+        ), f"{unit}: {secret} {opts}"
         assert env.get(f"{var}_FILE") == f"/run/secrets/{opts['target']}", env
-        assert var not in env, f"{cname} still passes {var} as environment"
+        assert var not in env, f"{unit} still passes {var} as environment"
+
+
+# ---------------------------------------------------------------------------
+# Container hardening: assume the app is breached (#458). The same settings on
+# the Compose services are checked in test_docker_config.py.
+# ---------------------------------------------------------------------------
+
+
+def _hardened_container(service: str) -> dict[str, list[str]]:
+    return load_units()[QUADLET_UNITS[service]]["Container"]
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_hardened_units_run_with_a_read_only_root(service: str):
+    """An attacker with code execution cannot drop tools into the image
+    filesystem. /tmp stays writable (Starlette spools uploads there); the
+    uploads and ACME volumes are mounts and stay writable too."""
+    container = _hardened_container(service)
+    assert container.get("ReadOnly") == ["true"], container
+    assert "/tmp" in container.get("Tmpfs", []), container
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_hardened_units_drop_every_capability_and_privilege_escalation(
+    service: str,
+):
+    container = _hardened_container(service)
+    assert container.get("DropCapability") == ["ALL"], container
+    assert container.get("AddCapability", []) == CAPABILITIES_ADDED_BACK[service]
+    assert container.get("NoNewPrivileges") == ["true"], container
+
+
+@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def test_hardened_units_cap_pids_and_memory(service: str):
+    """A breached container cannot fork-bomb or exhaust the host. PodmanArgs
+    rather than the PidsLimit=/Memory= keys: Memory= is not in Podman 4.9
+    (Ubuntu 24.04), and an unknown key stops Quadlet generating the unit. A
+    later `PodmanArgs=--memory=…` in a drop-in wins, which is how hosts tune it.
+    """
+    args = " ".join(_hardened_container(service).get("PodmanArgs", []))
+    assert re.search(r"--pids-limit=\d+\b", args), args
+    assert re.search(r"--memory=\d+[kmg]\b", args), args

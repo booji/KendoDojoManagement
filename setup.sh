@@ -162,7 +162,12 @@ placeholders() {
   sed 's/#.*//' "$1" | grep -oE '<your-[^>]*>|[a-z0-9.@-]*example\.(com|org|net)' | sort -u | tr '\n' ' ' || true
 }
 
-env_value() { sed -n "s/^$2=//p" "$1" | tail -1; } # env_value FILE KEY
+# env_value FILE KEY: the value Compose would read, so one pair of surrounding
+# quotes put there by hand is not part of it.
+env_value() {
+  sed -n "s/^$2=//p" "$1" | tail -1 |
+    sed -e 's/^"\(.*\)"$/\1/' -e t -e "s/^'\(.*\)'\$/\1/"
+}
 
 # Compose mounts these at /run/secrets instead of passing them as environment
 # (#462). .env stays the record and secrets/ is derived from it, on setup and

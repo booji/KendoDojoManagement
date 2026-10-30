@@ -4,8 +4,7 @@
 #
 # Secrets are podman secrets mounted as files under /run/secrets, readable only
 # by the image's user (uid 1001), and named to the app by <NAME>_FILE (#462).
-# Never `type=env`: an environment variable shows up in `podman inspect` and
-# /proc/<pid>/environ and is inherited by every child process.
+# Never `type=env` (why: read_secret in backend/app/config.py).
 #   - DATABASE_URL (full URL, incl. password) — the restricted app user's login
 #     (ADR-0007), never the superuser's: the app refuses to start as one, and
 #     kendo_migration_database_url is attached to kendo-migrate alone
@@ -42,8 +41,10 @@ Secret=kendo_setup_token,type=mount,target=setup_token,uid=1001,gid=1001,mode=04
 Environment=DATABASE_URL_FILE=/run/secrets/database_url
 Environment=JWT_SECRET_FILE=/run/secrets/jwt_secret
 Environment=SETUP_TOKEN_FILE=/run/secrets/setup_token
-# Hardening (#458): read-only root, so a breach cannot write tools into the
-# image; /tmp is the only scratch space (Starlette spools uploads there).
+# Hardening (#458). The same block is in kendo-app, kendo-migrate and
+# kendo-traefik: Quadlet has no include or anchor, so change all three.
+# Read-only root, so a breach cannot write tools into the image; /tmp is
+# the only scratch space (Starlette spools uploads there).
 ReadOnly=true
 Tmpfs=/tmp
 # No capabilities and no setuid escalation: it runs as an unprivileged user
