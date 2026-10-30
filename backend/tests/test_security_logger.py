@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import sys
 import uuid
@@ -827,3 +828,16 @@ async def test_event_after_a_request_does_not_inherit_its_ip(
         log_security_event("login_passkey", "failure")
 
     assert "ip_address" not in _capture_security_logs(caplog)[-1]
+
+
+def test_every_event_type_is_documented_for_operators():
+    """Operators filter the journal by event_type, so docs/deployment.md
+    must name every one the app can emit."""
+    from app.core.security_logger import _VALID_EVENT_TYPES
+
+    root = Path(os.environ.get("REPO_ROOT", Path(__file__).parents[2]))
+    doc = (root / "docs" / "deployment.md").read_text()
+    missing = sorted(t for t in _VALID_EVENT_TYPES if f"`{t}`" not in doc)
+    assert (
+        not missing
+    ), f"add to the Security events tables in docs/deployment.md: {missing}"
