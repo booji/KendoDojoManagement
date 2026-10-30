@@ -232,9 +232,11 @@ erDiagram
   Account that keeps failing) are kept — lockout counts failures since the
   last success with no time window, so deleting by age would expire lockouts
   — but `ip_address` is cleared to NULL once a row is 30 days old
-  (`IP_RETENTION` in `app/auth/attempt_repository.py`). There is no scheduler:
-  the clear runs on every `log_attempt`, for all Accounts, so an address can
-  outlive 30 days until the next recovery attempt anywhere on the instance.
+  (`IP_RETENTION` in `app/auth/attempt_repository.py`). The clear runs for all
+  Accounts on every app start and, under Quadlet, daily from
+  `kendo-ip-retention.timer` (#467), so an address outlives 30 days by at most
+  a day. The Compose stack has no timer: there it runs only at app start, and
+  an address can outlive 30 days until the next restart.
 - **One WebAuthn ceremony per Account** (#435). `accounts.pending_challenge` /
   `challenge_issued_at` hold a single challenge, so a second concurrent
   registration or login for the same Account overwrites the first, which

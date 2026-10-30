@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from starlette.exceptions import HTTPException
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse, Response
@@ -28,10 +28,12 @@ import app.sessions.db_models  # noqa: F401
 import app.settings.models  # noqa: F401
 from app.accounts.router import router as accounts_router
 from app.attendance.router import router as attendance_router
+from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.rate_limiter import limiter
 from app.auth.router import router as auth_router
 from app.config import API_PREFIX, CORS_ORIGINS, validate_startup_config
 from app.core.middleware import (
+    ClientIPMiddleware,
     ConstantTimeAuthMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -104,8 +106,9 @@ async def _refuse_superuser(conn: AsyncConnection) -> None:
 
 
 async def _init_db() -> None:
-    """Refuse a superuser connection, then seed default session types. Does
-    NOT migrate.
+    """Refuse a superuser connection, seed default session types, and clear
+    expired recovery-attempt IPs (#467; kendo-ip-retention.timer repeats that
+    daily under Quadlet). Does NOT migrate.
 
     `alembic upgrade head` runs in its own unit before this process starts —
     the `migrate` service in docker-compose.yml, kendo-migrate.service under
@@ -117,6 +120,8 @@ async def _init_db() -> None:
     async with engine.begin() as conn:
         await _refuse_superuser(conn)
         await seed_session_types(conn)
+    async with AsyncSession(engine) as session, session.begin():
+        await SqlAttemptRepository(session).clear_expired_ip_addresses()
 
 
 @asynccontextmanager
@@ -131,6 +136,7 @@ app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(IntegrityError, _constraint_conflict_handler)
+app.add_middleware(ClientIPMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 # Added after SlowAPI so it sits *outside* it: the constant-time floor must

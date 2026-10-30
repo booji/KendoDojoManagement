@@ -1,0 +1,51 @@
+# Clears recovery_attempts.ip_address once a row is 30 days old (#434, #467):
+# `python -m app.cli clear-expired-ip-addresses`, then exits. kendo-app runs
+# the same clear on every start; this unit is what keeps the 30-day limit true
+# on an instance that is never restarted and never sees a recovery attempt.
+#
+# Started daily by kendo-ip-retention.timer, a plain systemd user timer in
+# deploy/systemd (Quadlet generates no timers). Modelled on kendo-migrate:
+# same image and env file, backend network only, but the app user's login
+# (kendo_database_url), never the superuser's.
+[Unit]
+Description=Kendo recovery-attempt IP retention
+Requires=kendo-db.service
+After=kendo-db.service
+# Never against an unmigrated schema: Requires= pulls kendo-migrate in (and
+# skips this run if it failed), After= waits for it, as in kendo-app.
+Requires=kendo-migrate.service
+After=kendo-migrate.service
+
+[Container]
+ContainerName=kendo-ip-retention
+# Same image and tag as kendo-app and kendo-migrate (ADR-0004).
+Image=ghcr.io/booji/kendodojomanagement:1
+Network=kendo-backend.network
+EnvironmentFile=%h/kendo/kendo-app.env
+# Mounted as a file, not environment, as in kendo-app.container (#462).
+Secret=kendo_database_url,type=mount,target=database_url,uid=1001,gid=1001,mode=0400
+Environment=DATABASE_URL_FILE=/run/secrets/database_url
+Entrypoint=python
+Exec=-m app.cli clear-expired-ip-addresses
+# The container exits; without this Quadlet's default Type=notify would wait
+# for a readiness notification that never comes.
+Notify=no
+# Hardening (#458). The same block is in kendo-app, kendo-migrate,
+# kendo-ip-retention and kendo-traefik: Quadlet has no include or anchor, so
+# change all four.
+# Read-only root, so a breach cannot write tools into the image; /tmp is
+# the only scratch space.
+ReadOnly=true
+Tmpfs=/tmp
+# No capabilities and no setuid escalation: it runs as an unprivileged user
+# and needs none.
+DropCapability=ALL
+NoNewPrivileges=true
+# Bounds a fork bomb or a leak to this container. Fixed defaults; tune them
+# per host with a drop-in (docs/deployment.md, "Container limits").
+PodmanArgs=--pids-limit=256 --memory=512m
+
+[Service]
+Type=oneshot
+# No RemainAfterExit=yes, unlike kendo-migrate: an active unit cannot be
+# started again, so the timer would fire once and never again.

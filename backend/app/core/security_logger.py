@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
+from collections.abc import Iterable, Mapping
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 _VALID_EVENT_TYPES = frozenset(
@@ -18,11 +21,30 @@ _VALID_EVENT_TYPES = frozenset(
         "invite_redeemed",
         "setup_claim",
         "sign_out_everywhere",
+        # Admin writes and exports (#460)
+        "member_created",
+        "member_updated",
+        "member_erased",
+        "dojo_settings_updated",
+        "report_exported",
     }
 )
 
+# The client IP of the request being served, bound by ClientIPMiddleware, so
+# every event raised during a request records where it came from without each
+# call site threading the IP through (#460). None outside a request.
+request_ip: ContextVar[str | None] = ContextVar("request_ip", default=None)
+
+# Own stdout handler (#461): nothing configures the root logger, so without
+# one every INFO event fell through to logging.lastResort and was dropped.
+# The container's stdout is the journal (docs/deployment.md, "Logs").
+# propagate=False so a later root config cannot print each event twice.
 _logger = logging.getLogger("security_events")
 _logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+_logger.addHandler(_handler)
+_logger.propagate = False
 
 
 def log_security_event(
@@ -30,7 +52,6 @@ def log_security_event(
     result: str,
     *,
     user_id: str | None = None,
-    ip_address: str | None = None,
     detail: object | None = None,
 ) -> None:
     """Emit a single-line JSON security event to the 'security_events' logger."""
@@ -43,9 +64,23 @@ def log_security_event(
     }
     if user_id is not None:
         entry["user_id"] = user_id
+    ip_address = request_ip.get()
     if ip_address is not None:
         entry["ip_address"] = ip_address
     if detail is not None:
         entry["detail"] = detail
 
     _logger.info(json.dumps(entry, separators=(",", ":")))
+
+
+def log_admin_event(event_type: str, admin_id: str, **detail: object) -> None:
+    """An Admin's write or export (#460): who, and which object, as detail."""
+    log_security_event(event_type, "success", user_id=admin_id, detail=detail)
+
+
+def changed_fields(
+    before: Mapping[str, object], after: Mapping[str, object], keys: Iterable[str]
+) -> list[str]:
+    """The names of the keys whose value differs. Names only, never values:
+    the values are the personal data being audited (#460)."""
+    return sorted(k for k in keys if before[k] != after[k])

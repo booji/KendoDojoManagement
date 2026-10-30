@@ -387,6 +387,43 @@ def test_migrate_unit_is_a_oneshot_that_waits_for_db():
     assert "kendo-db.service" in migrate.get("Unit", {}).get("After", [])
 
 
+# ---------------------------------------------------------------------------
+# Recovery-attempt IPs are cleared daily, not only on a recovery attempt (#467)
+# ---------------------------------------------------------------------------
+
+
+def test_ip_retention_unit_is_a_oneshot_running_the_clear():
+    unit = load_units()["kendo-ip-retention.container"]
+    container = unit["Container"]
+    assert container.get("Entrypoint") == ["python"], container
+    assert container.get("Exec") == ["-m app.cli clear-expired-ip-addresses"]
+    assert _networks(unit) == ["kendo-backend.network"]
+    assert unit.get("Service", {}).get("Type") == ["oneshot"]
+    # RemainAfterExit=yes would leave it active, and a timer cannot start an
+    # active unit again: it would run once and never again.
+    assert "RemainAfterExit" not in unit.get("Service", {}), unit["Service"]
+    # Requires=, as kendo-app has: After= alone orders, it does not pull
+    # kendo-migrate in, so the clear could run against an unmigrated schema.
+    assert {"kendo-db.service", "kendo-migrate.service"} <= set(
+        unit["Unit"].get("Requires", [])
+    )
+    assert {"kendo-db.service", "kendo-migrate.service"} <= set(
+        unit["Unit"].get("After", [])
+    )
+
+
+def test_ip_retention_timer_triggers_the_unit_daily():
+    """A plain systemd timer: Quadlet generates no timers, so it installs to
+    ~/.config/systemd/user/ and activates the service named after it."""
+    timer = _parse_unit(
+        (ROOT / "deploy" / "systemd" / "kendo-ip-retention.timer").read_text()
+    )
+    assert timer["Timer"].get("OnCalendar") == ["daily"], timer
+    # A host that was off at midnight runs it on the next boot.
+    assert timer["Timer"].get("Persistent") == ["true"], timer
+    assert timer["Install"].get("WantedBy") == ["timers.target"], timer
+
+
 def test_every_unit_dependency_resolves_to_a_container_file():
     """Requires=/After= naming a *.service must have a matching .container.
 
@@ -444,14 +481,20 @@ def _secret_options(container: dict[str, list[str]]) -> dict[str, dict[str, str]
     return out
 
 
-@pytest.mark.parametrize("service", sorted(SECRETS))
-def test_app_secrets_are_mounted_files_named_in_their_file_variable(service: str):
-    unit = QUADLET_UNITS[service]
+# kendo-ip-retention has no Compose service, so it is added here by unit.
+UNIT_SECRETS = {QUADLET_UNITS[s]: names for s, names in SECRETS.items()} | {
+    "kendo-ip-retention.container": ["DATABASE_URL"]
+}
+
+
+@pytest.mark.parametrize("unit", sorted(UNIT_SECRETS))
+def test_app_secrets_are_mounted_files_named_in_their_file_variable(unit: str):
     container = load_units()[unit]["Container"]
     env = dict(e.split("=", 1) for e in container.get("Environment", []))
     secrets = _secret_options(container)
+    assert sorted(secrets) == sorted(f"kendo_{v.lower()}" for v in UNIT_SECRETS[unit])
 
-    for var in SECRETS[service]:
+    for var in UNIT_SECRETS[unit]:
         secret = f"kendo_{var.lower()}"
         opts = secrets[secret]
         assert opts.get("type") == "mount", f"{unit}: {secret} {opts}"
@@ -471,11 +514,16 @@ def test_app_secrets_are_mounted_files_named_in_their_file_variable(service: str
 # ---------------------------------------------------------------------------
 
 
-def _hardened_container(service: str) -> dict[str, list[str]]:
-    return load_units()[QUADLET_UNITS[service]]["Container"]
+HARDENED_UNITS = {
+    QUADLET_UNITS[s]: caps for s, caps in CAPABILITIES_ADDED_BACK.items()
+} | {"kendo-ip-retention.container": []}
 
 
-@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+def _hardened_container(unit: str) -> dict[str, list[str]]:
+    return load_units()[unit]["Container"]
+
+
+@pytest.mark.parametrize("service", sorted(HARDENED_UNITS))
 def test_hardened_units_run_with_a_read_only_root(service: str):
     """An attacker with code execution cannot drop tools into the image
     filesystem. /tmp stays writable (Starlette spools uploads there); the
@@ -485,17 +533,17 @@ def test_hardened_units_run_with_a_read_only_root(service: str):
     assert "/tmp" in container.get("Tmpfs", []), container
 
 
-@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+@pytest.mark.parametrize("service", sorted(HARDENED_UNITS))
 def test_hardened_units_drop_every_capability_and_privilege_escalation(
     service: str,
 ):
     container = _hardened_container(service)
     assert container.get("DropCapability") == ["ALL"], container
-    assert container.get("AddCapability", []) == CAPABILITIES_ADDED_BACK[service]
+    assert container.get("AddCapability", []) == HARDENED_UNITS[service]
     assert container.get("NoNewPrivileges") == ["true"], container
 
 
-@pytest.mark.parametrize("service", sorted(CAPABILITIES_ADDED_BACK))
+@pytest.mark.parametrize("service", sorted(HARDENED_UNITS))
 def test_hardened_units_cap_pids_and_memory(service: str):
     """A breached container cannot fork-bomb or exhaust the host. PodmanArgs
     rather than the PidsLimit=/Memory= keys: Memory= is not in Podman 4.9

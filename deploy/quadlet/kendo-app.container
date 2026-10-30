@@ -41,8 +41,9 @@ Secret=kendo_setup_token,type=mount,target=setup_token,uid=1001,gid=1001,mode=04
 Environment=DATABASE_URL_FILE=/run/secrets/database_url
 Environment=JWT_SECRET_FILE=/run/secrets/jwt_secret
 Environment=SETUP_TOKEN_FILE=/run/secrets/setup_token
-# Hardening (#458). The same block is in kendo-app, kendo-migrate and
-# kendo-traefik: Quadlet has no include or anchor, so change all three.
+# Hardening (#458). The same block is in kendo-app, kendo-migrate,
+# kendo-ip-retention and kendo-traefik: Quadlet has no include or anchor, so
+# change all four.
 # Read-only root, so a breach cannot write tools into the image; /tmp is
 # the only scratch space (Starlette spools uploads there).
 ReadOnly=true

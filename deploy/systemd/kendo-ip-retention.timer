@@ -1,0 +1,15 @@
+# Daily trigger for kendo-ip-retention.service, the Quadlet unit generated
+# from deploy/quadlet/kendo-ip-retention.container (#467). Quadlet generates
+# no timers, so this is a plain user unit. setup.sh --quadlet installs it to
+# ~/.config/systemd/user/kendo-ip-retention.timer and runs:
+#     systemctl --user enable --now kendo-ip-retention.timer
+[Unit]
+Description=Daily Kendo recovery-attempt IP retention
+
+[Timer]
+OnCalendar=daily
+# Run on the next boot if the host was off when a run was due.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

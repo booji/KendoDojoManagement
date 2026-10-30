@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
+from app.core.security_logger import log_admin_event
 from app.reports.dependencies import get_report_repo
 from app.reports.repository import AbstractReportRepository
 
@@ -76,6 +77,13 @@ async def attendance_csv(
 ) -> StreamingResponse:
     _validate_date_range(date_from, date_to)
     sessions = await repo.attendance_report(date_from.isoformat(), date_to.isoformat())
+    log_admin_event(
+        "report_exported",
+        claims.sub,
+        report="attendance",
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+    )
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=["session_id", "date", "headcount"])
     writer.writeheader()
@@ -94,6 +102,7 @@ async def members_csv(
     repo: _ReportRepo,
 ) -> StreamingResponse:
     members = await repo.members_report()
+    log_admin_event("report_exported", claims.sub, report="members")
     output = io.StringIO()
     writer = csv.DictWriter(
         output, fieldnames=["member_id", "display_name", "join_date", "current_grade"]

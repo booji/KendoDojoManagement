@@ -6,8 +6,11 @@ from collections.abc import Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import config
+from app.core.request_ip import client_ip
+from app.core.security_logger import request_ip
 
 # The passkey "begin" endpoints answer for any email, registered or not. Their
 # real path (known/authorized email) does strictly more work than their decoy
@@ -99,3 +102,24 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "object-src 'none'; base-uri 'self'"
         )
         return response
+
+
+class ClientIPMiddleware:
+    """Bind the client IP for every security event raised by this request.
+
+    Pure ASGI rather than BaseHTTPMiddleware: the binding is reset when the
+    request ends, so it never leaks into whatever runs next in the context.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = request_ip.set(client_ip(Request(scope)))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            request_ip.reset(token)

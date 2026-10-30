@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
+import sys
 import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,6 +34,8 @@ from app.auth.dependencies import (
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
+
+pytestmark = pytest.mark.usefixtures("security_events_to_caplog")
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -189,6 +194,37 @@ def test_log_security_event_is_callable() -> None:
     assert callable(log_security_event)
 
 
+# Production wiring (#461): nothing configures the root logger, so without its
+# own handler every INFO event fell through to logging.lastResort (WARNING+)
+# and was dropped. caplog attaches a handler of its own and hid that, so this
+# runs a fresh interpreter with only uvicorn's logging config, as in the
+# container, and reads the process's real stdout.
+_PRODUCTION_LOGGING = """
+import logging, logging.config, sys
+from uvicorn.config import LOGGING_CONFIG
+logging.config.dictConfig(LOGGING_CONFIG)
+import app.main
+from app.core.security_logger import log_security_event
+# A later root config must not print the event a second time.
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+log_security_event("setup_claim", "success")
+"""
+
+
+def test_security_event_reaches_stdout_once_under_uvicorn_logging() -> None:
+    out = subprocess.run(
+        [sys.executable, "-c", _PRODUCTION_LOGGING],
+        cwd=Path(__file__).parent.parent,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    events = [line for line in out.splitlines() if "setup_claim" in line]
+    assert len(events) == 1, out
+    event = json.loads(events[0])
+    assert (event["event_type"], event["result"]) == ("setup_claim", "success")
+
+
 # ===========================================================================
 # AC2 — Each log line is valid single-line JSON with required keys
 # ===========================================================================
@@ -333,18 +369,18 @@ def test_optional_user_id_included_when_passed(
     assert logs[0].get("user_id") == "test-user-123"
 
 
-def test_optional_ip_address_included_when_passed(
+def test_ip_address_included_when_a_request_bound_one(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """ip_address must appear in the log when explicitly provided."""
-    from app.core.security_logger import log_security_event
+    """ip_address is the IP ClientIPMiddleware bound for the request."""
+    from app.core.security_logger import log_security_event, request_ip
 
-    with caplog.at_level(logging.INFO, logger="security_events"):
-        log_security_event(
-            event_type="login_passkey",
-            result="failure",
-            ip_address="192.168.1.1",
-        )
+    token = request_ip.set("192.168.1.1")
+    try:
+        with caplog.at_level(logging.INFO, logger="security_events"):
+            log_security_event(event_type="login_passkey", result="failure")
+    finally:
+        request_ip.reset(token)
 
     logs = _capture_security_logs(caplog)
     assert logs[0].get("ip_address") == "192.168.1.1"
@@ -366,7 +402,7 @@ def test_optional_detail_included_when_passed(caplog: pytest.LogCaptureFixture) 
 
 
 def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -> None:
-    """All optional keys included when all three are provided."""
+    """Both optional keys included when both are provided."""
     from app.core.security_logger import log_security_event
 
     with caplog.at_level(logging.INFO, logger="security_events"):
@@ -374,14 +410,12 @@ def test_all_optional_keys_included_together(caplog: pytest.LogCaptureFixture) -
             event_type="admin_token_generated",
             result="success",
             user_id="admin-456",
-            ip_address="10.0.0.1",
             detail="session abc",
         )
 
     logs = _capture_security_logs(caplog)
     entry = logs[0]
     assert entry.get("user_id") == "admin-456"
-    assert entry.get("ip_address") == "10.0.0.1"
     assert entry.get("detail") == "session abc"
 
 
@@ -738,3 +772,58 @@ async def test_admin_token_generation_emits_log(
         and log["detail"] == {"target_user_id": target_user_id}
         for log in logs
     ), f"Expected admin_token_generated/success event, got: {logs}"
+
+
+# ===========================================================================
+# #460 — every event raised while serving a request carries the client IP
+# ===========================================================================
+
+_FAKE_PASSKEY_LOGIN = {
+    "email": "passkey_ip@dojo.test",
+    "credential": {
+        "id": "fake",
+        "rawId": "fake",
+        "response": {
+            "clientDataJSON": "fake",
+            "authenticatorData": "fake",
+            "signature": "fake",
+        },
+        "type": "public-key",
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_sign_in_event_carries_client_ip(
+    db_client, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        async with AsyncClient(
+            transport=ASGITransport(app=app, client=("203.0.113.7", 4242)),
+            base_url="http://test/api",
+        ) as c:
+            await c.post("/auth/login/passkey/complete", json=_FAKE_PASSKEY_LOGIN)
+
+    events = [
+        e for e in _capture_security_logs(caplog) if e["event_type"] == "login_passkey"
+    ]
+    assert events and all(e["ip_address"] == "203.0.113.7" for e in events), events
+
+
+@pytest.mark.asyncio
+async def test_event_after_a_request_does_not_inherit_its_ip(
+    db_client, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The bound IP ends with its request: a later event outside one has none."""
+    from app.core.security_logger import log_security_event
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, client=("203.0.113.7", 4242)),
+        base_url="http://test/api",
+    ) as c:
+        await c.post("/auth/login/passkey/complete", json=_FAKE_PASSKEY_LOGIN)
+
+    with caplog.at_level(logging.INFO, logger="security_events"):
+        log_security_event("login_passkey", "failure")
+
+    assert "ip_address" not in _capture_security_logs(caplog)[-1]
