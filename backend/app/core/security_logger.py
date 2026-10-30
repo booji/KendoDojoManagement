@@ -19,6 +19,9 @@ _VALID_EVENT_TYPES = frozenset(
         "invite_redeemed",
         "setup_claim",
         "sign_out_everywhere",
+        # Admin writes and exports (#460)
+        "member_created",
+        "member_updated",
     }
 )
 

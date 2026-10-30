@@ -10,6 +10,7 @@ from sqlalchemy import delete
 from app.auth.accounts import delete_account
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
@@ -73,7 +74,7 @@ def _to_response(record: dict[str, Any]) -> MemberResponse:
 @router.post("/members", status_code=status.HTTP_201_CREATED)
 async def create_member(
     payload: CreateMemberRequest,
-    _claims: _Admin,
+    claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
@@ -89,6 +90,12 @@ async def create_member(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
+    log_security_event(
+        "member_created",
+        "success",
+        user_id=claims.sub,
+        detail={"member_id": record["id"]},
+    )
     return _to_response(record)
 
 
@@ -144,7 +151,7 @@ async def get_member(
 async def update_member(
     member_id: uuid.UUID,
     payload: UpdateMemberRequest,
-    _claims: _Admin,
+    claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
@@ -157,12 +164,23 @@ async def update_member(
     for key in _CLEARABLE_FIELDS:
         if key in explicitly_set:
             data[key] = explicitly_set[key]
-    record = await repo.update(str(member_id), data)
-    if record is None:
+    before = await repo.get(str(member_id))
+    if before is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
+    record = await repo.update(str(member_id), data)
     await uow.commit()
+    log_security_event(
+        "member_updated",
+        "success",
+        user_id=claims.sub,
+        detail={
+            "member_id": record["id"],
+            # Names only: the values are the personal data being audited.
+            "changed_fields": sorted(k for k in data if before[k] != record[k]),
+        },
+    )
     return _to_response(record)
 
 
