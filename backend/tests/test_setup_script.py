@@ -380,7 +380,7 @@ class Host:
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
-        for sub in ("quadlet", "env"):
+        for sub in ("quadlet", "env", "systemd"):
             shutil.copytree(ROOT / "deploy" / sub, self.src / "deploy" / sub)
         (self.src / "deploy/traefik/dynamic").mkdir()
         shutil.copy(ROOT / "deploy/traefik/traefik.yml", self.src / "deploy/traefik")
@@ -487,6 +487,21 @@ def test_quadlet_installs_the_units_and_reloads(tmp_path):
     assert shipped <= {p.name for p in host.units().iterdir() if p.is_file()}
     assert "--user daemon-reload" in host.systemctl_log.read_text()
     assert "systemctl --user start kendo-traefik" in out.stdout
+
+
+def test_quadlet_enables_the_daily_ip_retention_timer(tmp_path):
+    """Without it, recovery-attempt IPs outlive 30 days on an instance nobody
+    restarts (#467). Quadlet generates no timers: it is a plain user unit."""
+    host = Host(tmp_path)
+    host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    timer = "kendo-ip-retention.timer"
+    assert (host.home / ".config/systemd/user" / timer).read_text() == (
+        ROOT / "deploy/systemd" / timer
+    ).read_text()
+    calls = host.systemctl_log.read_text().splitlines()
+    reload = calls.index("--user daemon-reload")
+    assert f"--user enable --now {timer}" in calls[reload + 1 :], calls
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
@@ -607,7 +622,11 @@ def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
     )
     host.run("dojo.example.com", "4")
 
-    for unit in ("kendo-app.container", "kendo-migrate.container"):
+    for unit in (
+        "kendo-app.container",
+        "kendo-migrate.container",
+        "kendo-ip-retention.container",
+    ):
         assert (
             "Image=ghcr.io/booji/kendodojomanagement:1.0.0-rc1"
             in (host.units() / unit).read_text()

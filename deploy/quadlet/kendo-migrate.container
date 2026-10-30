@@ -38,8 +38,9 @@ Exec=-m app.db.bootstrap
 # The image has no HEALTHCHECK and this container exits; without this Quadlet's
 # default Type=notify would wait for a readiness notification that never comes.
 Notify=no
-# Hardening (#458). The same block is in kendo-app, kendo-migrate and
-# kendo-traefik: Quadlet has no include or anchor, so change all three.
+# Hardening (#458). The same block is in kendo-app, kendo-migrate,
+# kendo-ip-retention and kendo-traefik: Quadlet has no include or anchor, so
+# change all four.
 # Read-only root, so a breach cannot write tools into the image; /tmp is
 # the only scratch space (Starlette spools uploads there).
 ReadOnly=true

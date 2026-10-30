@@ -23,8 +23,9 @@ PublishPort=443:443
 Volume=kendo-traefik-acme.volume:/acme
 Volume=%h/kendo/traefik/traefik.yml:/etc/traefik/traefik.yml:ro,Z
 Volume=%h/kendo/traefik/dynamic:/etc/traefik/dynamic:ro,Z
-# Hardening (#458). The same block is in kendo-app, kendo-migrate and
-# kendo-traefik: Quadlet has no include or anchor, so change all three.
+# Hardening (#458). The same block is in kendo-app, kendo-migrate,
+# kendo-ip-retention and kendo-traefik: Quadlet has no include or anchor, so
+# change all four.
 # Read-only root, so a breach cannot write tools into the image. ACME state
 # lives on its volume; /tmp is the only scratch space.
 ReadOnly=true
