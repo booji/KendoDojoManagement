@@ -28,8 +28,11 @@ ContainerName=kendo-migrate
 Image=ghcr.io/booji/kendodojomanagement:1
 Network=kendo-backend.network
 EnvironmentFile=%h/kendo/kendo-app.env
-Secret=kendo_migration_database_url,type=env,target=MIGRATION_DATABASE_URL
-Secret=kendo_database_url,type=env,target=DATABASE_URL
+# Mounted as files, not environment, as in kendo-app.container (#462).
+Secret=kendo_migration_database_url,type=mount,target=migration_database_url,uid=1001,gid=1001,mode=0400
+Secret=kendo_database_url,type=mount,target=database_url,uid=1001,gid=1001,mode=0400
+Environment=MIGRATION_DATABASE_URL_FILE=/run/secrets/migration_database_url
+Environment=DATABASE_URL_FILE=/run/secrets/database_url
 Entrypoint=python
 Exec=-m app.db.bootstrap
 # The image has no HEALTHCHECK and this container exits; without this Quadlet's

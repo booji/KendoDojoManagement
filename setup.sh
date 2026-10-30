@@ -164,6 +164,21 @@ placeholders() {
 
 env_value() { sed -n "s/^$2=//p" "$1" | tail -1; } # env_value FILE KEY
 
+# Compose mounts these at /run/secrets instead of passing them as environment
+# (#462). .env stays the record and secrets/ is derived from it, on setup and
+# on upgrade. The directory is the operator's alone; the files are 0644 because
+# a bind-mounted file keeps its host mode and the app runs as uid 1001, which
+# does not own them.
+write_compose_secrets() {
+  local name
+  ( umask 077; mkdir -p secrets )
+  chmod 700 secrets
+  for name in DATABASE_URL MIGRATION_DATABASE_URL JWT_SECRET SETUP_TOKEN; do
+    printf '%s' "$(env_value .env "$name")" > "secrets/${name,,}"
+    chmod 644 "secrets/${name,,}"
+  done
+}
+
 run_check() {
   local env_file traefik_dir certs rerun
   if [ "$mode" = quadlet ]; then
@@ -457,6 +472,9 @@ run_upgrade() {
   podman run --rm "$image" init | tar -x -C "$tmp/next" ||
     { echo "Could not extract the bundle from $image — nothing past the backup was changed." >&2; exit 1; }
   refresh_bundle "$tmp/prev" "$tmp/next"
+  # A stack set up before #462 has no secrets/ yet, and the compose file it
+  # just took mounts them; re-deriving also picks up a hand edit of .env.
+  write_compose_secrets
 
   # --force-recreate: podman-compose recreates a container only when the YAML
   # changed, and a new image under the same :1 tag is not a YAML change. And
@@ -738,6 +756,8 @@ if [ "$mode" = compose ]; then
   )
   chmod 600 .env
   echo "  wrote .env (mode 600)"
+  write_compose_secrets
+  echo "  wrote secrets/ from it (mode 700)"
 fi
 
 # The one provider table. dns_var is the single environment variable lego reads,

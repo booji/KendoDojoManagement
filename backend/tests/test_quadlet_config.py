@@ -14,6 +14,8 @@ import os
 import re
 from pathlib import Path
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -294,7 +296,7 @@ def test_docs_database_url_host_matches_db_container_name():
 # ---------------------------------------------------------------------------
 # 13 — the env file the Quadlet unit reads (#385)
 # ---------------------------------------------------------------------------
-# kendo-app.container passes exactly one EnvironmentFile plus two secrets, so
+# kendo-app.container passes exactly one EnvironmentFile plus its secrets, so
 # anything absent from deploy/env/kendo-app.env.example is absent from the
 # app's environment on a Quadlet host. APP_ENV was, which left
 # validate_startup_config() on its permissive development path: a placeholder
@@ -323,9 +325,16 @@ def test_app_env_file_is_the_only_environment_source():
     example file alone stops being sufficient."""
     app = load_units()["kendo-app.container"]["Container"]
     assert app.get("EnvironmentFile") == ["%h/kendo/kendo-app.env"]
-    assert "Environment" not in app, (
+    # The one exception: each mounted secret's <NAME>_FILE path (#462), which
+    # pairs with its Secret= line and is no setting of the operator's.
+    inline = [
+        e
+        for e in app.get("Environment", [])
+        if not re.fullmatch(r"[A-Z_]+_FILE=/run/secrets/[a-z_]+", e)
+    ]
+    assert not inline, (
         "kendo-app.container now sets Environment= inline; the env-file "
-        "checks below no longer see the app's whole environment"
+        f"checks below no longer see the app's whole environment: {inline}"
     )
 
 
@@ -409,13 +418,57 @@ def test_superuser_login_is_attached_to_the_migrate_unit_only():
     def secrets(name: str) -> str:
         return " ".join(units[name].get("Container", {}).get("Secret", []))
 
-    assert "kendo_migration_database_url,type=env,target=MIGRATION_DATABASE_URL" in (
-        secrets("kendo-migrate.container")
-    )
+    assert "kendo_migration_database_url," in secrets("kendo-migrate.container")
     # The app user's login: bootstrap reads its name and password from it.
-    assert "kendo_database_url,type=env,target=DATABASE_URL" in secrets(
-        "kendo-migrate.container"
-    )
+    assert "kendo_database_url," in secrets("kendo-migrate.container")
     app = secrets("kendo-app.container")
     assert "kendo_migration_database_url" not in app, app
     assert "kendo_postgres_password" not in app, app
+
+
+# ---------------------------------------------------------------------------
+# Secrets reach the app as files, never as environment (#462)
+# ---------------------------------------------------------------------------
+# An environment variable shows up in `podman inspect` and /proc/<pid>/environ
+# and is inherited by every child process. A mounted secret is a file under
+# /run/secrets, and app/config.py reads its path from <NAME>_FILE.
+
+_SECRET_FILES = {
+    "kendo-app.container": {
+        "DATABASE_URL": "kendo_database_url",
+        "JWT_SECRET": "kendo_jwt_secret",
+        "SETUP_TOKEN": "kendo_setup_token",
+    },
+    "kendo-migrate.container": {
+        "MIGRATION_DATABASE_URL": "kendo_migration_database_url",
+        "DATABASE_URL": "kendo_database_url",
+    },
+}
+
+
+def _secret_options(container: dict[str, list[str]]) -> dict[str, dict[str, str]]:
+    """{secret name: {option: value}} for each Secret= line."""
+    out = {}
+    for line in container.get("Secret", []):
+        name, *opts = line.split(",")
+        out[name] = dict(opt.split("=", 1) for opt in opts)
+    return out
+
+
+@pytest.mark.parametrize("cname", sorted(_SECRET_FILES))
+def test_app_secrets_are_mounted_files_named_in_their_file_variable(cname: str):
+    container = load_units()[cname]["Container"]
+    env = dict(e.split("=", 1) for e in container.get("Environment", []))
+    secrets = _secret_options(container)
+
+    for var, secret in _SECRET_FILES[cname].items():
+        opts = secrets[secret]
+        assert opts.get("type") == "mount", f"{cname}: {secret} {opts}"
+        # Readable by the image's unprivileged user (uid 1001) and nobody else.
+        assert (opts.get("uid"), opts.get("gid"), opts.get("mode")) == (
+            "1001",
+            "1001",
+            "0400",
+        ), f"{cname}: {secret} {opts}"
+        assert env.get(f"{var}_FILE") == f"/run/secrets/{opts['target']}", env
+        assert var not in env, f"{cname} still passes {var} as environment"

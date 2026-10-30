@@ -201,6 +201,12 @@ openssl rand -base64 32 | tr -d '\n' \
 
 A sixth, `kendo_dns_token`, only when you use DNS-01 — with the drop-in from §5.
 
+The units mount each secret as a file under `/run/secrets`, readable only by
+the app's user, and tell the app where it is with `<NAME>_FILE` (for example
+`JWT_SECRET_FILE=/run/secrets/jwt_secret`). None is passed as an environment
+variable, so none shows up in `podman inspect` or is inherited by a process
+the app starts (#462).
+
 Then the units:
 
 ```bash

@@ -14,12 +14,35 @@ load_dotenv(override=False)
 # this, or a change here silently stops it matching.
 API_PREFIX = "/api"
 
-DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
+
+def read_secret(name: str) -> str:
+    """The secret `name`, from the file `<name>_FILE` names, else `<name>`.
+
+    Production mounts each secret as a file (#462): an environment variable
+    shows up in `podman inspect` and /proc/<pid>/environ and is inherited by
+    every child process. The plain variable is the fallback dev and test use.
+    """
+    path = os.getenv(f"{name}_FILE")
+    if not path:
+        return os.getenv(name) or ""
+    try:
+        with open(path) as f:
+            # A trailing newline is the editor's or `echo`'s, never the secret's.
+            return f.read().rstrip("\r\n")
+    except OSError as e:
+        # Not a fallback to the variable: that would surface as "<name> must
+        # be set" and send the operator looking in the wrong place.
+        raise RuntimeError(
+            f"{name}_FILE names {path}, which cannot be read: {e}"
+        ) from e
+
+
+DATABASE_URL: str = read_secret("DATABASE_URL")
 
 # The superuser login, given only to the migration step (ADR-0007): the app
 # itself connects as the restricted user named in DATABASE_URL and must never
 # see this one.
-MIGRATION_DATABASE_URL: str = os.getenv("MIGRATION_DATABASE_URL") or ""
+MIGRATION_DATABASE_URL: str = read_secret("MIGRATION_DATABASE_URL")
 
 # development | production. Explicit and never inferred from other settings
 # (e.g. COOKIE_SECURE) — production-only checks below key off this alone.
@@ -33,14 +56,14 @@ MIGRATION_DATABASE_URL: str = os.getenv("MIGRATION_DATABASE_URL") or ""
 # rather than silently defaulting to development — see the check there.
 APP_ENV: str = os.getenv("APP_ENV", "development").strip().lower()
 
-JWT_SECRET: str = os.getenv("JWT_SECRET") or ""
+JWT_SECRET: str = read_secret("JWT_SECRET")
 
 # Pre-provisioned secret that gates claiming the first admin account
 # (ADR-0003). Required unconditionally, claimed or not: making it conditional
 # on unclaimed state needs a DB query in lifespan() and invites an operator to
 # delete the secret after claiming — which boots fine until the database is
 # restored or wiped, and then reopens the claim to whoever finds it first.
-SETUP_TOKEN: str = os.getenv("SETUP_TOKEN") or ""
+SETUP_TOKEN: str = read_secret("SETUP_TOKEN")
 JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
 # An Auth Session's idle window is JWT_EXPIRE_MINUTES (the name predates
 # ADR-0008 and is deployment surface). This is its absolute ceiling, however
@@ -336,7 +359,7 @@ def validate_startup_config() -> None:
         value = globals().get(name)
         if not isinstance(value, str) or not value.strip():
             raise RuntimeError(
-                f"{name} environment variable must be set to a non-empty "
+                f"{name} (or the file {name}_FILE names) must be set to a non-empty "
                 "value. Refusing to start with a missing/blank secret."
             )
 

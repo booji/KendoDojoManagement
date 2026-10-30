@@ -102,6 +102,29 @@ async def test_create_recovery_token_succeeds_with_real_database_url(
 
 
 @pytest.mark.asyncio
+async def test_create_recovery_token_reads_the_database_url_file(
+    database_url: str, tmp_path
+) -> None:
+    """Inside the hardened app container the login is a mounted file and
+    DATABASE_URL is unset (#462): break-glass must still work there."""
+    email = _unique_email("cli-url-file")
+    user_id = await _seed_user(database_url, email)
+    url_file = tmp_path / "database_url"
+    url_file.write_text(database_url)
+    try:
+        result = runner.invoke(
+            cli_app,
+            ["create-recovery-token", email],
+            env={"DATABASE_URL": "", "DATABASE_URL_FILE": str(url_file)},
+        )
+
+        assert result.exit_code == 0, f"output={result.output!r} exc={result.exception}"
+        assert len(result.stdout.strip()) > 0
+    finally:
+        await _cleanup_user(database_url, user_id)
+
+
+@pytest.mark.asyncio
 async def test_create_recovery_token_token_is_nonempty_string(
     database_url: str,
 ) -> None:

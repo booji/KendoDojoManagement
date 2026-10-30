@@ -2,7 +2,10 @@
 # ONLY via Traefik on the edge network. Straddles both networks: edge (Traefik
 # reaches it) and backend (it reaches the db).
 #
-# Secrets injected as env straight from podman secrets (no config.py change):
+# Secrets are podman secrets mounted as files under /run/secrets, readable only
+# by the image's user (uid 1001), and named to the app by <NAME>_FILE (#462).
+# Never `type=env`: an environment variable shows up in `podman inspect` and
+# /proc/<pid>/environ and is inherited by every child process.
 #   - DATABASE_URL (full URL, incl. password) — the restricted app user's login
 #     (ADR-0007), never the superuser's: the app refuses to start as one, and
 #     kendo_migration_database_url is attached to kendo-migrate alone
@@ -33,9 +36,12 @@ EnvironmentFile=%h/kendo/kendo-app.env
 # upgrade from a root-running image does not leave the uploads directory
 # unwritable (#385).
 Volume=kendo-app-uploads.volume:/app/uploads:U
-Secret=kendo_database_url,type=env,target=DATABASE_URL
-Secret=kendo_jwt_secret,type=env,target=JWT_SECRET
-Secret=kendo_setup_token,type=env,target=SETUP_TOKEN
+Secret=kendo_database_url,type=mount,target=database_url,uid=1001,gid=1001,mode=0400
+Secret=kendo_jwt_secret,type=mount,target=jwt_secret,uid=1001,gid=1001,mode=0400
+Secret=kendo_setup_token,type=mount,target=setup_token,uid=1001,gid=1001,mode=0400
+Environment=DATABASE_URL_FILE=/run/secrets/database_url
+Environment=JWT_SECRET_FILE=/run/secrets/jwt_secret
+Environment=SETUP_TOKEN_FILE=/run/secrets/setup_token
 
 [Service]
 Restart=always
