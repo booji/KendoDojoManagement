@@ -327,8 +327,78 @@ systemctl --user daemon-reload && systemctl --user restart kendo-app
 
 The Compose stack carries the same settings (`x-hardening` in `docker-compose.yml`). There, set `mem_limit:` or `pids_limit:` on the service itself, which wins over the merged defaults.
 
----
+## 9. Logs
 
+The app writes its logs to the container's stdout. Podman's default `journald`
+log driver hands them to the `kendo` user's journal, tagged with the
+`kendo-app` unit, so the journal on the device is where they live. Nothing is
+written to a log file inside the container (the root filesystem is read-only).
+
+```bash
+podman logs kendo-app                    # this container's output since it started
+journalctl --user-unit kendo-app         # the unit's history, across restarts
+```
+
+Use `--user-unit`, not `--user -u`. `--user` reads only the per-user journal
+file, which journald creates only when journal storage is persistent. On a host
+without it, everything is in the system journal and `--user -u` shows nothing.
+`--user-unit` works either way.
+
+### Security events
+
+Sign-ins, recovery, passkey and invite changes, the setup claim and the other
+security events are one JSON object per line:
+
+```json
+{"timestamp":"2026-10-30T21:31:58.723232+00:00","event_type":"setup_claim","result":"success"}
+```
+
+`timestamp` (UTC, ISO 8601), `event_type` and `result` are always there.
+`user_id`, `ip_address` and `detail` appear when they apply. To see only these
+lines:
+
+```bash
+journalctl --user-unit kendo-app -o cat --grep '"event_type"'
+# or pretty-print them, if jq is installed
+journalctl --user-unit kendo-app -o cat --grep '"event_type"' | jq .
+```
+
+### How long they survive
+
+journald decides, not the app. Check two things as an admin user:
+
+- **Storage is persistent.** If `/var/log/journal` does not exist, the journal
+  lives in `/run` and every event is gone at reboot. Create it with
+  `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`,
+  or set `Storage=persistent` in `/etc/systemd/journald.conf`.
+- **Size caps.** `SystemMaxUse` and `SystemMaxFileSize` in
+  `/etc/systemd/journald.conf` bound the journal's disk use. When the cap is
+  hit the oldest entries go first, so on a small or busy disk events can
+  vanish sooner than you expect. Check with `journalctl --disk-usage`.
+
+Events carry client IP addresses, which are personal data, so keep them no
+longer than you need. The app clears IPs from its own recovery-attempt records
+after 30 days; matching that in the journal is a drop-in:
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\n' | sudo tee /etc/systemd/journald.conf.d/30-retention.conf
+sudo systemctl restart systemd-journald
+```
+
+`MaxRetentionSec` is host-wide: it applies to every service's logs, not just
+`kendo-app`.
+
+### Collecting them off the host
+
+Optional. Any collector that reads the journal works, and the app needs no
+configuration for it: for example [Grafana Alloy](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/)
+into Loki, [Graylog](https://go2docs.graylog.org/current/getting_in_log_data/ingest_journald.html),
+or [`systemd-journal-remote`](https://www.freedesktop.org/software/systemd/man/latest/systemd-journal-remote.service.html).
+
+The limit to be honest about: anyone who controls the host can delete events
+the collector has not pulled yet. Pulling often keeps that window small; it
+does not close it.
 
 ---
 
