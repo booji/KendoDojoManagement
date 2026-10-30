@@ -127,7 +127,10 @@ async def test_member_edit_logs_only_the_names_of_fields_that_changed(
     assert "Suzuki" not in caplog.text and "Yamada" not in caplog.text
 
 
-async def test_member_erasure_is_logged(member_repo, caplog) -> None:
+async def test_member_erasure_is_logged(db_client, member_repo, caplog) -> None:
+    # db_client: erasure runs SQL, which must stay on this test's own
+    # connection, not the app's pool, or a later test hits a "different loop"
+    # error (#291).
     member = member_repo.seed(
         **_member_payload(membership_status="archived"), id=str(uuid.uuid4())
     )
