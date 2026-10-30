@@ -11,7 +11,9 @@
 Description=Kendo recovery-attempt IP retention
 Requires=kendo-db.service
 After=kendo-db.service
-# Never against a half-migrated schema.
+# Never against an unmigrated schema: Requires= pulls kendo-migrate in (and
+# skips this run if it failed), After= waits for it, as in kendo-app.
+Requires=kendo-migrate.service
 After=kendo-migrate.service
 
 [Container]
@@ -32,7 +34,7 @@ Notify=no
 # kendo-ip-retention and kendo-traefik: Quadlet has no include or anchor, so
 # change all four.
 # Read-only root, so a breach cannot write tools into the image; /tmp is
-# the only scratch space (Starlette spools uploads there).
+# the only scratch space.
 ReadOnly=true
 Tmpfs=/tmp
 # No capabilities and no setuid escalation: it runs as an unprivileged user

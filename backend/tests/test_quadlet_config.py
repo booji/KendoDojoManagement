@@ -402,7 +402,11 @@ def test_ip_retention_unit_is_a_oneshot_running_the_clear():
     # RemainAfterExit=yes would leave it active, and a timer cannot start an
     # active unit again: it would run once and never again.
     assert "RemainAfterExit" not in unit.get("Service", {}), unit["Service"]
-    assert "kendo-db.service" in unit["Unit"].get("Requires", [])
+    # Requires=, as kendo-app has: After= alone orders, it does not pull
+    # kendo-migrate in, so the clear could run against an unmigrated schema.
+    assert {"kendo-db.service", "kendo-migrate.service"} <= set(
+        unit["Unit"].get("Requires", [])
+    )
     assert {"kendo-db.service", "kendo-migrate.service"} <= set(
         unit["Unit"].get("After", [])
     )
