@@ -1041,7 +1041,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 # issue #300 -- invite_redeem_begin decoy user.id must not be a stability
 # oracle
 #
-# Same defect as register_passkey_begin (see test_passkey_enumeration.py),
+# Same defect the email-addressed register begin had (removed, #472),
 # keyed by invite token instead of email: invite_redeem_begin's real path
 # returns the persisted Account.id (stable forever for a given token, until
 # redeemed), while the decoy minted a fresh uuid4() per call. Two POSTs
@@ -1149,6 +1149,79 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
     padded = returned_id_b64 + "=" * (4 - len(returned_id_b64) % 4)
     returned_id = base64.urlsafe_b64decode(padded).decode()
     assert returned_id == user_row.id
+
+
+def _decoded_user_id(response) -> uuid.UUID:
+    import base64
+
+    encoded = response.json()["publicKey"]["user"]["id"]
+    padded = encoded + "=" * (-len(encoded) % 4)
+    return uuid.UUID(base64.urlsafe_b64decode(padded).decode())
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_decoy_user_id_is_a_version_4_uuid(db_client) -> None:
+    """The decoy id must parse as a version-4 RFC 4122 UUID, exactly like the
+    real one.
+
+    Real ids come from uuid4(), so their version and variant nibbles are
+    fixed. A decoy built from raw HMAC bytes has random ones -- which would
+    classify a token from a SINGLE response (parse, check version == 4:
+    always true for a real invite, true roughly one time in sixteen for a
+    raw digest). Moved here from the email-addressed register begin when that
+    was removed (#472).
+    """
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(
+        session, "format-real@dojo.test", "format-real-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        real = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "format-real-token"}
+        )
+        decoy = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "format-decoy-token"}
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    real_id = _decoded_user_id(real)
+    decoy_id = _decoded_user_id(decoy)
+    assert real_id.version == 4
+    assert decoy_id.version == real_id.version
+    assert decoy_id.variant == real_id.variant
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_requests_discoverable_credential_real_and_decoy(
+    db_client,
+) -> None:
+    """Login has no allowCredentials (#267), so an invitee's passkey must be
+    discoverable: residentKey "required" on the real path, and on the decoy so
+    it keeps the real path's shape (#239)."""
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(
+        session, "discoverable@dojo.test", "discoverable-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        real = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "discoverable-token"}
+        )
+        decoy = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "no-such-token"}
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    for response in (real, decoy):
+        selection = response.json()["publicKey"]["authenticatorSelection"]
+        assert selection["residentKey"] == "required"
 
 
 # ---------------------------------------------------------------------------

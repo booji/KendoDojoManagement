@@ -148,7 +148,7 @@ def _mock_passkeys_list(page: Page, passkeys: list[dict]) -> None:
 
 def _stub_navigator_credentials(page: Page) -> None:
     """Replace navigator.credentials.create with a stub that returns a fake credential,
-    allowing the frontend's performPasskeyRegistration to proceed past the WebAuthn prompt.
+    allowing the frontend's passkey enrolment to proceed past the WebAuthn prompt.
     """
     page.add_init_script("""
         const fakeCredential = {

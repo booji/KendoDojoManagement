@@ -665,16 +665,11 @@ async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> N
 async def test_passkey_registration_emits_log(
     db_client, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Successful passkey registration completion must emit a passkey_registered/success event.
-
-    Note: the full WebAuthn ceremony requires a real authenticator so we test
-    that the route emits login_passkey/failure for a bad credential — the event
-    emission point for passkey_registered is in register_passkey_complete.
-    We verify the module calls log_security_event by patching at the service level.
+    """An attempt at the email-addressed registration complete emits a
+    passkey_registered/failure event. The route is a decoy since Members
+    became invite-only (#472), so every attempt there is a failure an
+    operator may want to see.
     """
-    # We can't complete a real WebAuthn ceremony in unit tests, so we verify
-    # that a failed complete attempt emits a failure event (the success path
-    # is covered by the real service calling log_security_event internally).
     with caplog.at_level(logging.INFO, logger="security_events"):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test/api"

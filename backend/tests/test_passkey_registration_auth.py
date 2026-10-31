@@ -1,11 +1,10 @@
 """Issue #443 — passkey registration cannot attach a credential to someone
 else's Account.
 
-The unauthenticated ceremony (/auth/register/passkey/*) identifies the Account
-by a submitted email, so it may only establish an Account's FIRST credential,
-as an invite does. Adding another passkey goes through
-/auth/passkeys/register/*, which takes the Account from the caller's session
-cookie or recovery token, never from the request body.
+Adding a passkey goes through /auth/passkeys/register/*, which takes the
+Account from the caller's session cookie or recovery token, never from the
+request body. (The email-addressed ceremony is gone: Members join by invite
+only, #472; see test_passkey.py.)
 """
 
 from __future__ import annotations
@@ -17,9 +16,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import func, insert, select, update
 
-from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
+from app.auth.db_models import Account, PasskeyCredential
 from app.auth.models import AccountClaims
 from app.main import app
 from tests.account_support import seed_account
@@ -41,7 +40,7 @@ def clear_overrides():
 
 async def _seed_account_with_passkey(session, email: str, role: str = "member") -> str:
     """An Account that already has a passkey, with a registration challenge
-    pending (as /auth/register/passkey/begin would leave it)."""
+    pending (as a begin would leave it)."""
     user_id = str(uuid.uuid4())
     await seed_account(
         session,
@@ -89,24 +88,6 @@ def _client(**kwargs) -> AsyncClient:
     return AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api", **kwargs
     )
-
-
-async def test_unauthenticated_registration_cannot_add_to_an_account_with_a_passkey(
-    db_client,
-) -> None:
-    email = "victim-admin@dojo.test"
-    user_id = await _seed_account_with_passkey(db_client, email, role="admin")
-
-    with _authenticator_says_yes():
-        async with _client() as c:
-            response = await c.post(
-                "/auth/register/passkey/complete",
-                json={"email": email, "credential": _CREDENTIAL},
-            )
-
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication failed"}
-    assert await _passkey_count(db_client, user_id) == 1
 
 
 def _claims(user_id: str, email: str) -> AccountClaims:
@@ -223,38 +204,3 @@ async def test_a_deactivated_account_cannot_add_a_passkey(db_client) -> None:
 
     assert statuses == (401, 401)
     assert await _passkey_count(db_client, user_id) == 1
-
-
-async def test_an_account_that_deleted_its_last_passkey_is_not_open_again(
-    db_client,
-) -> None:
-    """A Member may delete their only passkey while they hold recovery codes,
-    leaving the Account with none. It is still somebody's Account: the
-    email-addressed ceremony must not treat it as never enrolled."""
-    # A claimed instance: with no passkey anywhere the bootstrap gate would
-    # refuse on its own and hide whether this rule holds.
-    await _seed_account_with_passkey(db_client, "someone-else@dojo.test")
-    email = "codes-only@dojo.test"
-    user_id = await _seed_account_with_passkey(db_client, email, role="admin")
-    await db_client.execute(
-        delete(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
-    )
-    await db_client.execute(
-        insert(RecoveryCode).values(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            code_hash="hash",
-            set_id=str(uuid.uuid4()),
-            created_at=datetime.now(UTC),
-        )
-    )
-
-    with _authenticator_says_yes():
-        async with _client() as c:
-            response = await c.post(
-                "/auth/register/passkey/complete",
-                json={"email": email, "credential": _CREDENTIAL},
-            )
-
-    assert response.status_code == 401
-    assert await _passkey_count(db_client, user_id) == 0

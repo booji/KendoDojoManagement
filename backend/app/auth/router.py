@@ -63,8 +63,6 @@ from app.auth.passkey_service import (
     add_passkey_complete,
     login_passkey_begin,
     login_passkey_complete,
-    register_passkey_begin,
-    register_passkey_complete,
 )
 from app.auth.rate_limiter import (
     PER_IP_LIMIT,
@@ -142,24 +140,23 @@ async def admin_only(
     return claims
 
 
-@router.post("/register/passkey/begin")
-@limiter.limit(PER_IP_LIMIT)
-async def passkey_register_begin(
-    request: Request,
-    payload: PasskeyBeginRequest,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> dict:
-    return await register_passkey_begin(payload.email, uow)
-
-
 @router.post("/register/passkey/complete", status_code=201)
 @limiter.limit(PER_IP_LIMIT)
 async def passkey_register_complete(
     request: Request,
     payload: PasskeyRegisterCompleteRequest,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> PasskeyRegisterCompleteResponse:
-    return await register_passkey_complete(payload, uow)
+    """A decoy: Members join by invite only (#472).
+
+    A submitted email was all that identified the caller, so anyone who knew a
+    never-enrolled Member's address could become that Account's only passkey.
+    Every request now gets the generic 401 the ceremony always gave for a bad
+    credential, so the route answers as it did before for anyone probing it.
+    """
+    log_security_event("passkey_registered", "failure")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed"
+    )
 
 
 async def _enrolment_email(account: Account, uow: AbstractUnitOfWork) -> str:

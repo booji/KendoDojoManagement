@@ -15,7 +15,7 @@ valid invite) does strictly more work than the decoy path — an extra SELECT, a
 `ConstantTimeAuthMiddleware` closes it by holding every request to these paths
 for a fixed minimum wall-clock time:
 
-- `POST /auth/register/passkey/begin`
+- `POST /auth/register/passkey/begin` (removed in #472: Members join by invite only)
 - `POST /auth/login/passkey/begin`
 - `POST /auth/invites/redeem/begin`
 
@@ -82,7 +82,8 @@ discarded warmup requests. All figures in milliseconds, server-side.
 
 ### Under concurrency
 
-Swept on `register/passkey/begin`, the heaviest repeatable path. "over 50ms" is
+Swept on `register/passkey/begin`, then the heaviest repeatable path (removed in
+#472; a new run sweeps `login/passkey/begin`). "over 50ms" is
 the share of requests that would have breached the old default.
 
 | in-flight requests | p50 | p90 | **p99** | max | over 50ms |

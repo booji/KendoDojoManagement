@@ -7,24 +7,23 @@ Two auth-boundary weaknesses are being closed in app.auth.passkey_service:
 2. register_passkey_begin -> _get_or_create_user used to create an Account row
    for ANY email, unauthenticated.
 
-The new design:
-- Registration is gated on an admin-created Member row matching the email.
-  The zero-Account bootstrap is preserved (first-ever registrant becomes admin
-  regardless of Member rows).
-- A successful register-begin creates the Account for the matching Member
-  (accounts.member_id, #432).
-- Both begin endpoints return HTTP 200 with a well-formed decoy publicKey
-  challenge for unauthorized/unknown emails, freshly random on every call
-  just like the real path, and never touch the DB on that path.
-- The complete endpoints fail with a generic, indistinguishable error when
+The design:
+- Login begin returns HTTP 200 with a well-formed decoy publicKey challenge
+  for unknown emails, freshly random on every call just like the real path,
+  and never touches the DB on that path.
+- Login complete fails with a generic, indistinguishable error when
   following a decoy begin.
+- The zero-Account bootstrap lives behind the setup token (ADR-0003).
+
+The email-addressed register ceremony this issue gated on a Member row is
+gone altogether: Members join by invite only (#472). Its decoy-shape
+guarantees now belong to invite redemption (test_invites.py).
 
 Written against the shared PostgreSQL test database via the `db_client`
 fixture (conftest.py; savepoint-scoped, rolled back per test), following the
 fixture conventions in test_passkey.py.
 """
 
-import base64
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -68,7 +67,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     """Seed a fully-registered user: an Account row plus a PasskeyCredential.
 
     The credential is what makes the instance count as "already set up" --
-    register_passkey_begin defines bootstrap as zero PasskeyCredential rows,
+    the setup claim defines bootstrap as zero PasskeyCredential rows,
     not zero Account rows, so that a phantom user left behind by an abandoned
     first-run ceremony cannot permanently brick setup.
     """
@@ -163,97 +162,7 @@ async def _user_count(session) -> int:
     return len(result.fetchall())
 
 
-# ── AC1/AC2: registration gated on admin-created Member ─────────────────────
-
-
-@pytest.mark.asyncio
-async def test_register_begin_unauthorized_email_creates_no_user(db_client) -> None:
-    """Register-begin for an email with no matching Member creates no Account row,
-    when the instance already has at least one Account (bootstrap not in play)."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    before = await _user_count(session)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "unauthorized@dojo.test"},
-        )
-
-    assert response.status_code == 200
-    after = await _user_count(session)
-    assert after == before
-
-    result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "unauthorized@dojo.test")
-    )
-    assert result.fetchone() is None
-
-
-@pytest.mark.asyncio
-async def test_register_begin_authorized_email_creates_user(db_client) -> None:
-    """Register-begin for an email matching an admin-created Member creates
-    the Account row and returns a real (non-decoy) challenge."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    member_id = await _seed_member(session, "authorized@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "authorized@dojo.test"},
-        )
-
-    assert response.status_code == 200
-    result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "authorized@dojo.test")
-    )
-    user_row = result.scalar_one_or_none()
-    member_result = await session.execute(select(Member).where(Member.id == member_id))
-    member_row = member_result.scalar_one_or_none()
-    assert user_row is not None
-    # A "real" (non-decoy) begin creates the Account for that Member (#432).
-    assert member_row is not None
-    assert user_row.member_id == member_row.id
-
-
-@pytest.mark.asyncio
-async def test_register_begin_links_member_user_id(db_client) -> None:
-    """After a successful register-begin, the new Account belongs to the
-    matching Member (#432: accounts.member_id)."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    member_id = await _seed_member(session, "linkme@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "linkme@dojo.test"},
-        )
-    assert response.status_code == 200
-
-    user_result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "linkme@dojo.test")
-    )
-    user_row = user_result.scalar_one_or_none()
-    member_result = await session.execute(select(Member).where(Member.id == member_id))
-    member_row = member_result.scalar_one_or_none()
-
-    assert user_row is not None
-    assert member_row is not None
-    assert user_row.member_id == member_row.id
+# ── First-admin claim (bootstrap) ────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -402,79 +311,6 @@ async def test_login_begin_known_and_unknown_email_shapes_match(db_client) -> No
     assert len(known["challenge"]) == len(unknown["challenge"])
 
 
-@pytest.mark.asyncio
-async def test_register_begin_authorized_and_unauthorized_shapes_match(
-    db_client,
-) -> None:
-    """AC6 at the HTTP layer: the register-begin response for an authorized
-    email (real challenge) and an unauthorized one (decoy) must be
-    indistinguishable -- same keys, and same encoded widths.
-
-    Converted from a Playwright stub. The browser could only observe that
-    both attempts reach the same generic client-side failure, which is a
-    weaker claim than this: a real WebAuthn ceremony cannot complete in
-    headless Chromium without a virtual authenticator, so the UI test could
-    never actually reach the interesting part. The indistinguishability
-    claim lives in the HTTP response, so it is asserted here.
-
-    The user id width check is not incidental -- the decoy originally used a
-    32-byte sha256 digest while the real path uses a 36-char UUID string,
-    which made the encoded user id itself an enumeration tell.
-    """
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "authorized@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        authorized = await c.post(
-            "/auth/register/passkey/begin", json={"email": "authorized@dojo.test"}
-        )
-        unauthorized = await c.post(
-            "/auth/register/passkey/begin", json={"email": "nobody@dojo.test"}
-        )
-
-    assert authorized.status_code == unauthorized.status_code == 200
-    auth_key = authorized.json()["publicKey"]
-    unauth_key = unauthorized.json()["publicKey"]
-    assert set(auth_key.keys()) == set(unauth_key.keys())
-    assert len(auth_key["challenge"]) == len(unauth_key["challenge"])
-    assert len(auth_key["user"]["id"]) == len(unauth_key["user"]["id"])
-    assert set(auth_key["user"].keys()) == set(unauth_key["user"].keys())
-
-
-@pytest.mark.asyncio
-async def test_register_begin_unauthorized_email_returns_200_decoy(db_client) -> None:
-    """register_passkey_begin for an unauthorized email returns 200 with a
-    well-formed decoy challenge, not an error."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "unauthorized2@dojo.test"},
-        )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "publicKey" in body
-    assert "challenge" in body["publicKey"]
-    assert isinstance(body["publicKey"]["challenge"], str)
-    assert len(body["publicKey"]["challenge"]) > 0
-    # A well-formed decoy must not be a *real* challenge -- no Account row for
-    # the unauthorized email may exist afterwards.
-    result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "unauthorized2@dojo.test")
-    )
-    assert result.fetchone() is None
-
-
 # ── AC7: decoy challenges are random per call, like the real path ────────────
 #
 # These two tests originally asserted the OPPOSITE (a deterministic,
@@ -506,184 +342,6 @@ async def test_login_begin_decoy_challenge_differs_per_call(db_client) -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_register_begin_decoy_challenge_differs_per_call(db_client) -> None:
-    """Two register-begin calls for the same unauthorized email return
-    DIFFERENT decoy challenges."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        first = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "repeat-probe-reg@dojo.test"},
-        )
-        second = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "repeat-probe-reg@dojo.test"},
-        )
-
-    assert first.status_code == second.status_code == 200
-    assert (
-        first.json()["publicKey"]["challenge"]
-        != second.json()["publicKey"]["challenge"]
-    )
-
-
-# ── issue #300: register-begin decoy user.id must not be a stability oracle ──
-#
-# register_passkey_begin returns the persisted Account.id as publicKey.user.id on
-# the real path -- stable forever for a given email -- while
-# _decoy_register_response minted a fresh uuid4() per call. Two POSTs plus one
-# field comparison classified any email with no timing analysis needed, sitting
-# right next to (but distinct from) the #239/AC7 challenge-randomness
-# guarantee above: the CHALLENGE must stay random per call on both paths, but
-# the USER ID must be either stable on both paths or random on both -- never
-# stable on one and random on the other. The fix is expected to derive the
-# decoy id via HMAC(server secret, normalised email), which is what makes it
-# both stable for repeat calls AND unpredictable without the secret -- this
-# test asserts both properties together so it fails for the stability reason
-# under today's random-uuid4 implementation, and would also fail against a
-# fix that derived the id deterministically from the email alone (the exact
-# defect _decoy_login_response's docstring already warns about).
-
-
-@pytest.mark.asyncio
-async def test_register_begin_decoy_user_id_stable_then_secret_dependent(
-    db_client, monkeypatch
-) -> None:
-    """Two decoy register-begin calls for the SAME unauthorized email, under
-    the SAME server secret, must return the SAME publicKey.user.id (today
-    they don't: each call mints a fresh uuid4()). Then, changing the server
-    secret and repeating must change the id -- proving it is not derivable
-    from the email alone."""
-    from app import config
-
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-
-    monkeypatch.setattr(config, "JWT_SECRET", "secret-one-for-issue-300")
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        first = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "stability-probe@dojo.test"},
-        )
-        second = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "stability-probe@dojo.test"},
-        )
-
-    assert first.status_code == second.status_code == 200
-    first_id = first.json()["publicKey"]["user"]["id"]
-    second_id = second.json()["publicKey"]["user"]["id"]
-    assert first_id == second_id, (
-        "decoy user.id must be stable across repeat calls for the same "
-        "email, matching the real path's stability -- a decoy that varies "
-        "per call while the real path is stable-forever is the #300 "
-        "enumeration oracle"
-    )
-
-    monkeypatch.setattr(config, "JWT_SECRET", "secret-two-for-issue-300")
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        third = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "stability-probe@dojo.test"},
-        )
-
-    assert third.status_code == 200
-    third_id = third.json()["publicKey"]["user"]["id"]
-    assert third_id != first_id, (
-        "the decoy id must be secret-dependent -- changing the server "
-        "secret for the same email must change the derived id, or the "
-        "derivation is just the email in disguise (the exact defect "
-        "_decoy_login_response's docstring already warns about)"
-    )
-
-
-@pytest.mark.asyncio
-async def test_register_begin_real_user_id_stable_across_calls(db_client) -> None:
-    """Sanity check on the OTHER half of AC1: the real (authorized) path's
-    user.id is already stable across repeat begin calls for the same email --
-    this must keep holding once the decoy path is fixed to match it."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "real-stability@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        first = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "real-stability@dojo.test"},
-        )
-        second = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "real-stability@dojo.test"},
-        )
-
-    assert first.status_code == second.status_code == 200
-    assert (
-        first.json()["publicKey"]["user"]["id"]
-        == second.json()["publicKey"]["user"]["id"]
-    )
-
-
-@pytest.mark.asyncio
-async def test_register_begin_decoy_user_id_is_a_version_4_uuid(db_client) -> None:
-    """The decoy id must parse as a version-4 RFC 4122 UUID, exactly like the
-    real one.
-
-    Real ids come from uuid4(), so their version and variant nibbles are
-    fixed. A decoy built from raw HMAC bytes has random ones -- which would
-    classify any email from a SINGLE response (parse, check version == 4:
-    always true for a real account, true roughly one time in sixteen for a
-    raw digest). That is a strictly easier oracle than the two-call
-    stability tell #300 exists to close, so assert the format matches on
-    both paths, not just the width.
-    """
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "format-real@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        real = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "format-real@dojo.test"},
-        )
-        decoy = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "format-decoy@dojo.test"},
-        )
-
-    assert real.status_code == decoy.status_code == 200
-
-    def _parsed_user_id(response) -> uuid.UUID:
-        encoded = response.json()["publicKey"]["user"]["id"]
-        padded = encoded + "=" * (-len(encoded) % 4)
-        return uuid.UUID(base64.urlsafe_b64decode(padded).decode())
-
-    real_id = _parsed_user_id(real)
-    decoy_id = _parsed_user_id(decoy)
-    assert real_id.version == 4
-    assert decoy_id.version == real_id.version, (
-        "decoy user.id must carry the same UUID version nibble as a real "
-        "uuid4-derived id, or the version alone classifies an email in one "
-        "request"
-    )
-    assert decoy_id.variant == real_id.variant, (
-        "decoy user.id must carry the same UUID variant bits as a real id, "
-        "for the same reason as the version nibble"
-    )
-
-
 # ── AC8: decoy paths write nothing to the DB ─────────────────────────────────
 
 
@@ -699,27 +357,6 @@ async def test_login_begin_decoy_path_writes_no_db_rows(db_client) -> None:
     ) as c:
         response = await c.post(
             "/auth/login/passkey/begin", json={"email": "ghost@dojo.test"}
-        )
-
-    assert response.status_code == 200
-    after = await _user_count(session)
-    assert after == before
-
-
-@pytest.mark.asyncio
-async def test_register_begin_decoy_path_writes_no_db_rows(db_client) -> None:
-    """register_passkey_begin for an unauthorized email must not create an
-    Account row."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    before = await _user_count(session)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "ghost-register@dojo.test"},
         )
 
     assert response.status_code == 200
@@ -750,41 +387,6 @@ async def test_login_complete_after_decoy_begin_fails_generic(db_client) -> None
                         "clientDataJSON": "dGVzdA",
                         "authenticatorData": "dGVzdA",
                         "signature": "dGVzdA",
-                    },
-                    "type": "public-key",
-                },
-            },
-        )
-
-    assert response.status_code != 404
-    assert response.json().get("detail") != "User not found"
-
-
-@pytest.mark.asyncio
-async def test_register_complete_after_decoy_begin_fails_generic(db_client) -> None:
-    """register_passkey_complete for an unauthorized email (which only ever
-    got a decoy begin) must fail with a generic error -- not the
-    user-enumerating 404 'User not found'."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "phantom-register@dojo.test"},
-        )
-        response = await c.post(
-            "/auth/register/passkey/complete",
-            json={
-                "email": "phantom-register@dojo.test",
-                "credential": {
-                    "id": "ZmFrZQ",
-                    "rawId": "ZmFrZQ",
-                    "response": {
-                        "clientDataJSON": "dGVzdA",
-                        "attestationObject": "dGVzdA",
                     },
                     "type": "public-key",
                 },
@@ -912,82 +514,17 @@ async def test_login_begin_response_has_no_allow_credentials_key(db_client) -> N
 
 
 @pytest.mark.asyncio
-async def test_register_begin_requests_discoverable_credential_real_and_decoy(
-    db_client,
-) -> None:
-    """AC3: register-begin requests a discoverable credential
-    (authenticatorSelection.residentKey == "required") on both the real path
-    (authorized email) and the decoy path (unknown email) -- the decoy must
-    keep matching the real path's shape, per #239."""
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "discoverable@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        real = await c.post(
-            "/auth/register/passkey/begin", json={"email": "discoverable@dojo.test"}
-        )
-        decoy = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "no-such-member@dojo.test"},
-        )
-
-    assert real.status_code == decoy.status_code == 200
-    assert (
-        real.json()["publicKey"]["authenticatorSelection"]["residentKey"] == "required"
-    )
-    assert (
-        decoy.json()["publicKey"]["authenticatorSelection"]["residentKey"] == "required"
-    )
-
-
-@pytest.mark.asyncio
-async def test_register_begin_real_and_decoy_bodies_same_byte_length(
-    db_client,
-) -> None:
-    """AC4: register-begin's response has no size-varying field -- the
-    real-path and decoy-path bodies are the same byte length.
-
-    Emails are deliberately equal-length so the comparison isolates
-    implementation-driven size differences (e.g. an authenticatorSelection
-    block present on one path but not the other) from the trivial fact that
-    the caller's own email varies the encoded user.name width -- that width
-    difference is not a secret, since the attacker chose both emails.
-    """
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    real_email = "aaaaaaaaaa@dojo.test"
-    decoy_email = "bbbbbbbbbb@dojo.test"
-    assert len(real_email) == len(decoy_email)
-    await _seed_member(session, real_email)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        real = await c.post("/auth/register/passkey/begin", json={"email": real_email})
-        decoy = await c.post(
-            "/auth/register/passkey/begin", json={"email": decoy_email}
-        )
-
-    assert real.status_code == decoy.status_code == 200
-    assert len(real.content) == len(decoy.content)
-
-
-@pytest.mark.asyncio
 async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time(
     db_client,
 ) -> None:
     """AC5: removing allowCredentials must not regress the #239/#255
-    guarantees -- both begin endpoints still accept an email, still return
-    200 for an unknown/unauthorized one, and remain listed in the
-    constant-time middleware's protected path set."""
+    guarantees -- login begin still accepts an email, still returns 200 for an
+    unknown one, and remains listed in the constant-time middleware's
+    protected path set. (The email-addressed register begin is gone, #472.)"""
     from app.config import API_PREFIX
     from app.core.middleware import _CONSTANT_TIME_PATHS
 
     assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
-    assert f"{API_PREFIX}/auth/register/passkey/begin" in _CONSTANT_TIME_PATHS
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -995,12 +532,8 @@ async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time
         login_resp = await c.post(
             "/auth/login/passkey/begin", json={"email": "still-answers@dojo.test"}
         )
-        register_resp = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "still-answers-reg@dojo.test"},
-        )
 
-    assert login_resp.status_code == register_resp.status_code == 200
+    assert login_resp.status_code == 200
     # The specific #267 regression check: the old guarantee was shaped around
     # an empty allowCredentials list, a concept this issue removes outright.
     assert "allowCredentials" not in login_resp.json()["publicKey"]
@@ -1016,25 +549,21 @@ async def test_login_completes_end_to_end_without_allow_credentials(
     login_passkey_complete resolves the user from (email, credential_id)
     alone rather than depending on a channel this issue removes.
 
-    Runs a full register -> login round trip against a fresh instance
-    (bootstrap path), mocking only the two webauthn verification calls the
+    Runs a full setup claim -> login round trip against a fresh instance,
+    mocking only the two webauthn verification calls the
     same way test_passkey.py does, since no real authenticator is available
     here.
     """
     session = db_client
     await _reset_to_fresh_instance(session)
-    # A claimed instance with the test email on the roll: the ordinary
-    # registration route is the second-and-later user's path now that the
-    # bootstrap branch belongs to the token-gated setup route (ADR-0003).
-    await _seed_user(session, "claimed@dojo.test", role="admin")
-    await _seed_member(session, "e2e-flow@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         register_begin = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "e2e-flow@dojo.test"},
+            "/setup/passkey/begin",
+            json={"email": "e2e-flow@dojo.test", "first_name": "Ai", "surname": "Sato"},
+            headers=_SETUP_HEADERS,
         )
         assert register_begin.status_code == 200
         assert (
@@ -1056,7 +585,8 @@ async def test_login_completes_end_to_end_without_allow_credentials(
             return_value=mock_verified_registration,
         ):
             register_complete = await c.post(
-                "/auth/register/passkey/complete",
+                "/setup/passkey/complete",
+                headers=_SETUP_HEADERS,
                 json={
                     "email": "e2e-flow@dojo.test",
                     "credential": {
@@ -1158,8 +688,6 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
     """
     session = db_client
     await _reset_to_fresh_instance(session)
-    await _seed_user(session, "claimed@dojo.test", role="admin")
-    await _seed_member(session, "uv-flow@dojo.test")
 
     credential_id_bytes = b"uv-flow-credential-id"
     credential_id_b64 = "dXYtZmxvdy1jcmVkZW50aWFsLWlk"
@@ -1174,14 +702,17 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         await c.post(
-            "/auth/register/passkey/begin", json={"email": "uv-flow@dojo.test"}
+            "/setup/passkey/begin",
+            json={"email": "uv-flow@dojo.test", "first_name": "Ai", "surname": "Sato"},
+            headers=_SETUP_HEADERS,
         )
 
         with patch(
             "webauthn.verify_registration_response", return_value=mock_registration
         ) as reg_spy:
             reg_complete = await c.post(
-                "/auth/register/passkey/complete",
+                "/setup/passkey/complete",
+                headers=_SETUP_HEADERS,
                 json={
                     "email": "uv-flow@dojo.test",
                     "credential": {
@@ -1197,7 +728,7 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
             )
         assert reg_complete.status_code == 201
         assert reg_spy.call_args.kwargs.get("require_user_verification") is True, (
-            "register_passkey_complete does not enforce user verification; the "
+            "the setup claim does not enforce user verification; the "
             "userVerification='required' advertised at begin is unchecked"
         )
 

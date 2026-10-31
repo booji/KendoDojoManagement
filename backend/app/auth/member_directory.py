@@ -1,14 +1,12 @@
 """Narrow port auth uses to ask questions about Members.
 
 Every Account belongs to exactly one Member (#432, ADR-0006), so creating an
-Account starts from a Member id. Auth needs exactly two things here:
-1. The id of the admin-created Member with this email, if any (the
-   registration gate, #239).
-2. The id of the Member for an invited or first-admin email, creating that
-   Member if there is none yet.
+Account starts from a Member id. Auth needs exactly one thing here: the id of
+the Member for an invited or first-admin email, creating that Member if there
+is none yet.
 
 Everything else about Member stays inside app.members — this module hides
-that repository behind the two questions auth actually asks, per the
+that repository behind the one question auth actually asks, per the
 deep-modules convention in CLAUDE.md.
 """
 
@@ -25,8 +23,6 @@ from app.members.repository import SqlMemberRepository
 
 @runtime_checkable
 class MemberDirectory(Protocol):
-    async def member_id_for(self, email: str) -> str | None: ...
-
     async def ensure_member(
         self, email: str, first_name: str, surname: str, *, claim: bool = False
     ) -> str: ...
@@ -35,15 +31,6 @@ class MemberDirectory(Protocol):
 class SqlMemberDirectory:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def member_id_for(self, email: str) -> str | None:
-        # The id alone: this answers unauthenticated callers, so the Member
-        # row itself -- date of birth, safeguarding fields -- is never loaded
-        # on their behalf (ADR-0006).
-        result = await self._session.execute(
-            select(Member.id).where(Member.email == email)
-        )
-        return result.scalar_one_or_none()
 
     async def ensure_member(
         self, email: str, first_name: str, surname: str, *, claim: bool = False
@@ -58,7 +45,9 @@ class SqlMemberDirectory:
         `claim` marks a Member this creates as a claim attempt's, so an
         abandoned attempt can be told from the roster and removed (#446).
         """
-        member_id = await self.member_id_for(email)
+        member_id = (
+            await self._session.execute(select(Member.id).where(Member.email == email))
+        ).scalar_one_or_none()
         if member_id is None:
             member = await SqlMemberRepository(self._session).add(
                 {
