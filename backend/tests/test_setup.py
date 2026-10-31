@@ -567,6 +567,45 @@ async def test_a_claim_cannot_take_an_account_that_holds_recovery_codes(
     assert stored.first() is None
 
 
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
+    db_client, membership_status: str
+) -> None:
+    """The claim reuses an existing Member with the claimant's email. If that
+    Member is archived or suspended, the Admin it would make could never sign
+    in, so the claim is refused and setup stays open (#484)."""
+    await seed_member(
+        db_client, "former@dojo.test", membership_status=membership_status
+    )
+    await db_client.flush()
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "former@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 200
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "former@dojo.test"},
+            SETUP_HEADERS,
+        )
+
+    assert completed.status_code == 401
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        assert (await c.get("/setup")).status_code == 200
+
+
 async def _members_and_accounts(session, email: str) -> tuple[int, int]:
     members = (
         await session.execute(select(Member.id).where(Member.email == email))

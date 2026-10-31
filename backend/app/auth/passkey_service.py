@@ -99,6 +99,14 @@ async def register_passkey_complete(
         log_security_event("passkey_registered", "failure", user_id=user.id)
         raise _AUTH_FAILED
 
+    # The claim reuses an existing Member with this email. An archived or
+    # suspended one would become an Admin who can never sign in, and closing
+    # setup behind them would lock the dojo out (#484). Refused before the
+    # passkey is stored, so setup stays open.
+    if not await may_sign_in(uow.session, user.id):
+        log_security_event("passkey_registered", "failure", user_id=user.id)
+        raise _AUTH_FAILED
+
     return await add_passkey_complete(user, payload.email, payload.credential, uow)
 
 
