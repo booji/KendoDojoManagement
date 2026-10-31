@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
 import webauthn
 from fastapi import HTTPException, status
@@ -34,6 +35,14 @@ from app.db.unit_of_work import AbstractUnitOfWork
 _AUTH_FAILED = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed"
 )
+
+
+def refuse_registration() -> NoReturn:
+    """Refuse an email-addressed registration with the generic failure (#472):
+    the register decoy's whole answer, kept here beside _AUTH_FAILED so the
+    two cannot drift apart."""
+    log_security_event("passkey_registered", "failure")
+    raise _AUTH_FAILED
 
 
 async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> Account:

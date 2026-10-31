@@ -64,11 +64,11 @@ from app.auth.models import (
 )
 from app.auth.passkey_repository import AbstractPasskeyRepository
 from app.auth.passkey_service import (
-    _AUTH_FAILED,
     add_passkey_begin,
     add_passkey_complete,
     login_passkey_begin,
     login_passkey_complete,
+    refuse_registration,
 )
 from app.auth.rate_limiter import (
     PER_IP_LIMIT,
@@ -165,8 +165,7 @@ async def passkey_register_complete(
     a known Member's email it would overwrite their pending sign-in challenge.
     #472 allows either; a visible 404 costs less than those.
     """
-    log_security_event("passkey_registered", "failure")
-    raise _AUTH_FAILED
+    refuse_registration()
 
 
 async def _enrolment_email(account: Account, uow: AbstractUnitOfWork) -> str:
