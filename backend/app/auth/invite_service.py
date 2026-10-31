@@ -28,7 +28,7 @@ from sqlalchemy import select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
-from app.auth.accounts import account_for_email
+from app.auth.accounts import BARRED_FROM_SIGN_IN, account_for_email, may_sign_in
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
@@ -45,6 +45,7 @@ from app.auth.webauthn_ceremony import (
 )
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
+from app.members.db_models import Member
 
 # How long a minted invite stays redeemable.
 INVITE_EXPIRY_HOURS = 72
@@ -115,6 +116,22 @@ async def mint_invite(
             detail=(
                 "An account already exists for that email. Issue an admin "
                 "recovery token instead of an invite."
+            ),
+        )
+
+    membership_status = (
+        await uow.session.execute(
+            select(Member.membership_status).where(Member.email == payload.email)
+        )
+    ).scalar_one_or_none()
+    if membership_status in BARRED_FROM_SIGN_IN:
+        # Their Account could never sign in (#484), so the invite would only
+        # mint a passkey that is refused at the door.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"That Member is {membership_status}, so they cannot sign in. "
+                "Change their Membership Status before inviting them."
             ),
         )
 
@@ -206,6 +223,11 @@ async def invite_redeem_complete(
         select(PasskeyCredential).where(PasskeyCredential.user_id == user.id)
     )
     if existing.scalars().first() is not None:
+        log_security_event("invite_redeemed", "failure", user_id=user.id)
+        raise _AUTH_FAILED
+
+    # The Member may have been archived or suspended since minting (#484).
+    if not await may_sign_in(uow.session, user.id):
         log_security_event("invite_redeemed", "failure", user_id=user.id)
         raise _AUTH_FAILED
 

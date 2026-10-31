@@ -56,13 +56,13 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, update
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.main import app
 from app.members.db_models import Member
-from tests.account_support import seed_account
+from tests.account_support import seed_account, seed_member
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER_CLAIMS = AccountClaims(
@@ -1485,3 +1485,81 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
         ).all()
     )
     assert after == before, "no credential may be added to the existing account"
+
+
+# ---------------------------------------------------------------------------
+# An archived or suspended Member cannot be invited (#484)
+#
+# Their Account could never sign in, so an invite would only mint a passkey
+# that is refused at the door.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_mint_invite_for_a_member_barred_from_signing_in_is_refused(
+    db_client, membership_status: str
+) -> None:
+    admin_id = await _seed_admin_user(db_client)
+    await seed_member(db_client, "barred@dojo.test", membership_status=membership_status)
+    await db_client.flush()
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=admin_id, email="existing-admin@dojo.test", role="admin"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/admin/invites",
+            json={"email": "barred@dojo.test", "first_name": "Ba", "surname": "Rred"},
+        )
+
+    assert response.status_code == 409
+    assert membership_status in response.json()["detail"]
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_redeem_is_refused_once_the_member_is_barred_from_signing_in(
+    db_client, membership_status: str
+) -> None:
+    """The Member may be archived or suspended between minting and redemption,
+    so the check at mint time is not enough on its own."""
+    from unittest.mock import MagicMock, patch
+
+    from app.auth.db_models import PasskeyCredential
+
+    admin_id = await _seed_admin_user(db_client)
+    member_id = await _seed_member(db_client, "lapsed@dojo.test")
+    await _seed_invite(db_client, "lapsed@dojo.test", "lapsed-token", issued_by=admin_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        begin = await c.post("/auth/invites/redeem/begin", json={"token": "lapsed-token"})
+        await db_client.execute(
+            update(Member)
+            .where(Member.id == member_id)
+            .values(membership_status=membership_status)
+        )
+        verified = MagicMock(
+            credential_id=b"lapsed-cred",
+            credential_public_key=b"lapsed-key",
+            sign_count=0,
+            aaguid=None,
+        )
+        with patch("webauthn.verify_registration_response", return_value=verified):
+            complete = await c.post(
+                "/auth/invites/redeem/complete",
+                json={"token": "lapsed-token", "credential": _FAKE_REGISTER_CREDENTIAL},
+            )
+
+    assert begin.status_code == 200
+    assert complete.status_code == 401
+    stored = await db_client.execute(
+        select(PasskeyCredential).where(
+            PasskeyCredential.credential_id == b"lapsed-cred"
+        )
+    )
+    assert stored.first() is None
