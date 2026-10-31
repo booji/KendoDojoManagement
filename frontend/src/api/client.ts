@@ -107,7 +107,6 @@ export type RequestOptions = Omit<RequestInit, "body"> & {
 const PRE_AUTH_PATHS = [
   "/api/auth/me",
   "/api/auth/login/",
-  "/api/auth/register/",
   "/api/auth/passkeys/register/",
   "/api/auth/recovery/redeem",
   "/api/auth/invites/redeem/",
