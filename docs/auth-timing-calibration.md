@@ -15,7 +15,6 @@ valid invite) does strictly more work than the decoy path — an extra SELECT, a
 `ConstantTimeAuthMiddleware` closes it by holding every request to these paths
 for a fixed minimum wall-clock time:
 
-- `POST /auth/register/passkey/begin` (removed in #472: Members join by invite only)
 - `POST /auth/login/passkey/begin`
 - `POST /auth/invites/redeem/begin`
 

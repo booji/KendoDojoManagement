@@ -22,7 +22,6 @@ erDiagram
         string id PK
         string member_id FK,UK
         string role
-        bool is_active
         string theme
         string pending_challenge
         timestamptz challenge_issued_at
