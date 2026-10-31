@@ -145,18 +145,14 @@ class TestBuildErasurePlan:
 class TestCanErase:
     def test_deny_when_member_not_archived(self) -> None:
         member = _member(membership_status="active")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is False
         assert decision.reason is not None
         assert "archived" in decision.reason.lower()
 
     def test_deny_self_erase(self) -> None:
         member = _member(membership_status="archived", user_id="admin-1")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is False
         assert decision.reason is not None
         assert (
@@ -165,9 +161,7 @@ class TestCanErase:
 
     def test_allow_archived_non_admin_not_self(self) -> None:
         member = _member(membership_status="archived", user_id="some-other-user")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is True
 
 

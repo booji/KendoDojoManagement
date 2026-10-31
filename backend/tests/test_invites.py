@@ -1501,7 +1501,9 @@ async def test_mint_invite_for_a_member_barred_from_signing_in_is_refused(
     db_client, membership_status: str
 ) -> None:
     admin_id = await _seed_admin_user(db_client)
-    await seed_member(db_client, "barred@dojo.test", membership_status=membership_status)
+    await seed_member(
+        db_client, "barred@dojo.test", membership_status=membership_status
+    )
     await db_client.flush()
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
         sub=admin_id, email="existing-admin@dojo.test", role="admin"
@@ -1532,12 +1534,16 @@ async def test_redeem_is_refused_once_the_member_is_barred_from_signing_in(
 
     admin_id = await _seed_admin_user(db_client)
     member_id = await _seed_member(db_client, "lapsed@dojo.test")
-    await _seed_invite(db_client, "lapsed@dojo.test", "lapsed-token", issued_by=admin_id)
+    await _seed_invite(
+        db_client, "lapsed@dojo.test", "lapsed-token", issued_by=admin_id
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        begin = await c.post("/auth/invites/redeem/begin", json={"token": "lapsed-token"})
+        begin = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "lapsed-token"}
+        )
         await db_client.execute(
             update(Member)
             .where(Member.id == member_id)

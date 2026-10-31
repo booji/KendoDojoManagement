@@ -1,13 +1,15 @@
 """Narrow port auth uses to ask questions about Members.
 
 Every Account belongs to exactly one Member (#432, ADR-0006), so creating an
-Account starts from a Member id. Auth needs exactly one thing here: the id of
-the Member for an invited or first-admin email, creating that Member if there
-is none yet.
+Account starts from a Member id. The one thing auth needs from the Member
+repository is here: the id of the Member for an invited or first-admin email,
+creating that Member if there is none yet. This module hides that repository
+behind it, per the deep-modules convention in CLAUDE.md.
 
-Everything else about Member stays inside app.members — this module hides
-that repository behind the one question auth actually asks, per the
-deep-modules convention in CLAUDE.md.
+It is not the only place auth touches Members. app.auth.accounts and invite
+minting read single columns of `members` in SQL -- the email, and the
+Membership Status that decides sign-in (MAY_SIGN_IN, #484) -- so a lookup never
+loads the Member row itself (ADR-0006).
 """
 
 from datetime import UTC, date, datetime
@@ -45,6 +47,9 @@ class SqlMemberDirectory:
         `claim` marks a Member this creates as a claim attempt's, so an
         abandoned attempt can be told from the roster and removed (#446).
         """
+        # The id alone: invite redemption answers unauthenticated callers, so
+        # the Member row itself -- date of birth, safeguarding fields -- is
+        # never loaded on their behalf (ADR-0006).
         member_id = (
             await self._session.execute(select(Member.id).where(Member.email == email))
         ).scalar_one_or_none()
