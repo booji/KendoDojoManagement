@@ -73,7 +73,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     first-run ceremony cannot permanently brick setup.
     """
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
+    await seed_account(session, email, user_id=user_id, role=role)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -90,7 +90,7 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
 async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
     """Seed an Account with NO credential -- an abandoned registration ceremony."""
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
+    await seed_account(session, email, user_id=user_id, role=role)
     await session.flush()
     return user_id
 

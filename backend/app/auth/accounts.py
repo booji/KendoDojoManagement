@@ -19,6 +19,22 @@ from app.auth.db_models import (
 )
 from app.members.db_models import Member
 
+# Who may sign in, and keep using an Auth Session they already hold (#484):
+# a Member whose Membership Status is neither of these. `inactive` keeps
+# access. Every check reads it through here, as SQL, joined to the Member.
+_BARRED_FROM_SIGN_IN = ("archived", "suspended")
+MAY_SIGN_IN = Member.membership_status.not_in(_BARRED_FROM_SIGN_IN)
+
+
+async def may_sign_in(session: AsyncSession, account_id: str) -> bool:
+    """Whether the Account's Member may sign in, as of now; False if no Account."""
+    result = await session.execute(
+        select(MAY_SIGN_IN)
+        .join(Account, Account.member_id == Member.id)
+        .where(Account.id == account_id)
+    )
+    return bool(result.scalar_one_or_none())
+
 
 async def account_for_email(session: AsyncSession, email: str) -> Account | None:
     result = await session.execute(

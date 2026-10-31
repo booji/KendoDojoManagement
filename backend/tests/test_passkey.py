@@ -32,7 +32,6 @@ async def _claimed_instance_with_member(session, email: str) -> None:
         f"claimed-{seed_user_id}@dojo.test",
         user_id=seed_user_id,
         role="admin",
-        is_active=True,
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -160,7 +159,6 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
         "complete@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -216,9 +214,7 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     """
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "loginbegin@dojo.test", user_id=user_id, role="member", is_active=True
-    )
+    await seed_account(session, "loginbegin@dojo.test", user_id=user_id, role="member")
     await session.flush()
 
     async with AsyncClient(
@@ -277,7 +273,6 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
         "logincomp@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1sb2dpbi1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )

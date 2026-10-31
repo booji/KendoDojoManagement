@@ -6,7 +6,6 @@ export type RegisterResponse = {
   sub: string
   email: string
   role: "admin" | "member"
-  is_active: boolean
   show_nudge?: boolean
 }
 
@@ -18,7 +17,6 @@ export type AccountClaims = {
   sub: string
   email: string
   role: "admin" | "member"
-  is_active: boolean
 }
 
 // Re-exported for the many call sites that already import them from here.

@@ -64,9 +64,7 @@ async def test_get_setup_returns_404_when_passkey_credential_exists(db_client) -
     """GET /setup returns 404 when at least one PasskeyCredential row exists (AC7 issue #155)."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "existing@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "existing@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -105,7 +103,6 @@ async def test_get_setup_returns_200_for_phantom_user_without_credential(
         "phantom@dojo.test",
         user_id=str(uuid.uuid4()),
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -133,7 +130,6 @@ async def test_get_setup_returns_200_for_user_without_credential(
         "no-cred@dojo.test",
         user_id=str(uuid.uuid4()),
         role="admin",
-        is_active=True,
     )
     await session.flush()
 
@@ -165,9 +161,7 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
 
     # Simulate a completed passkey registration (user + credential row)
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "founder@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "founder@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -263,9 +257,7 @@ async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None
     """POST /setup/passkey/begin returns 404 when instance already has a PasskeyCredential."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "alreadyhere@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "alreadyhere@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -307,7 +299,6 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
         "admin@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -358,9 +349,7 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
 
     existing_id = str(uuid.uuid4())
     pending_id = str(uuid.uuid4())
-    await seed_account(
-        session, "original@dojo.test", user_id=existing_id, role="admin", is_active=True
-    )
+    await seed_account(session, "original@dojo.test", user_id=existing_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -376,7 +365,6 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
         "newcomer@dojo.test",
         user_id=pending_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -510,9 +498,7 @@ async def test_claimed_instance_404s_whatever_token_is_presented(
     """The existing claimed guard still runs first: 404 beats any token."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "claimed@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "claimed@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -568,7 +554,6 @@ async def test_ordinary_register_complete_rejected_on_unclaimed_instance(
         "admin@dojo.test",
         user_id=str(uuid.uuid4()),
         role="admin",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )

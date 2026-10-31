@@ -6,7 +6,7 @@ from sqlalchemy import exists, func, select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
-from app.auth.accounts import account_for_email, account_for_member
+from app.auth.accounts import account_for_email, account_for_member, may_sign_in
 from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
@@ -66,7 +66,7 @@ async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> Acc
     """
     user = await account_for_member(uow.session, member_id)
     if user is None:
-        user = Account(member_id=member_id, role="member", is_active=True)
+        user = Account(member_id=member_id, role="member")
         uow.session.add(user)
         await uow.session.flush()
     return user
@@ -250,7 +250,6 @@ async def add_passkey_complete(
         sub=user.id,
         email=email,
         role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
         show_nudge=show_nudge,
     )
 
@@ -282,12 +281,12 @@ async def login_passkey_complete(
     if user is None:
         raise _AUTH_FAILED
 
-    # NOTE: the is_active check deliberately happens *after* signature
-    # verification below, not here. Rejecting an inactive account before the
-    # credential is checked lets anyone distinguish "deactivated member" from
-    # "unknown email" with a single request carrying a junk credential.
-    # Account status is only disclosed to someone who has already proved
-    # possession of a registered passkey.
+    # NOTE: the may-sign-in check (#484) deliberately happens *after*
+    # signature verification below, not here. Rejecting a barred Member before
+    # the credential is checked lets anyone distinguish "archived or suspended
+    # member" from "unknown email" with a single request carrying a junk
+    # credential. Membership Status is only disclosed to someone who has
+    # already proved possession of a registered passkey.
 
     # Decode credential_id from the request to find the matching stored credential
     cred_id_b64 = payload.credential.id
@@ -328,7 +327,7 @@ async def login_passkey_complete(
     # Credential possession is now proven, so disclosing account status here
     # tells the caller nothing they could not already infer about their own
     # account. See the note above where this check used to live.
-    if not user.is_active:
+    if not await may_sign_in(uow.session, user.id):
         user.pending_challenge = None
         await uow.commit()
         raise HTTPException(

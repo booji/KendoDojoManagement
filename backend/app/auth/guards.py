@@ -27,17 +27,15 @@ def require_role(
     ) -> AccountClaims:
         if access_token is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        # 401 too for a Member barred from signing in (#484): they have no
+        # Auth Session either way, so the SPA must route to /login rather
+        # than leave the app rendered behind a "Not authorized" toast (#396).
         claims = await resolve_auth_session(repo, access_token)
         if claims is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         if claims.recovery_session:
             # Good only for enrolling a passkey (#486), never the app.
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-        # 401, not 403, for a deactivated Account as for a missing Auth Session:
-        # it has none either way, so the SPA must route to /login rather
-        # than leave the app rendered behind a "Not authorized" toast (#396).
-        if not claims.is_active:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         # The role check stays a 403: the Auth Session is valid, this route is not.
         if role == "admin" and claims.role != "admin":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
@@ -69,7 +67,8 @@ async def require_passkey_enrolment(
     neither can stand in for the other.
 
     The Account is re-read rather than trusted from the Auth Session: one
-    deleted or deactivated since gets nothing.
+    deleted since gets nothing. One whose Member may no longer sign in never
+    gets this far: ``resolve_auth_session`` refuses it (#484).
     """
     if authorization is not None and authorization.startswith("Bearer "):
         token, expect_recovery = authorization.removeprefix("Bearer "), True
@@ -82,6 +81,6 @@ async def require_passkey_enrolment(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     account = await uow.session.get(Account, claims.sub)
-    if account is None or not account.is_active:
+    if account is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     return account

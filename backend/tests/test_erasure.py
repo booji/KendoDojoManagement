@@ -202,11 +202,9 @@ class TestCanErase:
 
 
 _MEMBER_CLAIMS = AccountClaims(
-    sub="member-uuid-self", email="self@dojo.test", role="member", is_active=True
+    sub="member-uuid-self", email="self@dojo.test", role="member"
 )
-_ADMIN_CLAIMS = AccountClaims(
-    sub="admin-1", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN_CLAIMS = AccountClaims(sub="admin-1", email="admin@dojo.test", role="admin")
 
 
 def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
@@ -311,6 +309,26 @@ class _DbSessionUnitOfWork:
         return None
 
 
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+async def test_an_admin_barred_from_signing_in_does_not_count_as_one(
+    db_session: AsyncSession, membership_status: str
+) -> None:
+    """The last-admin guard counts admins who can still sign in (#484)."""
+    from app.members.admin_directory import SqlAdminDirectory
+
+    directory = SqlAdminDirectory(db_session)
+    before = await directory.count_admins()
+    barred = await seed_account(
+        db_session,
+        f"barred-{uuid.uuid4()}@dojo.test",
+        role="admin",
+        membership_status=membership_status,
+    )
+
+    assert await directory.is_admin(barred) is False
+    assert await directory.count_admins() == before
+
+
 async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     db_session: AsyncSession,
 ) -> None:
@@ -344,8 +362,8 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     )
     await db_session.execute(
         text(
-            "INSERT INTO accounts (id, member_id, role, is_active, theme) "
-            "VALUES (:id, :member_id, 'member', true, 'system')"
+            "INSERT INTO accounts (id, member_id, role, theme) "
+            "VALUES (:id, :member_id, 'member', 'system')"
         ),
         {"id": member_user_id, "member_id": member_id},
     )
@@ -446,7 +464,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     app.dependency_overrides[get_uow] = lambda: uow
     app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
-        sub=actor_id, email="actor@dojo.test", role="admin", is_active=True
+        sub=actor_id, email="actor@dojo.test", role="admin"
     )
 
     async with AsyncClient(

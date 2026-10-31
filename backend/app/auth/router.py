@@ -15,7 +15,12 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth.accounts import account_for_email, account_for_member, sign_in_email
+from app.auth.accounts import (
+    account_for_email,
+    account_for_member,
+    may_sign_in,
+    sign_in_email,
+)
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.auth_session_repository import (
     AbstractAuthSessionRepository,
@@ -379,7 +384,7 @@ async def redeem_recovery_code(
     ip = client_ip(request)
 
     user = await account_for_email(uow.session, payload.email)
-    if user is None or not user.is_active:
+    if user is None or not await may_sign_in(uow.session, user.id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     failures = await attempt_repo.count_failures_since_last_success(user.id)
@@ -443,9 +448,10 @@ async def generate_admin_token(
     ],
 ) -> dict[str, str]:
     # A Member who never registered has no Account, and nothing to recover;
-    # redemption refuses an inactive one, so a token for it would be a dud.
+    # redemption refuses an archived or suspended one (#484), so a token for
+    # it would be a dud.
     user = await account_for_member(uow.session, str(payload.member_id))
-    if user is None or not user.is_active:
+    if user is None or not await may_sign_in(uow.session, user.id):
         log_security_event(
             "admin_token_generated",
             "failure",
@@ -460,7 +466,7 @@ async def generate_admin_token(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "This member's account is deactivated, "
+                "This member is archived or suspended and cannot sign in, "
                 "so a recovery token could not be used"
             ),
         )
@@ -599,7 +605,6 @@ if _ALLOW_TEST_AUTH:
                 id=payload.sub or str(uuid.uuid4()),
                 member_id=member_id,
                 role=payload.role,
-                is_active=True,
             )
             uow.session.add(user)
             await uow.session.flush()

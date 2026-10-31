@@ -32,7 +32,6 @@ def _make_token(role: str, sub: str | None = None) -> str:
         sub=sub or str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
-        is_active=True,
     )
     return login_as(claims)
 

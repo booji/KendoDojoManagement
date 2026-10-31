@@ -23,9 +23,7 @@ from app.auth.auth_sessions import (
 from app.auth.models import AccountClaims
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 _T0 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
 
 

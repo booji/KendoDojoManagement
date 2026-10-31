@@ -32,11 +32,9 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Auth claim helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER_A = AccountClaims(
-    sub="member-a-uuid", email="member-a@dojo.test", role="member", is_active=True
+    sub="member-a-uuid", email="member-a@dojo.test", role="member"
 )
 
 _MEMBER_A_ID = "00000000-0000-0000-0000-000000000001"

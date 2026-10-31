@@ -690,8 +690,8 @@ class InMemoryAuthSessionRepository:
     """In-memory implementation of ``AbstractAuthSessionRepository``.
 
     ``find`` joins the Account in SQL; here ``seed_account`` stands in for the
-    accounts table, so a test can change an Account's role or active flag
-    under a live Auth Session. ``sign_in`` is the front door: it seeds the
+    accounts table, so a test can change an Account's role, or whether its
+    Member may sign in, under a live Auth Session. ``sign_in`` is the front door: it seeds the
     Account and stores a row built by the same ``new_auth_session`` that
     production sign-in uses.
     """
@@ -699,11 +699,16 @@ class InMemoryAuthSessionRepository:
     def __init__(self) -> None:
         self._store: dict[str, dict[str, Any]] = {}
         self._accounts: dict[str, Any] = {}
+        self._barred: set[str] = set()
 
     # -- seeding ------------------------------------------------------------
 
-    def seed_account(self, claims: Any) -> None:
+    def seed_account(self, claims: Any, *, may_sign_in: bool = True) -> None:
         self._accounts[claims.sub] = claims
+        if may_sign_in:
+            self._barred.discard(claims.sub)
+        else:
+            self._barred.add(claims.sub)
 
     def sign_in(
         self,
@@ -736,7 +741,7 @@ class InMemoryAuthSessionRepository:
         return {
             **row,
             "role": account.role,
-            "is_active": account.is_active,
+            "may_sign_in": account.sub not in self._barred,
             "email": account.email,
         }
 

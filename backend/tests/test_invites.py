@@ -64,11 +64,9 @@ from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
 
-_ADMIN = AccountClaims(
-    sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER_CLAIMS = AccountClaims(
-    sub=str(uuid.uuid4()), email="member@dojo.test", role="member", is_active=True
+    sub=str(uuid.uuid4()), email="member@dojo.test", role="member"
 )
 
 
@@ -505,7 +503,7 @@ async def _seed_admin_user(session, email: str = "existing-admin@dojo.test") -> 
     from app.auth.db_models import PasskeyCredential
 
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role="admin", is_active=True)
+    await seed_account(session, email, user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -1258,7 +1256,6 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
         f"issuer-{admin_id}@dojo.test",
         user_id=admin_id,
         role="admin",
-        is_active=True,
     )
     await db_session.execute(
         insert(Invite).values(

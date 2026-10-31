@@ -192,7 +192,6 @@ async def setup_passkey_complete(
             sub=claims.sub,
             email=claims.email,
             role="admin",
-            is_active=claims.is_active,
         )
 
     # Signed in before the tidy-up below, which may roll back: the claim has
