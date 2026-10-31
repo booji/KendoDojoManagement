@@ -1,7 +1,7 @@
-"""Small read-only lookup over the auth accounts table, used by member erasure
-to decide whether a target member is an admin and how many admins who can
-still sign in remain. Kept separate from AbstractMemberRepository since it queries a
-different aggregate (accounts, not members).
+"""Small read-only lookup over the auth accounts table, used when a Member's
+status changes to decide whether they are an admin and how many admins who can
+still sign in remain (#484). Kept separate from AbstractMemberRepository since
+it queries a different aggregate (accounts, not members).
 """
 
 from __future__ import annotations
@@ -42,11 +42,11 @@ class SqlAdminDirectory:
         return role == "admin"
 
     async def count_admins(self) -> int:
-        # Row-level lock (FOR UPDATE) on the admin set so concurrent
-        # erasures serialise: two admins erasing each other's linked member at
-        # once must not both observe the pre-delete count and drop the dojo to
-        # zero admins. FOR UPDATE cannot combine with an aggregate, so we lock
-        # the rows and count them in Python.
+        # Row-level lock (FOR UPDATE) on the admin set so concurrent status
+        # changes serialise: two admins archiving each other at once must not
+        # both observe the pre-change count and drop the dojo to zero admins.
+        # FOR UPDATE cannot combine with an aggregate, so we lock the rows and
+        # count them in Python.
         result = await self._session.execute(
             select(Account.id)
             .join(Member, Member.id == Account.member_id)

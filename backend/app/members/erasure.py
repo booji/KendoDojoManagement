@@ -61,13 +61,13 @@ def build_erasure_plan() -> ErasurePlan:
     return ErasurePlan(scrub=scrub, delete=_RELATED_RECORDS_TO_DELETE)
 
 
-def can_erase(
-    actor_user_id: str,
-    member: dict[str, Any],
-    is_admin: bool,
-    admin_count: int,
-) -> ErasureDecision:
-    """Decide whether `member` may be erased by `actor_user_id`."""
+def can_erase(actor_user_id: str, member: dict[str, Any]) -> ErasureDecision:
+    """Decide whether `member` may be erased by `actor_user_id`.
+
+    There is no last-admin check here: only an archived Member can be erased,
+    and an archived Member's Account is no Admin who may sign in, so the last
+    such Admin is protected when their status changes instead (#484).
+    """
     if member.get("membership_status") != "archived":
         return ErasureDecision(
             allowed=False,
@@ -77,10 +77,5 @@ def can_erase(
         return ErasureDecision(
             allowed=False,
             reason="You cannot erase yourself",
-        )
-    if is_admin and admin_count <= 1:
-        return ErasureDecision(
-            allowed=False,
-            reason="Cannot erase the last admin",
         )
     return ErasureDecision(allowed=True, reason=None)

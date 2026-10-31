@@ -15,24 +15,15 @@ Planned contract (see .claude task brief for issue #229 for full detail):
         build_erasure_plan() -> ErasurePlan
             .scrub: dict[str, Any]   — field -> anonymised value
             .delete: set[str] | frozenset[str]  — related record type names
-        can_erase(actor_user_id: str, member: dict, is_admin: bool,
-                   admin_count: int) -> ErasureDecision
+        can_erase(actor_user_id: str, member: dict) -> ErasureDecision
             .allowed: bool
             .reason: str | None
-
-    app/members/dependencies.py
-        get_admin_directory() -> AbstractAdminDirectory
-            .is_admin(user_id: str | None) -> bool
-            .count_admins() -> int
-        (exact dependency name is a suggestion for the implementer; guard
-        tests below degrade gracefully if the name differs — the important,
-        load-bearing assertion is the HTTP status code / response body.)
 
     app/members/router.py
         POST /members/{member_id}/erase  (admin only)
             200 -> anonymised MemberResponse ("Deleted" / "member")
             403 -> non-admin actor
-            409 -> member not archived / self-erase / last-admin erase
+            409 -> member not archived / self-erase
 """
 
 from __future__ import annotations
@@ -155,7 +146,7 @@ class TestCanErase:
     def test_deny_when_member_not_archived(self) -> None:
         member = _member(membership_status="active")
         decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
+            actor_user_id="admin-1", member=member
         )
         assert decision.allowed is False
         assert decision.reason is not None
@@ -164,7 +155,7 @@ class TestCanErase:
     def test_deny_self_erase(self) -> None:
         member = _member(membership_status="archived", user_id="admin-1")
         decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
+            actor_user_id="admin-1", member=member
         )
         assert decision.allowed is False
         assert decision.reason is not None
@@ -172,26 +163,10 @@ class TestCanErase:
             "self" in decision.reason.lower() or "yourself" in decision.reason.lower()
         )
 
-    def test_deny_last_admin(self) -> None:
-        member = _member(membership_status="archived", user_id="other-admin")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=True, admin_count=1
-        )
-        assert decision.allowed is False
-        assert decision.reason is not None
-        assert "last admin" in decision.reason.lower()
-
     def test_allow_archived_non_admin_not_self(self) -> None:
         member = _member(membership_status="archived", user_id="some-other-user")
         decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
-        )
-        assert decision.allowed is True
-
-    def test_allow_when_member_is_admin_but_not_the_last_one(self) -> None:
-        member = _member(membership_status="archived", user_id="other-admin")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=True, admin_count=2
+            actor_user_id="admin-1", member=member
         )
         assert decision.allowed is True
 
