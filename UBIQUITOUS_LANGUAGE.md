@@ -24,7 +24,7 @@
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Membership Status** | The current standing of a member: `active`, `inactive`, or `suspended` | Account status |
+| **Membership Status** | The current standing of a member: `active`, `inactive`, `suspended`, or `archived`. It also decides sign-in: `active` and `inactive` Members can sign in; `suspended` and `archived` Members cannot, and any **Auth Session** they hold stops working on its next request | Account status |
 | **Deactivation** | Setting a member's **Membership Status** to `inactive`; the record is retained, not removed | Delete, remove, archive |
 | **Federation Number** | A member's identifier with the national kendo federation | Licence number, membership number |
 | **Federation Membership** | A member's registration with one **Federation**: the federation, their **Federation Number**, and an optional renewal date | Affiliation, federation link, member federation |
