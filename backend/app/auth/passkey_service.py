@@ -280,15 +280,15 @@ async def login_passkey_complete(
     except Exception as exc:
         raise _AUTH_FAILED from exc
 
-    # Credential possession is now proven, so disclosing account status here
-    # tells the caller nothing they could not already infer about their own
-    # account. See the note above where this check used to live.
+    # Credential possession is now proven, so disclosing Membership Status
+    # here tells the caller nothing they could not already infer about their
+    # own membership. See the note above on where this check sits.
     if not await may_sign_in(uow.session, user.id):
         user.pending_challenge = None
         await uow.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account deactivated",
+            detail="Membership is archived or suspended",
         )
 
     stored_cred.sign_count = verified.new_sign_count
