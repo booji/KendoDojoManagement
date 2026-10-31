@@ -2150,6 +2150,57 @@ security events are one JSON object per line:</p>
 <p><code>timestamp</code> (UTC, ISO 8601), <code>event_type</code> and <code>result</code> are always there.
 <code>user_id</code>, <code>ip_address</code> and <code>detail</code> appear when they apply; every event raised
 while serving a request carries the client's <code>ip_address</code>.</p>
+<p>Sign-in and account events, with <code>result</code> <code>success</code> or <code>failure</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>event_type</code></th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>login_passkey</code></td>
+<td>someone signs in with a passkey</td>
+</tr>
+<tr>
+<td><code>passkey_registered</code></td>
+<td>an Account adds a passkey</td>
+</tr>
+<tr>
+<td><code>passkey_deleted</code></td>
+<td>an Account removes a passkey</td>
+</tr>
+<tr>
+<td><code>recovery_redeem</code></td>
+<td>someone redeems a recovery code or admin recovery token</td>
+</tr>
+<tr>
+<td><code>admin_token_generated</code></td>
+<td>an Admin mints a recovery token for a Member (<code>detail</code> names the target)</td>
+</tr>
+<tr>
+<td><code>invite_minted</code></td>
+<td>an Admin creates an invite</td>
+</tr>
+<tr>
+<td><code>invite_revoked</code></td>
+<td>an Admin revokes an invite</td>
+</tr>
+<tr>
+<td><code>invite_redeemed</code></td>
+<td>someone redeems an invite</td>
+</tr>
+<tr>
+<td><code>setup_claim</code></td>
+<td>someone claims the first Admin Account with the <code>SETUP_TOKEN</code></td>
+</tr>
+<tr>
+<td><code>sign_out_everywhere</code></td>
+<td>an Account signs out of every session</td>
+</tr>
+</tbody>
+</table>
 <p>Admin writes and exports are logged too, with the Admin as <code>user_id</code>:</p>
 <table>
 <thead>
