@@ -34,12 +34,8 @@ from app.main import app
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 
 
 def _admin_override():

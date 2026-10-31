@@ -28,9 +28,7 @@ from app.main import app
 
 _USER_SUB = "user-uuid-prefs"
 
-_MEMBER_CLAIMS = AccountClaims(
-    sub=_USER_SUB, email="prefs@dojo.test", role="member", is_active=True
-)
+_MEMBER_CLAIMS = AccountClaims(sub=_USER_SUB, email="prefs@dojo.test", role="member")
 
 
 def _member_override():

@@ -36,7 +36,6 @@ def _make_token(role: str = "member") -> str:
         sub=str(uuid.uuid4()),
         email=f"{role}-{uuid.uuid4().hex[:6]}@example.com",
         role=role,  # type: ignore[arg-type]
-        is_active=True,
     )
     token = login_as(claims)
     # Seed the acting user's Member profile so the RequireProfile gate does

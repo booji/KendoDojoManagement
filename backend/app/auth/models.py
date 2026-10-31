@@ -24,7 +24,6 @@ class AccountClaims(BaseModel):
     sub: str  # Account id
     email: str
     role: Literal["admin", "member"]
-    is_active: bool
     recovery_session: bool = False
 
 

@@ -21,15 +21,8 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_role
 from app.auth.models import AccountClaims
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
-_INACTIVE = AccountClaims(
-    sub="inactive-uuid", email="inactive@dojo.test", role="admin", is_active=False
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 
 
 async def _call(guard, claims: AccountClaims | None) -> AccountClaims:
@@ -119,15 +112,20 @@ async def test_unknown_cookie_returns_401(guard) -> None:
 
 
 @pytest.mark.parametrize("guard", [REQUIRE_MEMBER, REQUIRE_ADMIN])
-async def test_inactive_user_returns_401(guard) -> None:
-    """Deactivating a member must lock them out before their token expires.
+async def test_a_member_barred_from_signing_in_returns_401(guard) -> None:
+    """Archiving or suspending a Member must lock them out before their Auth
+    Session expires (#484).
 
-    401 rather than 403 (#396): a deactivated user
-    has no session either way, so the SPA reads it as a sign-out and routes to
-    the login page instead of leaving the app rendered behind a toast.
+    401 rather than 403 (#396): a barred Member has no session either way,
+    so the SPA reads it as a sign-out and routes to the login page instead
+    of leaving the app rendered behind a toast.
     """
+    repo = InMemoryAuthSessionRepository()
+    token = repo.sign_in(_ADMIN)
+    repo.seed_account(_ADMIN, may_sign_in=False)
+
     with pytest.raises(HTTPException) as exc:
-        await _call(guard, _INACTIVE)
+        await _invoke(guard, token, repo)
 
     assert exc.value.status_code == 401
 

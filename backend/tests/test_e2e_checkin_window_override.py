@@ -43,7 +43,6 @@ def _make_user_with_complete_profile(role: str) -> str:
         sub=str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
-        is_active=True,
     )
     token = login_as(claims)
     complete_onboarding(

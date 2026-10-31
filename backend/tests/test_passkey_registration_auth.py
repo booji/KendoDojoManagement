@@ -18,9 +18,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, insert, select, update
 
-from app.auth.db_models import Account, PasskeyCredential
+from app.auth.auth_session_repository import SqlAuthSessionRepository
+from app.auth.auth_sessions import start_auth_session
+from app.auth.db_models import PasskeyCredential
 from app.auth.models import AccountClaims
 from app.main import app
+from app.members.db_models import Member
 from tests.account_support import seed_account
 from tests.auth_support import sign_in
 
@@ -47,7 +50,6 @@ async def _seed_account_with_passkey(session, email: str, role: str = "member") 
         email,
         user_id=user_id,
         role=role,
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -91,7 +93,7 @@ def _client(**kwargs) -> AsyncClient:
 
 
 def _claims(user_id: str, email: str) -> AccountClaims:
-    return AccountClaims(sub=user_id, email=email, role="member", is_active=True)
+    return AccountClaims(sub=user_id, email=email, role="member")
 
 
 def _session_cookie(user_id: str, email: str) -> dict[str, str]:
@@ -192,12 +194,21 @@ async def test_adding_a_passkey_needs_the_callers_own_session(db_client, auth) -
     assert await _passkey_count(db_client, user_id) == 1
 
 
-async def test_a_deactivated_account_cannot_add_a_passkey(db_client) -> None:
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+async def test_a_member_barred_from_signing_in_cannot_add_a_passkey(
+    db_client, membership_status
+) -> None:
+    """Not even with a recovery token (#484). A real Auth Session row, since
+    the refusal is in the join that reads it."""
     email = "left@dojo.test"
     user_id = await _seed_account_with_passkey(db_client, email)
-    token = _recovery_token(user_id, email)
+    token = await start_auth_session(
+        SqlAuthSessionRepository(db_client), user_id, kind="recovery"
+    )
     await db_client.execute(
-        update(Account).where(Account.id == user_id).values(is_active=False)
+        update(Member)
+        .where(Member.email == email)
+        .values(membership_status=membership_status)
     )
 
     statuses = await _add_passkey(headers={"Authorization": f"Bearer {token}"})

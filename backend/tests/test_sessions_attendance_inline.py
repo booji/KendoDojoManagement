@@ -43,12 +43,8 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 # The Member record id behind _MEMBER's user. Attendance is keyed by Member id
 # (#340), so it must differ from the Account id in the token for these tests to
 # tell the two apart.

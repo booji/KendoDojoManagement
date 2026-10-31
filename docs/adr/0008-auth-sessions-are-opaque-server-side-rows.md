@@ -11,16 +11,16 @@ Now every Auth Session is a row in `auth_sessions`. The table is not called
 `sessions`, because a **Session** is a training event. The cookie carries a
 random id (`secrets.token_urlsafe(32)`) and the table stores only its SHA-256,
 so a database dump or backup yields no live Auth Session. The guard looks the
-row up on every authenticated request and joins the Account, so role and
-active status always come from the database.
+row up on every authenticated request and joins the Account and its Member,
+so role and whether the Member may sign in always come from the database.
 
 - **Revocation is deleting rows, and the foreign keys do most of it.** Logout
   deletes the row; "sign out everywhere" deletes all of the Account's rows,
   the current one included. `account_id` is `ON DELETE CASCADE`, so erasure
   revokes with no code. Each row records the passkey it signed in with
   (`passkey_id`, nullable, `ON DELETE CASCADE`), so removing a lost device's
-  passkey ends that device's Auth Sessions. A demotion or deactivation needs
-  no revocation hook: the next request reads the new row.
+  passkey ends that device's Auth Sessions. A demotion, archiving or suspension
+  needs no revocation hook: the next request reads the new row.
 - **Recovery tokens are rows too**, with a `kind` of `recovery` and a
   15-minute life, still sent as a Bearer header and refused in the cookie.
   They are single-use: the row is deleted once the new passkey is enrolled.
@@ -68,3 +68,12 @@ active status always come from the database.
 Deploying this signs everyone out once: existing JWT cookies have no row.
 
 Decided in issue #455.
+
+Amended by #484: whether an Account may sign in is its Member's
+**Membership Status**, not an Account flag. `archived` and `suspended` are
+refused at sign-in, recovery, passkey enrolment and on every authenticated
+request (401, as for no Auth Session); `inactive` keeps access. The rule is
+`app.auth.accounts.MAY_SIGN_IN`, one SQL predicate every check uses, the
+Auth Session join included. `accounts.is_active`, which nothing ever set
+false, is dropped. Such a Member's rows are refused, not deleted: they expire
+as usual, and reinstating the Member within that window revives them.

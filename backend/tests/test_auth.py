@@ -51,9 +51,7 @@ async def test_protected_route_no_token_returns_401() -> None:
 
 
 async def test_protected_route_member_token_succeeds() -> None:
-    claims = AccountClaims(
-        sub="uuid-1", email="m@dojo.test", role="member", is_active=True
-    )
+    claims = AccountClaims(sub="uuid-1", email="m@dojo.test", role="member")
     app.dependency_overrides[REQUIRE_MEMBER] = lambda: claims
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -66,9 +64,7 @@ async def test_protected_route_member_token_succeeds() -> None:
 async def test_admin_route_rejects_member_token() -> None:
     from tests.auth_support import sign_in
 
-    member_claims = AccountClaims(
-        sub="uuid-2", email="m@dojo.test", role="member", is_active=True
-    )
+    member_claims = AccountClaims(sub="uuid-2", email="m@dojo.test", role="member")
     token = sign_in(member_claims)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -78,9 +74,7 @@ async def test_admin_route_rejects_member_token() -> None:
 
 
 async def test_admin_route_accepts_admin_token() -> None:
-    claims = AccountClaims(
-        sub="uuid-3", email="a@dojo.test", role="admin", is_active=True
-    )
+    claims = AccountClaims(sub="uuid-3", email="a@dojo.test", role="admin")
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -107,9 +101,7 @@ async def test_logout_clears_access_token_cookie() -> None:
     """
     from tests.auth_support import sign_in
 
-    token = sign_in(
-        AccountClaims(sub="uuid-4", email="m@dojo.test", role="member", is_active=True)
-    )
+    token = sign_in(AccountClaims(sub="uuid-4", email="m@dojo.test", role="member"))
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -173,9 +165,7 @@ async def test_logout_clears_the_readable_theme_cookie() -> None:
 
 
 def _member(sub: str) -> AccountClaims:
-    return AccountClaims(
-        sub=sub, email=f"{sub}@dojo.test", role="member", is_active=True
-    )
+    return AccountClaims(sub=sub, email=f"{sub}@dojo.test", role="member")
 
 
 async def _me(c: AsyncClient, token: str) -> int:

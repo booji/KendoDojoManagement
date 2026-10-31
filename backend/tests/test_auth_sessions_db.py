@@ -18,6 +18,7 @@ from sqlalchemy import func, insert, select, update
 from app.auth.accounts import delete_account
 from app.auth.db_models import Account, AuthSession, PasskeyCredential
 from app.main import app
+from app.members.db_models import Member
 from tests.account_support import seed_account
 
 
@@ -51,6 +52,13 @@ async def _add_passkey(session, user_id: str, credential_id: bytes) -> str:
 
 async def _sign_in(email: str, credential_id: bytes) -> str:
     """Sign in with a passkey and return the session cookie it set."""
+    done = await _attempt_sign_in(email, credential_id)
+    assert done.status_code == 200, done.text
+    return done.cookies["access_token"]
+
+
+async def _attempt_sign_in(email: str, credential_id: bytes):
+    """The login ceremony's complete response, with a valid signature."""
     b64 = __import__("base64").urlsafe_b64encode(credential_id).decode().rstrip("=")
     async with _client() as c:
         begin = await c.post("/auth/login/passkey/begin", json={"email": email})
@@ -73,8 +81,7 @@ async def _sign_in(email: str, credential_id: bytes) -> str:
                     },
                 },
             )
-    assert done.status_code == 200, done.text
-    return done.cookies["access_token"]
+    return done
 
 
 async def _status(path: str, cookie: str, method: str = "GET") -> int:
@@ -168,6 +175,49 @@ async def test_a_role_change_bites_on_the_next_request(db_client) -> None:
     )
 
     assert await _status("/auth/admin/invites", cookie) == 403
+
+
+async def _set_membership_status(session, user_id: str, status: str) -> None:
+    member_id = select(Account.member_id).where(Account.id == user_id)
+    await session.execute(
+        update(Member)
+        .where(Member.id == member_id.scalar_subquery())
+        .values(membership_status=status)
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"), [("archived", 401), ("suspended", 401), ("inactive", 200)]
+)
+async def test_a_membership_status_change_bites_on_the_next_request(
+    db_client, status: str, expected: int
+) -> None:
+    """Archiving or suspending a Member ends their live Auth Sessions with no
+    revocation hook (#484): the guard reads the status on every request.
+    401, as for no Auth Session at all, so the SPA routes to /login (#396)."""
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    cookie = await _sign_in(email, phone)
+
+    await _set_membership_status(db_client, user_id, status)
+
+    assert await _status("/auth/me", cookie) == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"), [("archived", 403), ("suspended", 403), ("inactive", 200)]
+)
+async def test_sign_in_is_refused_by_membership_status(
+    db_client, status: str, expected: int
+) -> None:
+    """403 only after the signature checks out, so an unproven caller cannot
+    tell a barred Member from an unknown address (#484)."""
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    await _set_membership_status(db_client, user_id, status)
+
+    response = await _attempt_sign_in(email, phone)
+
+    assert response.status_code == expected
+    assert ("access_token" in response.cookies) == (expected == 200)
 
 
 # ── Sign out everywhere (#487) ────────────────────────────────────────────────

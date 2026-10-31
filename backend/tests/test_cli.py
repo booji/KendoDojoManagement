@@ -49,9 +49,7 @@ async def _seed_user(database_url: str, email: str) -> str:
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with AsyncSession(engine) as session:
-            await seed_account(
-                session, email, user_id=user_id, role="admin", is_active=True
-            )
+            await seed_account(session, email, user_id=user_id, role="admin")
             await session.commit()
     finally:
         await engine.dispose()

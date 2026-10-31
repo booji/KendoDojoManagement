@@ -84,9 +84,7 @@ async def seeded_db(database_url: str):
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with AsyncSession(engine) as session:
-            await seed_account(
-                session, email, user_id=user_id, role="admin", is_active=True
-            )
+            await seed_account(session, email, user_id=user_id, role="admin")
             await session.commit()
 
         yield {"url": database_url, "email": email}
@@ -107,7 +105,7 @@ async def seeded_db(database_url: str):
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
-        await seed_account(conn, email, user_id=user_id, role=role, is_active=True)
+        await seed_account(conn, email, user_id=user_id, role=role)
 
 
 async def _seed_admin_token(

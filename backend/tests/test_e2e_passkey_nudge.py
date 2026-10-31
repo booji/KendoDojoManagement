@@ -110,7 +110,6 @@ def _mock_passkey_complete(page: Page, *, show_nudge: bool) -> None:
                     "sub": str(uuid.uuid4()),
                     "email": "test@dojo.test",
                     "role": "member",
-                    "is_active": True,
                     "theme": "system",
                     "show_nudge": show_nudge,
                 }

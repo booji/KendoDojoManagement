@@ -39,12 +39,8 @@ _CODE_PATTERN = re.compile(r"^[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$")
 # Helpers
 # ---------------------------------------------------------------------------
 
-_USER_A = AccountClaims(
-    sub="user-a-uuid", email="usera@dojo.test", role="member", is_active=True
-)
-_USER_B = AccountClaims(
-    sub="user-b-uuid", email="userb@dojo.test", role="member", is_active=True
-)
+_USER_A = AccountClaims(sub="user-a-uuid", email="usera@dojo.test", role="member")
+_USER_B = AccountClaims(sub="user-b-uuid", email="userb@dojo.test", role="member")
 
 
 def _user_a_override():

@@ -23,9 +23,7 @@ from app.settings.dependencies import get_dojo_settings_repo
 from tests.dojo_settings_support import StubDojoSettingsRepo, default_dojo_settings
 from tests.fake_repositories import InMemoryMemberRepository
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _IP = "203.0.113.9"
 
 pytestmark = pytest.mark.usefixtures("security_events_to_caplog")

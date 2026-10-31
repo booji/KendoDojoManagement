@@ -35,11 +35,9 @@ from tests.auth_support import sign_in
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid-branding", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid-branding", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(
-    sub="member-uuid-branding", email="member@dojo.test", role="member", is_active=True
+    sub="member-uuid-branding", email="member@dojo.test", role="member"
 )
 
 

@@ -35,7 +35,7 @@ from tests.auth_support import sign_in
 # ---------------------------------------------------------------------------
 
 _USER_A = AccountClaims(
-    sub="user-a-nudge-uuid", email="nudge-a@dojo.test", role="member", is_active=True
+    sub="user-a-nudge-uuid", email="nudge-a@dojo.test", role="member"
 )
 
 
@@ -151,7 +151,6 @@ async def test_invite_redemption_returns_show_nudge_true_for_first_passkey(
         f"claimed-{admin_id}@dojo.test",
         user_id=admin_id,
         role="admin",
-        is_active=True,
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -238,7 +237,6 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
         "secondpasskey@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -253,9 +251,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     )
     await session.flush()
 
-    claims = AccountClaims(
-        sub=user_id, email="secondpasskey@dojo.test", role="member", is_active=True
-    )
+    claims = AccountClaims(sub=user_id, email="secondpasskey@dojo.test", role="member")
     mock_verified = MagicMock()
     mock_verified.credential_id = b"second-cred-id-nudge-false"
     mock_verified.credential_public_key = b"second-public-key"

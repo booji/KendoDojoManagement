@@ -48,18 +48,20 @@ async def seed_account(
     *,
     user_id: str | None = None,
     role: str = "member",
-    is_active: bool = True,
+    membership_status: str = "active",
     **user_values: Any,
 ) -> str:
-    """Insert a Member (unless one has `email`) and its Account; the Account id."""
-    member_id = await seed_member(session, email)
+    """Insert a Member (unless one has `email`) and its Account; the Account id.
+
+    `membership_status` applies only to a Member this inserts.
+    """
+    member_id = await seed_member(session, email, membership_status=membership_status)
     user_id = user_id or str(uuid.uuid4())
     await session.execute(
         insert(Account).values(
             id=user_id,
             member_id=member_id,
             role=role,
-            is_active=is_active,
             **user_values,
         )
     )

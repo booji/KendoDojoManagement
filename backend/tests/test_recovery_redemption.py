@@ -27,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 import bcrypt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -42,9 +42,7 @@ from tests.account_support import seed_account
 
 _TEST_EMAIL = "musashi@dojo.test"
 
-_USER = AccountClaims(
-    sub=str(uuid.uuid4()), email=_TEST_EMAIL, role="member", is_active=True
-)
+_USER = AccountClaims(sub=str(uuid.uuid4()), email=_TEST_EMAIL, role="member")
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -99,10 +97,21 @@ async def db_client(database_url: str):
     await engine.dispose()
 
 
-async def _seed_user(engine, email: str, user_id: str) -> None:
-    """Insert a user row into the test DB."""
+async def _seed_user(
+    engine, email: str, user_id: str, membership_status: str = "active"
+) -> None:
+    """Insert a user row into the test DB.
+
+    The Member outlives `_wipe_test_email`, which deletes only Accounts, so
+    its status is set every time rather than inherited from an earlier test.
+    """
     async with engine.begin() as conn:
-        await seed_account(conn, email, user_id=user_id, role="member", is_active=True)
+        await seed_account(conn, email, user_id=user_id, role="member")
+        await conn.execute(
+            update(Member)
+            .where(Member.email == email)
+            .values(membership_status=membership_status)
+        )
 
 
 async def _seed_recovery_code(
@@ -446,6 +455,30 @@ async def test_valid_code_is_marked_used_after_redemption(db_client) -> None:
         row = await session.get(RecoveryCode, code_id)
     assert row is not None
     assert row.used_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["archived", "suspended"])
+async def test_a_member_barred_from_signing_in_cannot_redeem(db_client, status) -> None:
+    """A valid code is no way round #484: 401, as for an unknown address,
+    and the code stays unused."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, _TEST_EMAIL, user_id, membership_status=status)
+    plaintext = "abcd-efgh-ijkl"
+    code_id = await _seed_recovery_code(db_client, user_id, plaintext)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/redeem", json={"email": _TEST_EMAIL, "code": plaintext}
+        )
+
+    assert response.status_code == 401
+    factory = async_sessionmaker(db_client, expire_on_commit=False)
+    async with factory() as session:
+        row = await session.get(RecoveryCode, code_id)
+    assert row is not None and row.used_at is None
 
 
 @pytest.mark.asyncio

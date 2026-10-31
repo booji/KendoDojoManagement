@@ -147,7 +147,7 @@ async def _create_invited_user(
     member_id = await member_directory_for(uow).ensure_member(
         record["email"], record["first_name"], record["surname"]
     )
-    user = Account(member_id=member_id, role="member", is_active=True)
+    user = Account(member_id=member_id, role="member")
     uow.session.add(user)
     await uow.session.flush()
     return user
@@ -259,6 +259,5 @@ async def invite_redeem_complete(
         sub=user.id,
         email=record["email"],
         role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
         show_nudge=True,
     )

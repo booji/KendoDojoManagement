@@ -34,7 +34,6 @@ vi.mock("@/api/auth", () => ({
     role: "member",
     sub: "u1",
     email: "member@dojo.test",
-    is_active: true,
     theme: "system",
   }),
 }))

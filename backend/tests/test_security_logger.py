@@ -634,9 +634,7 @@ async def test_account_lockout_emits_log(
 
 async def test_passkey_deletion_emits_log(caplog: pytest.LogCaptureFixture) -> None:
     """DELETE /auth/passkeys/{id} must emit a passkey_deleted/success event."""
-    user = AccountClaims(
-        sub="del-user", email="del@dojo.test", role="member", is_active=True
-    )
+    user = AccountClaims(sub="del-user", email="del@dojo.test", role="member")
     passkey_repo = StubPasskeyRepo()
     recovery_repo = StubRecoveryRepo(unused_count=1)
 
@@ -744,7 +742,7 @@ async def test_admin_token_generation_emits_log(
     await db_client.flush()
 
     admin_claims = AccountClaims(
-        sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
+        sub="admin-uuid", email="admin@dojo.test", role="admin"
     )
     admin_token_repo = StubAdminTokenRepo()
 

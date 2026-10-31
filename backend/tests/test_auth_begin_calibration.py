@@ -176,7 +176,6 @@ async def _seed() -> tuple[list[str], list[str]]:
                     id=anchor_id,
                     member_id=anchor_member_id,
                     role="admin",
-                    is_active=True,
                 )
             )
             await session.execute(
@@ -219,7 +218,6 @@ async def _seed() -> tuple[list[str], list[str]]:
                         "id": str(uuid.uuid4()),
                         "member_id": member_id,
                         "role": "member",
-                        "is_active": True,
                     }
                     for member_id in member_ids
                 ],
