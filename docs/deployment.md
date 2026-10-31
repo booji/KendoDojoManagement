@@ -358,6 +358,21 @@ security events are one JSON object per line:
 `user_id`, `ip_address` and `detail` appear when they apply; every event raised
 while serving a request carries the client's `ip_address`.
 
+Sign-in and account events, with `result` `success` or `failure`:
+
+| `event_type` | When |
+|---|---|
+| `login_passkey` | someone signs in with a passkey |
+| `passkey_registered` | an Account adds a passkey |
+| `passkey_deleted` | an Account removes a passkey |
+| `recovery_redeem` | someone redeems a recovery code or admin recovery token |
+| `admin_token_generated` | an Admin mints a recovery token for a Member (`detail` names the target) |
+| `invite_minted` | an Admin creates an invite |
+| `invite_revoked` | an Admin revokes an invite |
+| `invite_redeemed` | someone redeems an invite |
+| `setup_claim` | someone claims the first Admin Account with the `SETUP_TOKEN` |
+| `sign_out_everywhere` | an Account signs out of every session |
+
 Admin writes and exports are logged too, with the Admin as `user_id`:
 
 | `event_type` | When | `detail` |
