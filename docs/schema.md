@@ -61,6 +61,15 @@ erDiagram
         timestamptz used_at
         timestamptz created_at
     }
+    auth_sessions {
+        string id PK
+        string token_hash UK
+        string account_id FK
+        string passkey_id FK
+        string kind
+        timestamptz created_at
+        timestamptz expires_at
+    }
     invites {
         string id PK
         string email
@@ -204,6 +213,8 @@ erDiagram
     accounts ||--o{ admin_recovery_tokens : "issued to"
     accounts ||--o{ admin_recovery_tokens : "created by"
     accounts ||--o{ invites : "issued by"
+    accounts ||--o{ auth_sessions : "signed in as"
+    passkey_credentials ||--o{ auth_sessions : "signed in with"
     members ||--o| accounts : "signs in as"
     members ||--o{ member_federations : "belongs to"
     federations ||--o{ member_federations : "has members"
