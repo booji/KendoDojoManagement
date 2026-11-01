@@ -51,7 +51,6 @@ _MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",
-    is_active=True,
 )
 
 

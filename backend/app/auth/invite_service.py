@@ -28,7 +28,7 @@ from sqlalchemy import select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
-from app.auth.accounts import account_for_email
+from app.auth.accounts import account_for_email, may_sign_in
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
@@ -118,6 +118,18 @@ async def mint_invite(
             ),
         )
 
+    membership_status = await member_directory_for(uow).barred_status(payload.email)
+    if membership_status is not None:
+        # Their Account could never sign in (#484), so the invite would only
+        # mint a passkey that is refused at the door.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"That Member is {membership_status}, so they cannot sign in. "
+                "Change their Membership Status before inviting them."
+            ),
+        )
+
     plaintext = generate_invite_token()
     record = await repo.add(
         {
@@ -135,19 +147,25 @@ async def mint_invite(
 async def _create_invited_user(
     record: dict[str, Any], uow: AbstractUnitOfWork
 ) -> Account | None:
-    """Create the invited Member's Account, or None if the email has one.
+    """Create the invited Member's Account, or None if the email has one or
+    its Member may not sign in.
 
-    An account can appear between minting and redemption, so refusing at mint
+    Either can change between minting and redemption, so refusing at mint
     time is not enough on its own. Returning None here makes the redemption
-    path treat it like any other unusable invite. Otherwise the Member is
-    found or created first, because every Account belongs to one (#432).
+    path treat it like any other unusable invite, so a barred Member's browser
+    is never asked for a passkey that complete would refuse (#484). Otherwise
+    the Member is found or created first, because every Account belongs to
+    one (#432).
     """
+    directory = member_directory_for(uow)
     if await _email_has_user(record["email"], uow):
         return None
-    member_id = await member_directory_for(uow).ensure_member(
+    if await directory.barred_status(record["email"]) is not None:
+        return None
+    member_id = await directory.ensure_member(
         record["email"], record["first_name"], record["surname"]
     )
-    user = Account(member_id=member_id, role="member", is_active=True)
+    user = Account(member_id=member_id, role="member")
     uow.session.add(user)
     await uow.session.flush()
     return user
@@ -156,8 +174,9 @@ async def _create_invited_user(
 async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
     """Begin redemption for `token`, usable or not.
 
-    Every unusable case -- unknown, expired, revoked, already-redeemed, or an
-    account that appeared for the invited email since minting -- converges on
+    Every unusable case -- unknown, expired, revoked, already-redeemed, an
+    account that appeared for the invited email since minting, or a Member
+    archived or suspended since then -- converges on
     `subject=None`, and app.auth.webauthn_ceremony builds the response for
     both outcomes. The real and decoy bodies therefore cannot drift apart;
     see that module for the four shape rules and the three enumeration bugs
@@ -206,6 +225,11 @@ async def invite_redeem_complete(
         select(PasskeyCredential).where(PasskeyCredential.user_id == user.id)
     )
     if existing.scalars().first() is not None:
+        log_security_event("invite_redeemed", "failure", user_id=user.id)
+        raise _AUTH_FAILED
+
+    # The Member may have been archived or suspended since minting (#484).
+    if not await may_sign_in(uow.session, user.id):
         log_security_event("invite_redeemed", "failure", user_id=user.id)
         raise _AUTH_FAILED
 
@@ -259,6 +283,5 @@ async def invite_redeem_complete(
         sub=user.id,
         email=record["email"],
         role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
         show_nudge=True,
     )

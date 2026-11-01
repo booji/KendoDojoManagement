@@ -102,13 +102,16 @@ async def resolve_auth_session(
 ) -> AccountClaims | None:
     """The Account behind token ``value``, read as of now, or ``None``.
 
+    ``None`` too when its Member may no longer sign in (#484): archiving or
+    suspending a Member ends their Auth Sessions on the next request.
+
     ``recovery_session`` on the result says which kind of Auth Session it is;
     each caller decides whether that kind is welcome.
     """
     token_hash = hash_token(value)
     row = await repo.find(token_hash)
     now = datetime.now(UTC)
-    if row is None or now >= row["expires_at"]:
+    if row is None or now >= row["expires_at"] or not row["may_sign_in"]:
         return None
     recovery = row["kind"] == "recovery"
     slid = None if recovery else slid_expiry(row["created_at"], row["expires_at"], now)
@@ -118,7 +121,6 @@ async def resolve_auth_session(
         sub=row["account_id"],
         email=row["email"],
         role=row["role"],
-        is_active=row["is_active"],
         recovery_session=recovery,
     )
 

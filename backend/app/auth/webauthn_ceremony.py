@@ -1,11 +1,14 @@
 """The one place a WebAuthn "begin" response is shaped (issue #354).
 
-Three endpoints answer for any identifier, registered or not, and must be
+Two endpoints answer for any identifier, registered or not, and must be
 indistinguishable whether or not the identifier is known::
 
-    POST /auth/register/passkey/begin
     POST /auth/login/passkey/begin
     POST /auth/invites/redeem/begin
+
+(A third, the email-addressed POST /auth/register/passkey/begin, was removed
+when Members became invite-only, #472. Registration begin survives for the
+setup claim and for adding a passkey, neither of which has a decoy.)
 
 Four rules decide whether a decoy is distinguishable from the real thing:
 the resident-key requirement, the user-verification level, the user-id byte
@@ -30,9 +33,9 @@ none of the four rules can diverge without the change being visible in one
 place. `tests/test_webauthn_ceremony_conventions.py` fails if a second
 construction site appears.
 
-A fifth rule joins them on the invite path: constant name width. The other
-two paths echo an address the caller already typed, so their two outcomes
-match for free. An invite decoy cannot -- it does not know the invitee's
+A fifth rule joins them on the invite path: constant name width. Login
+echoes nothing about the account, so its two outcomes match for free. An
+invite decoy cannot -- it does not know the invitee's
 address -- so `invite_begin` pads both of its outcomes to one width. See
 there for what that costs and why it is invisible.
 
@@ -250,9 +253,9 @@ class Ceremony:
     challenge: str
 
 
-def _registration_ceremony(subject: Subject) -> Ceremony:
+def register_begin(subject: Subject) -> Ceremony:
     """Build a registration begin response -- the single site for all four
-    shape rules on the register and invite-redeem paths.
+    shape rules on every registration path, the invite decoy included.
 
     The challenge is deliberately NOT passed in: letting py_webauthn generate
     it is what guarantees every response matches every other in both width
@@ -260,10 +263,9 @@ def _registration_ceremony(subject: Subject) -> Ceremony:
     produced.
 
     `user_display_name` mirrors `user_name` rather than looking up a member
-    name. No Member row is guaranteed reachable here without an extra query
-    (bootstrap registers with no Member at all), and a decoy has no member
-    name available for an identifier that does not exist -- so any other
-    choice would open a width channel between the two paths.
+    name. An invite decoy has no member name available for a token that does
+    not exist, so any other choice would open a width channel between its
+    two outcomes.
     """
     options = webauthn.generate_registration_options(
         rp_id=config.WEBAUTHN_RP_ID,
@@ -279,33 +281,6 @@ def _registration_ceremony(subject: Subject) -> Ceremony:
     )
 
 
-def register_begin(email: str, subject: Subject | None) -> Ceremony:
-    """Registration begin for `email`; `subject=None` yields the decoy.
-
-    The decoy identifier is normalised the same way a case/whitespace variant
-    of a known email would be treated -- strip + casefold. `email` has
-    already been through LenientEmail's validation (app.auth.models), which
-    normalises the domain but deliberately leaves local-part case alone (RFC
-    5321 permits a case-sensitive local part). Re-normalising here is
-    defense-in-depth so that "A@b.com" and "a@b.com" derive the SAME decoy
-    id -- otherwise the two would silently diverge from how a human expects
-    "the same email" to behave, without ever showing up as inconsistent
-    between the real and decoy paths (both would just independently be
-    case-sensitive).
-
-    The decoy's `user_name` is the email the caller typed. That is
-    attacker-controlled on both sides -- they already know what they sent --
-    so echoing it costs nothing and keeps the two paths trivially
-    equal-width, the real path's `user_name` being the same address.
-    """
-    if subject is None:
-        subject = Subject(
-            user_id=_decoy_user_id(email.strip().casefold()),
-            user_name=email,
-        )
-    return _registration_ceremony(subject)
-
-
 def invite_begin(token: str, subject: Subject | None) -> Ceremony:
     """Invite-redemption begin for `token`; `subject=None` yields the decoy.
 
@@ -314,13 +289,12 @@ def invite_begin(token: str, subject: Subject | None) -> Ceremony:
     convention to respect, so normalising it would only create collisions
     between otherwise-distinct tokens.
 
-    Unlike `register_begin`, the decoy cannot echo the identifier as
-    `user_name`: the real path returns the invitee's persisted email, which
-    the caller does not know and which never moves for a given token. A
-    fresh uuid4() local part would leave the #300 oracle fully intact on this
-    field after closing it on user_id, since a caller can compare either one
-    across two calls. So the name is derived from the same stable id. Both
-    fields must be stable, or neither is.
+    The decoy cannot echo the identifier as `user_name`: the real path returns
+    the invitee's persisted email, which the caller does not know and which
+    never moves for a given token. A fresh uuid4() local part would leave the
+    #300 oracle fully intact on this field after closing it on user_id, since
+    a caller can compare either one across two calls. So the name is derived
+    from the same stable id. Both fields must be stable, or neither is.
 
     Stability is not enough on its own, though, because a *stable* name of
     the wrong LENGTH is still a one-call oracle. A synthesised
@@ -355,7 +329,7 @@ def invite_begin(token: str, subject: Subject | None) -> Ceremony:
     if subject is None:
         decoy_id = _decoy_user_id(token)
         subject = Subject(user_id=decoy_id, user_name=f"{decoy_id}@invite.invalid")
-    return _registration_ceremony(
+    return register_begin(
         Subject(
             user_id=subject.user_id,
             user_name=_fixed_width(subject.user_name),
@@ -367,7 +341,7 @@ def login_begin() -> Ceremony:
     """Authentication begin -- identical for a known and an unknown email.
 
     There is no real/decoy branch here at all, which is the strongest form
-    of the guarantee the other two functions get from an internal one: the
+    of the guarantee `invite_begin` gets from an internal one: the
     caller decides only whether to persist the challenge, never what the
     response looks like.
 

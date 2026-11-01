@@ -33,9 +33,7 @@ from tests.fake_repositories import InMemoryMemberRepository
 
 _ADMIN_SUB = "admin-uuid-settings"
 
-_ADMIN_CLAIMS = AccountClaims(
-    sub=_ADMIN_SUB, email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN_CLAIMS = AccountClaims(sub=_ADMIN_SUB, email="admin@dojo.test", role="admin")
 
 
 def _admin_override():

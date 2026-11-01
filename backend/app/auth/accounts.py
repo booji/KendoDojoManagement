@@ -17,7 +17,18 @@ from app.auth.db_models import (
     RecoveryAttempt,
     RecoveryCode,
 )
+from app.auth.member_directory import MAY_SIGN_IN
 from app.members.db_models import Member
+
+
+async def may_sign_in(session: AsyncSession, account_id: str) -> bool:
+    """Whether the Account's Member may sign in, as of now; False if no Account."""
+    result = await session.execute(
+        select(MAY_SIGN_IN)
+        .join(Account, Account.member_id == Member.id)
+        .where(Account.id == account_id)
+    )
+    return bool(result.scalar_one_or_none())
 
 
 async def account_for_email(session: AsyncSession, email: str) -> Account | None:

@@ -56,19 +56,17 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, update
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.main import app
 from app.members.db_models import Member
-from tests.account_support import seed_account
+from tests.account_support import seed_account, seed_member
 
-_ADMIN = AccountClaims(
-    sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER_CLAIMS = AccountClaims(
-    sub=str(uuid.uuid4()), email="member@dojo.test", role="member", is_active=True
+    sub=str(uuid.uuid4()), email="member@dojo.test", role="member"
 )
 
 
@@ -505,7 +503,7 @@ async def _seed_admin_user(session, email: str = "existing-admin@dojo.test") -> 
     from app.auth.db_models import PasskeyCredential
 
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role="admin", is_active=True)
+    await seed_account(session, email, user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -1041,7 +1039,7 @@ async def test_invite_redeem_begin_valid_vs_invalid_median_latency_converges(
 # issue #300 -- invite_redeem_begin decoy user.id must not be a stability
 # oracle
 #
-# Same defect as register_passkey_begin (see test_passkey_enumeration.py),
+# Same defect the email-addressed register begin had (removed, #472),
 # keyed by invite token instead of email: invite_redeem_begin's real path
 # returns the persisted Account.id (stable forever for a given token, until
 # redeemed), while the decoy minted a fresh uuid4() per call. Two POSTs
@@ -1151,6 +1149,79 @@ async def test_redeem_begin_real_user_id_matches_persisted_user(db_client) -> No
     assert returned_id == user_row.id
 
 
+def _decoded_user_id(response) -> uuid.UUID:
+    import base64
+
+    encoded = response.json()["publicKey"]["user"]["id"]
+    padded = encoded + "=" * (-len(encoded) % 4)
+    return uuid.UUID(base64.urlsafe_b64decode(padded).decode())
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_decoy_user_id_is_a_version_4_uuid(db_client) -> None:
+    """The decoy id must parse as a version-4 RFC 4122 UUID, exactly like the
+    real one.
+
+    Real ids come from uuid4(), so their version and variant nibbles are
+    fixed. A decoy built from raw HMAC bytes has random ones -- which would
+    classify a token from a SINGLE response (parse, check version == 4:
+    always true for a real invite, true roughly one time in sixteen for a
+    raw digest). Moved here from the email-addressed register begin when that
+    was removed (#472).
+    """
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(
+        session, "format-real@dojo.test", "format-real-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        real = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "format-real-token"}
+        )
+        decoy = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "format-decoy-token"}
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    real_id = _decoded_user_id(real)
+    decoy_id = _decoded_user_id(decoy)
+    assert real_id.version == 4
+    assert decoy_id.version == real_id.version
+    assert decoy_id.variant == real_id.variant
+
+
+@pytest.mark.asyncio
+async def test_redeem_begin_requests_discoverable_credential_real_and_decoy(
+    db_client,
+) -> None:
+    """Login has no allowCredentials (#267), so an invitee's passkey must be
+    discoverable: residentKey "required" on the real path, and on the decoy so
+    it keeps the real path's shape (#239)."""
+    session = db_client
+    admin_id = await _seed_admin_user(session)
+    await _seed_invite(
+        session, "discoverable@dojo.test", "discoverable-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        real = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "discoverable-token"}
+        )
+        decoy = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "no-such-token"}
+        )
+
+    assert real.status_code == decoy.status_code == 200
+    for response in (real, decoy):
+        selection = response.json()["publicKey"]["authenticatorSelection"]
+        assert selection["residentKey"] == "required"
+
+
 # ---------------------------------------------------------------------------
 # Hardening from the #257 security review
 #
@@ -1258,7 +1329,6 @@ async def test_deleting_the_issuing_user_leaves_the_invite_intact(db_session) ->
         f"issuer-{admin_id}@dojo.test",
         user_id=admin_id,
         role="admin",
-        is_active=True,
     )
     await db_session.execute(
         insert(Invite).values(
@@ -1415,3 +1485,120 @@ async def test_redeem_is_refused_once_the_email_has_a_user(db_client) -> None:
         ).all()
     )
     assert after == before, "no credential may be added to the existing account"
+
+
+# ---------------------------------------------------------------------------
+# An archived or suspended Member cannot be invited (#484)
+#
+# Their Account could never sign in, so an invite would only mint a passkey
+# that is refused at the door.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_mint_invite_for_a_member_barred_from_signing_in_is_refused(
+    db_client, membership_status: str
+) -> None:
+    admin_id = await _seed_admin_user(db_client)
+    await seed_member(
+        db_client, "barred@dojo.test", membership_status=membership_status
+    )
+    await db_client.flush()
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=admin_id, email="existing-admin@dojo.test", role="admin"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/admin/invites",
+            json={"email": "barred@dojo.test", "first_name": "Ba", "surname": "Rred"},
+        )
+
+    assert response.status_code == 409
+    assert membership_status in response.json()["detail"]
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_redeem_is_refused_once_the_member_is_barred_from_signing_in(
+    db_client, membership_status: str
+) -> None:
+    """The Member may be archived or suspended between minting and redemption,
+    so the check at mint time is not enough on its own."""
+    from unittest.mock import MagicMock, patch
+
+    from app.auth.db_models import PasskeyCredential
+
+    admin_id = await _seed_admin_user(db_client)
+    member_id = await _seed_member(db_client, "lapsed@dojo.test")
+    await _seed_invite(
+        db_client, "lapsed@dojo.test", "lapsed-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        begin = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "lapsed-token"}
+        )
+        await db_client.execute(
+            update(Member)
+            .where(Member.id == member_id)
+            .values(membership_status=membership_status)
+        )
+        verified = MagicMock(
+            credential_id=b"lapsed-cred",
+            credential_public_key=b"lapsed-key",
+            sign_count=0,
+            aaguid=None,
+        )
+        with patch("webauthn.verify_registration_response", return_value=verified):
+            complete = await c.post(
+                "/auth/invites/redeem/complete",
+                json={"token": "lapsed-token", "credential": _FAKE_REGISTER_CREDENTIAL},
+            )
+
+    assert begin.status_code == 200
+    assert complete.status_code == 401
+    stored = await db_client.execute(
+        select(PasskeyCredential).where(
+            PasskeyCredential.credential_id == b"lapsed-cred"
+        )
+    )
+    assert stored.first() is None
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_redeem_begin_for_a_barred_member_is_the_decoy(
+    db_client, membership_status: str
+) -> None:
+    """Refused at begin, so the browser never creates a passkey that complete
+    would refuse. The decoy, as for an unusable token: nothing tells a barred
+    invitee from a bad link, and no Account is created for them."""
+    from app.auth.db_models import Account
+
+    admin_id = await _seed_admin_user(db_client)
+    member_id = await seed_member(
+        db_client, "barred-begin@dojo.test", membership_status=membership_status
+    )
+    await _seed_invite(
+        db_client, "barred-begin@dojo.test", "barred-begin-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "barred-begin-token"}
+        )
+
+    assert response.status_code == 200
+    assert "challenge" in response.json()["publicKey"]
+    account = await db_client.execute(
+        select(Account.id).where(Account.member_id == member_id)
+    )
+    assert account.first() is None

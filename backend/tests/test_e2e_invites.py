@@ -403,3 +403,36 @@ def test_invite_landing_page_route_exists_and_drives_registration(page: Page) ->
     expect(page.get_by_text("Complete your registration")).to_be_visible(timeout=5000)
     page.click('[data-testid="invite-register-button"]')
     page.wait_for_selector('[data-testid="invite-register-in-progress"]', timeout=5000)
+
+
+# ── #484: an archived or suspended Member cannot be invited ─────────────────
+
+
+def test_admin_sees_why_a_barred_member_cannot_be_invited(page: Page) -> None:
+    token = authenticate(page)
+    email = f"suspended-{uuid.uuid4().hex[:8]}@dojo.test"
+    requests.post(
+        f"{API_URL}/members",
+        json={
+            "email": email,
+            "first_name": "Sus",
+            "surname": "Pended",
+            "join_date": "2024-01-01",
+            "membership_status": "suspended",
+        },
+        cookies={"access_token": token},
+        timeout=5,
+    ).raise_for_status()
+
+    page.goto(f"{BASE_URL}/settings/invites")
+    page.fill('[data-testid="invite-first-name-input"]', "Sus")
+    page.fill('[data-testid="invite-surname-input"]', "Pended")
+    page.fill('[data-testid="invite-email-input"]', email)
+    page.click('[data-testid="invite-submit"]')
+
+    expect(page.get_by_role("alert")).to_have_text(
+        "That Member is suspended, so they cannot sign in. "
+        "Change their Membership Status before inviting them.",
+        timeout=5000,
+    )
+    expect(page.locator('[data-testid="invite-link"]')).to_have_count(0)

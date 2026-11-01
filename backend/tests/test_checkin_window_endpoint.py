@@ -57,14 +57,11 @@ from tests.fake_repositories import (
 _DEFAULT_BEFORE_MINUTES = 60
 _DEFAULT_AFTER_MINUTES = 120
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",
-    is_active=True,
 )
 _SOME_MEMBER_UUID = "00000000-0000-0000-0000-000000000099"
 

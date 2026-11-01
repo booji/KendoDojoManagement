@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.db_models import AdminRecoveryToken
+from app.auth.member_directory import SqlMemberDirectory
 from app.auth.recovery_service import (
     admin_token_expiry,
     generate_admin_token_plaintext,
@@ -66,9 +67,20 @@ def create_recovery_token(email: str) -> None:
         factory = _make_session_factory(url)
         async with factory() as session:
             user = await account_for_email(session, email)
+            barred = await SqlMemberDirectory(session).barred_status(email)
 
         if user is None:
             typer.echo(f"Error: no account found with email '{email}'", err=True)
+            raise typer.Exit(code=1)
+
+        # Redemption refuses a Member who may not sign in (#484), so a token
+        # minted for one could never be used.
+        if barred is not None:
+            typer.echo(
+                f"Error: Member is {barred}; reinstate first "
+                "(set membership_status to 'active').",
+                err=True,
+            )
             raise typer.Exit(code=1)
 
         plaintext = generate_admin_token_plaintext()

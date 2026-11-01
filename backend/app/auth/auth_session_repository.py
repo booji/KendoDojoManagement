@@ -9,6 +9,7 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.db_models import Account, AuthSession
+from app.auth.member_directory import MAY_SIGN_IN
 from app.members.db_models import Member
 
 
@@ -17,7 +18,8 @@ class AbstractAuthSessionRepository(Protocol):
     async def add(self, row: dict[str, Any]) -> None: ...
 
     async def find(self, token_hash: str) -> dict[str, Any] | None:
-        """The row joined to its Account's role, active flag and email."""
+        """The row joined to its Account's role, and its Member's email and
+        whether they may sign in (``may_sign_in``)."""
         ...
 
     async def slide(self, token_hash: str, expires_at: datetime) -> None: ...
@@ -49,7 +51,7 @@ class SqlAuthSessionRepository:
                 AuthSession.created_at,
                 AuthSession.expires_at,
                 Account.role,
-                Account.is_active,
+                MAY_SIGN_IN.label("may_sign_in"),
                 Member.email,
             )
             .join(Account, Account.id == AuthSession.account_id)

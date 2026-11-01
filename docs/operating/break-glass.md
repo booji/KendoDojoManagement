@@ -11,6 +11,10 @@ This prints a single-use plaintext token valid for **60 minutes**. Redeem it at:
 - **API:** `POST /auth/recovery/redeem` — body `{"email": "<email>", "code": "<token>"}`
 - **Login page:** enter the email and paste the token into the recovery code field
 
+The command refuses a Member whose Membership Status is `archived` or
+`suspended`, because they cannot sign in. Reinstate them first by setting
+`membership_status` to `active`.
+
 Security notes:
 - Run this command on the server only — never over an untrusted network.
 - The token is stored as a bcrypt hash; the plaintext is never persisted.

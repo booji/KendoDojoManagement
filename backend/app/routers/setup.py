@@ -108,8 +108,8 @@ async def _discard_abandoned_claims(uow: AbstractUnitOfWork, claimant: Account) 
 
     A claim begun under one address and finished under another leaves the
     first attempt's Member on the roster and its Account, with no passkey,
-    reachable by the ordinary registration route. Only Members a claim
-    created carry `claim_attempted_at`, so the roster is never touched.
+    that nobody can use. Only Members a claim created carry
+    `claim_attempted_at`, so the roster is never touched.
     """
     session = uow.session
     abandoned = (
@@ -159,7 +159,7 @@ async def setup_passkey_begin(
         raise _ALREADY_DONE
     _require_setup_token(x_setup_token)
     return await register_passkey_begin(
-        payload.email, uow, bootstrap_names=(payload.first_name, payload.surname)
+        payload.email, payload.first_name, payload.surname, uow
     )
 
 
@@ -178,11 +178,11 @@ async def setup_passkey_complete(
         raise _ALREADY_DONE
     _require_setup_token(x_setup_token)
 
-    claims = await register_passkey_complete(payload, uow, allow_bootstrap=True)
+    claims = await register_passkey_complete(payload, uow)
 
     # The one place admin is granted: the claim has completed. Begin creates
     # the Account as a member, so an abandoned claim leaves no admin account
-    # behind for the ordinary registration route to finish (#432).
+    # behind for a later claim to finish (#432).
     user = await uow.session.get(Account, claims.sub)
     assert user is not None  # register_passkey_complete just enrolled it
     if claims.role != "admin":
@@ -192,7 +192,6 @@ async def setup_passkey_complete(
             sub=claims.sub,
             email=claims.email,
             role="admin",
-            is_active=claims.is_active,
         )
 
     # Signed in before the tidy-up below, which may roll back: the claim has

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import NoReturn
 
 import webauthn
 from fastapi import HTTPException, status
@@ -6,11 +7,11 @@ from sqlalchemy import exists, func, select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
-from app.auth.accounts import account_for_email, account_for_member
+from app.auth.accounts import account_for_email, account_for_member, may_sign_in
 from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
-from app.auth.member_directory import MemberDirectory, member_directory_for
+from app.auth.member_directory import member_directory_for
 from app.auth.models import (
     PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
@@ -36,82 +37,53 @@ _AUTH_FAILED = HTTPException(
 )
 
 
-async def _is_bootstrap(uow: AbstractUnitOfWork) -> bool:
-    """True when no fully-registered user exists yet.
-
-    Counts PasskeyCredential rows, not Account rows, matching the convention in
-    app/routers/setup.py. An Account row is inserted before the interactive
-    WebAuthn ceremony completes, so counting users would let a single
-    abandoned first-run ceremony leave a phantom user behind, flip this to
-    False forever, and permanently brick setup (no Member row exists yet, so
-    every retry would get a decoy).
-    """
-    passkey_count = await uow.session.execute(
-        select(func.count()).select_from(PasskeyCredential)
-    )
-    return passkey_count.scalar_one() == 0
+def refuse_registration() -> NoReturn:
+    """Refuse an email-addressed registration with the generic failure (#472):
+    the register decoy's whole answer, kept here beside _AUTH_FAILED so the
+    two cannot drift apart."""
+    log_security_event("passkey_registered", "failure")
+    raise _AUTH_FAILED
 
 
 async def _get_or_create_account(member_id: str, uow: AbstractUnitOfWork) -> Account:
     """The Member's Account, created if it has none (#432: every Account
     belongs to exactly one Member).
 
-    Always as a member, the first-admin claim included: admin is granted when
-    the claim *completes* (app/routers/setup.py), never when it begins. A
-    claim begun under one address and finished under another leaves the
-    first attempt's Member and Account behind with no passkey, and once the
-    instance is claimed the ordinary registration route can reach them. An
-    admin role on that leftover would be an admin account for whoever knew
-    the abandoned address.
+    Always as a member: admin is granted when the claim *completes*
+    (app/routers/setup.py), never when it begins. A claim begun under one
+    address and finished under another leaves the first attempt's Member and
+    Account behind with no passkey, and an admin role on that leftover would be
+    an admin account for whoever later completed it.
     """
     user = await account_for_member(uow.session, member_id)
     if user is None:
-        user = Account(member_id=member_id, role="member", is_active=True)
+        user = Account(member_id=member_id, role="member")
         uow.session.add(user)
         await uow.session.flush()
     return user
 
 
 async def register_passkey_begin(
-    email: str,
-    uow: AbstractUnitOfWork,
-    member_directory: MemberDirectory | None = None,
-    *,
-    bootstrap_names: tuple[str, str] | None = None,
+    email: str, first_name: str, surname: str, uow: AbstractUnitOfWork
 ) -> dict:
-    """Begin a registration ceremony, whether or not `email` is authorized.
+    """Begin the first-admin claim ceremony (ADR-0003), creating the first
+    Admin's Member as well as their Account (#432): there is no sign-in without
+    a kendoka, the first Admin included.
 
-    `bootstrap_names` (first name, surname) is the first-admin claim gate
-    (ADR-0003): only the setup router passes it, and only after checking the
-    pre-provisioned SETUP_TOKEN. Without it the bootstrap branch below is
-    unreachable, so the ordinary registration route cannot be used to claim
-    admin on an unclaimed instance — it sees an email with no Member row and
-    answers with the decoy, exactly as it does on a claimed one. With it, the
-    claim creates the first Admin's Member as well as their Account (#432):
-    there is no sign-in without a kendoka, the first Admin included.
+    Only the setup router calls this, after checking the pre-provisioned
+    SETUP_TOKEN and that the instance is unclaimed. There is no anonymous
+    registration: every other Member joins by invite (#472).
 
-    The Member gate (#239) decides only whether there is a `Subject`;
-    app.auth.webauthn_ceremony decides what the response looks like in either
-    case, so the real and decoy bodies cannot drift apart. Only the real
-    path persists a challenge; there is no account row on the decoy path to
-    persist one against. That missing write is what makes the decoy faster,
-    which is a latency channel rather than a shape one -- covered by
-    app.core.middleware.ConstantTimeAuthMiddleware, not here.
+    An existing archived or suspended Member is refused here, as complete
+    would refuse them, before the browser is asked for a passkey (#484).
     """
-    directory = member_directory or member_directory_for(uow)
-
-    is_bootstrap = bootstrap_names is not None and await _is_bootstrap(uow)
-    if is_bootstrap:
-        assert bootstrap_names is not None  # narrowed by is_bootstrap
-        member_id = await directory.ensure_member(email, *bootstrap_names, claim=True)
-    else:
-        member_id = await directory.member_id_for(email)
-        if member_id is None:
-            return register_begin(email, subject=None).response
-
+    directory = member_directory_for(uow)
+    if await directory.barred_status(email) is not None:
+        refuse_registration()
+    member_id = await directory.ensure_member(email, first_name, surname, claim=True)
     user = await _get_or_create_account(member_id, uow)
 
-    ceremony = register_begin(email, Subject(user_id=user.id, user_name=email))
+    ceremony = register_begin(Subject(user_id=user.id, user_name=email))
 
     user.pending_challenge = ceremony.challenge
     user.challenge_issued_at = datetime.now(UTC)
@@ -121,33 +93,30 @@ async def register_passkey_begin(
 
 
 async def register_passkey_complete(
-    payload: PasskeyRegisterCompleteRequest,
-    uow: AbstractUnitOfWork,
-    *,
-    allow_bootstrap: bool = False,
+    payload: PasskeyRegisterCompleteRequest, uow: AbstractUnitOfWork
 ) -> PasskeyRegisterCompleteResponse:
-    # The other half of the claim gate (ADR-0003). A phantom admin row left by
-    # setup's begin would otherwise be completable through the ordinary
-    # registration route, which presents no token. Indistinguishable from every
-    # other failure here, for the same enumeration reason.
-    if not allow_bootstrap and await _is_bootstrap(uow):
-        log_security_event("passkey_registered", "failure")
-        raise _AUTH_FAILED
-
+    """Complete the first-admin claim ceremony begun by register_passkey_begin.
+    Same callers, same gate."""
     user = await account_for_email(uow.session, payload.email)
     if user is None:
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
 
-    # The submitted email is all that identifies the caller here, so this
-    # ceremony may only enrol an Account nobody has enrolled yet, as an invite
-    # does (#443). Otherwise anyone who knows a Member's address could enrol
-    # their own authenticator on that Account and sign in as them. Recovery
-    # codes count as enrolment too: a Member may delete their only passkey
-    # while holding codes, and that Account is still theirs. Adding another
-    # passkey goes through add_passkey_*, which takes the Account from the
-    # session. Same generic 401, for the same enumeration reason as below.
+    # Only an Account nobody has enrolled yet. Setup reopens once the last
+    # passkey on the instance is gone, and an Admin who deleted their only
+    # passkey while holding recovery codes still owns that Account; the claim
+    # must not hand it to whoever holds the setup token. Adding a passkey to
+    # an enrolled Account goes through add_passkey_*, which takes the Account
+    # from the session.
     if await _is_enrolled(uow, user.id):
+        log_security_event("passkey_registered", "failure", user_id=user.id)
+        raise _AUTH_FAILED
+
+    # The claim reuses an existing Member with this email. An archived or
+    # suspended one would become an Admin who can never sign in, and closing
+    # setup behind them would lock the dojo out (#484). Refused before the
+    # passkey is stored, so setup stays open.
+    if not await may_sign_in(uow.session, user.id):
         log_security_event("passkey_registered", "failure", user_id=user.id)
         raise _AUTH_FAILED
 
@@ -158,9 +127,9 @@ async def add_passkey_begin(
     account: Account, email: str, uow: AbstractUnitOfWork
 ) -> dict:
     """Begin adding a passkey to an Account the caller has already proved is
-    theirs (a session, or a recovery token). See register_passkey_complete
-    for why this is not the email-addressed ceremony."""
-    ceremony = register_begin(email, Subject(user_id=account.id, user_name=email))
+    theirs (a session, or a recovery token), never one named by a submitted
+    email (#443, #472)."""
+    ceremony = register_begin(Subject(user_id=account.id, user_name=email))
     account.pending_challenge = ceremony.challenge
     account.challenge_issued_at = datetime.now(UTC)
     await uow.commit()
@@ -189,13 +158,13 @@ async def add_passkey_complete(
 
     Trusts that the caller may add a passkey to `user`: the router only passes
     the Account from a session or recovery token, and register_passkey_complete
-    only an Account with no passkey yet.
+    only the setup claim's Account, with no passkey or recovery codes yet.
     """
-    # These must not be distinguishable from the unknown-email case above: a
-    # 400 here would only ever be reachable for an email that already cleared
-    # the Member gate, and accounts sit in the "no pending challenge" state
-    # most of the time -- making 400-vs-401 a high-hit-rate enumeration
-    # oracle. The specific reason still goes to the security log.
+    # The same generic 401 as every other failure: a 400 here would only ever
+    # be reachable for an Account that exists, and accounts sit in the "no
+    # pending challenge" state most of the time -- making 400-vs-401 a
+    # high-hit-rate enumeration oracle. The specific reason still goes to the
+    # security log.
     if not user.pending_challenge or not user.challenge_issued_at:
         log_security_event("passkey_registered", "failure", user_id=user.id)
         raise _AUTH_FAILED
@@ -250,7 +219,6 @@ async def add_passkey_complete(
         sub=user.id,
         email=email,
         role=user.role,  # type: ignore[arg-type]
-        is_active=user.is_active,
         show_nudge=show_nudge,
     )
 
@@ -282,12 +250,12 @@ async def login_passkey_complete(
     if user is None:
         raise _AUTH_FAILED
 
-    # NOTE: the is_active check deliberately happens *after* signature
-    # verification below, not here. Rejecting an inactive account before the
-    # credential is checked lets anyone distinguish "deactivated member" from
-    # "unknown email" with a single request carrying a junk credential.
-    # Account status is only disclosed to someone who has already proved
-    # possession of a registered passkey.
+    # NOTE: the may-sign-in check (#484) deliberately happens *after*
+    # signature verification below, not here. Rejecting a barred Member before
+    # the credential is checked lets anyone distinguish "archived or suspended
+    # member" from "unknown email" with a single request carrying a junk
+    # credential. Membership Status is only disclosed to someone who has
+    # already proved possession of a registered passkey.
 
     # Decode credential_id from the request to find the matching stored credential
     cred_id_b64 = payload.credential.id
@@ -325,15 +293,15 @@ async def login_passkey_complete(
     except Exception as exc:
         raise _AUTH_FAILED from exc
 
-    # Credential possession is now proven, so disclosing account status here
-    # tells the caller nothing they could not already infer about their own
-    # account. See the note above where this check used to live.
-    if not user.is_active:
+    # Credential possession is now proven, so disclosing Membership Status
+    # here tells the caller nothing they could not already infer about their
+    # own membership. See the note above on where this check sits.
+    if not await may_sign_in(uow.session, user.id):
         user.pending_challenge = None
         await uow.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account deactivated",
+            detail="Membership is archived or suspended",
         )
 
     stored_cred.sign_count = verified.new_sign_count

@@ -155,10 +155,8 @@ async def _seed() -> tuple[list[str], list[str]]:
     try:
         session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
         async with session_factory() as session:
-            # One fully-registered account so register-begin is past bootstrap:
-            # _is_bootstrap counts PasskeyCredential rows, and while it returns
-            # True every email takes the real path, which is not the asymmetry
-            # under test.
+            # One fully-registered account so the instance is claimed, as a
+            # live one is.
             anchor_id = str(uuid.uuid4())
             anchor_member_id = str(uuid.uuid4())
             await session.execute(
@@ -178,7 +176,6 @@ async def _seed() -> tuple[list[str], list[str]]:
                     id=anchor_id,
                     member_id=anchor_member_id,
                     role="admin",
-                    is_active=True,
                 )
             )
             await session.execute(
@@ -191,9 +188,8 @@ async def _seed() -> tuple[list[str], list[str]]:
                 )
             )
 
-            # register-begin's real path needs a Member with the email (the
-            # #239 directory gate); login-begin's needs that Member's Account,
-            # found by joining on members.email (#432).
+            # login-begin's real path needs an Account, found by joining on
+            # members.email (#432).
             # Inserted as one executemany per table rather than a statement per
             # row: seeding is setup, not the thing being measured, and a few
             # thousand round trips is minutes of nothing.
@@ -222,7 +218,6 @@ async def _seed() -> tuple[list[str], list[str]]:
                         "id": str(uuid.uuid4()),
                         "member_id": member_id,
                         "role": "member",
-                        "is_active": True,
                     }
                     for member_id in member_ids
                 ],
@@ -287,8 +282,8 @@ async def _assert_real_paths_taken(email_count: int, invite_count: int) -> None:
     finally:
         await engine.dispose()
 
-    # login/register begin both stamp pending_challenge; the invited accounts
-    # created by redemption are stamped too, hence the sum.
+    # login begin stamps pending_challenge; the invited accounts created by
+    # redemption are stamped too, hence the sum.
     assert challenged == email_count + invite_count, (
         f"only {challenged} of {email_count + invite_count} accounts carry a "
         "challenge: some requests took the decoy path, so the numbers below "
@@ -298,7 +293,7 @@ async def _assert_real_paths_taken(email_count: int, invite_count: int) -> None:
     # its own, so the count covers the seeded members *and* the invited ones.
     assert linked == email_count + invite_count, (
         f"only {linked} of {email_count + invite_count} members have an "
-        "account: register-begin or invite redemption took the decoy path"
+        "account: invite redemption took the decoy path"
     )
     assert invited_users == invite_count, (
         f"only {invited_users} of {invite_count} invited accounts exist: "
@@ -397,7 +392,6 @@ async def test_measure_auth_begin_real_path_latency() -> None:
     emails, tokens = await _seed()
     try:
         login = [{"email": e} for e in emails]
-        register = [{"email": e} for e in emails]
         invite = [{"token": t} for t in tokens]
 
         results = [
@@ -406,20 +400,12 @@ async def test_measure_auth_begin_real_path_latency() -> None:
                 await _run_sequential("/auth/login/passkey/begin", login),
             ),
             percentiles(
-                "register/passkey/begin  known email  seq",
-                await _run_sequential("/auth/register/passkey/begin", register),
-            ),
-            percentiles(
                 "invites/redeem/begin  valid token  seq",
                 await _run_sequential("/auth/invites/redeem/begin", invite[:_PER_RUN]),
             ),
             percentiles(
                 f"login/passkey/begin  known email  c={CONCURRENCY}",
                 await _run_concurrent("/auth/login/passkey/begin", login),
-            ),
-            percentiles(
-                f"register/passkey/begin  known email  c={CONCURRENCY}",
-                await _run_concurrent("/auth/register/passkey/begin", register),
             ),
             percentiles(
                 f"invites/redeem/begin  valid token  c={CONCURRENCY}",
@@ -432,9 +418,9 @@ async def test_measure_auth_begin_real_path_latency() -> None:
         # rather than only that it survives an idle box and not a hammered one.
         sweep = [
             percentiles(
-                f"register/passkey/begin  known email  c={level}",
+                f"login/passkey/begin  known email  c={level}",
                 await _run_concurrent(
-                    "/auth/register/passkey/begin", register, concurrency=level
+                    "/auth/login/passkey/begin", login, concurrency=level
                 ),
             )
             for level in SWEEP

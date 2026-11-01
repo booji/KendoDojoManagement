@@ -11,16 +11,17 @@ Now every Auth Session is a row in `auth_sessions`. The table is not called
 `sessions`, because a **Session** is a training event. The cookie carries a
 random id (`secrets.token_urlsafe(32)`) and the table stores only its SHA-256,
 so a database dump or backup yields no live Auth Session. The guard looks the
-row up on every authenticated request and joins the Account, so role and
-active status always come from the database.
+row up on every authenticated request and joins the Account and its Member,
+so role and whether the Member may sign in always come from the database.
 
 - **Revocation is deleting rows, and the foreign keys do most of it.** Logout
   deletes the row; "sign out everywhere" deletes all of the Account's rows,
   the current one included. `account_id` is `ON DELETE CASCADE`, so erasure
   revokes with no code. Each row records the passkey it signed in with
   (`passkey_id`, nullable, `ON DELETE CASCADE`), so removing a lost device's
-  passkey ends that device's Auth Sessions. A demotion or deactivation needs
-  no revocation hook: the next request reads the new row.
+  passkey ends that device's Auth Sessions. A demotion needs no revocation
+  hook: the next request reads the new row. Archiving or suspending is refused
+  the same way, and also deletes the Account's rows (see the #484 amendment).
 - **Recovery tokens are rows too**, with a `kind` of `recovery` and a
   15-minute life, still sent as a Bearer header and refused in the cookie.
   They are single-use: the row is deleted once the new passkey is enrolled.
@@ -68,3 +69,24 @@ active status always come from the database.
 Deploying this signs everyone out once: existing JWT cookies have no row.
 
 Decided in issue #455.
+
+Amended by #484: whether an Account may sign in is its Member's
+**Membership Status**, not an Account flag. `archived` and `suspended` are
+refused at sign-in, recovery, passkey enrolment and on every authenticated
+request (401, as for no Auth Session); `inactive` keeps access. The members
+domain owns the rule (`BARRED_FROM_SIGN_IN` in `app.members.db_models`, and
+`MAY_SIGN_IN`, the same rule as one SQL predicate), and auth reads it only
+through the `app.auth.member_directory` port (ADR-0006). The Auth Session join
+reads `MAY_SIGN_IN` in its one statement. `accounts.is_active`, which nothing
+ever set false, is dropped.
+
+Barring a Member also deletes every Auth Session row of their Account, of both
+kinds, in the same transaction as the status change. The per-request refusal
+alone left the rows in place, so an Admin reinstating the Member before they
+expired revived them: a session the Member, or whoever held their cookie, had
+when they were barred came back with no new sign-in. The refusal stays the
+guarantee while the bar lasts; the deletion makes the bar final for every
+session that predates it. This is the one place a status change revokes, and
+it does not reopen the rejected "delete Auth Sessions when they change"
+option: missing the call would only bring back the revival, never let a
+barred Member in.

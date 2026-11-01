@@ -1,9 +1,8 @@
 /**
  * Adding a passkey names the Account by the caller's session, never by email
- * (#443). The email-addressed /api/auth/register/passkey/* ceremony only ever
- * enrols an Account's first passkey; Settings and the post-recovery page go
- * through /api/auth/passkeys/register/*, which the backend scopes to the
- * session cookie or the recovery token.
+ * (#443, #472). Settings and the post-recovery page go through
+ * /api/auth/passkeys/register/*, which the backend scopes to the session
+ * cookie or the recovery token.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"

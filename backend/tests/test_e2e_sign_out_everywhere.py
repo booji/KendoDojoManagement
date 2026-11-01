@@ -26,7 +26,6 @@ def _on_settings(page: Page, width: int = 1280) -> AccountClaims:
         sub=str(uuid.uuid4()),
         email=f"everywhere-{uuid.uuid4().hex[:6]}@dojo.test",
         role="member",
-        is_active=True,
     )
     token = login_as(claims)
     complete_onboarding(token)

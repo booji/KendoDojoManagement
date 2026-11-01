@@ -19,12 +19,10 @@ from tests.account_support import seed_account
 
 
 async def _claimed_instance_with_member(session, email: str) -> None:
-    """Seed the state the ordinary registration route now requires: an already
-    claimed instance (one PasskeyCredential row) and a Member for `email`.
-
-    The bootstrap branch — no credentials, any email, role="admin" — moved
-    behind the setup token (ADR-0003, #402), so /auth/register/passkey/* is the
-    second-and-later user's path and nothing else.
+    """Seed the state the email-addressed registration route once enrolled
+    from: an already claimed instance (one PasskeyCredential row) and a Member
+    for `email`. So a refusal here is the route's own (#472), not the
+    unclaimed-instance gate's.
     """
     seed_user_id = str(uuid.uuid4())
     await seed_account(
@@ -32,7 +30,6 @@ async def _claimed_instance_with_member(session, email: str) -> None:
         f"claimed-{seed_user_id}@dojo.test",
         user_id=seed_user_id,
         role="admin",
-        is_active=True,
     )
     await session.execute(
         insert(PasskeyCredential).values(
@@ -72,8 +69,11 @@ def clear_overrides():
 
 
 @pytest.mark.asyncio
-async def test_register_passkey_begin_returns_options(db_client) -> None:
-    """POST /auth/register/passkey/begin returns 200 with publicKey.challenge."""
+async def test_register_passkey_begin_is_gone(db_client) -> None:
+    """Invites only (#472): there is no anonymous ceremony to begin. A begin
+    would have a browser create a credential that complete can never accept,
+    and would overwrite a known Member's pending sign-in challenge."""
+    await _claimed_instance_with_member(db_client, "musashi@dojo.test")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
@@ -81,86 +81,31 @@ async def test_register_passkey_begin_returns_options(db_client) -> None:
             "/auth/register/passkey/begin",
             json={"email": "musashi@dojo.test"},
         )
-    assert response.status_code == 200
-    body = response.json()
-    assert "publicKey" in body
-    assert "challenge" in body["publicKey"]
-    assert isinstance(body["publicKey"]["challenge"], str)
-    assert len(body["publicKey"]["challenge"]) > 0
-
-
-@pytest.mark.asyncio
-async def test_register_passkey_begin_creates_user_if_not_exists(db_client) -> None:
-    """Calling begin for a new email creates an Account row in the DB."""
-    session = db_client
-    await _claimed_instance_with_member(session, "musashi@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "musashi@dojo.test"},
-        )
-    assert response.status_code == 200
-
-    result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "musashi@dojo.test")
-    )
-    user = result.fetchone()
-    assert user is not None
-
-
-@pytest.mark.asyncio
-async def test_register_passkey_begin_reuses_existing_user(db_client) -> None:
-    """If the user already exists (password-registered), begin returns 200 without duplicate."""
-    session = db_client
-    await _claimed_instance_with_member(session, "existing@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        # First create via password route
-        await c.post(
-            "/auth/register/password",
-            json={"email": "existing@dojo.test", "password": "Str0ng!Pass"},
-        )
-        # Now call passkey begin for the same email
-        response = await c.post(
-            "/auth/register/passkey/begin",
-            json={"email": "existing@dojo.test"},
-        )
-    assert response.status_code == 200
-
-    # Should still be exactly one user with that email
-    result = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "existing@dojo.test")
-    )
-    rows = result.fetchall()
-    assert len(rows) == 1
+    assert response.status_code == 404
 
 
 # ── Register complete ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_register_passkey_complete_stores_credential(db_client) -> None:
-    """POST /auth/register/passkey/complete verifies credential and returns AccountClaims (201)."""
+async def test_register_passkey_complete_refuses_a_never_enrolled_member(
+    db_client,
+) -> None:
+    """Invites only (#472): the email-addressed ceremony enrols nobody, not even
+    a Member who has never set up a passkey. Otherwise anyone who knew their
+    address could enrol their own authenticator and sign in as them.
+
+    Everything else is in order here (pending challenge, a credential that
+    verifies), so the refusal is the route's, not the ceremony's."""
     session = db_client
     await _claimed_instance_with_member(session, "complete@dojo.test")
 
-    # Seed a user with a pending challenge
     user_id = str(uuid.uuid4())
     await seed_account(
         session,
         "complete@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -191,12 +136,12 @@ async def test_register_passkey_complete_stores_credential(db_client) -> None:
                 },
             )
 
-    assert response.status_code == 201
-    body = response.json()
-    assert body["email"] == "complete@dojo.test"
-    assert "sub" in body
-    assert "password" not in body
-    assert "hashed_password" not in body
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication failed"}
+    stored = await session.execute(
+        select(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
+    )
+    assert stored.first() is None
 
 
 # ── Login begin ───────────────────────────────────────────────────────────────
@@ -216,9 +161,7 @@ async def test_login_passkey_begin_returns_options(db_client) -> None:
     """
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "loginbegin@dojo.test", user_id=user_id, role="member", is_active=True
-    )
+    await seed_account(session, "loginbegin@dojo.test", user_id=user_id, role="member")
     await session.flush()
 
     async with AsyncClient(
@@ -277,7 +220,6 @@ async def test_login_passkey_complete_sets_cookie(db_client) -> None:
         "logincomp@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1sb2dpbi1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )

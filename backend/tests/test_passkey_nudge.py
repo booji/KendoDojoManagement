@@ -1,8 +1,9 @@
 """Unit / integration tests for issue #40 — Second passkey nudge.
 
 Backend concerns:
-  1. POST /auth/register/passkey/complete response includes show_nudge: bool.
-     - show_nudge=True when the user's passkey count went from 0→1.
+  1. Passkey enrolment responses include show_nudge: bool.
+     - show_nudge=True when the user's passkey count went from 0→1 (a new
+       Member's first, through POST /auth/invites/redeem/complete, #472).
      - show_nudge=False when the user already had ≥1 passkeys (added through
        POST /auth/passkeys/register/complete, #443).
   2. GET /auth/security-status returns passkey_count so the frontend can
@@ -16,7 +17,7 @@ via app.dependency_overrides to inject in-memory stubs.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -34,7 +35,7 @@ from tests.auth_support import sign_in
 # ---------------------------------------------------------------------------
 
 _USER_A = AccountClaims(
-    sub="user-a-nudge-uuid", email="nudge-a@dojo.test", role="member", is_active=True
+    sub="user-a-nudge-uuid", email="nudge-a@dojo.test", role="member"
 )
 
 
@@ -127,54 +128,52 @@ def passkey_repo() -> StubPasskeyRepo:
 
 
 @pytest.mark.asyncio
-async def test_register_passkey_complete_returns_show_nudge_true_for_first_passkey(
+async def test_invite_redemption_returns_show_nudge_true_for_first_passkey(
     passkey_repo, db_client
 ) -> None:
-    """POST /auth/register/passkey/complete includes show_nudge=True when
-    the user had zero passkeys before this registration.
+    """Redeeming an invite includes show_nudge=True: the new Member had zero
+    passkeys before this one.
 
     The frontend uses this flag to trigger the lockout-risk modal.
     """
+    import hashlib
+
     from sqlalchemy import insert
 
-    from app.auth.db_models import PasskeyCredential
+    from app.auth.db_models import Invite, PasskeyCredential
 
     session = db_client
 
-    # A claimed instance: /auth/register/passkey/complete refuses to run while
-    # no credential exists anywhere, because that is an unclaimed instance and
-    # the first admin is claimed through the token-gated setup route
-    # (ADR-0003, #402). This user still has none of its own, which is what
-    # show_nudge is about.
-    claimed_user_id = str(uuid.uuid4())
+    # A claimed instance, as every instance that can mint an invite is.
+    admin_id = str(uuid.uuid4())
     await seed_account(
         session,
-        f"claimed-{claimed_user_id}@dojo.test",
-        user_id=claimed_user_id,
+        f"claimed-{admin_id}@dojo.test",
+        user_id=admin_id,
         role="admin",
-        is_active=True,
     )
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
-            user_id=claimed_user_id,
+            user_id=admin_id,
             credential_id=uuid.uuid4().bytes,
             public_key=b"seeded-public-key",
             sign_count=0,
             created_at=datetime.now(UTC),
         )
     )
-
-    # Seed a user with pending challenge and NO existing passkeys
-    user_id = str(uuid.uuid4())
-    await seed_account(
-        session,
-        "firstpasskey@dojo.test",
-        user_id=user_id,
-        role="member",
-        is_active=True,
-        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-        challenge_issued_at=datetime.now(UTC),
+    token = "nudge-first-passkey-token"
+    await session.execute(
+        insert(Invite).values(
+            id=str(uuid.uuid4()),
+            email="firstpasskey@dojo.test",
+            first_name="First",
+            surname="Passkey",
+            token_hash=hashlib.sha256(token.encode()).hexdigest(),
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
+            issued_by=admin_id,
+            created_at=datetime.now(UTC),
+        )
     )
     await session.flush()
 
@@ -184,14 +183,16 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
     mock_verified.sign_count = 0
     mock_verified.aaguid = None
 
-    with patch("webauthn.verify_registration_response", return_value=mock_verified):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test/api"
-        ) as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        begin = await c.post("/auth/invites/redeem/begin", json={"token": token})
+        assert begin.status_code == 200
+        with patch("webauthn.verify_registration_response", return_value=mock_verified):
             response = await c.post(
-                "/auth/register/passkey/complete",
+                "/auth/invites/redeem/complete",
                 json={
-                    "email": "firstpasskey@dojo.test",
+                    "token": token,
                     "credential": {
                         "id": "dGVzdC1jcmVkLW51ZGdlLXRydWU",
                         "rawId": "dGVzdC1jcmVkLW51ZGdlLXRydWU",
@@ -205,14 +206,7 @@ async def test_register_passkey_complete_returns_show_nudge_true_for_first_passk
             )
 
     assert response.status_code == 201
-    body = response.json()
-    # The response must include show_nudge=True because this was the first passkey
-    assert (
-        "show_nudge" in body
-    ), "POST /auth/register/passkey/complete must return show_nudge in the response body"
-    assert (
-        body["show_nudge"] is True
-    ), f"show_nudge should be True when registering first passkey, got {body['show_nudge']!r}"
+    assert response.json()["show_nudge"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +222,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     one or more passkeys before this registration.
 
     The modal must only fire on the 0→1 transition. A second passkey is added
-    through the session-authenticated route: the email-addressed
-    /auth/register/passkey/complete only ever enrols an Account's first
-    (#443).
+    through the session-authenticated route (#443).
     """
     from sqlalchemy import insert
 
@@ -245,7 +237,6 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
         "secondpasskey@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -260,9 +251,7 @@ async def test_register_passkey_complete_returns_show_nudge_false_for_subsequent
     )
     await session.flush()
 
-    claims = AccountClaims(
-        sub=user_id, email="secondpasskey@dojo.test", role="member", is_active=True
-    )
+    claims = AccountClaims(sub=user_id, email="secondpasskey@dojo.test", role="member")
     mock_verified = MagicMock()
     mock_verified.credential_id = b"second-cred-id-nudge-false"
     mock_verified.credential_public_key = b"second-public-key"

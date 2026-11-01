@@ -37,9 +37,7 @@ from tests.fake_repositories import InMemoryMemberRepository
 _USER_SUB = "user-uuid-self"
 _OTHER_SUB = "user-uuid-other"
 
-_MEMBER_CLAIMS = AccountClaims(
-    sub=_USER_SUB, email="self@dojo.test", role="member", is_active=True
-)
+_MEMBER_CLAIMS = AccountClaims(sub=_USER_SUB, email="self@dojo.test", role="member")
 
 
 def _member_override():

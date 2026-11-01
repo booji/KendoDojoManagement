@@ -1,11 +1,10 @@
 """Issue #443 — passkey registration cannot attach a credential to someone
 else's Account.
 
-The unauthenticated ceremony (/auth/register/passkey/*) identifies the Account
-by a submitted email, so it may only establish an Account's FIRST credential,
-as an invite does. Adding another passkey goes through
-/auth/passkeys/register/*, which takes the Account from the caller's session
-cookie or recovery token, never from the request body.
+Adding a passkey goes through /auth/passkeys/register/*, which takes the
+Account from the caller's session cookie or recovery token, never from the
+request body. (The email-addressed ceremony is gone: Members join by invite
+only, #472; see test_passkey.py.)
 """
 
 from __future__ import annotations
@@ -17,11 +16,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import func, insert, select, update
 
-from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
+from app.auth.auth_session_repository import SqlAuthSessionRepository
+from app.auth.auth_sessions import start_auth_session
+from app.auth.db_models import PasskeyCredential
 from app.auth.models import AccountClaims
 from app.main import app
+from app.members.db_models import Member
 from tests.account_support import seed_account
 from tests.auth_support import sign_in
 
@@ -41,14 +43,13 @@ def clear_overrides():
 
 async def _seed_account_with_passkey(session, email: str, role: str = "member") -> str:
     """An Account that already has a passkey, with a registration challenge
-    pending (as /auth/register/passkey/begin would leave it)."""
+    pending (as a begin would leave it)."""
     user_id = str(uuid.uuid4())
     await seed_account(
         session,
         email,
         user_id=user_id,
         role=role,
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -91,26 +92,8 @@ def _client(**kwargs) -> AsyncClient:
     )
 
 
-async def test_unauthenticated_registration_cannot_add_to_an_account_with_a_passkey(
-    db_client,
-) -> None:
-    email = "victim-admin@dojo.test"
-    user_id = await _seed_account_with_passkey(db_client, email, role="admin")
-
-    with _authenticator_says_yes():
-        async with _client() as c:
-            response = await c.post(
-                "/auth/register/passkey/complete",
-                json={"email": email, "credential": _CREDENTIAL},
-            )
-
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication failed"}
-    assert await _passkey_count(db_client, user_id) == 1
-
-
 def _claims(user_id: str, email: str) -> AccountClaims:
-    return AccountClaims(sub=user_id, email=email, role="member", is_active=True)
+    return AccountClaims(sub=user_id, email=email, role="member")
 
 
 def _session_cookie(user_id: str, email: str) -> dict[str, str]:
@@ -211,50 +194,24 @@ async def test_adding_a_passkey_needs_the_callers_own_session(db_client, auth) -
     assert await _passkey_count(db_client, user_id) == 1
 
 
-async def test_a_deactivated_account_cannot_add_a_passkey(db_client) -> None:
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+async def test_a_member_barred_from_signing_in_cannot_add_a_passkey(
+    db_client, membership_status
+) -> None:
+    """Not even with a recovery token (#484). A real Auth Session row, since
+    the refusal is in the join that reads it."""
     email = "left@dojo.test"
     user_id = await _seed_account_with_passkey(db_client, email)
-    token = _recovery_token(user_id, email)
+    token = await start_auth_session(
+        SqlAuthSessionRepository(db_client), user_id, kind="recovery"
+    )
     await db_client.execute(
-        update(Account).where(Account.id == user_id).values(is_active=False)
+        update(Member)
+        .where(Member.email == email)
+        .values(membership_status=membership_status)
     )
 
     statuses = await _add_passkey(headers={"Authorization": f"Bearer {token}"})
 
     assert statuses == (401, 401)
     assert await _passkey_count(db_client, user_id) == 1
-
-
-async def test_an_account_that_deleted_its_last_passkey_is_not_open_again(
-    db_client,
-) -> None:
-    """A Member may delete their only passkey while they hold recovery codes,
-    leaving the Account with none. It is still somebody's Account: the
-    email-addressed ceremony must not treat it as never enrolled."""
-    # A claimed instance: with no passkey anywhere the bootstrap gate would
-    # refuse on its own and hide whether this rule holds.
-    await _seed_account_with_passkey(db_client, "someone-else@dojo.test")
-    email = "codes-only@dojo.test"
-    user_id = await _seed_account_with_passkey(db_client, email, role="admin")
-    await db_client.execute(
-        delete(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
-    )
-    await db_client.execute(
-        insert(RecoveryCode).values(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            code_hash="hash",
-            set_id=str(uuid.uuid4()),
-            created_at=datetime.now(UTC),
-        )
-    )
-
-    with _authenticator_says_yes():
-        async with _client() as c:
-            response = await c.post(
-                "/auth/register/passkey/complete",
-                json={"email": email, "credential": _CREDENTIAL},
-            )
-
-    assert response.status_code == 401
-    assert await _passkey_count(db_client, user_id) == 0

@@ -46,14 +46,12 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER_A = AccountClaims(
-    sub="member-a-uuid", email="member-a@dojo.test", role="member", is_active=True
+    sub="member-a-uuid", email="member-a@dojo.test", role="member"
 )
 _MEMBER_B = AccountClaims(
-    sub="member-b-uuid", email="member-b@dojo.test", role="member", is_active=True
+    sub="member-b-uuid", email="member-b@dojo.test", role="member"
 )
 
 

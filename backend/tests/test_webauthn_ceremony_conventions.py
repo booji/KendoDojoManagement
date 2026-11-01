@@ -1,11 +1,12 @@
 """Structural guards for the WebAuthn begin-ceremony seam (issue #354).
 
-Three endpoints answer for any identifier, registered or not, and must be
+Two endpoints answer for any identifier, registered or not, and must be
 indistinguishable whether or not it is known::
 
-    POST /auth/register/passkey/begin
     POST /auth/login/passkey/begin
     POST /auth/invites/redeem/begin
+
+(The email-addressed register begin was a third until #472 removed it.)
 
 Their responses used to be built in two modules (`passkey_service` and
 `invite_service`) held in step by matching comments and one private import
@@ -132,9 +133,9 @@ def test_no_auth_module_imports_private_names_from_another() -> None:
 # Body-length parity
 #
 # A begin response that is a constant length whatever the identifier is the
-# fifth rule, alongside the four the module's docstring names. The register
-# and login paths get it for free -- both outcomes echo an address the caller
-# already typed, or carry no name at all. The invite path has to buy it, by
+# fifth rule, alongside the four the module's docstring names. The login path
+# gets it for free -- its outcomes carry no name at all. The invite path has
+# to buy it, by
 # padding both outcomes to one width (see webauthn_ceremony._fixed_width),
 # because a decoy cannot imitate a length it does not know.
 # ---------------------------------------------------------------------------
@@ -159,21 +160,6 @@ def _wire_length(ceremony) -> int:
     a non-ASCII address goes out as UTF-8, not as \\uXXXX escapes.
     """
     return len(json.dumps(ceremony.response, ensure_ascii=False).encode("utf-8"))
-
-
-def test_register_begin_real_and_decoy_bodies_are_the_same_length() -> None:
-    """The register decoy echoes the caller's own email, so it matches the
-    real path at every address width without padding."""
-    from app.auth.webauthn_ceremony import Subject, register_begin
-
-    for email in _EMAILS:
-        real = _wire_length(register_begin(email, Subject("u" * 36, email)))
-        decoy = _wire_length(register_begin(email, subject=None))
-        assert real == decoy, (
-            f"register begin bodies differ for {email!r}: real={real} "
-            f"decoy={decoy} -- response size is a one-call oracle that "
-            "ConstantTimeAuthMiddleware does not cover, it pads latency only"
-        )
 
 
 def test_invite_begin_body_length_is_constant_for_every_address() -> None:

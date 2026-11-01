@@ -118,7 +118,7 @@ const LoginPage = () => {
               <p className="text-center text-sm text-muted-foreground">
                 No account yet?{" "}
                 <Link to="/register" className="text-primary underline-offset-4 hover:underline">
-                  Register
+                  How to join
                 </Link>
               </p>
               <p className="text-center text-sm text-muted-foreground">

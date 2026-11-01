@@ -4,7 +4,9 @@
 different wall-clock time depending on whether the email is known/authorized
 (extra SELECT + UPDATE + commit) or unknown/unauthorized (a single SELECT and
 an early return). The issue reports a ~2ms median delta, which is enough to
-run as a timing side channel for enumerating emails.
+run as a timing side channel for enumerating emails. (register_passkey_begin's
+email-addressed route has since been removed, #472; invite redemption's floor
+is tested in test_invites.py.)
 
 The chosen fix is a constant-time floor: both branches of each begin endpoint
 are held to a fixed minimum wall-clock duration (`asyncio.sleep` of whatever
@@ -36,7 +38,6 @@ from sqlalchemy import insert
 from app import config
 from app.auth.db_models import PasskeyCredential
 from app.main import app
-from app.members.db_models import Member
 from tests.account_support import seed_account
 from tests.timing_support import assert_latency_converges_sampled
 
@@ -52,11 +53,11 @@ def clear_overrides():
 async def _seed_user(session, email: str, role: str = "member") -> str:
     """Seed a fully-registered user: an Account row plus a PasskeyCredential.
 
-    The credential is what makes register-begin count as "not bootstrap" --
-    see the note in test_passkey_enumeration.py.
+    The credential is what makes the instance count as claimed -- see the
+    note in test_passkey_enumeration.py.
     """
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role=role, is_active=True)
+    await seed_account(session, email, user_id=user_id, role=role)
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -68,24 +69,6 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     )
     await session.flush()
     return user_id
-
-
-async def _seed_member(session, email: str) -> str:
-    member_id = str(uuid.uuid4())
-    await session.execute(
-        insert(Member).values(
-            id=member_id,
-            email=email,
-            first_name="Test",
-            surname="Member",
-            join_date="2024-01-01",
-            membership_status="active",
-            is_coach=False,
-            is_first_aider=False,
-        )
-    )
-    await session.flush()
-    return member_id
 
 
 async def _timed_post(client: AsyncClient, path: str, email: str) -> float:
@@ -134,65 +117,6 @@ async def test_login_begin_unknown_email_meets_floor(db_client, monkeypatch) -> 
     assert elapsed >= 0.020
 
 
-@pytest.mark.asyncio
-async def test_register_begin_authorized_email_meets_floor(
-    db_client, monkeypatch
-) -> None:
-    """register_passkey_begin for an AUTHORIZED email (matching Member) takes
-    at least the configured minimum duration."""
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "authorized-floor@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        elapsed = await _timed_post(
-            c, "/auth/register/passkey/begin", "authorized-floor@dojo.test"
-        )
-
-    assert elapsed >= 0.020
-
-
-@pytest.mark.asyncio
-async def test_register_begin_bootstrap_email_meets_floor(
-    db_client, monkeypatch
-) -> None:
-    """register_passkey_begin on a fresh (zero-Account) instance -- the bootstrap
-    real path -- takes at least the configured minimum duration."""
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        elapsed = await _timed_post(
-            c, "/auth/register/passkey/begin", "bootstrap-floor@dojo.test"
-        )
-
-    assert elapsed >= 0.020
-
-
-@pytest.mark.asyncio
-async def test_register_begin_unauthorized_email_meets_floor(
-    db_client, monkeypatch
-) -> None:
-    """register_passkey_begin for an UNAUTHORIZED email (decoy path) takes at
-    least the configured minimum duration."""
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 20)
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        elapsed = await _timed_post(
-            c, "/auth/register/passkey/begin", "unauthorized-floor@dojo.test"
-        )
-
-    assert elapsed >= 0.020
-
-
 # ── AC5: median latency difference between real and decoy paths is tiny ─────
 
 
@@ -232,42 +156,6 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
             ),
             label_a="known email",
             label_b="unknown email",
-        )
-
-
-@pytest.mark.asyncio
-@pytest.mark.timing_sensitive
-async def test_register_begin_authorized_vs_unauthorized_median_latency_converges(
-    db_client, monkeypatch
-) -> None:
-    """Over interleaved samples, the median latency for an AUTHORIZED email
-    and an UNAUTHORIZED email must differ by far less than the ~2ms signal in
-    the issue."""
-    # The floor must sit above the real path's p99 on whatever host is running
-    # this, or there is nothing left to pad and the delta this test measures
-    # reappears through no fault of the application (see ConstantTimeFloor's
-    # docstring and docs/auth-timing-calibration.md). 20ms clears the 16.8ms
-    # p99 measured on a dev machine by only 3ms — too thin for a shared CI
-    # runner, where it voided the floor and failed this test with a 1.2ms
-    # median delta against a 0.17ms control (#336). Use the shipped 100ms
-    # default instead: production's own headroom, at ~5s per test.
-    monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 100)
-    session = db_client
-    await _seed_user(session, "existing-admin@dojo.test", role="admin")
-    await _seed_member(session, "authorized-median@dojo.test")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        await assert_latency_converges_sampled(
-            lambda: _timed_post(
-                c, "/auth/register/passkey/begin", "authorized-median@dojo.test"
-            ),
-            lambda: _timed_post(
-                c, "/auth/register/passkey/begin", "unauthorized-median@dojo.test"
-            ),
-            label_a="authorized email",
-            label_b="unauthorized email",
         )
 
 

@@ -161,6 +161,14 @@ decide whether to render the setup page.
 > router passes, and only after the token check. On an unclaimed instance the
 > ordinary registration route now answers with the same decoy it gives an
 > unknown email on a claimed one.
+>
+> **Amended by #472.** There is no ordinary registration route any more:
+> Members join by invite only. `POST /api/auth/register/passkey/begin` is
+> removed, `/complete` refuses every request with the generic 401, and
+> `allow_bootstrap` and `_is_bootstrap` are gone. `register_passkey_begin` and
+> `register_passkey_complete` now serve the setup router alone, so the token
+> check in front of them is the only gate the claim needs. The decoy
+> `/complete` still takes the shared request model, so the header stays.
 
 **Lockout is a rotation, not a rebuild.** An operator who loses the token
 recreates the secret and restarts; nothing in the database has to change. The

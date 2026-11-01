@@ -15,7 +15,12 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth.accounts import account_for_email, account_for_member, sign_in_email
+from app.auth.accounts import (
+    account_for_email,
+    account_for_member,
+    may_sign_in,
+    sign_in_email,
+)
 from app.auth.attempt_repository import AbstractAttemptRepository
 from app.auth.auth_session_repository import (
     AbstractAuthSessionRepository,
@@ -63,8 +68,7 @@ from app.auth.passkey_service import (
     add_passkey_complete,
     login_passkey_begin,
     login_passkey_complete,
-    register_passkey_begin,
-    register_passkey_complete,
+    refuse_registration,
 )
 from app.auth.rate_limiter import (
     PER_IP_LIMIT,
@@ -142,24 +146,26 @@ async def admin_only(
     return claims
 
 
-@router.post("/register/passkey/begin")
-@limiter.limit(PER_IP_LIMIT)
-async def passkey_register_begin(
-    request: Request,
-    payload: PasskeyBeginRequest,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
-) -> dict:
-    return await register_passkey_begin(payload.email, uow)
-
-
 @router.post("/register/passkey/complete", status_code=201)
 @limiter.limit(PER_IP_LIMIT)
 async def passkey_register_complete(
     request: Request,
     payload: PasskeyRegisterCompleteRequest,
-    uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> PasskeyRegisterCompleteResponse:
-    return await register_passkey_complete(payload, uow)
+    """A decoy: Members join by invite only (#472).
+
+    A submitted email was all that identified the caller, so anyone who knew a
+    never-enrolled Member's address could become that Account's only passkey.
+    Every request now gets the generic 401 the ceremony always gave for a bad
+    credential, so the route answers as it did before for anyone probing it.
+
+    Its begin is removed (404) rather than kept as a decoy too, though that
+    shows a prober the pair is half-gone. A decoy begin hands the browser real
+    creation options, so it would mint a passkey nobody could ever use, and for
+    a known Member's email it would overwrite their pending sign-in challenge.
+    #472 allows either; a visible 404 costs less than those.
+    """
+    refuse_registration()
 
 
 async def _enrolment_email(account: Account, uow: AbstractUnitOfWork) -> str:
@@ -379,7 +385,7 @@ async def redeem_recovery_code(
     ip = client_ip(request)
 
     user = await account_for_email(uow.session, payload.email)
-    if user is None or not user.is_active:
+    if user is None or not await may_sign_in(uow.session, user.id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     failures = await attempt_repo.count_failures_since_last_success(user.id)
@@ -443,9 +449,10 @@ async def generate_admin_token(
     ],
 ) -> dict[str, str]:
     # A Member who never registered has no Account, and nothing to recover;
-    # redemption refuses an inactive one, so a token for it would be a dud.
+    # redemption refuses an archived or suspended one (#484), so a token for
+    # it would be a dud.
     user = await account_for_member(uow.session, str(payload.member_id))
-    if user is None or not user.is_active:
+    if user is None or not await may_sign_in(uow.session, user.id):
         log_security_event(
             "admin_token_generated",
             "failure",
@@ -460,7 +467,7 @@ async def generate_admin_token(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "This member's account is deactivated, "
+                "This member is archived or suspended and cannot sign in, "
                 "so a recovery token could not be used"
             ),
         )
@@ -599,7 +606,6 @@ if _ALLOW_TEST_AUTH:
                 id=payload.sub or str(uuid.uuid4()),
                 member_id=member_id,
                 role=payload.role,
-                is_active=True,
             )
             uow.session.add(user)
             await uow.session.flush()

@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete
 
 from app.auth.accounts import delete_account
+from app.auth.auth_session_repository import SqlAuthSessionRepository
+from app.auth.auth_sessions import end_every_auth_session
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.core.security_logger import changed_fields, log_admin_event
@@ -16,6 +18,7 @@ from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
 from app.member_federations.db_models import MemberFederation
 from app.members.admin_directory import AbstractAdminDirectory
+from app.members.db_models import BARRED_FROM_SIGN_IN
 from app.members.dependencies import get_admin_directory, get_member_repo
 from app.members.erasure import build_erasure_plan, can_erase
 from app.members.models import CreateMemberRequest, MemberResponse, UpdateMemberRequest
@@ -149,6 +152,7 @@ async def update_member(
     claims: _Admin,
     repo: _Repo,
     uow: _UoW,
+    directory: _AdminDirectory,
 ) -> MemberResponse:
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
     # The optional PII fields are nullable-by-design: an explicitly provided
@@ -164,10 +168,30 @@ async def update_member(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
+    # Archiving or suspending bars the Member's Account from signing in (#484),
+    # and recovery refuses barred Members too, so doing it to the last Admin
+    # would leave nobody able to administer the dojo. count_admins locks the
+    # admin rows, so two admins barring each other at once serialise.
+    if (
+        data.get("membership_status") in BARRED_FROM_SIGN_IN
+        and await directory.is_admin(before.get("user_id"))
+        and await directory.count_admins() <= 1
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot archive or suspend the last admin",
+        )
     record = await repo.update(str(member_id), data)
     if record is None:  # deleted between the read and the write
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    # Barring ends every Auth Session the Account holds, in this transaction
+    # (#484). The guard refuses them anyway, but only while the bar lasts:
+    # reinstating the Member before they expired would revive them.
+    if data.get("membership_status") in BARRED_FROM_SIGN_IN and before.get("user_id"):
+        await end_every_auth_session(
+            SqlAuthSessionRepository(uow.session), before["user_id"]
         )
     # Before the commit: a write that commits always gets its event.
     changed = changed_fields(before, record, data)
@@ -189,7 +213,6 @@ async def erase_member(
     claims: _Admin,
     repo: _Repo,
     uow: _UoW,
-    directory: _AdminDirectory,
 ) -> MemberResponse:
     record = await repo.get(member_id)
     if record is None:
@@ -199,27 +222,7 @@ async def erase_member(
 
     target_user_id = record.get("user_id")
 
-    # The "not archived" and "self erase" checks in can_erase don't depend on
-    # is_admin/admin_count, so a preliminary check (with is_admin forced to
-    # False) short-circuits those denials without ever touching the admin
-    # directory. Only when that preliminary check would allow do we need the
-    # real admin/last-admin lookup.
-    preliminary = can_erase(
-        actor_user_id=claims.sub, member=record, is_admin=False, admin_count=1
-    )
-    if not preliminary.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=preliminary.reason
-        )
-
-    is_admin = await directory.is_admin(target_user_id)
-    admin_count = await directory.count_admins()
-    decision = can_erase(
-        actor_user_id=claims.sub,
-        member=record,
-        is_admin=is_admin,
-        admin_count=admin_count,
-    )
+    decision = can_erase(actor_user_id=claims.sub, member=record)
     if not decision.allowed:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=decision.reason

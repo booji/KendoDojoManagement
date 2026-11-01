@@ -45,12 +45,8 @@ from tests.fake_repositories import (
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 
 
 def _admin_override():
@@ -267,9 +263,7 @@ async def test_delete_session_type_forbidden_for_member(
     type_repo, template_repo, instance_repo
 ) -> None:
     """DELETE /session-types/{id} must return 403 for a non-admin user."""
-    member_claims = AccountClaims(
-        sub="member-uuid", email="m@dojo.test", role="member", is_active=True
-    )
+    member_claims = AccountClaims(sub="member-uuid", email="m@dojo.test", role="member")
     member_token = sign_in(member_claims)
     st = await _seed_type(type_repo, name="Naginata")
 

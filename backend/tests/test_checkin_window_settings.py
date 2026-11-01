@@ -25,9 +25,7 @@ from app.auth.models import AccountClaims
 from app.main import app
 from tests.dojo_settings_support import StubDojoSettingsRepo
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 
 
 def _admin_override():

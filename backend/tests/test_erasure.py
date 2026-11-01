@@ -15,24 +15,15 @@ Planned contract (see .claude task brief for issue #229 for full detail):
         build_erasure_plan() -> ErasurePlan
             .scrub: dict[str, Any]   — field -> anonymised value
             .delete: set[str] | frozenset[str]  — related record type names
-        can_erase(actor_user_id: str, member: dict, is_admin: bool,
-                   admin_count: int) -> ErasureDecision
+        can_erase(actor_user_id: str, member: dict) -> ErasureDecision
             .allowed: bool
             .reason: str | None
-
-    app/members/dependencies.py
-        get_admin_directory() -> AbstractAdminDirectory
-            .is_admin(user_id: str | None) -> bool
-            .count_admins() -> int
-        (exact dependency name is a suggestion for the implementer; guard
-        tests below degrade gracefully if the name differs — the important,
-        load-bearing assertion is the HTTP status code / response body.)
 
     app/members/router.py
         POST /members/{member_id}/erase  (admin only)
             200 -> anonymised MemberResponse ("Deleted" / "member")
             403 -> non-admin actor
-            409 -> member not archived / self-erase / last-admin erase
+            409 -> member not archived / self-erase
 """
 
 from __future__ import annotations
@@ -154,45 +145,23 @@ class TestBuildErasurePlan:
 class TestCanErase:
     def test_deny_when_member_not_archived(self) -> None:
         member = _member(membership_status="active")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is False
         assert decision.reason is not None
         assert "archived" in decision.reason.lower()
 
     def test_deny_self_erase(self) -> None:
         member = _member(membership_status="archived", user_id="admin-1")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is False
         assert decision.reason is not None
         assert (
             "self" in decision.reason.lower() or "yourself" in decision.reason.lower()
         )
 
-    def test_deny_last_admin(self) -> None:
-        member = _member(membership_status="archived", user_id="other-admin")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=True, admin_count=1
-        )
-        assert decision.allowed is False
-        assert decision.reason is not None
-        assert "last admin" in decision.reason.lower()
-
     def test_allow_archived_non_admin_not_self(self) -> None:
         member = _member(membership_status="archived", user_id="some-other-user")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=False, admin_count=2
-        )
-        assert decision.allowed is True
-
-    def test_allow_when_member_is_admin_but_not_the_last_one(self) -> None:
-        member = _member(membership_status="archived", user_id="other-admin")
-        decision = _erasure().can_erase(
-            actor_user_id="admin-1", member=member, is_admin=True, admin_count=2
-        )
+        decision = _erasure().can_erase(actor_user_id="admin-1", member=member)
         assert decision.allowed is True
 
 
@@ -202,11 +171,9 @@ class TestCanErase:
 
 
 _MEMBER_CLAIMS = AccountClaims(
-    sub="member-uuid-self", email="self@dojo.test", role="member", is_active=True
+    sub="member-uuid-self", email="self@dojo.test", role="member"
 )
-_ADMIN_CLAIMS = AccountClaims(
-    sub="admin-1", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN_CLAIMS = AccountClaims(sub="admin-1", email="admin@dojo.test", role="admin")
 
 
 def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
@@ -311,6 +278,26 @@ class _DbSessionUnitOfWork:
         return None
 
 
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+async def test_an_admin_barred_from_signing_in_does_not_count_as_one(
+    db_session: AsyncSession, membership_status: str
+) -> None:
+    """The last-admin guard counts admins who can still sign in (#484)."""
+    from app.members.admin_directory import SqlAdminDirectory
+
+    directory = SqlAdminDirectory(db_session)
+    before = await directory.count_admins()
+    barred = await seed_account(
+        db_session,
+        f"barred-{uuid.uuid4()}@dojo.test",
+        role="admin",
+        membership_status=membership_status,
+    )
+
+    assert await directory.is_admin(barred) is False
+    assert await directory.count_admins() == before
+
+
 async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     db_session: AsyncSession,
 ) -> None:
@@ -344,8 +331,8 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     )
     await db_session.execute(
         text(
-            "INSERT INTO accounts (id, member_id, role, is_active, theme) "
-            "VALUES (:id, :member_id, 'member', true, 'system')"
+            "INSERT INTO accounts (id, member_id, role, theme) "
+            "VALUES (:id, :member_id, 'member', 'system')"
         ),
         {"id": member_user_id, "member_id": member_id},
     )
@@ -446,7 +433,7 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     app.dependency_overrides[get_uow] = lambda: uow
     app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
-        sub=actor_id, email="actor@dojo.test", role="admin", is_active=True
+        sub=actor_id, email="actor@dojo.test", role="admin"
     )
 
     async with AsyncClient(

@@ -50,7 +50,6 @@ def _make_token(role: str) -> str:
         sub=str(uuid.uuid4()),
         email=f"{role}-{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
-        is_active=True,
     )
     token = login_as(claims)
     complete_onboarding(token)

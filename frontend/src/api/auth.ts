@@ -6,7 +6,6 @@ export type RegisterResponse = {
   sub: string
   email: string
   role: "admin" | "member"
-  is_active: boolean
   show_nudge?: boolean
 }
 
@@ -18,7 +17,6 @@ export type AccountClaims = {
   sub: string
   email: string
   role: "admin" | "member"
-  is_active: boolean
 }
 
 // Re-exported for the many call sites that already import them from here.
@@ -88,26 +86,6 @@ type PasskeyRequestOptions = {
   rpId?: string
   allowCredentials?: Array<{ id: string; type: string; transports?: AuthenticatorTransport[] }>
   userVerification?: UserVerificationRequirement
-}
-
-export const registerPasskeyBegin = async (email: string): Promise<PasskeyCreationOptions> => {
-  const res = await apiFetch("/api/auth/register/passkey/begin", { method: "POST", body: { email } })
-  if (!res.ok) {
-    throw { status: res.status, message: "Failed to begin passkey registration" } satisfies ApiError
-  }
-  const data = (await res.json()) as { publicKey: PasskeyCreationOptions }
-  return data.publicKey
-}
-
-export const registerPasskeyComplete = async (
-  email: string,
-  credential: object
-): Promise<RegisterResponse> => {
-  const res = await apiFetch("/api/auth/register/passkey/complete", { method: "POST", body: { email, credential } })
-  if (!res.ok) {
-    throw { status: res.status, message: "Passkey registration failed" } satisfies ApiError
-  }
-  return res.json() as Promise<RegisterResponse>
 }
 
 export const loginPasskeyBegin = async (email: string): Promise<PasskeyRequestOptions> => {
@@ -223,16 +201,10 @@ export const runPasskeyCreationCeremony = async (
   }
 }
 
-export const performPasskeyRegistration = async (email: string): Promise<RegisterResponse> => {
-  const options = await registerPasskeyBegin(email)
-  const credentialData = await runPasskeyCreationCeremony(options)
-  return registerPasskeyComplete(email, credentialData)
-}
-
 /**
  * Add a passkey to the caller's own Account (#443): the signed-in session's,
  * or — after redeeming a recovery code — the one `recoveryToken` names. Never
- * by email: `performPasskeyRegistration` only enrols an Account's first.
+ * by email: a new Member's first passkey comes from an invite (#472).
  */
 export const performPasskeyAdd = async (recoveryToken?: string): Promise<RegisterResponse> => {
   const headers = recoveryToken ? { Authorization: `Bearer ${recoveryToken}` } : undefined

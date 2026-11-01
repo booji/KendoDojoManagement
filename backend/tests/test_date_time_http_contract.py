@@ -29,9 +29,7 @@ from app.sessions.repository import (
     SqlSessionTemplateRepository,
 )
 
-_ADMIN = AccountClaims(
-    sub=str(uuid.uuid4()), email="a@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="a@dojo.test", role="admin")
 _SEGMENT = {"start_time": "07:30", "duration_minutes": 90, "type_ids": []}
 # As the app writes it: datetime.now(UTC).isoformat(), microseconds included.
 _CHECKED_IN_AT = "2026-10-01T07:32:05.123456+00:00"

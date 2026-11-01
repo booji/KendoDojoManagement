@@ -4,7 +4,8 @@ E2E browser tests for auth UI (issues #3 and #155).
 Issue #3 — email/password auth criteria covered by unit/integration tests in test_auth.py.
 Issue #155 — legacy password auth removal:
   - Login page must show only passkey form; no "Use email and password instead" option.
-  - Register page must show only passkey form; no "Use email and password instead" option.
+  - (The register page offers no registration at all since #472; see
+    test_e2e_passkey.py.)
 
 Criteria still covered by browser tests:
   - Unauthenticated redirect to /login
@@ -41,21 +42,6 @@ def _seeded_db() -> None:
         timeout=5,
     )
     assert resp.ok, f"Seed login failed: {resp.status_code} {resp.text}"
-
-
-# ── Register page — passkey-only (issue #155) ─────────────────────────────────
-
-
-def test_register_page_has_no_password_toggle(page: Page) -> None:
-    """Register page must NOT show a 'Use email and password instead' button (AC2 issue #155)."""
-    page.goto(f"{BASE_URL}/register")
-    expect(page.get_by_text("Use email and password instead")).not_to_be_visible()
-
-
-def test_register_page_renders_passkey_form_only(page: Page) -> None:
-    """Register page shows the passkey form and no password fields (AC2 issue #155)."""
-    page.goto(f"{BASE_URL}/register")
-    expect(page.locator("input[type='password']")).to_have_count(0)
 
 
 # ── Login page — passkey-only (issue #155) ────────────────────────────────────

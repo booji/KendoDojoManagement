@@ -31,6 +31,7 @@ from app.cli import app as cli_app  # noqa: E402  # red — cli.py doesn't exist
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
+from app.members.db_models import Member
 from tests.account_support import seed_account
 
 runner = CliRunner()
@@ -84,9 +85,7 @@ async def seeded_db(database_url: str):
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with AsyncSession(engine) as session:
-            await seed_account(
-                session, email, user_id=user_id, role="admin", is_active=True
-            )
+            await seed_account(session, email, user_id=user_id, role="admin")
             await session.commit()
 
         yield {"url": database_url, "email": email}
@@ -107,7 +106,7 @@ async def seeded_db(database_url: str):
 async def _seed_user(engine, email: str, user_id: str, *, role: str = "member") -> None:
     """Insert a user row into the test DB."""
     async with engine.begin() as conn:
-        await seed_account(conn, email, user_id=user_id, role=role, is_active=True)
+        await seed_account(conn, email, user_id=user_id, role=role)
 
 
 async def _seed_admin_token(
@@ -371,3 +370,56 @@ def test_cli_unknown_email_prints_error_message(seeded_db) -> None:
         result.stderr if hasattr(result, "stderr") and result.stderr else ""
     )
     assert len(output.strip()) > 0
+
+
+# ── #484 — a Member who may not sign in gets no token ─────────────────────────
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_cli_refuses_a_member_barred_from_signing_in(
+    tmp_db, membership_status: str
+) -> None:
+    """Redemption refuses an archived or suspended Member, so a token minted
+    for one would be a dud. The CLI says why, and mints nothing."""
+    target_id = str(uuid.uuid4())
+    target_email = _unique_email(f"cli-{membership_status}")
+
+    eng = create_async_engine(tmp_db, poolclass=NullPool)
+    try:
+        async with eng.begin() as conn:
+            await seed_account(
+                conn,
+                target_email,
+                user_id=target_id,
+                membership_status=membership_status,
+            )
+
+        result = runner.invoke(
+            cli_app,
+            ["create-recovery-token", target_email],
+            env={"DATABASE_URL": tmp_db},
+        )
+
+        assert result.exit_code != 0
+        assert result.stdout == ""
+        assert f"Member is {membership_status}" in result.stderr
+        assert "'active'" in result.stderr
+        async with AsyncSession(eng) as session:
+            minted = await session.execute(
+                select(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id == target_id
+                )
+            )
+            assert minted.first() is None
+    finally:
+        async with AsyncSession(eng) as session:
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id == target_id
+                )
+            )
+            await session.execute(delete(Account).where(Account.id == target_id))
+            await session.execute(delete(Member).where(Member.email == target_email))
+            await session.commit()
+        await eng.dispose()

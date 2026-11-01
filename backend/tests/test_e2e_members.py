@@ -5,8 +5,14 @@ Auth pattern: signed in through the test-login endpoint (tests.e2e_support.login
 which creates a real Account and its Member; the session cookie is set on the page.
 """
 
+import asyncio
+import concurrent.futures
+import os
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 
+import asyncpg
 import pytest
 import requests
 from playwright.sync_api import Page, expect
@@ -26,7 +32,6 @@ def _make_token(role: str, sub: str | None = None) -> str:
         sub=sub or str(uuid.uuid4()),
         email=f"{role}_{uuid.uuid4().hex[:6]}@dojo.test",
         role=role,  # type: ignore[arg-type]
-        is_active=True,
     )
     token = login_as(claims)
     # Seed the acting user's Member profile so the RequireProfile gate does
@@ -243,3 +248,68 @@ def test_member_detail_renders_on_desktop(page: Page) -> None:
     page.goto(f"{BASE_URL}/members/{member_id}")
     page.wait_for_load_state("networkidle")
     expect(page.get_by_role("heading", name=full_name)).to_be_visible(timeout=8000)
+
+
+# ---------------------------------------------------------------------------
+# #484 — the last Admin cannot be archived or suspended
+# ---------------------------------------------------------------------------
+
+
+async def _set_role(sql: str, *args: object) -> list[str]:
+    db_url = os.environ["DATABASE_URL"].replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
+    conn = await asyncpg.connect(db_url)
+    try:
+        return [row["id"] for row in await conn.fetch(sql, *args)]
+    finally:
+        await conn.close()
+
+
+def _run(coro):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(coro)).result()
+
+
+@contextmanager
+def _sole_admin(account_id: str) -> Iterator[None]:
+    """Make `account_id` the only Admin, restoring every other one after.
+
+    The e2e database is shared, and every earlier test left an Admin behind.
+    """
+    demoted = _run(
+        _set_role(
+            "UPDATE accounts SET role = 'member' "
+            "WHERE role = 'admin' AND id <> $1::uuid RETURNING id",
+            account_id,
+        )
+    )
+    try:
+        yield
+    finally:
+        _run(
+            _set_role(
+                "UPDATE accounts SET role = 'admin' "
+                "WHERE id = ANY($1::uuid[]) RETURNING id",
+                demoted,
+            )
+        )
+
+
+def test_admin_sees_why_the_last_admin_cannot_be_archived(page: Page) -> None:
+    admin_token = _make_token("admin")
+    cookies = _cookie_dict(admin_token)
+    account_id = requests.get(f"{API_BASE}/auth/me", cookies=cookies).json()["sub"]
+    member_id = complete_onboarding(admin_token)["id"]
+    _inject_cookie(page, admin_token)
+
+    with _sole_admin(account_id):
+        page.goto(f"{BASE_URL}/members/{member_id}")
+        page.get_by_role("button", name="Edit Test User").click()
+        page.get_by_role("combobox", name="Membership status").click()
+        page.get_by_role("option", name="Archived").click()
+        page.get_by_role("button", name="Save changes").click()
+
+        expect(page.get_by_role("alert")).to_have_text(
+            "Cannot archive or suspend the last admin", timeout=8000
+        )

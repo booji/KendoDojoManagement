@@ -24,9 +24,7 @@ from tests.account_support import seed_account
 
 _CREDENTIAL_ID = b"sign-in-email-credential"
 _CREDENTIAL_B64 = "c2lnbi1pbi1lbWFpbC1jcmVkZW50aWFs"
-_ADMIN = AccountClaims(
-    sub=str(uuid.uuid4()), email="sensei@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="sensei@dojo.test", role="admin")
 
 
 @pytest.fixture(autouse=True)

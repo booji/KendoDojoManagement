@@ -115,7 +115,7 @@ describe("AC1 — renders session detail page", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -133,7 +133,7 @@ describe("AC2 — member view", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
   })
 
@@ -190,7 +190,7 @@ describe("issue #182 — segment title", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: SESSION_WITH_TITLE },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -210,7 +210,7 @@ describe("issue #182 — segment title", () => {
         },
       },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -225,7 +225,7 @@ describe("issue #182 — segment title", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -245,7 +245,7 @@ describe("AC3 — Markdown rendering", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -263,7 +263,7 @@ describe("AC3 — Markdown rendering", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: ADMIN_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: ATTENDANCE },
-      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -306,7 +306,7 @@ describe("AC4 — check-in button", () => {
       }
       if (url.includes("/auth/me")) {
         return new Response(
-          JSON.stringify({ role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" }),
+          JSON.stringify({ role: "member", sub: "u1", email: "m@t.com", theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }
@@ -337,7 +337,7 @@ describe("AC5 — check-in link display", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: ADMIN_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -351,7 +351,7 @@ describe("AC5 — check-in link display", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: BASE_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "member", sub: "u1", email: "m@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -370,7 +370,7 @@ describe("AC6 — admin view", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: ADMIN_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: ATTENDANCE },
-      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", theme: "system" } },
     })
   })
 
@@ -417,7 +417,7 @@ describe("AC7 — edit form", () => {
     mockFetch({
       [`/sessions/${SESSION_ID}`]: { status: 200, body: ADMIN_SESSION },
       [`/sessions/${SESSION_ID}/attendance`]: { status: 200, body: [] },
-      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" } },
+      [`/auth/me`]: { status: 200, body: { role: "admin", sub: "a1", email: "a@t.com", theme: "system" } },
     })
 
     renderDetailPage()
@@ -459,7 +459,7 @@ describe("AC7 — edit form", () => {
       }
       if (url.includes("/auth/me")) {
         return new Response(
-          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" }),
+          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }
@@ -515,7 +515,7 @@ describe("AC8 — cancel controls", () => {
       }
       if (url.includes("/auth/me")) {
         return new Response(
-          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" }),
+          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }
@@ -567,7 +567,7 @@ describe("AC8 — cancel controls", () => {
       }
       if (url.includes("/auth/me")) {
         return new Response(
-          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", is_active: true, theme: "system" }),
+          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         )
       }

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 import app.config as config
 from app.auth.db_models import Account, PasskeyCredential
@@ -64,9 +64,7 @@ async def test_get_setup_returns_404_when_passkey_credential_exists(db_client) -
     """GET /setup returns 404 when at least one PasskeyCredential row exists (AC7 issue #155)."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "existing@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "existing@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -105,7 +103,6 @@ async def test_get_setup_returns_200_for_phantom_user_without_credential(
         "phantom@dojo.test",
         user_id=str(uuid.uuid4()),
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -133,7 +130,6 @@ async def test_get_setup_returns_200_for_user_without_credential(
         "no-cred@dojo.test",
         user_id=str(uuid.uuid4()),
         role="admin",
-        is_active=True,
     )
     await session.flush()
 
@@ -165,9 +161,7 @@ async def test_get_setup_returns_404_after_first_user_registered(db_client) -> N
 
     # Simulate a completed passkey registration (user + credential row)
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "founder@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "founder@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -263,9 +257,7 @@ async def test_setup_passkey_begin_returns_404_when_populated(db_client) -> None
     """POST /setup/passkey/begin returns 404 when instance already has a PasskeyCredential."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "alreadyhere@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "alreadyhere@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -307,7 +299,6 @@ async def test_setup_passkey_complete_creates_admin_and_sets_cookie(db_client) -
         "admin@dojo.test",
         user_id=user_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -358,9 +349,7 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
 
     existing_id = str(uuid.uuid4())
     pending_id = str(uuid.uuid4())
-    await seed_account(
-        session, "original@dojo.test", user_id=existing_id, role="admin", is_active=True
-    )
+    await seed_account(session, "original@dojo.test", user_id=existing_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -376,7 +365,6 @@ async def test_setup_passkey_complete_returns_404_when_populated(db_client) -> N
         "newcomer@dojo.test",
         user_id=pending_id,
         role="member",
-        is_active=True,
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
     )
@@ -510,9 +498,7 @@ async def test_claimed_instance_404s_whatever_token_is_presented(
     """The existing claimed guard still runs first: 404 beats any token."""
     session = db_client
     user_id = str(uuid.uuid4())
-    await seed_account(
-        session, "claimed@dojo.test", user_id=user_id, role="admin", is_active=True
-    )
+    await seed_account(session, "claimed@dojo.test", user_id=user_id, role="admin")
     await session.execute(
         insert(PasskeyCredential).values(
             id=str(uuid.uuid4()),
@@ -530,111 +516,124 @@ async def test_claimed_instance_404s_whatever_token_is_presented(
     assert response.json().get("detail") == "Setup already completed"
 
 
-# ── The claim gate is not bypassable via the ordinary registration route ──────
+# ── A claim cannot take an Account somebody holds ─────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_ordinary_register_begin_cannot_bootstrap_an_admin(db_client) -> None:
-    """/auth/register/passkey/begin presents no setup token, so on an unclaimed
-    instance it must take the decoy path rather than the bootstrap branch —
-    which would create a role="admin" user row for any email a stranger sends.
-    """
-    session = db_client
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/register/passkey/begin", json={"email": "stranger@dojo.test"}
-        )
-
-    assert response.status_code == 200  # decoy is indistinguishable by shape
-    rows = await session.execute(
-        select(Account)
-        .join(Member, Member.id == Account.member_id)
-        .where(Member.email == "stranger@dojo.test")
-    )
-    assert rows.scalar_one_or_none() is None
-
-
-@pytest.mark.asyncio
-async def test_ordinary_register_complete_rejected_on_unclaimed_instance(
+async def test_a_claim_cannot_take_an_account_that_holds_recovery_codes(
     db_client,
 ) -> None:
-    """A phantom admin row left by setup's begin must not be completable through
-    the ordinary registration route, which carries no setup token."""
+    """Setup reopens once the last passkey on the instance is gone. An Admin
+    who deleted their only passkey while holding recovery codes still owns
+    their Account, so a claim under their address must not enrol on it."""
+    from app.auth.db_models import RecoveryCode
+
     session = db_client
-    await seed_account(
-        session,
-        "admin@dojo.test",
-        user_id=str(uuid.uuid4()),
-        role="admin",
-        is_active=True,
-        pending_challenge="dGVzdC1jaGFsbGVuZ2U",
-        challenge_issued_at=datetime.now(UTC),
-    )
-    await session.flush()
-
-    mock_verified = MagicMock()
-    mock_verified.credential_id = b"hijacked-credential-id"
-    mock_verified.credential_public_key = b"hijacked-public-key"
-    mock_verified.sign_count = 0
-
-    with patch("webauthn.verify_registration_response", return_value=mock_verified):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test/api"
-        ) as c:
-            response = await c.post(
-                "/auth/register/passkey/complete", json=_CREDENTIAL_PAYLOAD
-            )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_an_abandoned_claim_leaves_no_admin_to_take_over(db_client) -> None:
-    """#432 review: a claim begun under one address and finished under another
-    leaves the first attempt's Member and Account behind, with no passkey.
-    Once the instance is claimed, the ordinary registration route can reach
-    that Account (its Member is on the roster), so it must not be an admin:
-    admin is granted when a claim completes, never when one begins."""
-    session = db_client
-    abandoned = await _post(
-        "/setup/passkey/begin",
-        {"email": "typo@dojo.tst", "first_name": "Ai", "surname": "Sato"},
-        SETUP_HEADERS,
-    )
-    assert abandoned.status_code == 200
-
-    # The claim then completes under the right address; here, any passkey
-    # anywhere ends bootstrap.
-    claimant = await seed_account(session, "sensei@dojo.test", role="admin")
+    user_id = await seed_account(session, "sensei@dojo.test", role="admin")
     await session.execute(
-        insert(PasskeyCredential).values(
+        insert(RecoveryCode).values(
             id=str(uuid.uuid4()),
-            user_id=claimant,
-            credential_id=b"claimant-cred",
-            public_key=b"claimant-key",
-            sign_count=0,
+            user_id=user_id,
+            code_hash="hash",
+            set_id=str(uuid.uuid4()),
             created_at=datetime.now(UTC),
         )
     )
     await session.flush()
 
-    await _post("/auth/register/passkey/begin", {"email": "typo@dojo.tst"})
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "sensei@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 200
     mock_verified = MagicMock(
-        credential_id=b"stranger-cred",
-        credential_public_key=b"stranger-key",
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
         sign_count=0,
         aaguid=None,
     )
     with patch("webauthn.verify_registration_response", return_value=mock_verified):
         completed = await _post(
-            "/auth/register/passkey/complete",
-            {**_CREDENTIAL_PAYLOAD, "email": "typo@dojo.tst"},
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "sensei@dojo.test"},
+            SETUP_HEADERS,
         )
 
-    assert completed.status_code == 201, completed.text
-    assert completed.json()["role"] == "member"
+    assert completed.status_code == 401
+    stored = await session.execute(
+        select(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
+    )
+    assert stored.first() is None
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
+    db_client, membership_status: str
+) -> None:
+    """The claim reuses an existing Member with the claimant's email. If that
+    Member is archived or suspended, the Admin it would make could never sign
+    in, so the claim is refused and setup stays open (#484). Begin refuses
+    too; this is the Member barred between the two steps."""
+    member_id = await seed_member(db_client, "former@dojo.test")
+    await db_client.flush()
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "former@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 200
+    await db_client.execute(
+        update(Member)
+        .where(Member.id == member_id)
+        .values(membership_status=membership_status)
+    )
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "former@dojo.test"},
+            SETUP_HEADERS,
+        )
+
+    assert completed.status_code == 401
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        assert (await c.get("/setup")).status_code == 200
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_a_claim_for_a_member_barred_from_signing_in_is_refused_at_begin(
+    db_client, membership_status: str
+) -> None:
+    """Refused before the browser is asked for a passkey complete would refuse,
+    with complete's answer, and with no Account made for the Member (#484)."""
+    member_id = await seed_member(
+        db_client, "former@dojo.test", membership_status=membership_status
+    )
+    await db_client.flush()
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "former@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+
+    assert begun.status_code == 401
+    assert begun.json() == {"detail": "Authentication failed"}
+    account = await db_client.execute(
+        select(Account.id).where(Account.member_id == member_id)
+    )
+    assert account.first() is None
 
 
 async def _members_and_accounts(session, email: str) -> tuple[int, int]:
@@ -654,8 +653,8 @@ async def _members_and_accounts(session, email: str) -> tuple[int, int]:
 @pytest.mark.asyncio
 async def test_completing_a_claim_removes_abandoned_claim_attempts(db_client) -> None:
     """#446: a claim begun under one address and finished under another must
-    not leave the first attempt's Member on the roster, or its Account for
-    the ordinary registration route to finish. A Member who was on the roster
+    not leave the first attempt's Member on the roster, or its Account. A
+    Member who was on the roster
     before the claim is never removed or altered (an Account a claim attempt
     made for it stays: it cannot be told from one the Member made)."""
     session = db_client
@@ -695,12 +694,6 @@ async def test_completing_a_claim_removes_abandoned_claim_attempts(db_client) ->
         await session.execute(select(Member).where(Member.email == "sensei@dojo.test"))
     ).scalar_one()
     assert claimant.claim_attempted_at is None
-
-    # The abandoned address is now nobody: registration answers with the decoy
-    # and creates nothing.
-    decoy = await _post("/auth/register/passkey/begin", {"email": "typo@dojo.tst"})
-    assert decoy.status_code == 200
-    assert await _members_and_accounts(session, "typo@dojo.tst") == (0, 0)
 
 
 @pytest.mark.asyncio

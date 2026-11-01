@@ -38,12 +38,8 @@ from tests.fake_repositories import (
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
-_MEMBER = AccountClaims(
-    sub="member-uuid", email="member@dojo.test", role="member", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
+_MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
 
 
 def _admin_override():
@@ -182,9 +178,7 @@ async def test_put_session_type_colour_forbidden_for_member(type_repo) -> None:
     """PUT /session-types/{id} must return 403 for a non-admin user."""
     from tests.auth_support import sign_in
 
-    member_claims = AccountClaims(
-        sub="member-uuid", email="m@dojo.test", role="member", is_active=True
-    )
+    member_claims = AccountClaims(sub="member-uuid", email="m@dojo.test", role="member")
     token = sign_in(member_claims)
     st = await _seed_type(type_repo, name="Kendo")
     async with AsyncClient(

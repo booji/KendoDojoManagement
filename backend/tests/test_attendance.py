@@ -42,17 +42,14 @@ from tests.fake_repositories import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN = AccountClaims(
-    sub="admin-uuid", email="admin@dojo.test", role="admin", is_active=True
-)
+_ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",
-    is_active=True,
 )
 _OTHER_MEMBER = AccountClaims(
-    sub="other-member-uuid", email="other@dojo.test", role="member", is_active=True
+    sub="other-member-uuid", email="other@dojo.test", role="member"
 )
 
 # The Member record id belonging to _MEMBER's user. attendance.member_id holds

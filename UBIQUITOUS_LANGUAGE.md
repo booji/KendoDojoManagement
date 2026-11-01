@@ -5,7 +5,7 @@
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Admin** | A **Member** whose **Account** has full management rights over members, sessions, and configuration | Sensei, manager, owner |
-| **Member** | A person on the dojo's roster: personal details, grade and membership data. Holds the person's one email address, used both to contact them and to sign in. Has at most one **Account** — none until they register, and none again after erasure | Student, practitioner, kendoka, Member Profile, profile |
+| **Member** | A person on the dojo's roster: personal details, grade and membership data. Holds the person's one email address, used both to contact them and to sign in. Has at most one **Account** — none until they redeem an invite (or, for the first Admin, claim the instance at setup), and none again after erasure | Student, practitioner, kendoka, Member Profile, profile |
 | **Visitor** | A person who attends a session without an app account, recorded by an admin | Guest, drop-in |
 | **Coach** | A member flagged as having a coaching role within the dojo | Instructor, teacher |
 | **First Aider** | A member flagged as holding a first aid qualification | |
@@ -24,7 +24,7 @@
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Membership Status** | The current standing of a member: `active`, `inactive`, or `suspended` | Account status |
+| **Membership Status** | The current standing of a member: `active`, `inactive`, `suspended`, or `archived`. It also decides sign-in: `active` and `inactive` Members can sign in; `suspended` and `archived` Members cannot, and any **Auth Session** they hold stops working on its next request | Account status |
 | **Deactivation** | Setting a member's **Membership Status** to `inactive`; the record is retained, not removed | Delete, remove, archive |
 | **Federation Number** | A member's identifier with the national kendo federation | Licence number, membership number |
 | **Federation Membership** | A member's registration with one **Federation**: the federation, their **Federation Number**, and an optional renewal date | Affiliation, federation link, member federation |

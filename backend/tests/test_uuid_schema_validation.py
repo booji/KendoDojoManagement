@@ -53,13 +53,11 @@ _ADMIN = AccountClaims(
     sub="00000000-0000-0000-0000-000000000001",
     email="admin@dojo.test",
     role="admin",
-    is_active=True,
 )
 _MEMBER = AccountClaims(
     sub="00000000-0000-0000-0000-000000000002",
     email="member@dojo.test",
     role="member",
-    is_active=True,
 )
 
 _BAD_UUID = "not-a-uuid"
