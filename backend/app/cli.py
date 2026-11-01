@@ -10,19 +10,18 @@ from collections.abc import Coroutine
 from typing import Any
 
 import typer
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.auth.accounts import MAY_SIGN_IN, account_for_email
+from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.db_models import AdminRecoveryToken
+from app.auth.member_directory import SqlMemberDirectory
 from app.auth.recovery_service import (
     admin_token_expiry,
     generate_admin_token_plaintext,
     hash_admin_token,
 )
 from app.config import read_secret
-from app.members.db_models import Member
 
 app = typer.Typer()
 
@@ -68,24 +67,17 @@ def create_recovery_token(email: str) -> None:
         factory = _make_session_factory(url)
         async with factory() as session:
             user = await account_for_email(session, email)
-            standing = (
-                await session.execute(
-                    select(Member.membership_status, MAY_SIGN_IN).where(
-                        Member.email == email
-                    )
-                )
-            ).one_or_none()
+            barred = await SqlMemberDirectory(session).barred_status(email)
 
-        if user is None or standing is None:
+        if user is None:
             typer.echo(f"Error: no account found with email '{email}'", err=True)
             raise typer.Exit(code=1)
 
         # Redemption refuses a Member who may not sign in (#484), so a token
         # minted for one could never be used.
-        membership_status, may_sign_in = standing
-        if not may_sign_in:
+        if barred is not None:
             typer.echo(
-                f"Error: Member is {membership_status}; reinstate first "
+                f"Error: Member is {barred}; reinstate first "
                 "(set membership_status to 'active').",
                 err=True,
             )

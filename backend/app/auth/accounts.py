@@ -17,14 +17,8 @@ from app.auth.db_models import (
     RecoveryAttempt,
     RecoveryCode,
 )
+from app.auth.member_directory import MAY_SIGN_IN
 from app.members.db_models import Member
-from app.members.models import MembershipStatus
-
-# Who may sign in, and keep using an Auth Session they already hold (#484):
-# a Member whose Membership Status is neither of these. `inactive` keeps
-# access. Every check reads it through here, as SQL, joined to the Member.
-BARRED_FROM_SIGN_IN: tuple[MembershipStatus, ...] = ("archived", "suspended")
-MAY_SIGN_IN = Member.membership_status.not_in(BARRED_FROM_SIGN_IN)
 
 
 async def may_sign_in(session: AsyncSession, account_id: str) -> bool:

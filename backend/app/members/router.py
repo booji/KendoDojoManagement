@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete
 
-from app.auth.accounts import BARRED_FROM_SIGN_IN, delete_account
+from app.auth.accounts import delete_account
 from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import end_every_auth_session
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
@@ -18,6 +18,7 @@ from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
 from app.member_federations.db_models import MemberFederation
 from app.members.admin_directory import AbstractAdminDirectory
+from app.members.db_models import BARRED_FROM_SIGN_IN
 from app.members.dependencies import get_admin_directory, get_member_repo
 from app.members.erasure import build_erasure_plan, can_erase
 from app.members.models import CreateMemberRequest, MemberResponse, UpdateMemberRequest

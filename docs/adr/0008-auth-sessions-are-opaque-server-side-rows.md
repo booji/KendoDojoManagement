@@ -73,10 +73,12 @@ Decided in issue #455.
 Amended by #484: whether an Account may sign in is its Member's
 **Membership Status**, not an Account flag. `archived` and `suspended` are
 refused at sign-in, recovery, passkey enrolment and on every authenticated
-request (401, as for no Auth Session); `inactive` keeps access. The rule is
-`app.auth.accounts.MAY_SIGN_IN`, one SQL predicate every check uses, the
-Auth Session join included. `accounts.is_active`, which nothing ever set
-false, is dropped.
+request (401, as for no Auth Session); `inactive` keeps access. The members
+domain owns the rule (`BARRED_FROM_SIGN_IN` in `app.members.db_models`, and
+`MAY_SIGN_IN`, the same rule as one SQL predicate), and auth reads it only
+through the `app.auth.member_directory` port (ADR-0006). The Auth Session join
+reads `MAY_SIGN_IN` in its one statement. `accounts.is_active`, which nothing
+ever set false, is dropped.
 
 Barring a Member also deletes every Auth Session row of their Account, of both
 kinds, in the same transaction as the status change. The per-request refusal

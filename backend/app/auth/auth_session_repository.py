@@ -8,8 +8,8 @@ from typing import Any, Protocol, runtime_checkable
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.accounts import MAY_SIGN_IN
 from app.auth.db_models import Account, AuthSession
+from app.auth.member_directory import MAY_SIGN_IN
 from app.members.db_models import Member
 
 

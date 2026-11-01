@@ -11,9 +11,8 @@ from typing import Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.accounts import MAY_SIGN_IN
 from app.auth.db_models import Account
-from app.members.db_models import Member
+from app.members.db_models import MAY_SIGN_IN, Member
 
 
 @runtime_checkable

@@ -28,7 +28,7 @@ from sqlalchemy import select
 
 from app import config
 from app.auth.aaguid import label_from_aaguid
-from app.auth.accounts import BARRED_FROM_SIGN_IN, account_for_email, may_sign_in
+from app.auth.accounts import account_for_email, may_sign_in
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
@@ -45,7 +45,6 @@ from app.auth.webauthn_ceremony import (
 )
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
-from app.members.db_models import Member
 
 # How long a minted invite stays redeemable.
 INVITE_EXPIRY_HOURS = 72
@@ -119,12 +118,8 @@ async def mint_invite(
             ),
         )
 
-    membership_status = (
-        await uow.session.execute(
-            select(Member.membership_status).where(Member.email == payload.email)
-        )
-    ).scalar_one_or_none()
-    if membership_status in BARRED_FROM_SIGN_IN:
+    membership_status = await member_directory_for(uow).barred_status(payload.email)
+    if membership_status is not None:
         # Their Account could never sign in (#484), so the invite would only
         # mint a passkey that is refused at the door.
         raise HTTPException(

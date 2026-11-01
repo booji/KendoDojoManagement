@@ -6,6 +6,12 @@ from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import IsoDate, UUIDBase, UUIDType
+from app.members.models import MembershipStatus
+
+# Who may sign in, and keep using an Auth Session they already hold (#484):
+# a Member whose Membership Status is neither of these. `inactive` keeps
+# access. Auth reads it only through app.auth.member_directory.
+BARRED_FROM_SIGN_IN: tuple[MembershipStatus, ...] = ("archived", "suspended")
 
 
 class Member(UUIDBase):
@@ -41,3 +47,8 @@ class Member(UUIDBase):
     claim_attempted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+# The same rule as one SQL predicate on `members`, so a query can read it in
+# the statement that joins the Member (the Auth Session join, ADR-0008).
+MAY_SIGN_IN = Member.membership_status.not_in(BARRED_FROM_SIGN_IN)
