@@ -293,6 +293,32 @@ def test_a_restore_failing_after_the_drop_says_the_database_is_now_partial(
     assert str(dump) in out.stderr
 
 
+def test_a_restore_onto_a_server_without_the_app_role_completes_with_uploads(
+    tmp_path,
+):
+    # A dump carries GRANTs to kendo_app (#453). On a fresh server, where
+    # kendo-migrate has not yet created that role, pg_restore errors on them
+    # unless privileges are skipped; kendo-migrate re-applies them after (#481).
+    backup = Backup(tmp_path)
+    backup.run()
+    [dump] = backup.dir.glob("kendo-*.dump")
+    [uploads] = backup.dir.glob("kendo-uploads-*.tar")
+    stub = tmp_path / "bin/podman"
+    stub.write_text(
+        stub.read_text().replace(
+            '*pg_restore*) cat > "$RESTORED/db" ;;',
+            '*pg_restore*--no-privileges*) cat > "$RESTORED/db" ;;\n'
+            "  *pg_restore*) echo 'role \"kendo_app\" does not exist' >&2; exit 1 ;;",
+        )
+    )
+
+    out = backup.restore(dump, uploads, answers="yes\n")
+
+    assert out.returncode == 0, out.stderr
+    assert (backup.restored / "db").read_text() == "PGDMP\n"
+    assert (backup.restored / "uploads").read_text() == "uploads\n"
+
+
 # ---------------------------------------------------------------- off-site ---
 # An optional rclone copy of each run's encrypted artefacts (#502). rclone is
 # stubbed: what is asserted is what it was asked to copy and delete.

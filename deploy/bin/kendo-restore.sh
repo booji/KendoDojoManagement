@@ -14,10 +14,19 @@
 # not echoed and is never written to disk.
 #
 # DESTRUCTIVE: drops and recreates the `kendo` database. Stop the app first so
-# nothing writes mid-restore:
+# nothing writes mid-restore, and re-run kendo-migrate afterwards, not just the
+# app:
 #     systemctl --user stop kendo-app
 #     ./kendo-restore.sh <dump>
-#     systemctl --user start kendo-app
+#     systemctl --user restart kendo-migrate kendo-app
+# On the Compose stack: `podman-compose stop app` before, and
+# `podman-compose up -d --force-recreate` after, which re-runs `migrate`.
+#
+# Privileges are not restored (--no-privileges, #481): the dump's GRANTs to
+# kendo_app fail on a fresh server where migrate has not yet created that role.
+# Nor are they needed: the DROP/CREATE below resets the database's own grants
+# too (CONNECT for kendo_app, TEMPORARY revoked from PUBLIC), and migrate
+# re-applies every one. Until it has run, kendo_app can read no table.
 #
 # KENDO_DB_CONTAINER / KENDO_UPLOADS_VOLUME name the Compose stack's
 # project-scoped container and volume instead of the Quadlet defaults, as in
@@ -81,7 +90,7 @@ SQL
 
 # Restore the custom-format dump. Past the DROP, a failure leaves the database
 # empty or partial, and the operator has to hear that, not just an exit code.
-if ! open_artefact "$dump" | podman exec -i "$DB" pg_restore -U kendo -d kendo --no-owner; then
+if ! open_artefact "$dump" | podman exec -i "$DB" pg_restore -U kendo -d kendo --no-owner --no-privileges; then
   echo "Restore failed after the database was dropped: it is now empty or partial. Fix the error above and re-run this restore from $dump." >&2
   exit 1
 fi
