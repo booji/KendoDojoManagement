@@ -999,41 +999,8 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#re-measured-for-432-one-email-on-the-member" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Re-measured for #432 — one email, on the Member
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#conclusions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Conclusions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-convergence-assertions-own-false-failure-rate" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The convergence assertion's own false-failure rate
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1565,41 +1532,8 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#re-measured-for-432-one-email-on-the-member" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Re-measured for #432 — one email, on the Member
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#conclusions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Conclusions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-convergence-assertions-own-false-failure-rate" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The convergence assertion's own false-failure rate
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1641,7 +1575,6 @@ valid invite) does strictly more work than the decoy path — an extra SELECT, a
 <p><code>ConstantTimeAuthMiddleware</code> closes it by holding every request to these paths
 for a fixed minimum wall-clock time:</p>
 <ul>
-<li><code>POST /auth/register/passkey/begin</code></li>
 <li><code>POST /auth/login/passkey/begin</code></li>
 <li><code>POST /auth/invites/redeem/begin</code></li>
 </ul>
@@ -1726,8 +1659,9 @@ discarded warmup requests. All figures in milliseconds, server-side.</p>
 </table>
 <p><strong>Real-path p99 is 16.8ms; the worst single request out of 3000 was 27.9ms.</strong></p>
 <h3 id="under-concurrency">Under concurrency<a class="headerlink" href="#under-concurrency" title="Permanent link">&para;</a></h3>
-<p>Swept on <code>register/passkey/begin</code>, the heaviest repeatable path. "over 50ms" is
-the share of requests that would have breached the old default.</p>
+<p>Swept on <code>register/passkey/begin</code>, then the heaviest repeatable path (removed in</p>
+<h1 id="472-a-new-run-sweeps-loginpasskeybegin-over-50ms-is">472; a new run sweeps <code>login/passkey/begin</code>). "over 50ms" is<a class="headerlink" href="#472-a-new-run-sweeps-loginpasskeybegin-over-50ms-is" title="Permanent link">&para;</a></h1>
+<p>the share of requests that would have breached the old default.</p>
 <table>
 <thead>
 <tr>

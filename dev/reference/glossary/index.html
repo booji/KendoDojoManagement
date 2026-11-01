@@ -1700,7 +1700,7 @@
 </tr>
 <tr>
 <td><strong>Member</strong></td>
-<td>A person on the dojo's roster: personal details, grade and membership data. Holds the person's one email address, used both to contact them and to sign in. Has at most one <strong>Account</strong> — none until they register, and none again after erasure</td>
+<td>A person on the dojo's roster: personal details, grade and membership data. Holds the person's one email address, used both to contact them and to sign in. Has at most one <strong>Account</strong> — none until they redeem an invite (or, for the first Admin, claim the instance at setup), and none again after erasure</td>
 <td>Student, practitioner, kendoka, Member Profile, profile</td>
 </tr>
 <tr>
@@ -1769,7 +1769,7 @@
 <tbody>
 <tr>
 <td><strong>Membership Status</strong></td>
-<td>The current standing of a member: <code>active</code>, <code>inactive</code>, or <code>suspended</code></td>
+<td>The current standing of a member: <code>active</code>, <code>inactive</code>, <code>suspended</code>, or <code>archived</code>. It also decides sign-in: <code>active</code> and <code>inactive</code> Members can sign in; <code>suspended</code> and <code>archived</code> Members cannot, and any <strong>Auth Session</strong> they hold stops working on its next request</td>
 <td>Account status</td>
 </tr>
 <tr>
