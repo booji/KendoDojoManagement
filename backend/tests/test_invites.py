@@ -1569,3 +1569,36 @@ async def test_redeem_is_refused_once_the_member_is_barred_from_signing_in(
         )
     )
     assert stored.first() is None
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_redeem_begin_for_a_barred_member_is_the_decoy(
+    db_client, membership_status: str
+) -> None:
+    """Refused at begin, so the browser never creates a passkey that complete
+    would refuse. The decoy, as for an unusable token: nothing tells a barred
+    invitee from a bad link, and no Account is created for them."""
+    from app.auth.db_models import Account
+
+    admin_id = await _seed_admin_user(db_client)
+    member_id = await seed_member(
+        db_client, "barred-begin@dojo.test", membership_status=membership_status
+    )
+    await _seed_invite(
+        db_client, "barred-begin@dojo.test", "barred-begin-token", issued_by=admin_id
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/invites/redeem/begin", json={"token": "barred-begin-token"}
+        )
+
+    assert response.status_code == 200
+    assert "challenge" in response.json()["publicKey"]
+    account = await db_client.execute(
+        select(Account.id).where(Account.member_id == member_id)
+    )
+    assert account.first() is None

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 import app.config as config
 from app.auth.db_models import Account, PasskeyCredential
@@ -574,10 +574,9 @@ async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
 ) -> None:
     """The claim reuses an existing Member with the claimant's email. If that
     Member is archived or suspended, the Admin it would make could never sign
-    in, so the claim is refused and setup stays open (#484)."""
-    await seed_member(
-        db_client, "former@dojo.test", membership_status=membership_status
-    )
+    in, so the claim is refused and setup stays open (#484). Begin refuses
+    too; this is the Member barred between the two steps."""
+    member_id = await seed_member(db_client, "former@dojo.test")
     await db_client.flush()
 
     begun = await _post(
@@ -586,6 +585,11 @@ async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
         SETUP_HEADERS,
     )
     assert begun.status_code == 200
+    await db_client.execute(
+        update(Member)
+        .where(Member.id == member_id)
+        .values(membership_status=membership_status)
+    )
     mock_verified = MagicMock(
         credential_id=b"claim-cred",
         credential_public_key=b"claim-key",
@@ -604,6 +608,32 @@ async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         assert (await c.get("/setup")).status_code == 200
+
+
+@pytest.mark.parametrize("membership_status", ["archived", "suspended"])
+@pytest.mark.asyncio
+async def test_a_claim_for_a_member_barred_from_signing_in_is_refused_at_begin(
+    db_client, membership_status: str
+) -> None:
+    """Refused before the browser is asked for a passkey complete would refuse,
+    with complete's answer, and with no Account made for the Member (#484)."""
+    member_id = await seed_member(
+        db_client, "former@dojo.test", membership_status=membership_status
+    )
+    await db_client.flush()
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "former@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+
+    assert begun.status_code == 401
+    assert begun.json() == {"detail": "Authentication failed"}
+    account = await db_client.execute(
+        select(Account.id).where(Account.member_id == member_id)
+    )
+    assert account.first() is None
 
 
 async def _members_and_accounts(session, email: str) -> tuple[int, int]:

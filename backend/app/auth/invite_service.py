@@ -147,16 +147,22 @@ async def mint_invite(
 async def _create_invited_user(
     record: dict[str, Any], uow: AbstractUnitOfWork
 ) -> Account | None:
-    """Create the invited Member's Account, or None if the email has one.
+    """Create the invited Member's Account, or None if the email has one or
+    its Member may not sign in.
 
-    An account can appear between minting and redemption, so refusing at mint
+    Either can change between minting and redemption, so refusing at mint
     time is not enough on its own. Returning None here makes the redemption
-    path treat it like any other unusable invite. Otherwise the Member is
-    found or created first, because every Account belongs to one (#432).
+    path treat it like any other unusable invite, so a barred Member's browser
+    is never asked for a passkey that complete would refuse (#484). Otherwise
+    the Member is found or created first, because every Account belongs to
+    one (#432).
     """
+    directory = member_directory_for(uow)
     if await _email_has_user(record["email"], uow):
         return None
-    member_id = await member_directory_for(uow).ensure_member(
+    if await directory.barred_status(record["email"]) is not None:
+        return None
+    member_id = await directory.ensure_member(
         record["email"], record["first_name"], record["surname"]
     )
     user = Account(member_id=member_id, role="member")
@@ -168,8 +174,9 @@ async def _create_invited_user(
 async def invite_redeem_begin(token: str, uow: AbstractUnitOfWork) -> dict:
     """Begin redemption for `token`, usable or not.
 
-    Every unusable case -- unknown, expired, revoked, already-redeemed, or an
-    account that appeared for the invited email since minting -- converges on
+    Every unusable case -- unknown, expired, revoked, already-redeemed, an
+    account that appeared for the invited email since minting, or a Member
+    archived or suspended since then -- converges on
     `subject=None`, and app.auth.webauthn_ceremony builds the response for
     both outcomes. The real and decoy bodies therefore cannot drift apart;
     see that module for the four shape rules and the three enumeration bugs

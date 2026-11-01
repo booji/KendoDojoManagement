@@ -73,10 +73,14 @@ async def register_passkey_begin(
     Only the setup router calls this, after checking the pre-provisioned
     SETUP_TOKEN and that the instance is unclaimed. There is no anonymous
     registration: every other Member joins by invite (#472).
+
+    An existing archived or suspended Member is refused here, as complete
+    would refuse them, before the browser is asked for a passkey (#484).
     """
-    member_id = await member_directory_for(uow).ensure_member(
-        email, first_name, surname, claim=True
-    )
+    directory = member_directory_for(uow)
+    if await directory.barred_status(email) is not None:
+        refuse_registration()
+    member_id = await directory.ensure_member(email, first_name, surname, claim=True)
     user = await _get_or_create_account(member_id, uow)
 
     ceremony = register_begin(Subject(user_id=user.id, user_name=email))
