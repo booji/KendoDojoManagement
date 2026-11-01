@@ -104,6 +104,23 @@ the app run unprivileged and mounts the uploads volume `:U`; both live in
 `kendo-app.container`, so neither reaches an existing host until the copy
 above. The edge health check lives in the Traefik dynamic config.
 
+## Checking an image came from this repository
+
+Each release image is signed by the release workflow with
+[cosign](https://docs.sigstore.dev/cosign/) keyless signing (#457). To check
+the image you are about to run, with cosign installed:
+
+```bash
+cosign verify ghcr.io/booji/kendodojomanagement:1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/booji/KendoDojoManagement/\.github/workflows/release\.yml@refs/tags/v'
+```
+
+It fails unless the image's digest was signed by that workflow on a release
+tag. Images released before #457 are unsigned. Podman does not check this by
+itself yet (#518). The signature is recorded in Sigstore's public transparency log,
+which names this repository, the workflow and the release tag.
+
 ## Upgrading to the least-privilege app user (#453)
 
 The app now connects to PostgreSQL as its own user, `kendo_app`, which can only

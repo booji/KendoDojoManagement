@@ -1,0 +1,48 @@
+# Version updates for every dependency manifest (#457). Actions minutes are
+# metered on this private repository and each Dependabot PR runs the backend
+# suite, so updates are monthly and grouped into one PR per ecosystem.
+# Security updates are not held to this schedule: GitHub opens those as soon
+# as an advisory matches.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+    ignore:
+      # cosign-installer v4 installs cosign v3, which writes a different
+      # signature format by default. Hold the major until host-side
+      # verification is settled; see release.yml.
+      - dependency-name: sigstore/cosign-installer
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: pip
+    directories: [/backend, /]
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ['*']
+
+  # The Dockerfile's base images. The images the stacks run beside the app
+  # (postgres, traefik) are bumped by hand: Dependabot cannot read the Quadlet
+  # units, so it would move docker-compose.yml away from them, and a Postgres
+  # major version needs a dump and restore, not a tag change.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      base-images:
+        patterns: ['*']
