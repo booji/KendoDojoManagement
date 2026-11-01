@@ -60,7 +60,21 @@ systemctl --user stop kendo-app
 systemctl --user restart kendo-migrate kendo-app
 ```
 
-Restart `kendo-migrate`, not just `kendo-app`. The restore drops and recreates the database, which resets its grants, and it skips the dump's own grants: they name the app's database user, which a fresh server does not have until `kendo-migrate` first runs (#481). `kendo-migrate` re-applies every grant; until it has, the app can read nothing. On the Compose stack, stop with `podman-compose stop app` and finish with `podman-compose up -d --force-recreate`, which re-runs `migrate` the same way.
+On the Compose stack, from the install directory. Its database container and uploads volume are project-scoped, so name them (a failed `setup.sh upgrade` prints this command with them filled in):
+
+```bash
+podman-compose stop app
+KENDO_DB_CONTAINER=$(podman ps -a --format '{{.Names}}' \
+    --filter label=com.docker.compose.project=kendodojo \
+    --filter label=com.docker.compose.service=db) \
+KENDO_UPLOADS_VOLUME=kendodojo_static_uploads \
+  bash deploy/bin/kendo-restore.sh \
+  ~/backups/kendo-YYYYmmdd-HHMMSS.dump.age \
+  ~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
+podman-compose up -d --force-recreate
+```
+
+Both end by re-running migrate, as the restore prints when it finishes: the app's database user has no grants until it does (#481).
 
 Plaintext backups (`.dump`, `.tar`, from before a key was set) restore with the same command.
 

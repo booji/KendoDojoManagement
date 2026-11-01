@@ -22,7 +22,8 @@ every app table.
 - **Grants:** `SELECT, INSERT, UPDATE, DELETE` on app tables, `USAGE, SELECT` on
   sequences, `SELECT` only on `alembic_version` (so a compromised app cannot
   fake the schema version), set as default privileges for tables `kendo`
-  creates later. No `TRUNCATE`, `TRIGGER`, `REFERENCES` or `CREATE`.
+  creates later. No `TRUNCATE`, `TRIGGER`, `REFERENCES` or `CREATE`. No `TEMP`
+  either: it comes through `PUBLIC`, so it is revoked from `PUBLIC` (#482).
 - **No sliding back.** The app refuses to start when connected as a superuser,
   and the e2e tests run the server as the app user, so a missing grant fails in
   CI rather than tempting someone to point `DATABASE_URL` back at `kendo`.

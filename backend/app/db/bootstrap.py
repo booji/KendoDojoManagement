@@ -155,7 +155,9 @@ async def _ensure_app_user(migration_url: str, user: str, password: str) -> None
     version. Default privileges cover tables later migrations create as the
     migration user, so a new migration needs no grants of its own. Every
     grant is revoked and re-granted inside one transaction, so drift is
-    repaired without the app ever seeing a gap.
+    repaired without the app ever seeing a gap. TEMP is revoked on the
+    database from PUBLIC, not just from `user`, so it is gone for every
+    non-superuser role.
     """
     base_url, db_name = url_parts(migration_url)
     conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
