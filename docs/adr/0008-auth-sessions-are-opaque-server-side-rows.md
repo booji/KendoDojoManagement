@@ -19,8 +19,9 @@ so role and whether the Member may sign in always come from the database.
   the current one included. `account_id` is `ON DELETE CASCADE`, so erasure
   revokes with no code. Each row records the passkey it signed in with
   (`passkey_id`, nullable, `ON DELETE CASCADE`), so removing a lost device's
-  passkey ends that device's Auth Sessions. A demotion, archiving or suspension
-  needs no revocation hook: the next request reads the new row.
+  passkey ends that device's Auth Sessions. A demotion needs no revocation
+  hook: the next request reads the new row. Archiving or suspending is refused
+  the same way, and also deletes the Account's rows (see the #484 amendment).
 - **Recovery tokens are rows too**, with a `kind` of `recovery` and a
   15-minute life, still sent as a Bearer header and refused in the cookie.
   They are single-use: the row is deleted once the new passkey is enrolled.
@@ -75,5 +76,15 @@ refused at sign-in, recovery, passkey enrolment and on every authenticated
 request (401, as for no Auth Session); `inactive` keeps access. The rule is
 `app.auth.accounts.MAY_SIGN_IN`, one SQL predicate every check uses, the
 Auth Session join included. `accounts.is_active`, which nothing ever set
-false, is dropped. Such a Member's rows are refused, not deleted: they expire
-as usual, and reinstating the Member within that window revives them.
+false, is dropped.
+
+Barring a Member also deletes every Auth Session row of their Account, of both
+kinds, in the same transaction as the status change. The per-request refusal
+alone left the rows in place, so an Admin reinstating the Member before they
+expired revived them: a session the Member, or whoever held their cookie, had
+when they were barred came back with no new sign-in. The refusal stays the
+guarantee while the bar lasts; the deletion makes the bar final for every
+session that predates it. This is the one place a status change revokes, and
+it does not reopen the rejected "delete Auth Sessions when they change"
+option: missing the call would only bring back the revival, never let a
+barred Member in.

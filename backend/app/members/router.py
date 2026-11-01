@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete
 
 from app.auth.accounts import BARRED_FROM_SIGN_IN, delete_account
+from app.auth.auth_session_repository import SqlAuthSessionRepository
+from app.auth.auth_sessions import end_every_auth_session
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.core.security_logger import changed_fields, log_admin_event
@@ -182,6 +184,13 @@ async def update_member(
     if record is None:  # deleted between the read and the write
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
+    # Barring ends every Auth Session the Account holds, in this transaction
+    # (#484). The guard refuses them anyway, but only while the bar lasts:
+    # reinstating the Member before they expired would revive them.
+    if data.get("membership_status") in BARRED_FROM_SIGN_IN and before.get("user_id"):
+        await end_every_auth_session(
+            SqlAuthSessionRepository(uow.session), before["user_id"]
         )
     # Before the commit: a write that commits always gets its event.
     changed = changed_fields(before, record, data)

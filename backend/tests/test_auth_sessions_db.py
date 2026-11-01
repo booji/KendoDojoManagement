@@ -245,3 +245,51 @@ async def test_signing_out_everywhere_deletes_every_row_of_the_account(
     owners = (await db_client.execute(select(AuthSession.account_id))).scalars().all()
     assert user_id not in owners
     assert other_id in owners
+
+
+# ── Barring a Member deletes their Auth Sessions (#484) ───────────────────────
+
+
+async def _put_status(member_id: str, status: str) -> int:
+    from app.auth.guards import REQUIRE_ADMIN
+    from app.auth.models import AccountClaims
+
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub="acting-admin", email="acting@dojo.test", role="admin"
+    )
+    try:
+        async with _client() as c:
+            r = await c.put(f"/members/{member_id}", json={"membership_status": status})
+    finally:
+        app.dependency_overrides.pop(REQUIRE_ADMIN)
+    return r.status_code
+
+
+@pytest.mark.parametrize("barred", ["archived", "suspended"])
+async def test_reinstating_a_barred_member_does_not_revive_their_auth_sessions(
+    db_client, barred: str
+) -> None:
+    """Barring deletes every row of the Account, recovery ones included, so the
+    Admin reinstating the Member before those rows expire brings none back."""
+    from app.auth.auth_session_repository import SqlAuthSessionRepository
+    from app.auth.auth_sessions import start_auth_session
+
+    email, user_id, (_, phone), _ = await _member_with_two_passkeys(db_client)
+    cookie = await _sign_in(email, phone)
+    await start_auth_session(
+        SqlAuthSessionRepository(db_client), user_id, kind="recovery"
+    )
+    member_id = (
+        await db_client.execute(select(Account.member_id).where(Account.id == user_id))
+    ).scalar_one()
+
+    assert await _put_status(member_id, barred) == 200
+    assert await _put_status(member_id, "active") == 200
+
+    assert await _status("/auth/me", cookie) == 401
+    left = await db_client.execute(
+        select(func.count())
+        .select_from(AuthSession)
+        .where(AuthSession.account_id == user_id)
+    )
+    assert left.scalar_one() == 0
