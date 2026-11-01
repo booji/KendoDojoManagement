@@ -1567,7 +1567,10 @@ recreated. Merge the two, re-run <code>./setup.sh upgrade</code>, and it carries
 <code>kendo-restore.sh</code> command for the backup it just took. It also prints the
 digest of the image that was running, to pin back to. Restoring the data alone
 is only half a rollback, because the new image would migrate it straight back
-up.</p>
+up. The rollback ends with <code>podman-compose up -d --force-recreate</code> on the
+pinned image, which re-runs <code>migrate</code>: the restore drops and recreates the
+database and does not restore its grants, so the app can read nothing until
+<code>migrate</code> re-applies them (#481).</p>
 <p>If your backups are encrypted, have the backup key to hand before you start:
 a rollback restores the backup just taken, and <code>kendo-restore.sh</code> asks for the
 key. <code>setup.sh upgrade</code> reminds you. See <a href="../backups/#the-backup-key">Backups</a>.</p>

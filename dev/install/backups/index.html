@@ -1802,8 +1802,9 @@ ls<span class="w"> </span>-lh<span class="w"> </span>~/backups
 ~/.local/bin/kendo-restore.sh<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>~/backups/kendo-YYYYmmdd-HHMMSS.dump.age<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
-systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-app
+systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-migrate<span class="w"> </span>kendo-app
 </code></pre></div>
+<p>Restart <code>kendo-migrate</code>, not just <code>kendo-app</code>. The restore drops and recreates the database, which resets its grants, and it skips the dump's own grants: they name the app's database user, which a fresh server does not have until <code>kendo-migrate</code> first runs (#481). <code>kendo-migrate</code> re-applies every grant; until it has, the app can read nothing. On the Compose stack, stop with <code>podman-compose stop app</code> and finish with <code>podman-compose up -d --force-recreate</code>, which re-runs <code>migrate</code> the same way.</p>
 <p>Plaintext backups (<code>.dump</code>, <code>.tar</code>, from before a key was set) restore with the same command.</p>
 <p>For an encrypted backup it asks for the key at a hidden prompt: paste the whole <code>AGE-SECRET-KEY-1…</code> line. This works inside <code>sudo machinectl shell kendo@</code>. The key is never written to disk, and neither is anything it decrypts — it streams straight into <code>pg_restore</code> and the uploads volume.</p>
 <p>The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:</p>
