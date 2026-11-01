@@ -27,7 +27,12 @@ from app.members.db_models import BARRED_FROM_SIGN_IN, MAY_SIGN_IN, Member
 from app.members.models import MembershipStatus
 from app.members.repository import SqlMemberRepository
 
-__all__ = ["MAY_SIGN_IN", "MemberDirectory", "member_directory_for"]
+__all__ = [
+    "MAY_SIGN_IN",
+    "MemberDirectory",
+    "SqlMemberDirectory",
+    "member_directory_for",
+]
 
 
 @runtime_checkable
