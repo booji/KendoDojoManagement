@@ -243,6 +243,22 @@ def test_a_plaintext_backup_restores_without_asking_for_a_key(tmp_path):
     assert (backup.restored / "uploads").read_text() == "uploads\n"
 
 
+def test_a_restore_ends_by_saying_migrate_must_re_run(tmp_path):
+    # The restore leaves kendo_app with no grants (#481); only migrate gives
+    # them back, so starting the app alone would serve errors.
+    backup = Backup(tmp_path)
+    backup.run()
+    [dump] = backup.dir.glob("kendo-*.dump")
+    [uploads] = backup.dir.glob("kendo-uploads-*.tar")
+
+    out = backup.restore(dump, uploads, answers="yes\n")
+
+    assert out.returncode == 0, out.stderr
+    after_uploads = out.stdout[out.stdout.index("uploads restored from:") :]
+    assert "systemctl --user restart kendo-migrate kendo-app" in after_uploads
+    assert "podman-compose up -d --force-recreate" in after_uploads
+
+
 def test_a_mistyped_key_is_named_as_such_before_anything_changes(tmp_path):
     # The likeliest slip: a key copied with a character wrong or missing.
     secret, public = keypair()
@@ -304,13 +320,14 @@ def test_a_restore_onto_a_server_without_the_app_role_completes_with_uploads(
     [dump] = backup.dir.glob("kendo-*.dump")
     [uploads] = backup.dir.glob("kendo-uploads-*.tar")
     stub = tmp_path / "bin/podman"
-    stub.write_text(
-        stub.read_text().replace(
-            '*pg_restore*) cat > "$RESTORED/db" ;;',
-            '*pg_restore*--no-privileges*) cat > "$RESTORED/db" ;;\n'
-            "  *pg_restore*) echo 'role \"kendo_app\" does not exist' >&2; exit 1 ;;",
-        )
+    original = stub.read_text()
+    patched = original.replace(
+        '*pg_restore*) cat > "$RESTORED/db" ;;',
+        '*pg_restore*--no-privileges*) cat > "$RESTORED/db" ;;\n'
+        "  *pg_restore*) echo 'role \"kendo_app\" does not exist' >&2; exit 1 ;;",
     )
+    assert patched != original, "the podman stub's pg_restore case has moved"
+    stub.write_text(patched)
 
     out = backup.restore(dump, uploads, answers="yes\n")
 

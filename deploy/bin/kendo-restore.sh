@@ -14,13 +14,8 @@
 # not echoed and is never written to disk.
 #
 # DESTRUCTIVE: drops and recreates the `kendo` database. Stop the app first so
-# nothing writes mid-restore, and re-run kendo-migrate afterwards, not just the
-# app:
-#     systemctl --user stop kendo-app
-#     ./kendo-restore.sh <dump>
-#     systemctl --user restart kendo-migrate kendo-app
-# On the Compose stack: `podman-compose stop app` before, and
-# `podman-compose up -d --force-recreate` after, which re-runs `migrate`.
+# nothing writes mid-restore (`systemctl --user stop kendo-app`, or on Compose
+# `podman-compose stop app`); it prints what to run after.
 #
 # Privileges are not restored (--no-privileges, #481): the dump's GRANTs to
 # kendo_app fail on a fresh server where migrate has not yet created that role.
@@ -104,3 +99,7 @@ if [[ -n "$uploads" ]]; then
   open_artefact "$uploads" | podman volume import "$UPLOADS_VOLUME" -
   echo "uploads restored from: $uploads"
 fi
+
+echo "Next: the app's database user has no grants until migrate re-runs:"
+echo "  systemctl --user restart kendo-migrate kendo-app"
+echo "  (Compose: podman-compose up -d --force-recreate)"
