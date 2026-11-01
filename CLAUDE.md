@@ -111,8 +111,11 @@ podman-compose -f docker-compose.test.yml run --rm \
 podman-compose -f docker-compose.test.yml run --rm -e PYTEST_ARGS=-x test
 ```
 
+Parallel runs from separate worktrees are safe as written: `run_tests.sh` gives
+each run its own throwaway database (#316).
+
 ```bash
-# Backend only — no frontend install, no Vite, no e2e collection
+# Backend only — no frontend install, no Vite, e2e files imported but not run
 podman-compose -f docker-compose.test.yml run --rm test-backend
 ```
 
