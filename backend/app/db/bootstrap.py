@@ -150,7 +150,7 @@ def _app_login(migration_url: str, app_url: str) -> tuple[str, str]:
 async def _ensure_app_user(migration_url: str, user: str, password: str) -> None:
     """Create `user` if missing, then reset its attributes, password and grants.
 
-    Row access only: no TRUNCATE, TRIGGER, REFERENCES or CREATE, and
+    Row access only: no TRUNCATE, TRIGGER, REFERENCES, CREATE or TEMP, and
     alembic_version is read-only so a compromised app cannot fake the schema
     version. Default privileges cover tables later migrations create as the
     migration user, so a new migration needs no grants of its own. Every
@@ -190,6 +190,9 @@ async def _ensure_app_user(migration_url: str, user: str, password: str) -> None
             for statement in (
                 f'REVOKE ALL ON DATABASE "{db_name}" FROM "{user}"',
                 f'GRANT CONNECT ON DATABASE "{db_name}" TO "{user}"',
+                # TEMP reaches every role through PUBLIC's default grant, so
+                # revoking it from the app user alone would do nothing (#482).
+                f'REVOKE TEMPORARY ON DATABASE "{db_name}" FROM PUBLIC',
                 f'REVOKE ALL ON SCHEMA public FROM "{user}"',
                 f'GRANT USAGE ON SCHEMA public TO "{user}"',
                 f'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "{user}"',
