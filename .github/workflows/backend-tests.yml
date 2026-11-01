@@ -45,8 +45,8 @@ jobs:
       - name: Run the backend tests
         # The test-backend service builds the backend-dev-deps stage and runs
         # backend/run_tests.sh with BACKEND_ONLY=1: uvicorn still comes up (a
-        # few non-e2e tests drive :8000), but the Playwright files are not
-        # collected and no browser is ever installed.
+        # few non-e2e tests drive :8000), but the Playwright files are only
+        # imported, never run, and no browser is ever installed.
         #
         # The wall-clock convergence assertions are excluded here and run in
         # the reporting step below. Everything else, including the synthetic

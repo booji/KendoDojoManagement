@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # BACKEND_ONLY=1 runs the fast half of the suite: no frontend install, no Vite,
-# no e2e collection (#336). Private-repo Actions minutes are metered and the
+# no e2e tests run (#336; they are only imported, to catch missing packages). Private-repo Actions minutes are metered and the
 # full suite is ~15 minutes, almost all of it the 50-odd Playwright files, so
 # CI fires this mode on every push and the full suite only on release tags.
 # The backend server still starts — see the uvicorn note below.
@@ -245,6 +245,18 @@ fi
 # scratch databases and seed rows outside the app. Exported only now, after
 # uvicorn has started with the app user's.
 export DATABASE_URL="$MIGRATION_DATABASE_URL"
+
+# BACKEND_ONLY skips the Playwright files, so a package they import but nobody
+# declared fails only in the ~15-minute full suite (`requests`, #484). Import
+# them without running them: seconds, no browser, no Vite.
+if [[ "$BACKEND_ONLY" == "1" ]]; then
+    collect_log="$(mktemp)"
+    if ! pytest --collect-only -q tests/test_e2e_*.py >"$collect_log" 2>&1; then
+        cat "$collect_log"
+        echo "run_tests.sh: an e2e test file failed to import (see above)" >&2
+        exit 1
+    fi
+fi
 
 set +e
 pytest ${PYTEST_TARGET:-tests/} -q ${PYTEST_ARGS:-} "${BACKEND_ONLY_ARGS[@]}" "${MARK_ARGS[@]}" "$@"
