@@ -408,6 +408,13 @@ async def test_bootstrap_leaves_app_user_with_row_privileges_only(
             assert (
                 await scalar("SELECT has_schema_privilege('public', 'CREATE')") is False
             )
+            # PostgreSQL grants TEMP to PUBLIC on every new database (#482).
+            assert (
+                await scalar(
+                    "SELECT has_database_privilege(current_database(), 'TEMP')"
+                )
+                is False
+            )
             extra = (
                 await conn.execute(
                     text(
