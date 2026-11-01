@@ -1190,6 +1190,11 @@ def test_a_failed_migration_prints_the_exact_restore_for_the_backup_just_taken(
     # Restoring the data is half a rollback: the new image would migrate it
     # straight back up. The digest pins the image that was running.
     assert "KENDO_IMAGE=ghcr.io/booji/kendodojomanagement@sha256:0ld" in out.stderr
+    # The restore leaves the app user without grants (#481): the rollback has
+    # to re-run migrate after it, not just start the app.
+    restore = out.stderr.index("kendo-restore.sh")
+    assert "podman-compose up -d --force-recreate" in out.stderr[restore:]
+    assert "re-runs migrate" in out.stderr[restore:]
 
 
 def test_a_failed_upgrade_names_the_encrypted_backup_and_the_key_it_needs(

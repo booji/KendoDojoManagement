@@ -506,7 +506,8 @@ run_upgrade() {
       echo "  $names bash deploy/bin/kendo-restore.sh $(printf '%q' "$dump")${uploads:+ $(printf '%q' "$uploads")}"
       [ -z "$key_note" ] || echo "$key_note"
       [ -z "$previous" ] || echo "  then set KENDO_IMAGE=$previous in .env — the image that was running —"
-      echo "  and: podman-compose up -d --force-recreate"
+      # Not just `start app`: the restore leaves kendo_app without grants (#481).
+      echo "  and: podman-compose up -d --force-recreate   # re-runs migrate, which restores the grants"
     } >&2
     exit 1
   fi
