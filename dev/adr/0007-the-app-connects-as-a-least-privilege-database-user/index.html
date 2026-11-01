@@ -1487,7 +1487,8 @@ every app table.</p>
 <li><strong>Grants:</strong> <code>SELECT, INSERT, UPDATE, DELETE</code> on app tables, <code>USAGE, SELECT</code> on
   sequences, <code>SELECT</code> only on <code>alembic_version</code> (so a compromised app cannot
   fake the schema version), set as default privileges for tables <code>kendo</code>
-  creates later. No <code>TRUNCATE</code>, <code>TRIGGER</code>, <code>REFERENCES</code> or <code>CREATE</code>.</li>
+  creates later. No <code>TRUNCATE</code>, <code>TRIGGER</code>, <code>REFERENCES</code> or <code>CREATE</code>. No <code>TEMP</code>
+  either: it comes through <code>PUBLIC</code>, so it is revoked from <code>PUBLIC</code> (#482).</li>
 <li><strong>No sliding back.</strong> The app refuses to start when connected as a superuser,
   and the e2e tests run the server as the app user, so a missing grant fails in
   CI rather than tempting someone to point <code>DATABASE_URL</code> back at <code>kendo</code>.</li>

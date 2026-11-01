@@ -1804,7 +1804,18 @@ ls<span class="w"> </span>-lh<span class="w"> </span>~/backups
 <span class="w">  </span>~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
 systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-migrate<span class="w"> </span>kendo-app
 </code></pre></div>
-<p>Restart <code>kendo-migrate</code>, not just <code>kendo-app</code>. The restore drops and recreates the database, which resets its grants, and it skips the dump's own grants: they name the app's database user, which a fresh server does not have until <code>kendo-migrate</code> first runs (#481). <code>kendo-migrate</code> re-applies every grant; until it has, the app can read nothing. On the Compose stack, stop with <code>podman-compose stop app</code> and finish with <code>podman-compose up -d --force-recreate</code>, which re-runs <code>migrate</code> the same way.</p>
+<p>On the Compose stack, from the install directory. Its database container and uploads volume are project-scoped, so name them (a failed <code>setup.sh upgrade</code> prints this command with them filled in):</p>
+<div class="highlight"><pre><span></span><code>podman-compose<span class="w"> </span>stop<span class="w"> </span>app
+<span class="nv">KENDO_DB_CONTAINER</span><span class="o">=</span><span class="k">$(</span>podman<span class="w"> </span>ps<span class="w"> </span>-a<span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{.Names}}'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--filter<span class="w"> </span><span class="nv">label</span><span class="o">=</span>com.docker.compose.project<span class="o">=</span>kendodojo<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--filter<span class="w"> </span><span class="nv">label</span><span class="o">=</span>com.docker.compose.service<span class="o">=</span>db<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="nv">KENDO_UPLOADS_VOLUME</span><span class="o">=</span>kendodojo_static_uploads<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>bash<span class="w"> </span>deploy/bin/kendo-restore.sh<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>~/backups/kendo-YYYYmmdd-HHMMSS.dump.age<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
+podman-compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>--force-recreate
+</code></pre></div>
+<p>Both end by re-running migrate, as the restore prints when it finishes: the app's database user has no grants until it does (#481).</p>
 <p>Plaintext backups (<code>.dump</code>, <code>.tar</code>, from before a key was set) restore with the same command.</p>
 <p>For an encrypted backup it asks for the key at a hidden prompt: paste the whole <code>AGE-SECRET-KEY-1…</code> line. This works inside <code>sudo machinectl shell kendo@</code>. The key is never written to disk, and neither is anything it decrypts — it streams straight into <code>pg_restore</code> and the uploads volume.</p>
 <p>The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:</p>
