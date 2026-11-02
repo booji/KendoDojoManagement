@@ -3,9 +3,9 @@
 # operator on :1 reads the 1.x docs. The pages are the files in docs/, so docs
 # stay reviewable in the same PR as the code they describe.
 #
-#   pip install -r requirements-docs.txt
-#   mkdocs serve            # http://127.0.0.1:8000
-#   mkdocs build --strict   # what CI runs
+# Its pins are backend/pyproject.toml's `docs` dependency group:
+#   uv run --project backend --group docs mkdocs serve            # http://127.0.0.1:8000
+#   uv run --project backend --group docs mkdocs build --strict   # what CI runs
 site_name: KendoDojoManagement
 site_description: Self-hosted member, session and attendance management for a kendo dojo.
 site_url: https://booji.github.io/KendoDojoManagement/

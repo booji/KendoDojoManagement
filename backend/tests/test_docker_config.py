@@ -5,6 +5,7 @@ No live Docker required — these inspect files on disk.
 
 import os
 import re as _re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,7 @@ ROOT = (
 COMPOSE_FILE = ROOT / "docker-compose.yml"
 DEV_COMPOSE_FILE = ROOT / "docker-compose.dev.yml"
 ENV_EXAMPLE = ROOT / ".env.example"
-REQUIREMENTS = ROOT / "backend" / "requirements.txt"
+PYPROJECT = ROOT / "backend" / "pyproject.toml"
 
 
 # ---------------------------------------------------------------------------
@@ -237,19 +238,16 @@ def test_compose_no_hardcoded_secret_values():
 
 
 # ---------------------------------------------------------------------------
-# asyncpg in requirements.txt
+# asyncpg in the runtime dependencies
 # ---------------------------------------------------------------------------
 
 
 def test_asyncpg_in_requirements():
-    content = REQUIREMENTS.read_text()
-    packages = [
-        line.split("==")[0].split(">=")[0].split("<=")[0].strip().lower()
-        for line in content.splitlines()
-        if line.strip() and not line.startswith("#")
-    ]
+    deps = tomllib.loads(PYPROJECT.read_text())["project"]["dependencies"]
+    packages = [_re.split(r"[=<>~!\[;]", d)[0].strip().lower() for d in deps]
     assert "asyncpg" in packages, (
-        "asyncpg must be listed in backend/requirements.txt for PostgreSQL async support"
+        "asyncpg must be a [project] dependency in backend/pyproject.toml "
+        "for PostgreSQL async support"
     )
 
 

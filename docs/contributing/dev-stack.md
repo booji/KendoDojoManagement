@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Podman + podman-compose (Docker Compose may work — see [Container runtime](../index.md#container-runtime))
-- Python 3.13 + a virtual environment (`python3 -m venv backend/.venv`)
+- [uv](https://docs.astral.sh/uv/) — `uv sync` in `backend/` builds `.venv` from `uv.lock` (fetching Python 3.13 if needed)
 - Node 22
 
 ## Get the code
