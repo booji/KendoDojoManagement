@@ -1,0 +1,51 @@
+name: Dependency audit
+
+# Known vulnerabilities in what the prod image ships (#457): the backend's
+# runtime requirements and the frontend's non-dev packages. A finding fails
+# the run; nothing gates on it, so a fresh advisory in a transitive dependency
+# never blocks an urgent release. Dependabot opens the upgrade PRs.
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'backend/requirements.txt'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - '.github/workflows/audit.yml'
+  # Advisories are published without a push to this repo.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: pip-audit and npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The image's Python (Dockerfile `FROM python:3.13-slim`), so environment
+      # markers resolve as they do there. Bump the two together.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+
+      - name: pip-audit (backend runtime requirements)
+        # ponytail: version pinned here, so Dependabot does not bump it; move
+        # it into a requirements file if it falls behind.
+        run: pipx run pip-audit==2.10.1 -r backend/requirements.txt
+
+      - name: npm audit (frontend, production dependencies)
+        # Still runs after a pip-audit finding, so one run reports both.
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit --omit=dev

@@ -9,10 +9,12 @@ on:
     tags:
       - 'v*'
 
-# Least privilege: read the tree, write the package. Nothing else.
+# Least privilege: read the tree, write the package, and mint the OIDC token
+# cosign signs with. Nothing else.
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,13 +27,13 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Release candidates (v1.0.0-rc1) are prereleases: they get their exact
       # tag so the clean-VPS rehearsal has something to pull, but never the
       # moving 1 / 1.0 / latest tags an operator is pinned to.
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/booji/kendodojomanagement
           tags: |
@@ -40,7 +42,7 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -55,7 +57,8 @@ jobs:
           case "$v" in *-*) tag="$v" ;; *) tag="${v%%.*}" ;; esac
           echo "ref=ghcr.io/booji/kendodojomanagement:$tag" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           target: prod
@@ -64,3 +67,15 @@ jobs:
             KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Keyless signature of the pushed digest (#457), so a host can check an
+      # image came from this workflow. The identity is the workflow's OIDC
+      # token, recorded in the public Sigstore log; there is no key to steal.
+      # Signing the digest covers every tag on it. cosign v2 writes the
+      # classic signature tag that Podman's policy.json sigstoreSigned check
+      # reads; v3 (cosign-installer v4) defaults to a different format.
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - name: Sign the image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "ghcr.io/booji/kendodojomanagement@$DIGEST"
