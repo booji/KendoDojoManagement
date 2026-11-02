@@ -179,3 +179,17 @@ def test_full_suite_workflow_runs_on_release_candidates_and_prs_into_main():
     assert triggers["push"] == {"tags": ["v*-rc*"]}, (
         f"the full suite must stay on release-candidate tags; got {triggers['push']!r}"
     )
+
+
+def test_release_notes_lead_with_what_an_operator_must_act_on():
+    """Generated release notes group by label (#548): a Breaking change first,
+    then security, then features and fixes, then everything else."""
+    categories = _load(ROOT / ".github" / "release.yml")["changelog"]["categories"]
+    assert [c["labels"] for c in categories] == [
+        ["breaking"],
+        ["security"],
+        ["feature"],
+        ["bug"],
+        ["*"],
+    ], categories
+    assert categories[0]["title"] == "Breaking / Operator action", categories
