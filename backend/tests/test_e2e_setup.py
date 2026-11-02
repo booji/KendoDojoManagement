@@ -110,9 +110,9 @@ def fresh_db() -> None:
     _clear_users_and_credentials()
     # Verify the API now reports setup available (backend path, no /api prefix)
     r = requests.get(_SETUP_HEALTH_URL, timeout=5)
-    assert (
-        r.status_code == 200
-    ), f"Expected 200 from {_SETUP_HEALTH_URL} after clearing DB, got {r.status_code}"
+    assert r.status_code == 200, (
+        f"Expected 200 from {_SETUP_HEALTH_URL} after clearing DB, got {r.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +171,9 @@ def populated_db(fresh_db: None) -> None:
     _populate_instance()
     # Sanity-check: setup endpoint must now return 404
     r = requests.get(f"{API_URL}/api/setup", timeout=5)
-    assert (
-        r.status_code == 404
-    ), f"Expected 404 from /api/setup after seeding user, got {r.status_code}"
+    assert r.status_code == 404, (
+        f"Expected 404 from /api/setup after seeding user, got {r.status_code}"
+    )
 
 
 # ---------------------------------------------------------------------------

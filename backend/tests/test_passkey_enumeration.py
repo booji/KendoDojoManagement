@@ -758,6 +758,6 @@ async def test_ceremony_verification_enforces_user_verification(db_client) -> No
                 },
             )
         assert login_complete.status_code == 200
-        assert (
-            auth_spy.call_args.kwargs.get("require_user_verification") is True
-        ), "login_passkey_complete does not enforce user verification"
+        assert auth_spy.call_args.kwargs.get("require_user_verification") is True, (
+            "login_passkey_complete does not enforce user verification"
+        )

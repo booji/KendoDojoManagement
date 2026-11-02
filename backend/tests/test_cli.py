@@ -152,9 +152,9 @@ def test_get_engine_not_present_in_cli_module() -> None:
     """_get_engine() must not exist in app.cli after the async rewrite."""
     import app.cli as cli_module
 
-    assert not hasattr(
-        cli_module, "_get_engine"
-    ), "_get_engine() sync helper must be removed from cli.py"
+    assert not hasattr(cli_module, "_get_engine"), (
+        "_get_engine() sync helper must be removed from cli.py"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -177,15 +177,15 @@ def test_create_engine_not_imported_in_cli() -> None:
         if isinstance(node, ast.ImportFrom):
             if node.module and "sqlalchemy" in node.module:
                 names = [alias.name for alias in node.names]
-                assert (
-                    "create_engine" not in names
-                ), "create_engine must not be imported in cli.py"
+                assert "create_engine" not in names, (
+                    "create_engine must not be imported in cli.py"
+                )
         # Check for: import sqlalchemy; sqlalchemy.create_engine(...)
         if isinstance(node, ast.Import):
             for alias in node.names:
-                assert (
-                    alias.name != "sqlalchemy.create_engine"
-                ), "create_engine must not be imported in cli.py"
+                assert alias.name != "sqlalchemy.create_engine", (
+                    "create_engine must not be imported in cli.py"
+                )
 
 
 def test_psycopg2_not_imported_in_cli() -> None:
@@ -205,9 +205,9 @@ def test_psycopg2_not_imported_in_cli() -> None:
                 if isinstance(node, ast.Import)
                 else [type("_", (), {"name": node.module or ""})()]
             ):
-                assert "psycopg2" not in (
-                    alias.name or ""
-                ), "psycopg2 must not be imported in cli.py"
+                assert "psycopg2" not in (alias.name or ""), (
+                    "psycopg2 must not be imported in cli.py"
+                )
 
 
 # ---------------------------------------------------------------------------

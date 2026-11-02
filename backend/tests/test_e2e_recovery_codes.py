@@ -277,9 +277,9 @@ def test_generated_codes_are_in_correct_format(page: Page) -> None:
     data = s.post(f"{API_URL}/auth/recovery/codes/generate").json()
     pattern = re.compile(r"^[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$")
     for code in data["codes"]:
-        assert pattern.match(
-            code
-        ), f"Code {code!r} does not match xxxx-xxxx-xxxx format"
+        assert pattern.match(code), (
+            f"Code {code!r} does not match xxxx-xxxx-xxxx format"
+        )
 
 
 def test_plaintext_codes_are_not_stored(page: Page) -> None:

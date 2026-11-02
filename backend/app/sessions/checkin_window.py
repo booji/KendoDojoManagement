@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 
-class CheckinWindowStatus(str, Enum):
+class CheckinWindowStatus(StrEnum):
     OPEN = "open"
     TOO_EARLY = "too_early"
     CLOSED = "closed"

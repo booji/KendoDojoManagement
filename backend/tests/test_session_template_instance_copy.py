@@ -311,6 +311,6 @@ async def test_recurrence_stays_at_template_level(
         assert field not in inst, f"instance must not carry recurrence field {field!r}"
     for seg in inst["segments"]:
         for field in ("recurrence", "recurrence_days", "interval_weeks"):
-            assert (
-                field not in seg
-            ), f"segment must not carry recurrence field {field!r}"
+            assert field not in seg, (
+                f"segment must not carry recurrence field {field!r}"
+            )

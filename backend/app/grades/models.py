@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import AwareDatetime, BaseModel, field_validator
 
@@ -24,7 +24,7 @@ _DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-class Grade(str, Enum):
+class Grade(StrEnum):
     MUKYUU = "MUKYUU"
     ROKKYUU = "ROKKYUU"
     GOKYUU = "GOKYUU"

@@ -46,3 +46,11 @@ updates:
     groups:
       base-images:
         patterns: ['*']
+    ignore:
+      # A new Python or Node line is an upgrade, not a bump: Python 3.15 had no
+      # wheels for our dependencies when it was proposed (#524), and
+      # audit.yml's python-version moves with it. Do those by hand.
+      - dependency-name: python
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: node
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']

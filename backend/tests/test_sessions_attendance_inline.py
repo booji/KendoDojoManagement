@@ -308,9 +308,9 @@ async def test_list_sessions_reads_attendance_in_one_call(
     assert by_id[sessions[0]["id"]]["is_checked_in"] is True
     assert by_id[sessions[1]["id"]]["attendance_count"] == 0
     assert by_id[sessions[1]["id"]]["is_checked_in"] is False
-    assert (
-        attendance_repo.per_session_calls == 0
-    ), "GET /sessions must not read attendance one session at a time"
+    assert attendance_repo.per_session_calls == 0, (
+        "GET /sessions must not read attendance one session at a time"
+    )
 
 
 async def test_admin_marked_member_sees_themselves_as_checked_in(

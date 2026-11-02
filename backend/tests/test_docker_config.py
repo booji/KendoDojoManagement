@@ -61,16 +61,16 @@ def _networks_of(service: dict) -> list[str]:
 
 def test_compose_has_app_service():
     compose = load_compose()
-    assert "app" in compose.get(
-        "services", {}
-    ), "docker-compose.yml must define an 'app' service"
+    assert "app" in compose.get("services", {}), (
+        "docker-compose.yml must define an 'app' service"
+    )
 
 
 def test_compose_has_db_service():
     compose = load_compose()
-    assert "db" in compose.get(
-        "services", {}
-    ), "docker-compose.yml must define a 'db' service"
+    assert "db" in compose.get("services", {}), (
+        "docker-compose.yml must define a 'db' service"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -81,9 +81,9 @@ def test_compose_has_db_service():
 def test_compose_has_named_postgres_volume():
     compose = load_compose()
     top_level_volumes = compose.get("volumes", {})
-    assert (
-        top_level_volumes
-    ), "docker-compose.yml must declare at least one named volume"
+    assert top_level_volumes, (
+        "docker-compose.yml must declare at least one named volume"
+    )
 
     db_service = compose["services"]["db"]
     db_volumes = db_service.get("volumes", [])
@@ -92,9 +92,9 @@ def test_compose_has_named_postgres_volume():
     mounted = any(
         any(vol_name in str(v) for vol_name in volume_names) for v in db_volumes
     )
-    assert (
-        mounted
-    ), "The db service must mount a top-level named volume for postgres data"
+    assert mounted, (
+        "The db service must mount a top-level named volume for postgres data"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +248,9 @@ def test_asyncpg_in_requirements():
         for line in content.splitlines()
         if line.strip() and not line.startswith("#")
     ]
-    assert (
-        "asyncpg" in packages
-    ), "asyncpg must be listed in backend/requirements.txt for PostgreSQL async support"
+    assert "asyncpg" in packages, (
+        "asyncpg must be listed in backend/requirements.txt for PostgreSQL async support"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +272,9 @@ def test_compose_app_depends_on_db_with_health_condition():
 
     assert "db" in depends_on, "app service must declare depends_on: db"
     db_condition = depends_on["db"].get("condition")
-    assert (
-        db_condition == "service_healthy"
-    ), f"app depends_on db condition must be 'service_healthy', got '{db_condition}'"
+    assert db_condition == "service_healthy", (
+        f"app depends_on db condition must be 'service_healthy', got '{db_condition}'"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -313,9 +313,9 @@ def test_compose_app_straddles_both_networks():
 def test_dev_compose_defines_edge_and_backend_networks():
     networks = load_dev_compose().get("networks") or {}
     assert "edge" in networks, "docker-compose.dev.yml must define an 'edge' network"
-    assert (
-        "backend" in networks
-    ), "docker-compose.dev.yml must define a 'backend' network"
+    assert "backend" in networks, (
+        "docker-compose.dev.yml must define a 'backend' network"
+    )
 
 
 def test_dev_compose_frontend_cannot_reach_the_database():
@@ -326,16 +326,16 @@ def test_dev_compose_frontend_cannot_reach_the_database():
         "dependencies with node_modules mounted and must not be able to reach "
         f"PostgreSQL. Got: {frontend_networks}"
     )
-    assert frontend_networks == [
-        "edge"
-    ], f"frontend must be on the edge network only. Got: {frontend_networks}"
+    assert frontend_networks == ["edge"], (
+        f"frontend must be on the edge network only. Got: {frontend_networks}"
+    )
 
 
 def test_dev_compose_db_is_only_on_the_backend_network():
     db_networks = _networks_of(load_dev_compose()["services"]["db"])
-    assert db_networks == [
-        "backend"
-    ], f"dev db must be on the backend network only. Got: {db_networks}"
+    assert db_networks == ["backend"], (
+        f"dev db must be on the backend network only. Got: {db_networks}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -453,9 +453,9 @@ def test_dev_proxy_publishes_unprivileged_ports():
 
 def test_dev_proxy_mounts_its_config_and_no_container_runtime_socket():
     volumes = [str(v) for v in load_dev_compose()["services"]["proxy"]["volumes"]]
-    assert any(
-        "/etc/traefik/dynamic" in v for v in volumes
-    ), f"the dev proxy must mount the dynamic config directory. Got: {volumes}"
+    assert any("/etc/traefik/dynamic" in v for v in volumes), (
+        f"the dev proxy must mount the dynamic config directory. Got: {volumes}"
+    )
     for v in volumes:
         assert "docker.sock" not in v and "podman.sock" not in v, (
             "the dev proxy must not mount the container runtime socket — the "
@@ -625,9 +625,9 @@ def test_prod_image_owns_the_upload_directories():
     exist and belong to the runtime user or the first upload hits EACCES."""
     stage = _prod_stage()
     assert "/app/uploads" in stage, stage
-    assert _re.search(
-        r"chown[^\n]*/app/uploads", stage
-    ), "the prod stage must chown /app/uploads to the runtime user"
+    assert _re.search(r"chown[^\n]*/app/uploads", stage), (
+        "the prod stage must chown /app/uploads to the runtime user"
+    )
 
 
 @pytest.mark.parametrize(

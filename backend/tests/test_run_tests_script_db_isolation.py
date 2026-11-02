@@ -267,9 +267,9 @@ def test_pytest_is_not_exec_d_so_the_exit_trap_can_still_run():
         "the per-run database leaks on every invocation. Run pytest as a "
         "child process and exit with its status instead."
     )
-    assert re.search(
-        r"^\s*pytest\s", text, re.MULTILINE
-    ), "expected a plain 'pytest ...' invocation in run_tests.sh"
+    assert re.search(r"^\s*pytest\s", text, re.MULTILINE), (
+        "expected a plain 'pytest ...' invocation in run_tests.sh"
+    )
     assert re.search(r"^\s*exit\s+\"?\$", text, re.MULTILINE), (
         "expected run_tests.sh to exit with pytest's captured status "
         "(e.g. 'exit \"$status\"'), so the EXIT trap runs but a failing "

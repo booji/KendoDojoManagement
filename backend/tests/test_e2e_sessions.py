@@ -101,9 +101,9 @@ def test_admin_can_create_session_type_via_ui(page: Page) -> None:
         headers={**_api_headers(token), "Content-Type": "application/json"},
         data=json.dumps({"name": unique_name}),
     )
-    assert (
-        response.status == 201
-    ), f"Expected 201, got {response.status}: {response.text()}"
+    assert response.status == 201, (
+        f"Expected 201, got {response.status}: {response.text()}"
+    )
     body = response.json()
     assert body["name"] == unique_name
     assert "id" in body
@@ -250,9 +250,9 @@ def test_admin_can_create_adhoc_session_via_ui(page: Page) -> None:
             }
         ),
     )
-    assert (
-        sess_resp.status == 201
-    ), f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    assert sess_resp.status == 201, (
+        f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    )
     body = sess_resp.json()
     assert body["cancelled"] is False
 
@@ -344,9 +344,9 @@ def test_cancelling_session_instance_removes_it_from_list_but_keeps_template(
     )
     assert sessions_resp.status == 200
     ids = [s["id"] for s in sessions_resp.json()]
-    assert (
-        instance_id not in ids
-    ), f"Cancelled session {instance_id} should not appear in upcoming list"
+    assert instance_id not in ids, (
+        f"Cancelled session {instance_id} should not appear in upcoming list"
+    )
 
 
 # ---------------------------------------------------------------------------

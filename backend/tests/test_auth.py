@@ -110,9 +110,9 @@ async def test_logout_clears_access_token_cookie() -> None:
 
     assert response.status_code == 200
     set_cookie = response.headers.get("set-cookie")
-    assert (
-        set_cookie is not None
-    ), "logout must send a Set-Cookie header to clear the cookie"
+    assert set_cookie is not None, (
+        "logout must send a Set-Cookie header to clear the cookie"
+    )
     assert "access_token=" in set_cookie
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie.lower()
 

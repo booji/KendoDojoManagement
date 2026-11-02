@@ -84,9 +84,9 @@ def test_selecting_dark_on_settings_applies_dark_class(page: Page) -> None:
     page.goto(f"{BASE_URL}/settings")
     page.get_by_role("button", name="Dark", exact=True).click()
     page.wait_for_timeout(300)
-    assert _is_dark(
-        page
-    ), "<html> should have 'dark' class after clicking the Dark button"
+    assert _is_dark(page), (
+        "<html> should have 'dark' class after clicking the Dark button"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -193,9 +193,9 @@ async def test_admin_gets_pending_entries_across_members(
     ) as c:
         response = await c.get("/grades/pending")
 
-    assert (
-        response.status_code == 200
-    ), f"Expected 200 OK, got {response.status_code}: {response.text}"
+    assert response.status_code == 200, (
+        f"Expected 200 OK, got {response.status_code}: {response.text}"
+    )
     items = response.json()
     assert len(items) == 2, f"Expected 2 pending entries, got {len(items)}: {items}"
 
@@ -205,9 +205,9 @@ async def test_admin_gets_pending_entries_across_members(
 
     # Every entry must include member_name
     for item in items:
-        assert (
-            "member_name" in item
-        ), f"Each pending entry must include member_name; got keys: {list(item.keys())}"
+        assert "member_name" in item, (
+            f"Each pending entry must include member_name; got keys: {list(item.keys())}"
+        )
         assert item["member_name"] in (
             "Alice Kendo",
             "Bob Kendo",
@@ -320,9 +320,9 @@ async def test_empty_list_when_no_pending_entries(member_repo, grade_repo) -> No
     ) as c:
         response = await c.get("/grades/pending")
 
-    assert (
-        response.status_code == 200
-    ), f"Empty queue must return 200, not an error; got {response.status_code}"
+    assert response.status_code == 200, (
+        f"Empty queue must return 200, not an error; got {response.status_code}"
+    )
     items = response.json()
     assert items == [], f"Expected empty list, got {items}"
 
@@ -383,14 +383,14 @@ async def test_only_pending_entries_returned(member_repo, grade_repo) -> None:
 
     assert response.status_code == 200
     items = response.json()
-    assert (
-        len(items) == 1
-    ), f"Only pending entries should be returned; got {len(items)}: {items}"
+    assert len(items) == 1, (
+        f"Only pending entries should be returned; got {len(items)}: {items}"
+    )
     assert items[0]["grade"] == "NIDAN"
     assert items[0]["status"] == "pending"
     # Confirmed entries must not appear
     returned_grades = {item["grade"] for item in items}
-    assert (
-        "SHODAN" not in returned_grades
-    ), "Confirmed SHODAN must not appear in pending queue"
+    assert "SHODAN" not in returned_grades, (
+        "Confirmed SHODAN must not appear in pending queue"
+    )
     assert "ROKKYUU" not in returned_grades, "Confirmed ROKKYUU must not appear"

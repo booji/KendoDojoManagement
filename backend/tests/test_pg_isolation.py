@@ -28,9 +28,9 @@ async def test_pg_fixture_uses_postgresql(pg_engine: AsyncEngine) -> None:
     Fails right now because conftest.py does not define a `pg_engine` fixture.
     """
     url_str = str(pg_engine.url)
-    assert url_str.startswith(
-        "postgresql+asyncpg://"
-    ), f"Expected postgresql+asyncpg:// URL, got: {url_str}"
+    assert url_str.startswith("postgresql+asyncpg://"), (
+        f"Expected postgresql+asyncpg:// URL, got: {url_str}"
+    )
 
 
 # ---------------------------------------------------------------------------

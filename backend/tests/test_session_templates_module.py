@@ -25,9 +25,9 @@ from tests.fake_repositories import (
 _MONDAY = "2026-01-05"
 
 
-def _repos() -> (
-    tuple[InMemorySessionTemplateRepository, InMemorySessionInstanceRepository]
-):
+def _repos() -> tuple[
+    InMemorySessionTemplateRepository, InMemorySessionInstanceRepository
+]:
     return InMemorySessionTemplateRepository(), InMemorySessionInstanceRepository()
 
 

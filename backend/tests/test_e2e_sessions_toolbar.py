@@ -203,6 +203,6 @@ def test_sessions_page_no_visual_regression_mobile(page: Page) -> None:
     btn_box = ical_btn.bounding_box()
     assert btn_box is not None, "iCal button bounding box should not be None"
     assert btn_box["x"] >= 0, "iCal button should not overflow left edge"
-    assert (
-        btn_box["x"] + btn_box["width"] <= 375 + 1
-    ), f"iCal button overflows right edge: x={btn_box['x']}, width={btn_box['width']}"
+    assert btn_box["x"] + btn_box["width"] <= 375 + 1, (
+        f"iCal button overflows right edge: x={btn_box['x']}, width={btn_box['width']}"
+    )

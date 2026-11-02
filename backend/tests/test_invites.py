@@ -1283,9 +1283,9 @@ async def test_mark_redeemed_is_atomic_and_rejects_second_claim(database_url) ->
                 second = await repo.mark_redeemed(invite_id)
                 await session.commit()
 
-            assert (
-                second is None
-            ), "a second claim on an already-redeemed invite must fail"
+            assert second is None, (
+                "a second claim on an already-redeemed invite must fail"
+            )
         finally:
             async with AsyncSession(engine) as cleanup_session:
                 await cleanup_session.execute(

@@ -99,9 +99,9 @@ VIEWS = {
 
 
 def test_session_calendar_screenshots(browser: Browser) -> None:
-    assert (
-        OUT.is_dir()
-    ), "docs/assets is not mounted at /screenshots — run `make screenshots`"
+    assert OUT.is_dir(), (
+        "docs/assets is not mounted at /screenshots — run `make screenshots`"
+    )
     token = make_token("admin")
     complete_onboarding(token, first_name="Aiko", surname="Tanaka")
     _seed(token)

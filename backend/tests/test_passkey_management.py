@@ -166,36 +166,36 @@ def test_passkey_credential_model_has_label_field() -> None:
     """PasskeyCredential must have a label column."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(
-        PasskeyCredential, "label"
-    ), "PasskeyCredential.label is missing — add it to the model"
+    assert hasattr(PasskeyCredential, "label"), (
+        "PasskeyCredential.label is missing — add it to the model"
+    )
 
 
 def test_passkey_credential_model_has_aaguid_field() -> None:
     """PasskeyCredential must have an aaguid column (nullable)."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(
-        PasskeyCredential, "aaguid"
-    ), "PasskeyCredential.aaguid is missing — add it to the model"
+    assert hasattr(PasskeyCredential, "aaguid"), (
+        "PasskeyCredential.aaguid is missing — add it to the model"
+    )
 
 
 def test_passkey_credential_model_has_created_at_field() -> None:
     """PasskeyCredential must have a created_at column."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(
-        PasskeyCredential, "created_at"
-    ), "PasskeyCredential.created_at is missing — add it to the model"
+    assert hasattr(PasskeyCredential, "created_at"), (
+        "PasskeyCredential.created_at is missing — add it to the model"
+    )
 
 
 def test_passkey_credential_model_has_last_used_at_field() -> None:
     """PasskeyCredential must have a last_used_at column (nullable)."""
     from app.auth.db_models import PasskeyCredential
 
-    assert hasattr(
-        PasskeyCredential, "last_used_at"
-    ), "PasskeyCredential.last_used_at is missing — add it to the model"
+    assert hasattr(PasskeyCredential, "last_used_at"), (
+        "PasskeyCredential.last_used_at is missing — add it to the model"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -212,9 +212,9 @@ def test_jwt_expire_minutes_default_is_480(monkeypatch) -> None:
     import app.config as cfg
 
     importlib.reload(cfg)
-    assert (
-        cfg.JWT_EXPIRE_MINUTES == 480
-    ), f"Expected JWT_EXPIRE_MINUTES=480, got {cfg.JWT_EXPIRE_MINUTES}"
+    assert cfg.JWT_EXPIRE_MINUTES == 480, (
+        f"Expected JWT_EXPIRE_MINUTES=480, got {cfg.JWT_EXPIRE_MINUTES}"
+    )
 
 
 # ---------------------------------------------------------------------------

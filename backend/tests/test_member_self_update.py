@@ -156,9 +156,9 @@ async def test_get_my_member_response_schema(member_repo) -> None:
         assert field in body, f"Missing field in response: {field}"
     # Legacy fields must be absent
     assert "full_name" not in body, "full_name must not appear in MemberResponse"
-    assert (
-        "parental_consent_obtained" not in body
-    ), "parental_consent_obtained must not appear in MemberResponse"
+    assert "parental_consent_obtained" not in body, (
+        "parental_consent_obtained must not appear in MemberResponse"
+    )
     assert "is_minor" not in body, "is_minor must not appear in MemberResponse"
 
 

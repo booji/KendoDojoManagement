@@ -136,9 +136,9 @@ async def test_range_query_returns_sessions_within_date_range(
     ids = [s["id"] for s in sessions]
     assert inside["id"] in ids
     # outside-range sessions must not appear
-    assert all(
-        "2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions
-    ), f"Some sessions outside range: {[s['date'] for s in sessions]}"
+    assert all("2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions), (
+        f"Some sessions outside range: {[s['date'] for s in sessions]}"
+    )
 
 
 async def test_range_query_response_has_required_fields(
