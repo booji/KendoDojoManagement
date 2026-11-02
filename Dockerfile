@@ -1,4 +1,4 @@
-FROM python:3.13-slim AS backend-deps
+FROM python:3.15-slim AS backend-deps
 WORKDIR /app
 # tzdata provides /usr/share/zoneinfo so the TZ env var actually changes the
 # container's local time (Debian slim ships no timezone database otherwise).
@@ -29,19 +29,19 @@ RUN apt-get update && apt-get install -y gnupg && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN playwright install --with-deps chromium
 
-FROM node:22-slim AS frontend-deps
+FROM node:26-slim AS frontend-deps
 WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci
 
-FROM node:22-slim AS frontend-build
+FROM node:26-slim AS frontend-build
 WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.13-slim AS prod
+FROM python:3.15-slim AS prod
 WORKDIR /app
 
 # tzdata so the TZ env var honours the configured timezone in production too.
