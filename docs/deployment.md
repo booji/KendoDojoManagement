@@ -106,7 +106,7 @@ Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**
 # The bundle ships inside the image it configures, so the units below and the
 # app they start are one artefact (ADR-0004).
 mkdir -p ~/src && cd ~/src
-podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 
 ./setup.sh --quadlet
 ```

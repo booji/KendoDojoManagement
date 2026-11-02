@@ -32,8 +32,8 @@ Self-hosted web application for managing the members, sessions, and attendance o
 ## Documentation
 
 **<https://booji.github.io/KendoDojoManagement/>** — the same pages as
-[`docs/`](docs/), with navigation and search, one version per major release
-(an operator on the `:1` image reads the `1.x` docs).
+[`docs/`](docs/), with navigation and search, one version per Release line
+(an operator on the `:0.1` image reads the `0.1.x` docs).
 
 - **Install** — [Quick self-host](docs/install/quick-self-host.md) ·
   [Hardened deployment](docs/deployment.md) ·
@@ -48,12 +48,13 @@ Self-hosted web application for managing the members, sessions, and attendance o
 - **Contributing** — [Dev stack](docs/contributing/dev-stack.md) ·
   [Make targets](docs/contributing/make-targets.md) ·
   [Running tests](docs/contributing/tests.md) ·
-  [TDD workflow](docs/contributing/tdd.md)
+  [TDD workflow](docs/contributing/tdd.md) ·
+  [Releasing](docs/contributing/releasing.md)
 
 Quickest start, on a host with Podman:
 
 ```bash
-podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 ./setup.sh          # asks for your domain, writes .env and the Traefik config
 ./setup.sh check    # green? then:
 podman-compose up -d
@@ -63,6 +64,9 @@ Podman is the supported runtime; Docker is best-effort — see
 [Container runtime](docs/index.md#container-runtime).
 
 The site builds with `uv run --project backend --group docs mkdocs serve`.
+
+`develop` is the integration branch; `main` and its tags are releases — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licence
 
