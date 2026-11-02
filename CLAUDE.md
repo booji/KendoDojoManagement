@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 KendoDojoManagement — manages sessions and members of a kendo dojo. Open source, self-hosted, single-dojo-per-instance.
 
+## Branches and pull requests
+
+Branch from `develop` and target every PR at `develop`; `main` holds released
+code only. Titles are conventional commits. A **Breaking change**
+(`GLOSSARY.md`) PR carries the `breaking` label, a `!` in its title and an
+"Operator action" section in its body. Full rules: `CONTRIBUTING.md`. Cutting a
+release or hotfix: `docs/contributing/releasing.md`.
+
 ## Stack
 
 - **Backend:** Python + FastAPI
