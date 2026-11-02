@@ -21,7 +21,7 @@ After=kendo-db.service
 
 [Container]
 ContainerName=kendo-migrate
-# Published release image pinned by its release line (ADR-0004, ADR-0009):
+# Published Release image pinned by its Release line (ADR-0004, ADR-0009):
 # `:0.1` takes fixes and features but no Breaking change. Moving to `:0.2` is a
 # deliberate edit here. `podman build -t localhost/kendodojo:latest .` still
 # works — point this line at it to run your own build.

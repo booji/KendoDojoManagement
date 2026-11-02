@@ -39,15 +39,20 @@ From 1.0 the same rule bumps the major instead of Y.
 git switch -c release/X.Y.Z origin/develop
 ```
 
-**On a new Release line only**, move the operator docs to its pin in this
-branch, so the docs published for the line show it. List every mention of the
-old one and update each:
+**On a new Release line only**, move the deployment bundle and the operator
+docs to its pin in this branch, so the image and the docs published for the
+line show it. Start with `RELEASE_PIN` in `backend/tests/deploy_contract.py`,
+then list every mention of the old pin (here `0.1`) and update each, along with
+the next line the comments name as the one to move to:
 
 ```bash
-git grep -n -e ':0\.1\b' -e '0\.1\.x' -- README.md docs
+git grep -n -e ':0\.1\b' -e '0\.1\.x' -- README.md docs mkdocs.yml \
+  setup.sh entrypoint.sh docker-compose.yml .env.example deploy
 ```
 
-`test_docs_site.py` fails if any page still names a different image pin.
+The backend tests then fail on any shipped file or page that still names a
+different image pin, and the release workflow refuses to push a release tag
+whose pin the bundle and the docs do not name.
 
 Then write the upgrade notes. In [Upgrading](../install/upgrading.md), add an
 "Upgrading to X.Y" section and copy into it the **Operator action** section of
@@ -86,8 +91,9 @@ here goes on the release branch, and the next rc is `-rc2`.
     git push origin vX.Y.Z
     ```
 
-    The tag publishes the image as `X.Y.Z`, `X.Y` and `latest`, and the docs
-    for its Release line (`0.Y.x`).
+    The tag publishes the image as `X.Y.Z`, `X.Y` and `latest`, plus `X` from
+    1.0 on, and the docs for its Release line: `0.Y.x` before 1.0, `X.x`
+    after.
 
 3. Publish the GitHub release from the tag with generated notes; they are
    grouped by label, `breaking` first. On a new Release line, check the

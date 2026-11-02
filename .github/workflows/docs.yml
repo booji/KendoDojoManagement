@@ -50,9 +50,9 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One writer to gh-pages across every ref: a merge to main and the release
-    # tag pushed straight after it would otherwise both push, and the second
-    # is rejected as non-fast-forward. Never cancel one half-way through.
+    # One writer to gh-pages across every ref: a merge to develop and a release
+    # tag pushed while it runs would otherwise both push, and the second is
+    # rejected as non-fast-forward. Never cancel one half-way through.
     concurrency:
       group: docs-gh-pages
       cancel-in-progress: false

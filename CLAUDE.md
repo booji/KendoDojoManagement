@@ -8,11 +8,10 @@ KendoDojoManagement — manages sessions and members of a kendo dojo. Open sourc
 
 ## Branches and pull requests
 
-Branch from `develop` and target every PR at `develop`; `main` holds released
-code only. Titles are conventional commits. A **Breaking change**
-(`GLOSSARY.md`) PR carries the `breaking` label, a `!` in its title and an
-"Operator action" section in its body. Full rules: `CONTRIBUTING.md`. Cutting a
-release or hotfix: `docs/contributing/releasing.md`.
+Before opening a PR or choosing its base, read `CONTRIBUTING.md`. A PR with a
+**Breaking change** (`GLOSSARY.md`) carries the `breaking` label: the release's
+version bump and its notes are chosen from it. Cutting a release or hotfix:
+`docs/contributing/releasing.md`.
 
 ## Stack
 
@@ -128,8 +127,9 @@ podman-compose -f docker-compose.test.yml run --rm test-backend
 ```
 
 The `test-backend` service is the same `run_tests.sh` with `BACKEND_ONLY=1`,
-built from the lighter `backend-dev-deps` stage. CI runs it on every push
-(`.github/workflows/backend-tests.yml`, advisory); the full suite stays on
+built from the lighter `backend-dev-deps` stage. CI runs it on every push and
+pull request (`.github/workflows/backend-tests.yml`, the required check on
+`develop`); the full suite (`tests.yml`) runs only on PRs into `main` and
 release-candidate tags. It cannot catch an e2e regression — run the full suite
 before opening a PR.
 

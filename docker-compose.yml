@@ -31,7 +31,7 @@ x-hardening: &hardening
 services:
   app:
     <<: *hardening
-    # Published release image, pinned by its release line (ADR-0004, ADR-0009):
+    # Published Release image, pinned by its Release line (ADR-0004, ADR-0009):
     # `:0.1` means fixes and features but no Breaking change. Override
     # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
     # built yourself (`make build` produces localhost/kendodojo:latest).

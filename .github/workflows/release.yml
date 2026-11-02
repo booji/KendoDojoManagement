@@ -69,6 +69,25 @@ jobs:
           esac
           echo "ref=ghcr.io/booji/kendodojomanagement:$tag" >> "$GITHUB_OUTPUT"
 
+      # The bundle and the operator docs published for this tag must name the
+      # pin it is pushed under, or a new Release line ships a compose file and
+      # pages that still pull the old one. Fail before anything is pushed and
+      # name every stale line. A prerelease is pushed under its exact tag,
+      # which no shipped file names.
+      - id: pin-check
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          REF: ${{ steps.pin.outputs.ref }}
+        run: |
+          stale=$(grep -rnoIE 'ghcr\.io/booji/kendodojomanagement:[0-9]+(\.[0-9]+)*' \
+              setup.sh entrypoint.sh docker-compose.yml .env.example deploy README.md docs \
+            | awk -F: -v tag="${REF##*:}" '$NF != tag')
+          if [ -n "$stale" ]; then
+            echo "::error::Shipped files name a pin other than $REF:"
+            echo "$stale"
+            exit 1
+          fi
+
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:

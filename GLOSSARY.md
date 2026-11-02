@@ -181,7 +181,7 @@ The rootless Podman and Quadlet setup, with TLS termination, secrets and automat
 _Avoid_: The Quadlet thing, systemd deploy
 
 **Release image**:
-The published application container, pinned by its major version. The app and nothing else: it holds no operator configuration.
+The published application container, pinned by its **Release line**. The app and nothing else: it holds no operator configuration.
 _Avoid_: The container, the GHCR image, the build
 
 **Deployment bundle**:
@@ -193,7 +193,7 @@ The series of releases an operator pins to and upgrades within without a **Break
 _Avoid_: Major, version, branch
 
 **Breaking change**:
-A release an operator cannot take by the routine upgrade alone: it needs a manual step (a new setting, secret or unit change), or its migration cannot be undone by returning to the previous **Release image**. The REST API is not part of this promise; it ships with its only client.
+A change an operator cannot take by the routine upgrade alone: it needs a manual step, or it cannot be undone by returning to the previous **Release image**. The REST API is not part of this promise; it ships with its only client.
 _Avoid_: Major change, incompatible change
 
 ## Relationships

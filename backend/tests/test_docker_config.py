@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    PUBLISHED_IMAGE,
+    RELEASE_PIN,
+    SECRETS,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -684,11 +689,7 @@ def test_app_container_does_not_run_migrations():
 # ADR-0004)
 # ---------------------------------------------------------------------------
 
-PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
-# The documented pin (ADR-0004): the major from 1.0, 0.Y before it (ADR-0009).
-# A Breaking change in 0.x bumps it here, and the test below names every file
-# that still carries the old one.
-RELEASE_PIN = f"{PUBLISHED_IMAGE}:0.1"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 QUADLET_UNITS = [
     ROOT / "deploy" / "quadlet" / "kendo-app.container",
     ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
@@ -776,9 +777,6 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
     assert "KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}" in release, release
 
 
-RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
-
-
 def _release_steps() -> list[dict]:
     jobs = yaml.safe_load(RELEASE_WORKFLOW.read_text())["jobs"]
     return [step for job in jobs.values() for step in job["steps"]]
@@ -796,6 +794,49 @@ def _pin_for(version: str, tmp_path: Path) -> str:
         check=True,
     )
     return dict(line.split("=", 1) for line in out.read_text().splitlines())["ref"]
+
+
+def _shipped_pin_check(ref: str) -> subprocess.CompletedProcess:
+    """Run release.yml's own check that the shipped files name REF."""
+    [step] = [s for s in _release_steps() if s.get("id") == "pin-check"]
+    return subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=ROOT,
+        env={**os.environ, "REF": ref},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_release_publishes_when_the_shipped_files_name_its_pin():
+    result = _shipped_pin_check(RELEASE_PIN)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_release_checks_the_pin_before_pushing_and_never_for_a_prerelease():
+    """An rc is pushed under its exact tag, which no shipped file names."""
+    steps = _release_steps()
+    ids = [s.get("id") for s in steps]
+    assert ids.index("pin") < ids.index("pin-check") < ids.index("build"), ids
+    check = steps[ids.index("pin-check")]
+    assert check["if"] == "${{ !contains(github.ref_name, '-') }}", check
+
+
+def test_release_refuses_a_pin_the_shipped_files_do_not_name():
+    """A new Release line that missed a file must not publish: an operator
+    would extract a bundle, or read a page, that pulls the old line. The
+    failure names every such file."""
+    result = _shipped_pin_check(f"{PUBLISHED_IMAGE}:99")
+    assert result.returncode != 0, result.stdout
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    stale = {
+        path.relative_to(ROOT).as_posix()
+        for path in [*BUNDLE_FILES, *pages]
+        if RELEASE_PIN in path.read_text(errors="ignore")
+    }
+    assert stale
+    missed = {path for path in stale if path not in result.stdout}
+    assert not missed, result.stdout
 
 
 @pytest.mark.parametrize(

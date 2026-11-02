@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.deploy_contract import PUBLISHED_IMAGE, RELEASE_PIN
+
 ROOT = (
     Path(os.environ["REPO_ROOT"])
     if "REPO_ROOT" in os.environ
@@ -107,18 +109,17 @@ def test_every_page_in_the_nav_exists():
     assert not missing, missing
 
 
-def test_operator_docs_pin_one_pre_1_0_release_line():
-    """Before 1.0 the documented pin is `:0.Y`, never `:1` (ADR-0009), and every
-    page names the same one: a Breaking change bumps it everywhere at once, so
-    the docs published for each Release line show that line's pin."""
+def test_operator_docs_name_only_the_current_pin():
+    """Every page names the pin the bundle does: a new Release line moves it
+    everywhere at once, so the docs published for each line show that line's
+    pin (ADR-0009)."""
     pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
     pins = {
-        (page.relative_to(ROOT).as_posix(), tag)
+        (page.relative_to(ROOT).as_posix(), f"{PUBLISHED_IMAGE}:{tag}")
         for page in pages
         for tag in re.findall(
-            r"ghcr\.io/booji/kendodojomanagement:([\w.-]+)", page.read_text()
+            rf"{re.escape(PUBLISHED_IMAGE)}:([\w.-]+)", page.read_text()
         )
     }
     assert pins
-    tags = {tag for _, tag in pins}
-    assert len(tags) == 1 and re.fullmatch(r"0\.\d+", *tags), sorted(pins)
+    assert {pin for _, pin in pins} == {RELEASE_PIN}, sorted(pins)
