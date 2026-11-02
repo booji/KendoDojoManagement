@@ -180,9 +180,9 @@ def test_checkin_to_cancelled_session_shows_error(page: Page) -> None:
     page.wait_for_load_state("networkidle")
     buttons_after = page.get_by_role("button", name="Check In").count()
     # The cancelled session contributed one Check In button; it should now be gone
-    assert (
-        buttons_after < buttons_before
-    ), f"Expected fewer Check In buttons after cancel ({buttons_after} vs {buttons_before})"
+    assert buttons_after < buttons_before, (
+        f"Expected fewer Check In buttons after cancel ({buttons_after} vs {buttons_before})"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +216,9 @@ def test_admin_can_share_checkin_link_via_ui(page: Page) -> None:
     # one seeded above — so this asserts the link's shape, not its id. That the
     # id is the card's own session is covered without a browser in
     # test_checkin_link_api.py.
-    assert re.fullmatch(
-        r"https?://[^/]+/checkin/session/[0-9a-f-]{36}", link_value
-    ), f"Expected the session's tokenless check-in link, got: {link_value}"
+    assert re.fullmatch(r"https?://[^/]+/checkin/session/[0-9a-f-]{36}", link_value), (
+        f"Expected the session's tokenless check-in link, got: {link_value}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +244,9 @@ def test_admin_can_view_attendance_list_via_ui(page: Page) -> None:
         f"{API_URL}/sessions/{session_id}/checkin",
         headers=_api_headers(member_token),
     )
-    assert (
-        checkin_resp.status == 200
-    ), f"checkin failed: {checkin_resp.status} {checkin_resp.text()}"
+    assert checkin_resp.status == 200, (
+        f"checkin failed: {checkin_resp.status} {checkin_resp.text()}"
+    )
 
     # Admin retrieves the attendance list
     att_resp = page.request.get(
@@ -283,6 +283,6 @@ def test_checkin_ui_is_thumb_friendly_on_mobile(page: Page) -> None:
     # Verify the button height is at least 48px (thumb-friendly)
     bounding_box = check_in_btn.bounding_box()
     assert bounding_box is not None
-    assert (
-        bounding_box["height"] >= 48
-    ), f"Check In button height {bounding_box['height']}px is less than 48px min"
+    assert bounding_box["height"] >= 48, (
+        f"Check In button height {bounding_box['height']}px is less than 48px min"
+    )

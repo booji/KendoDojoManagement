@@ -138,7 +138,7 @@ def test_backend_workflow_skips_documentation_only_changes():
 def test_backend_workflow_invokes_the_backend_only_service():
     text = BACKEND_WORKFLOW.read_text()
     assert BACKEND_SERVICE in text, (
-        f"the backend-only workflow must run the '{BACKEND_SERVICE}' compose " "service"
+        f"the backend-only workflow must run the '{BACKEND_SERVICE}' compose service"
     )
 
 
@@ -170,6 +170,6 @@ def test_full_suite_workflow_still_reserved_for_release_candidates():
         "the full suite must not fire on pull_request — that is option B in "
         "#336 and was not adopted"
     )
-    assert triggers["push"] == {
-        "tags": ["v*-rc*"]
-    }, f"the full suite must stay on release-candidate tags; got {triggers['push']!r}"
+    assert triggers["push"] == {"tags": ["v*-rc*"]}, (
+        f"the full suite must stay on release-candidate tags; got {triggers['push']!r}"
+    )

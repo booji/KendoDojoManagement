@@ -382,9 +382,9 @@ class TestRunTestsShUsesScratchModule:
         # anywhere in the file.
         cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
         assert cleanup_match is not None, "could not locate cleanup() function body"
-        assert "TEST_DB_CREATED" in cleanup_match.group(
-            1
-        ), "TEST_DB_CREATED guard must live inside cleanup()'s own body"
+        assert "TEST_DB_CREATED" in cleanup_match.group(1), (
+            "TEST_DB_CREATED guard must live inside cleanup()'s own body"
+        )
 
     def test_sweep_invocation_is_commented_as_a_deliberate_exception(self):
         """AC9: the sweep is a deliberate, explicitly-commented exception to
@@ -456,9 +456,9 @@ class TestRunTestsShHoldsASentinelConnection:
         script = _run_tests_sh_text()
         cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
         assert cleanup_match is not None
-        assert "DB_HOLD_PID" in cleanup_match.group(
-            1
-        ), "cleanup() must release the sentinel connection"
+        assert "DB_HOLD_PID" in cleanup_match.group(1), (
+            "cleanup() must release the sentinel connection"
+        )
 
 
 class TestSweepGraceWindow:
@@ -534,6 +534,6 @@ class TestCleanupIsCwdIndependent:
         script = _run_tests_sh_text()
         cleanup_match = re.search(r"cleanup\(\)\s*\{(.*?)\n\}", script, re.DOTALL)
         assert cleanup_match is not None
-        assert "(cd /app" in cleanup_match.group(
-            1
-        ), "wrap the cd in a subshell so it does not change the caller's cwd"
+        assert "(cd /app" in cleanup_match.group(1), (
+            "wrap the cd in a subshell so it does not change the caller's cwd"
+        )

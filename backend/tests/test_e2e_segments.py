@@ -95,9 +95,9 @@ def test_session_created_via_nested_segments_payload_with_one_segment(
             }
         ),
     )
-    assert (
-        create_resp.status == 201
-    ), f"Expected 201, got {create_resp.status}: {create_resp.text()}"
+    assert create_resp.status == 201, (
+        f"Expected 201, got {create_resp.status}: {create_resp.text()}"
+    )
     created = create_resp.json()
     session_id = created["id"]
     assert created["title"] == "Single Segment Keiko"

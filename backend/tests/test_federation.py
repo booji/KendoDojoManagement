@@ -542,6 +542,6 @@ def test_member_db_model_has_no_federation_number_column() -> None:
     """AC20: federation_number must not exist on the Member DB model."""
     from app.members.db_models import Member  # noqa: F401
 
-    assert not hasattr(
-        Member, "federation_number"
-    ), "federation_number column must be removed from Member model (AC20)"
+    assert not hasattr(Member, "federation_number"), (
+        "federation_number column must be removed from Member model (AC20)"
+    )

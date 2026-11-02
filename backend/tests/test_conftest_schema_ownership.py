@@ -241,7 +241,7 @@ def _run_guard_in_subprocess(database_url: str) -> subprocess.CompletedProcess:
     module-level side effects on first import, and this suite's own
     conftest.py is already loaded by the time any test body runs.
     """
-    code = "import sys; " f"sys.path.insert(0, {str(TESTS_DIR)!r}); " "import conftest"
+    code = f"import sys; sys.path.insert(0, {str(TESTS_DIR)!r}); import conftest"
     env = dict(os.environ)
     env["DATABASE_URL"] = database_url
     return subprocess.run(
@@ -273,9 +273,9 @@ def test_non_postgres_database_url_still_refused():
         f"expected a RuntimeError for a non-PostgreSQL DATABASE_URL; "
         f"stderr was:\n{result.stderr}"
     )
-    assert (
-        "postgresql" in result.stderr.lower()
-    ), f"expected the failure to mention PostgreSQL; stderr was:\n{result.stderr}"
+    assert "postgresql" in result.stderr.lower(), (
+        f"expected the failure to mention PostgreSQL; stderr was:\n{result.stderr}"
+    )
 
 
 def test_non_test_named_database_still_refused():

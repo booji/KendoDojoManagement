@@ -622,9 +622,9 @@ async def test_account_lockout_emits_log(
                 )
 
     logs = _capture_security_logs(caplog)
-    assert any(
-        log["event_type"] == "login_lockout" for log in logs
-    ), f"Expected login_lockout event, got: {logs}"
+    assert any(log["event_type"] == "login_lockout" for log in logs), (
+        f"Expected login_lockout event, got: {logs}"
+    )
 
 
 # ===========================================================================
@@ -831,6 +831,6 @@ def test_every_event_type_is_documented_for_operators():
     root = Path(os.environ.get("REPO_ROOT", Path(__file__).parents[2]))
     doc = (root / "docs" / "deployment.md").read_text()
     missing = sorted(t for t in _VALID_EVENT_TYPES if f"`{t}`" not in doc)
-    assert (
-        not missing
-    ), f"add to the Security events tables in docs/deployment.md: {missing}"
+    assert not missing, (
+        f"add to the Security events tables in docs/deployment.md: {missing}"
+    )

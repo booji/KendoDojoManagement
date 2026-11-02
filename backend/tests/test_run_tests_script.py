@@ -51,9 +51,9 @@ def test_script_still_sets_strict_shell_options():
     swallowed) without stopping the script.
     """
     text = _script_text()
-    assert re.search(
-        r"^\s*set\s+-euo\s+pipefail\s*$", text, re.MULTILINE
-    ), "run_tests.sh must contain 'set -euo pipefail'"
+    assert re.search(r"^\s*set\s+-euo\s+pipefail\s*$", text, re.MULTILINE), (
+        "run_tests.sh must contain 'set -euo pipefail'"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -377,15 +377,15 @@ def _backend_only_guarded_regions() -> list[str]:
 
 def test_frontend_install_is_guarded_by_backend_only():
     """`npm ci` is the single largest fixed cost of a run — it must be skipped."""
-    assert any(
-        "npm ci" in region for region in _backend_only_guarded_regions()
-    ), "the 'npm ci' frontend install must sit inside a BACKEND_ONLY guard"
+    assert any("npm ci" in region for region in _backend_only_guarded_regions()), (
+        "the 'npm ci' frontend install must sit inside a BACKEND_ONLY guard"
+    )
 
 
 def test_vite_server_start_is_guarded_by_backend_only():
-    assert any(
-        "npm run dev" in region for region in _backend_only_guarded_regions()
-    ), "starting the Vite dev server must sit inside a BACKEND_ONLY guard"
+    assert any("npm run dev" in region for region in _backend_only_guarded_regions()), (
+        "starting the Vite dev server must sit inside a BACKEND_ONLY guard"
+    )
 
 
 def test_frontend_readiness_gate_is_guarded_by_backend_only():
@@ -393,9 +393,9 @@ def test_frontend_readiness_gate_is_guarded_by_backend_only():
     No Vite means nothing ever answers on :5173, so the readiness gate added
     for #316 would abort every backend-only run. It has to be skipped too.
     """
-    assert any(
-        "5173" in region for region in _backend_only_guarded_regions()
-    ), "the :5173 readiness gate must sit inside a BACKEND_ONLY guard"
+    assert any("5173" in region for region in _backend_only_guarded_regions()), (
+        "the :5173 readiness gate must sit inside a BACKEND_ONLY guard"
+    )
 
 
 def test_backend_server_is_started_even_in_backend_only_mode():

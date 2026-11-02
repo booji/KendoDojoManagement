@@ -41,9 +41,9 @@ def test_schema_doc_lists_every_table_and_column_of_the_models():
     }
     documented = _documented_tables()
 
-    assert sorted(documented) == sorted(
-        models
-    ), "docs/schema.md tables differ from Base.metadata; re-derive the doc"
+    assert sorted(documented) == sorted(models), (
+        "docs/schema.md tables differ from Base.metadata; re-derive the doc"
+    )
     drift = {
         table: {
             "missing from doc": sorted(models[table] - columns),

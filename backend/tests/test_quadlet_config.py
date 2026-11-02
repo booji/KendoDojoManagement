@@ -98,8 +98,7 @@ def test_db_is_only_on_the_backend_network():
     units = load_units()
     networks = _networks(units["kendo-db.container"])
     assert networks == ["kendo-backend.network"], (
-        "kendo-db must be on the backend network only, never the edge. "
-        f"Got: {networks}"
+        f"kendo-db must be on the backend network only, never the edge. Got: {networks}"
     )
 
 
@@ -115,9 +114,9 @@ def test_app_straddles_both_networks():
 def test_traefik_is_edge_only():
     units = load_units()
     networks = _networks(units["kendo-traefik.container"])
-    assert networks == [
-        "kendo-edge.network"
-    ], f"kendo-traefik must be on the edge network only. Got: {networks}"
+    assert networks == ["kendo-edge.network"], (
+        f"kendo-traefik must be on the edge network only. Got: {networks}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +132,7 @@ def test_only_traefik_publishes_ports():
         if units[name].get("Container", {}).get("PublishPort")
     ]
     assert publishers == ["kendo-traefik.container"], (
-        "kendo-traefik must be the only unit declaring PublishPort=. "
-        f"Got: {publishers}"
+        f"kendo-traefik must be the only unit declaring PublishPort=. Got: {publishers}"
     )
     ports = units["kendo-traefik.container"]["Container"]["PublishPort"]
     assert sorted(ports) == [
@@ -175,9 +173,9 @@ def test_every_network_unit_sets_isolate_true():
         if not name.endswith(".network"):
             continue
         options = unit.get("Network", {}).get("Options", [])
-        assert any(
-            opt.strip() == "isolate=true" for opt in options
-        ), f"{name} must set Options=isolate=true. Got: {options}"
+        assert any(opt.strip() == "isolate=true" for opt in options), (
+            f"{name} must set Options=isolate=true. Got: {options}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -263,12 +261,12 @@ def test_secrets_never_appear_as_inline_literals():
 def test_app_requires_and_waits_for_db():
     units = load_units()
     unit_section = units["kendo-app.container"].get("Unit", {})
-    assert "kendo-db.service" in unit_section.get(
-        "Requires", []
-    ), "kendo-app.container must declare Requires=kendo-db.service"
-    assert "kendo-db.service" in unit_section.get(
-        "After", []
-    ), "kendo-app.container must declare After=kendo-db.service"
+    assert "kendo-db.service" in unit_section.get("Requires", []), (
+        "kendo-app.container must declare Requires=kendo-db.service"
+    )
+    assert "kendo-db.service" in unit_section.get("After", []), (
+        "kendo-app.container must declare After=kendo-db.service"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +573,6 @@ def test_unit_settings_carry_no_inline_comment(path: Path):
         and not line.lstrip().startswith(("#", ";"))
         and re.search(r"\s[#;]", line.split("=", 1)[1])
     ]
-    assert (
-        not offenders
-    ), f"{path.name}: move the comment onto its own line: {offenders}"
+    assert not offenders, (
+        f"{path.name}: move the comment onto its own line: {offenders}"
+    )

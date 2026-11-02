@@ -415,8 +415,7 @@ def test_keep_days_expires_only_old_kendo_artefacts_on_the_remote(tmp_path):
     assert out.returncode == 0, out.stderr
     calls = backup.rclone_calls()
     assert calls[-1] == (
-        "delete gdrive:kendo-backups --min-age 90d --max-depth 1"
-        " --include kendo-*.age"
+        "delete gdrive:kendo-backups --min-age 90d --max-depth 1 --include kendo-*.age"
     )
     assert [c.split()[0] for c in calls] == ["copy", "delete"]
 

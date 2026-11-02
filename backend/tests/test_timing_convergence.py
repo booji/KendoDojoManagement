@@ -95,9 +95,9 @@ def test_scheduling_noise_without_systematic_offset_converges() -> None:
     a = _noisy(0.020, spread_s=3 * MS, n=31, seed=3)
     b = _noisy(0.020, spread_s=3 * MS, n=31, seed=7)
 
-    assert (
-        abs(_median(a) - _median(b)) > 1 * MS
-    ), "fixture must reproduce the flake: raw delta should exceed the old 1ms bound"
+    assert abs(_median(a) - _median(b)) > 1 * MS, (
+        "fixture must reproduce the flake: raw delta should exceed the old 1ms bound"
+    )
     assert_latency_medians_converge(a, b, label_a="valid", label_b="invalid")
 
 
@@ -234,9 +234,9 @@ def test_bimodal_leak_with_convergent_median_is_detected() -> None:
         slow_offset_s=6 * MS,
     )
 
-    assert (
-        abs(_median(a) - _median(b)) < 1 * MS
-    ), "fixture must keep the median-shaped signal below the historical 1ms budget"
+    assert abs(_median(a) - _median(b)) < 1 * MS, (
+        "fixture must keep the median-shaped signal below the historical 1ms budget"
+    )
 
     with pytest.raises(AssertionError):
         assert_latency_medians_converge(a, b, label_a="fast-only", label_b="cache-miss")
@@ -393,9 +393,9 @@ async def test_sampled_assertion_retries_before_failing_a_one_off_artefact() -> 
         measure_a, measure_b, label_a="valid", label_b="invalid"
     )
 
-    assert (
-        rounds == 2 * SAMPLE_COUNT
-    ), "a tripped assertion must re-measure exactly once"
+    assert rounds == 2 * SAMPLE_COUNT, (
+        "a tripped assertion must re-measure exactly once"
+    )
 
 
 @pytest.mark.asyncio

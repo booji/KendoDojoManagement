@@ -200,13 +200,13 @@ async def test_approve_pending_entry_returns_200_and_confirmed_status(
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert (
-        response.status_code == 200
-    ), f"Expected 200 OK, got {response.status_code}: {response.text}"
+    assert response.status_code == 200, (
+        f"Expected 200 OK, got {response.status_code}: {response.text}"
+    )
     body = response.json()
-    assert (
-        body["status"] == "confirmed"
-    ), f"Entry status must be 'confirmed' after approval; got {body.get('status')!r}"
+    assert body["status"] == "confirmed", (
+        f"Entry status must be 'confirmed' after approval; got {body.get('status')!r}"
+    )
 
 
 async def test_approve_sets_assigned_by_from_auth_token(
@@ -222,13 +222,13 @@ async def test_approve_sets_assigned_by_from_auth_token(
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert (
-        response.status_code == 200
-    ), f"Expected 200 OK, got {response.status_code}: {response.text}"
+    assert response.status_code == 200, (
+        f"Expected 200 OK, got {response.status_code}: {response.text}"
+    )
     body = response.json()
-    assert (
-        body.get("assigned_by") == _ADMIN.sub
-    ), f"assigned_by must be set to the approving admin's sub; got {body.get('assigned_by')!r}"
+    assert body.get("assigned_by") == _ADMIN.sub, (
+        f"assigned_by must be set to the approving admin's sub; got {body.get('assigned_by')!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -247,9 +247,9 @@ async def test_approve_nonexistent_entry_returns_404(member_repo, grade_repo) ->
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{nonexistent_id}/approve")
 
-    assert (
-        response.status_code == 404
-    ), f"Expected 404 Not Found, got {response.status_code}: {response.text}"
+    assert response.status_code == 404, (
+        f"Expected 404 Not Found, got {response.status_code}: {response.text}"
+    )
 
 
 async def test_approve_already_confirmed_entry_returns_409(
@@ -265,9 +265,9 @@ async def test_approve_already_confirmed_entry_returns_409(
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 Conflict for already-confirmed entry, got {response.status_code}: {response.text}"
+    assert response.status_code == 409, (
+        f"Expected 409 Conflict for already-confirmed entry, got {response.status_code}: {response.text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -286,9 +286,9 @@ async def test_delete_pending_entry_returns_204(member_repo, grade_repo) -> None
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert (
-        response.status_code == 204
-    ), f"Expected 204 No Content, got {response.status_code}: {response.text}"
+    assert response.status_code == 204, (
+        f"Expected 204 No Content, got {response.status_code}: {response.text}"
+    )
 
 
 async def test_delete_pending_entry_removes_it_from_history(
@@ -329,9 +329,9 @@ async def test_delete_confirmed_entry_returns_409(member_repo, grade_repo) -> No
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert (
-        response.status_code == 409
-    ), f"Expected 409 Conflict when deleting confirmed entry, got {response.status_code}: {response.text}"
+    assert response.status_code == 409, (
+        f"Expected 409 Conflict when deleting confirmed entry, got {response.status_code}: {response.text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -357,9 +357,9 @@ async def test_approve_non_admin_returns_403(
     ) as c:
         response = await c.post(f"/members/{member_id}/grades/{entry_id}/approve")
 
-    assert (
-        response.status_code == 403
-    ), f"Non-admin must be rejected with 403; got {response.status_code}"
+    assert response.status_code == 403, (
+        f"Non-admin must be rejected with 403; got {response.status_code}"
+    )
 
 
 async def test_delete_non_admin_returns_403(
@@ -380,6 +380,6 @@ async def test_delete_non_admin_returns_403(
     ) as c:
         response = await c.delete(f"/members/{member_id}/grades/{entry_id}")
 
-    assert (
-        response.status_code == 403
-    ), f"Non-admin must be rejected with 403; got {response.status_code}"
+    assert response.status_code == 403, (
+        f"Non-admin must be rejected with 403; got {response.status_code}"
+    )

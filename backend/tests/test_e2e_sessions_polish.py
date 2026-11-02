@@ -83,9 +83,9 @@ def _ensure_session(page: Page, admin_token: str) -> str:
             }
         ),
     )
-    assert (
-        sess_resp.status == 201
-    ), f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    assert sess_resp.status == 201, (
+        f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    )
     return sess_resp.json()["id"]
 
 
@@ -135,9 +135,9 @@ def test_ical_url_displayed_for_authenticated_member(page: Page) -> None:
     expect(ical_input).to_be_visible()
 
     url_value = ical_input.input_value()
-    assert (
-        "/api/sessions/ical" in url_value
-    ), f"Expected iCal URL to contain '/api/sessions/ical', got: {url_value}"
+    assert "/api/sessions/ical" in url_value, (
+        f"Expected iCal URL to contain '/api/sessions/ical', got: {url_value}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -169,9 +169,9 @@ def test_ical_copy_button_copies_url_to_clipboard(page: Page) -> None:
 
     # The clipboard should contain the iCal URL
     clipboard_text = page.evaluate("navigator.clipboard.readText()")
-    assert (
-        "/api/sessions/ical" in clipboard_text
-    ), f"Expected clipboard to contain iCal URL, got: {clipboard_text}"
+    assert "/api/sessions/ical" in clipboard_text, (
+        f"Expected clipboard to contain iCal URL, got: {clipboard_text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +222,9 @@ def test_e2e_copy_then_navigate_to_session_detail(page: Page) -> None:
     expect(page.get_by_text("Copied!")).to_be_visible()
 
     clipboard_text = page.evaluate("navigator.clipboard.readText()")
-    assert (
-        "/api/sessions/ical" in clipboard_text
-    ), f"Clipboard should contain iCal URL, got: {clipboard_text}"
+    assert "/api/sessions/ical" in clipboard_text, (
+        f"Clipboard should contain iCal URL, got: {clipboard_text}"
+    )
 
     # Close popover and navigate to session detail via card click (mobile card list at 375px)
     page.keyboard.press("Escape")

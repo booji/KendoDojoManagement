@@ -224,9 +224,9 @@ def test_generate_codes_match_format() -> None:
 
     codes = generate_recovery_codes()
     for code in codes:
-        assert _CODE_PATTERN.match(
-            code
-        ), f"Code '{code}' does not match xxxx-xxxx-xxxx format"
+        assert _CODE_PATTERN.match(code), (
+            f"Code '{code}' does not match xxxx-xxxx-xxxx format"
+        )
 
 
 def test_generate_codes_are_unique() -> None:
@@ -243,9 +243,9 @@ def test_generate_codes_are_cryptographically_random() -> None:
 
     set1 = set(generate_recovery_codes())
     set2 = set(generate_recovery_codes())
-    assert (
-        set1 != set2
-    ), "Two calls returned identical codes — not cryptographically random"
+    assert set1 != set2, (
+        "Two calls returned identical codes — not cryptographically random"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -266,9 +266,9 @@ def test_stored_records_contain_code_hash_not_plaintext() -> None:
         dummy_hashes = ["$2b$12$fakehash" + str(i) for i in range(8)]
         records = await repo.create_codes(_USER_A.sub, dummy_hashes, set_id)
         for record, code in zip(records, codes):
-            assert (
-                record["code_hash"] != code
-            ), "Plaintext code was stored instead of its bcrypt hash"
+            assert record["code_hash"] != code, (
+                "Plaintext code was stored instead of its bcrypt hash"
+            )
             assert record["used_at"] is None
             assert record["set_id"] == set_id
 
@@ -309,9 +309,9 @@ def test_regenerate_invalidates_old_codes() -> None:
         old_codes = await repo.get_all_for_user(_USER_A.sub)
         for c in old_codes:
             if c["set_id"] == old_set_id:
-                assert (
-                    c["used_at"] is not None
-                ), "Old code was not invalidated after regenerate"
+                assert c["used_at"] is not None, (
+                    "Old code was not invalidated after regenerate"
+                )
 
     asyncio.run(_run())
 
@@ -373,9 +373,9 @@ async def test_generate_endpoint_codes_match_format(
     assert response.status_code == 200
     codes = response.json().get("codes", [])
     for code in codes:
-        assert _CODE_PATTERN.match(
-            code
-        ), f"Code '{code}' does not match xxxx-xxxx-xxxx format"
+        assert _CODE_PATTERN.match(code), (
+            f"Code '{code}' does not match xxxx-xxxx-xxxx format"
+        )
 
 
 async def test_generate_endpoint_returns_409_if_set_exists(
@@ -452,9 +452,9 @@ async def test_regenerate_endpoint_invalidates_old_set(
     # After regeneration, old set codes must have used_at set
     old_codes = [r for r in recovery_repo._store if r["set_id"] == old_set_id]
     for code in old_codes:
-        assert (
-            code["used_at"] is not None
-        ), f"Old code {code['id']} was not invalidated after regenerate"
+        assert code["used_at"] is not None, (
+            f"Old code {code['id']} was not invalidated after regenerate"
+        )
 
 
 async def test_regenerate_endpoint_requires_authentication(

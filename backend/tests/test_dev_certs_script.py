@@ -89,9 +89,9 @@ def test_issues_a_pair_when_none_exists(tmp_path):
 def test_says_which_generator_it_used_and_that_the_result_is_untrusted(tmp_path):
     output = run(tmp_path).stdout.lower()
     assert "self-signed" in output
-    assert (
-        "mkcert" in output
-    ), "the message must name the next action, not just the state"
+    assert "mkcert" in output, (
+        "the message must name the next action, not just the state"
+    )
 
 
 def test_a_second_run_leaves_a_usable_pair_alone(tmp_path):

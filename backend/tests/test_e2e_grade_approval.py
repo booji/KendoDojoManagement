@@ -215,9 +215,9 @@ def test_reject_removes_entry_from_history_without_reload(page: Page) -> None:
     )
 
     entries_after = entries_after_locator.count()
-    assert (
-        entries_after < entries_before
-    ), f"Expected fewer history entries after rejection, got {entries_after} (was {entries_before})"
+    assert entries_after < entries_before, (
+        f"Expected fewer history entries after rejection, got {entries_after} (was {entries_before})"
+    )
 
     # Confirm no page reload occurred
     sentinel = page.evaluate("window.__noReload")

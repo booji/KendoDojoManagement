@@ -88,9 +88,9 @@ def _create_test_session(page: Page, admin_token: str, date: str = _TEST_DATE) -
             }
         ),
     )
-    assert (
-        sess_resp.status == 201
-    ), f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    assert sess_resp.status == 201, (
+        f"Expected 201, got {sess_resp.status}: {sess_resp.text()}"
+    )
     session = sess_resp.json()
     session["type_name"] = session_type["name"]
     return session
@@ -178,9 +178,9 @@ def test_week_grid_renders_sessions_with_title_and_time(page: Page) -> None:
     expect(chip).to_be_visible(timeout=10000)
 
     label = chip.get_attribute("aria-label") or ""
-    assert (
-        _TEST_TIME in label
-    ), f"Expected '{_TEST_TIME}' in chip aria-label, got: {label!r}"
+    assert _TEST_TIME in label, (
+        f"Expected '{_TEST_TIME}' in chip aria-label, got: {label!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -200,26 +200,26 @@ def test_view_toggle_switches_between_month_and_week(page: Page) -> None:
     week_btn = page.get_by_role("button", name="Week")
     expect(month_btn).to_be_visible()
     expect(week_btn).to_be_visible()
-    assert (
-        month_btn.get_attribute("aria-pressed") == "true"
-    ), "Month should be active initially"
+    assert month_btn.get_attribute("aria-pressed") == "true", (
+        "Month should be active initially"
+    )
 
     week_btn.click()
     page.wait_for_load_state("networkidle")
 
-    assert (
-        week_btn.get_attribute("aria-pressed") == "true"
-    ), "Week should be active after click"
-    assert (
-        month_btn.get_attribute("aria-pressed") == "false"
-    ), "Month should be inactive after switching to Week"
+    assert week_btn.get_attribute("aria-pressed") == "true", (
+        "Week should be active after click"
+    )
+    assert month_btn.get_attribute("aria-pressed") == "false", (
+        "Month should be inactive after switching to Week"
+    )
 
     month_btn.click()
     page.wait_for_load_state("networkidle")
 
-    assert (
-        month_btn.get_attribute("aria-pressed") == "true"
-    ), "Month should be active again"
+    assert month_btn.get_attribute("aria-pressed") == "true", (
+        "Month should be active again"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -348,9 +348,9 @@ def test_cancelled_sessions_distinguished_for_admin_hidden_for_member(
 
     # Verify line-through class
     class_attr = cancelled_chip.get_attribute("class") or ""
-    assert (
-        "line-through" in class_attr
-    ), f"Expected 'line-through' in class: {class_attr!r}"
+    assert "line-through" in class_attr, (
+        f"Expected 'line-through' in class: {class_attr!r}"
+    )
 
     # Member view: cancelled session should NOT appear
     member_token = _make_token("member")
@@ -402,9 +402,9 @@ def test_home_dashboard_uses_calendar_and_fetches_range(page: Page) -> None:
     expect(page.get_by_text("Tue", exact=True).first).to_be_visible()
 
     # At least one range request was made
-    assert (
-        len(requests_seen) > 0
-    ), "Expected at least one /sessions?from=...&to=... request, got none."
+    assert len(requests_seen) > 0, (
+        "Expected at least one /sessions?from=...&to=... request, got none."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +458,6 @@ def test_admin_sees_cancelled_sessions_member_sees_only_active(page: Page) -> No
     )
     assert member_sessions_resp.status == 200
     member_ids = [s["id"] for s in member_sessions_resp.json()]
-    assert (
-        session_id not in member_ids
-    ), f"Cancelled session {session_id} should not appear in member's session list"
+    assert session_id not in member_ids, (
+        f"Cancelled session {session_id} should not appear in member's session list"
+    )

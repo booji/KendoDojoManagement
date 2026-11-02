@@ -139,9 +139,9 @@ async def test_create_member_response_schema_has_all_required_fields(
         assert field in body, f"Missing field: {field}"
     # These fields must NOT be present
     assert "full_name" not in body, "full_name must be absent from response"
-    assert (
-        "parental_consent_obtained" not in body
-    ), "parental_consent_obtained must be absent from response"
+    assert "parental_consent_obtained" not in body, (
+        "parental_consent_obtained must be absent from response"
+    )
     assert "is_minor" not in body, "is_minor must be absent from response"
 
 
@@ -802,9 +802,9 @@ async def test_member_response_has_no_legacy_fields(member_repo) -> None:
     assert response.status_code == 201
     body = response.json()
     assert "full_name" not in body, "full_name must not appear in MemberResponse"
-    assert (
-        "parental_consent_obtained" not in body
-    ), "parental_consent_obtained must not appear in MemberResponse"
+    assert "parental_consent_obtained" not in body, (
+        "parental_consent_obtained must not appear in MemberResponse"
+    )
 
 
 async def test_member_response_includes_display_name(member_repo) -> None:

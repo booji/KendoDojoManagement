@@ -203,9 +203,9 @@ def test_segment_supports_multiple_types_and_overlapping_segments_are_accepted(
         f"{API_URL}/sessions/{our_session['id']}", headers=_api_headers(admin_token)
     )
     detail = detail_resp.json()
-    assert (
-        len(detail["segments"][0]["type_ids"]) == 2
-    ), f"Expected 2 types in segment 1, got {detail['segments'][0]['type_ids']}"
+    assert len(detail["segments"][0]["type_ids"]) == 2, (
+        f"Expected 2 types in segment 1, got {detail['segments'][0]['type_ids']}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -411,9 +411,9 @@ def test_edit_form_replaces_full_segment_set_on_save(
         f"{API_URL}/sessions/{session_id}", headers=_api_headers(admin_token)
     )
     detail = detail_resp.json()
-    assert (
-        len(detail["segments"]) == 2
-    ), f"Expected 2 segments after edit, got {len(detail['segments'])}"
+    assert len(detail["segments"]) == 2, (
+        f"Expected 2 segments after edit, got {len(detail['segments'])}"
+    )
 
     # 7. Reload and verify the segment set matches (removed segment is gone)
     page.reload()

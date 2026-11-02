@@ -190,12 +190,12 @@ def test_bottom_tab_bar_touch_targets_are_44px(member_page: Page) -> None:
     assert len(sizes) > 0, "No tab bar items found"
 
     for item in sizes:
-        assert (
-            item["height"] >= 44
-        ), f"Tab bar item '{item.get('label')}' height {item['height']}px < 44px"
-        assert (
-            item["width"] >= 44
-        ), f"Tab bar item '{item.get('label')}' width {item['width']}px < 44px"
+        assert item["height"] >= 44, (
+            f"Tab bar item '{item.get('label')}' height {item['height']}px < 44px"
+        )
+        assert item["width"] >= 44, (
+            f"Tab bar item '{item.get('label')}' width {item['width']}px < 44px"
+        )
 
 
 def test_sidebar_header_shows_my_dojo(admin_page: Page) -> None:
@@ -288,9 +288,9 @@ def test_theme_toggle_cycles_light_dark_system(admin_page: Page) -> None:
             html_classes: str = admin_page.evaluate(
                 "() => document.documentElement.className"
             )
-            assert (
-                "dark" in html_classes
-            ), f"Expected 'dark' class after toggling to dark, got: {html_classes}"
+            assert "dark" in html_classes, (
+                f"Expected 'dark' class after toggling to dark, got: {html_classes}"
+            )
             # Click again (dark → system/light) — dark class should be removed.
             toggle.click()
             admin_page.wait_for_function(
@@ -299,9 +299,9 @@ def test_theme_toggle_cycles_light_dark_system(admin_page: Page) -> None:
             html_classes = admin_page.evaluate(
                 "() => document.documentElement.className"
             )
-            assert (
-                "dark" not in html_classes
-            ), f"Expected no 'dark' class after leaving dark mode, got: {html_classes}"
+            assert "dark" not in html_classes, (
+                f"Expected no 'dark' class after leaving dark mode, got: {html_classes}"
+            )
             reached_dark = True
             break
         # Not at the right starting point — click once and try again.

@@ -42,9 +42,9 @@ def test_every_action_is_pinned_by_commit_sha():
         for line in w.read_text().splitlines()
         if re.match(r"^\s*-?\s*uses:", line) and not pinned.match(line)
     ]
-    assert (
-        WORKFLOWS and not unpinned
-    ), f"pin these actions by full commit SHA with '# vX.Y.Z': {unpinned}"
+    assert WORKFLOWS and not unpinned, (
+        f"pin these actions by full commit SHA with '# vX.Y.Z': {unpinned}"
+    )
 
 
 def test_dependabot_watches_the_dependency_manifests():
@@ -76,27 +76,26 @@ def test_release_signs_the_pushed_digest_keylessly():
     steps = _steps(RELEASE)
     [build] = [s for s in steps if "build-push-action" in s.get("uses", "")]
     [sign] = [s for s in steps if "cosign sign" in s.get("run", "")]
-    assert steps.index(sign) > steps.index(
-        build
-    ), "cosign can only sign a digest that has already been pushed"
-    assert f"steps.{build['id']}.outputs.digest" in str(
-        sign.get("env")
-    ), "sign the digest build-push-action pushed, not a tag"
+    assert steps.index(sign) > steps.index(build), (
+        "cosign can only sign a digest that has already been pushed"
+    )
+    assert f"steps.{build['id']}.outputs.digest" in str(sign.get("env")), (
+        "sign the digest build-push-action pushed, not a tag"
+    )
 
 
 def test_dependency_audit_findings_fail_the_job():
     # A finding turns the run red. Nothing gates on it: a fresh advisory in a
     # transitive dependency must not block an urgent release (#457).
     assert "schedule" in _load(AUDIT)[True], (
-        "advisories are published without a push; the audit must also run on "
-        "a schedule"
+        "advisories are published without a push; the audit must also run on a schedule"
     )
     runs = " ".join(s.get("run", "") for s in _steps(AUDIT))
     assert "pip-audit" in runs and "backend/requirements.txt" in runs, runs
     assert "npm audit --omit=dev" in runs, runs
-    assert (
-        "continue-on-error" not in AUDIT.read_text()
-    ), "a finding must fail the audit job, not be soft-failed"
+    assert "continue-on-error" not in AUDIT.read_text(), (
+        "a finding must fail the audit job, not be soft-failed"
+    )
 
 
 def test_every_workflow_defaults_to_read_only():

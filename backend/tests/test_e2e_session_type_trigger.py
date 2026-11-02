@@ -101,9 +101,9 @@ def test_session_type_trigger_shows_name_after_selection(page: Page) -> None:
     uuid_pattern = re.compile(
         r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
     )
-    assert not uuid_pattern.match(
-        trigger_text.strip()
-    ), f"Trigger shows a raw UUID '{trigger_text}' instead of the type name '{type_name}'"
+    assert not uuid_pattern.match(trigger_text.strip()), (
+        f"Trigger shows a raw UUID '{trigger_text}' instead of the type name '{type_name}'"
+    )
 
 
 # ---------------------------------------------------------------------------

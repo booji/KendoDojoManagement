@@ -66,9 +66,9 @@ def documented_targets() -> list[str]:
 
 
 def test_default_goal_is_help():
-    assert re.search(
-        r"^\.DEFAULT_GOAL\s*:=\s*help$", makefile_text(), re.M
-    ), "a bare `make` must print the target list, not run the first target"
+    assert re.search(r"^\.DEFAULT_GOAL\s*:=\s*help$", makefile_text(), re.M), (
+        "a bare `make` must print the target list, not run the first target"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +83,9 @@ def test_down_stops_the_dev_and_test_stacks():
 
 
 def test_down_does_not_touch_the_quick_self_host():
-    assert "COMPOSE_PROD" not in recipe_of(
-        "down"
-    ), "`make down` must not stop the quick self-host — it would take a dojo offline"
+    assert "COMPOSE_PROD" not in recipe_of("down"), (
+        "`make down` must not stop the quick self-host — it would take a dojo offline"
+    )
 
 
 def test_a_separately_named_target_stops_the_quick_self_host():
@@ -133,9 +133,9 @@ def test_the_certificate_script_is_executable():
 
 def test_every_target_has_a_help_description():
     undocumented = sorted(set(phony_targets()) - set(documented_targets()))
-    assert (
-        not undocumented
-    ), f"targets missing a `## name: description` line: {undocumented}"
+    assert not undocumented, (
+        f"targets missing a `## name: description` line: {undocumented}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +144,6 @@ def test_every_target_has_a_help_description():
 
 
 def test_host_venv_script_is_gone():
-    assert not (
-        ROOT / "dev.sh"
-    ).exists(), "dev.sh is a second, untested way to run the app — the container stack is the only one"
+    assert not (ROOT / "dev.sh").exists(), (
+        "dev.sh is a second, untested way to run the app — the container stack is the only one"
+    )
