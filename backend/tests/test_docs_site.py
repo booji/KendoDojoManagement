@@ -10,6 +10,7 @@ Everything here inspects files on disk — no MkDocs, no GitHub API.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -87,3 +88,20 @@ def test_every_page_in_the_nav_exists():
     assert pages
     missing = [p for p in pages if not (ROOT / "docs" / p).is_file()]
     assert not missing, missing
+
+
+def test_operator_docs_pin_one_pre_1_0_release_line():
+    """Before 1.0 the documented pin is `:0.Y`, never `:1` (ADR-0009), and every
+    page names the same one: a Breaking change bumps it everywhere at once, so
+    the docs published for each Release line show that line's pin."""
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    pins = {
+        (page.relative_to(ROOT).as_posix(), tag)
+        for page in pages
+        for tag in re.findall(
+            r"ghcr\.io/booji/kendodojomanagement:([\w.-]+)", page.read_text()
+        )
+    }
+    assert pins
+    tags = {tag for _, tag in pins}
+    assert len(tags) == 1 and re.fullmatch(r"0\.\d+", *tags), sorted(pins)

@@ -22,8 +22,7 @@ and silently upgraded.
     last redeployed), there is no single correct stamp target at all —
     `test_stale_legacy_database_stamped_at_head_stays_missing_later_tables`
     documents that failure mode rather than papering over it.
-Both are documented in the baseline migration's docstring and
-docs/install/upgrading.md.
+Both are documented in the baseline migration's docstring.
 
 Test isolation strategy
 ------------------------
@@ -230,7 +229,7 @@ def _run_alembic(database_url: str, action, *args) -> None:
 # unconditionally, which for this state means replaying the baseline
 # migration's CREATE TABLE statements against tables that already exist —
 # it must fail loudly rather than silently doing the wrong thing. The
-# documented fix (docs/install/upgrading.md, the baseline migration's docstring) is
+# documented fix (the baseline migration's docstring) is
 # `alembic stamp head` — correct precisely when the legacy schema already
 # matches the current ORM, which is what this test builds (a full
 # `Base.metadata.create_all` of today's models — proven identical to a fully
@@ -287,9 +286,9 @@ async def test_legacy_database_at_current_schema_needs_stamp_head(
 # stamp target. This test documents (does not "fix") that failure mode:
 # stamping head against a stale schema does not error, but silently leaves
 # the database missing tables/columns those later migrations would have
-# added. This is exactly why docs/install/upgrading.md tells an operator who is not
-# sure their schema is current to diff it against the ORM first rather than
-# guess a stamp point.
+# added. This is exactly why the baseline migration's docstring tells an
+# operator who is not sure their schema is current to diff it against the ORM
+# first rather than guess a stamp point.
 # ---------------------------------------------------------------------------
 
 
@@ -323,7 +322,8 @@ async def test_stale_legacy_database_stamped_at_head_stays_missing_later_tables(
 
     # ...leaving tables that real migrations after the baseline would have
     # created permanently missing, silently. There is no stamp target that
-    # avoids this for a genuinely stale schema — see docs/install/upgrading.md.
+    # avoids this for a genuinely stale schema — see the baseline migration's
+    # docstring.
     assert "federations" not in await _table_names(_bootstrap_db)
     assert "member_federations" not in await _table_names(_bootstrap_db)
     assert "invites" not in await _table_names(_bootstrap_db)

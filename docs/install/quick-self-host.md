@@ -14,7 +14,7 @@ The release image carries the files a deployment needs — this compose file, th
 there is no clone and no build (ADR-0004):
 
 ```bash
-podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 ```
 
 (Working from a checkout instead? Skip that — the files are already here.)
@@ -60,7 +60,7 @@ escalates itself; you run those.
 
 ```bash
 ./setup.sh check       # green? then:
-podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:1
+podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:0.1
 ```
 
 `check` looks at what the app cannot see from inside its container, the things
@@ -74,9 +74,11 @@ is something it cannot decide from here — DNS pointing at a router's public
 address is right behind NAT — and does not fail it. Run it any time: after an
 upgrade, after a domain change, or paste its output into a bug report.
 
-`KENDO_IMAGE` in `.env` is the pin. The documented default is the **major** tag
-`:1`: fixes and features, but no migration that needs a restore from backup to
-undo. Moving to `:2` is a deliberate edit, made after reading the release notes.
+`KENDO_IMAGE` in `.env` is the pin. The documented default is the **Release
+line** tag `:0.1`: fixes and features, but no Breaking change — nothing that
+needs a manual step or a restore from backup to undo. Moving to `:0.2` is a
+deliberate edit, made after reading its section in [Upgrading](upgrading.md).
+From 1.0 the pin is the major, `:1` (ADR-0009).
 
 Contributors still build from source — `make build` produces
 `localhost/kendodojo:latest`; set `KENDO_IMAGE=localhost/kendodojo:latest` to

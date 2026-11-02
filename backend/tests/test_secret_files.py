@@ -80,8 +80,8 @@ _UNREACHABLE_URL = "postgresql+asyncpg://nobody:nothing@127.0.0.1:1/none"
     "variable", [None, _UNREACHABLE_URL], ids=["file-only", "file-and-variable"]
 )
 def test_alembic_reads_the_database_url_file(tmp_path, variable):
-    """`podman exec kendo-app alembic ...` (docs/install/upgrading.md) runs
-    where DATABASE_URL_FILE is set. The file wins over the variable, as it
+    """`podman exec kendo-app alembic ...` (the baseline migration's
+    docstring) runs where DATABASE_URL_FILE is set. The file wins over the variable, as it
     does for the app: one rule, read_secret's."""
     url_file = tmp_path / "database_url"
     url_file.write_text(os.environ["DATABASE_URL"])
