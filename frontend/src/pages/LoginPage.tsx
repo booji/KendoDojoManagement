@@ -29,6 +29,11 @@ const LoginPage = () => {
       })
   }, [])
 
+  // A null name keeps index.html's fallback title.
+  useEffect(() => {
+    if (branding?.dojo_name) document.title = branding.dojo_name
+  }, [branding])
+
   const handlePasskeyLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
