@@ -1,5 +1,5 @@
 # The docs site (mkdocs.yml, .github/workflows/docs.yml). Pinned like the
 # backend's requirements: a theme release must not change the site unreviewed.
 mkdocs==1.6.1
-mkdocs-material==9.7.7
+mkdocs-material==9.8.0
 mike==2.2.0
