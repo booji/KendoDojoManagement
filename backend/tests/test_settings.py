@@ -350,3 +350,53 @@ async def test_upload_accepts_a_genuine_png(
 
     assert response.status_code == 200
     assert response.json()["logo_url"].startswith("/static/logos/")
+
+
+# ---------------------------------------------------------------------------
+# Issue #556 — an Admin can see which Version is running
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_gets_the_version_the_image_was_built_with(monkeypatch) -> None:
+    monkeypatch.setenv("KENDO_VERSION", "0.1.5")
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/settings/version")
+
+    assert response.status_code == 200
+    assert response.json() == {"version": "0.1.5"}
+
+
+async def test_a_build_that_is_not_a_release_reports_dev(monkeypatch) -> None:
+    monkeypatch.delenv("KENDO_VERSION", raising=False)
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/settings/version")
+
+    assert response.json() == {"version": "dev"}
+
+
+async def test_a_member_cannot_get_the_version() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get(
+            "/settings/version", cookies={"access_token": _member_token()}
+        )
+
+    assert response.status_code == 403
+
+
+async def test_a_signed_out_request_cannot_get_the_version() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/settings/version")
+
+    assert response.status_code == 401
