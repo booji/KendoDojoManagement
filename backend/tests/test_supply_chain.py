@@ -56,8 +56,7 @@ def test_dependabot_watches_the_dependency_manifests():
     }
     expected = {
         ("github-actions", "/"),
-        ("pip", "/backend"),
-        ("pip", "/"),  # requirements-docs.txt, installed by docs.yml
+        ("uv", "/backend"),  # uv.lock: runtime, dev and docs groups
         ("npm", "/frontend"),
         ("docker", "/"),
     }
@@ -91,7 +90,10 @@ def test_dependency_audit_findings_fail_the_job():
         "advisories are published without a push; the audit must also run on a schedule"
     )
     runs = " ".join(s.get("run", "") for s in _steps(AUDIT))
-    assert "pip-audit" in runs and "backend/requirements.txt" in runs, runs
+    assert "pip-audit" in runs and "uv export" in runs, runs
+    assert "--no-default-groups" in runs, (
+        "audit what the prod image ships, not dev tools"
+    )
     assert "npm audit --omit=dev" in runs, runs
     assert "continue-on-error" not in AUDIT.read_text(), (
         "a finding must fail the audit job, not be soft-failed"

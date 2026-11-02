@@ -39,7 +39,7 @@ dev: certs
 
 ## test: Start the test watcher stack (rebuilds the image so pinned dev deps are present)
 test:
-	# --build rebuilds when the Dockerfile or requirements*.txt change, so a
+	# --build rebuilds when the Dockerfile or backend/uv.lock change, so a
 	# newly pinned dev dependency (e.g. freezegun) can't be missing from a stale
 	# cached image and masquerade as a collection error (see #221). Docker layer
 	# caching keeps this a no-op when nothing relevant changed.

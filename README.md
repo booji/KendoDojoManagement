@@ -62,7 +62,7 @@ podman-compose up -d
 Podman is the supported runtime; Docker is best-effort — see
 [Container runtime](docs/index.md#container-runtime).
 
-The site builds with `mkdocs serve` after `pip install -r requirements-docs.txt`.
+The site builds with `uv run --project backend --group docs mkdocs serve`.
 
 ## Licence
 

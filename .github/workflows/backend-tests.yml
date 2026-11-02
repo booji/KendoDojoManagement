@@ -34,11 +34,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint and format check (ruff)
-        # The ruff version comes from requirements-dev.txt, so CI and the
-        # local venv cannot drift apart.
+        # The ruff version comes from pyproject.toml's dev group, so CI and
+        # the local venv cannot drift apart.
         working-directory: backend
         run: |
-          spec="$(grep '^ruff==' requirements-dev.txt)"
+          spec="$(grep -oE 'ruff==[0-9.]+' pyproject.toml)"
           pipx run --spec "$spec" ruff check .
           pipx run --spec "$spec" ruff format --check .
 

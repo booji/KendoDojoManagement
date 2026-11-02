@@ -152,18 +152,34 @@ systemd user manager has lost its private socket, and Podman needs it for the
 units with `QUADLET_UNIT_DIRS=$PWD/deploy/quadlet /usr/libexec/podman/quadlet
 -dryrun -user`, which touches no running manager.
 
+### Python dependencies
+
+uv owns them: `backend/pyproject.toml` declares them (runtime in `[project]`,
+`dev` and `docs` in `[dependency-groups]`), `backend/uv.lock` pins the full
+tree, and the Dockerfile installs with `uv sync --frozen`. Never edit
+`uv.lock` by hand or reintroduce a `requirements*.txt`.
+
+```bash
+cd backend
+uv add <pkg>                      # runtime dependency
+uv add --group dev <pkg>          # dev-only
+uv lock --upgrade-package <pkg>   # bump one package within its constraint
+```
+
+A changed lock needs an image rebuild (`make test` and `make dev` pass `--build`).
+
 ### Lint, format, dev servers
 
-These run on the host from `backend/` with the venv active. CI
-(`backend-tests.yml`) runs `ruff check` and `ruff format --check` on every push.
+These run on the host from `backend/` through uv, which builds `.venv` from
+`uv.lock` on first use. CI (`backend-tests.yml`) runs `ruff check` and
+`ruff format --check` on every push.
 
 ```bash
 # Backend
 cd backend
-. .venv/bin/activate
-ruff check .            # lint
-ruff format .           # format
-uvicorn app.main:app --reload  # dev server
+uv run ruff check .            # lint
+uv run ruff format .           # format
+uv run uvicorn app.main:app --reload  # dev server
 
 # Frontend
 cd frontend

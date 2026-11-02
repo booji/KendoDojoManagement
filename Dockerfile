@@ -7,12 +7,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
 # Upgrade pip first so the image ships the CVE-fixed pip (issue #235). pip is
 # build-only tooling, but this keeps the image's pip current too.
 RUN pip install --no-cache-dir --upgrade pip
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# uv installs the locked dependencies (uv.lock) straight into the system
+# Python, so the prod stage's site-packages copy below works unchanged. The
+# binary sits in /bin, outside what prod copies, so prod ships no uv.
+# --inexact leaves pip (and anything else uv did not install) in place.
+COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /bin/uv
+ENV UV_PROJECT_ENVIRONMENT=/usr/local UV_COMPILE_BYTECODE=1 UV_NO_CACHE=1
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --inexact --no-default-groups
 
 FROM backend-deps AS backend-dev-deps
-COPY backend/requirements-dev.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
+RUN uv sync --frozen --inexact
 # curl belongs to this stage rather than the e2e one below: run_tests.sh gates
 # on `curl http://localhost:8000/health` before pytest (#316), and the
 # backend-only CI job (#336) runs that script against this image. age is here
