@@ -41,6 +41,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+          # Otherwise the action labels the licence GitHub detects, the bare
+          # AGPL-3.0, contradicting LICENSE and the package metadata (#390).
+          labels: |
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:

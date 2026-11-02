@@ -5,7 +5,7 @@ JWT_SECRET could forge one and enrol an attacker's passkey on any Account.
 They are now Auth Session rows of kind `recovery`: 15 minutes, never slid,
 deleted when the passkey they enrol is saved. Existing rows are sign-ins, so
 the column defaults to `sign_in` (not `session`: a Session is a training
-event, UBIQUITOUS_LANGUAGE.md).
+event, GLOSSARY.md).
 
 Revision ID: b0c1d2e3f4a6
 Revises: a9b0c1d2e3f5

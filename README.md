@@ -43,7 +43,7 @@ Self-hosted web application for managing the members, sessions, and attendance o
   [Day-2 operations](docs/operating/day-2.md)
 - **Reference** — [Environment variables](docs/reference/environment.md) ·
   [Container architecture](docs/reference/container-architecture.md) ·
-  [Database schema](docs/schema.md) · [Glossary](UBIQUITOUS_LANGUAGE.md) ·
+  [Database schema](docs/schema.md) · [Glossary](GLOSSARY.md) ·
   [Decisions (ADRs)](docs/adr/)
 - **Contributing** — [Dev stack](docs/contributing/dev-stack.md) ·
   [Make targets](docs/contributing/make-targets.md) ·
@@ -63,3 +63,11 @@ Podman is the supported runtime; Docker is best-effort — see
 [Container runtime](docs/index.md#container-runtime).
 
 The site builds with `uv run --project backend --group docs mkdocs serve`.
+
+## Licence
+
+KendoDojoManagement is licensed under the GNU Affero General Public License,
+version 3 or later (`AGPL-3.0-or-later`); see [LICENSE](LICENSE). You may run,
+modify and share it. Copies you share must come with their source code under
+the same licence, and if you run a modified version for other people over a
+network, you must offer them its source code too.

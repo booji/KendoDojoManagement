@@ -1,6 +1,8 @@
 [project]
 name = "kendodojomanagement"
-version = "0"
+# Not published as a package: the image tag is the version (ADR-0004).
+version = "0.0.0"
+license = "AGPL-3.0-or-later"
 # The image's Python (Dockerfile `FROM python:3.13-slim`). A new minor is an
 # upgrade done by hand, not a bump (see .github/dependabot.yml).
 requires-python = "==3.13.*"

@@ -15,7 +15,7 @@ on:
       - '.github/workflows/docs.yml'
       # Included into pages by pymdownx.snippets.
       - 'README.md'
-      - 'UBIQUITOUS_LANGUAGE.md'
+      - 'GLOSSARY.md'
       - 'CLAUDE.md'
       - '.env.example'
       - 'deploy/env/**'
