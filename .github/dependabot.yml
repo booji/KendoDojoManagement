@@ -34,6 +34,11 @@ updates:
     groups:
       npm:
         patterns: ['*']
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 only; #528's move to
+      # TypeScript 7 could not install. Lift once typescript-eslint supports it.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   # The Dockerfile's base images. The images the stacks run beside the app
   # (postgres, traefik) are bumped by hand: Dependabot cannot read the Quadlet
