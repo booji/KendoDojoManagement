@@ -63,3 +63,11 @@ Podman is the supported runtime; Docker is best-effort — see
 [Container runtime](docs/index.md#container-runtime).
 
 The site builds with `mkdocs serve` after `pip install -r requirements-docs.txt`.
+
+## Licence
+
+KendoDojoManagement is licensed under the GNU Affero General Public License,
+version 3 or later (`AGPL-3.0-or-later`); see [LICENSE](LICENSE). You may run,
+modify and share it. Copies you share must come with their source code under
+the same licence, and if you run a modified version for other people over a
+network, you must offer them its source code too.
