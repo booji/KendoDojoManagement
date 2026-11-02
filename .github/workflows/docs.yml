@@ -1,10 +1,11 @@
 name: Docs
 
 # The docs site (#415): mkdocs.yml, served on GitHub Pages from the gh-pages
-# branch, one version per major image tag via mike — an operator on the :1
-# image reads the 1.x docs. A pull request only builds, strictly, so a broken
-# link fails in the same PR as the change that broke it. `main` publishes `dev`;
-# a release tag publishes its major and moves `latest` to it.
+# branch, one version per pinned image tag via mike — an operator on the :1
+# image reads the 1.x docs, and before 1.0 one on :0.3 reads 0.3.x (ADR-0009).
+# A pull request only builds, strictly, so a broken link fails in the same PR
+# as the change that broke it. `develop` publishes `dev`; a release tag
+# publishes its pin's version and moves `latest` to it.
 on:
   pull_request:
     paths: &docs
@@ -20,7 +21,7 @@ on:
       - '.env.example'
       - 'deploy/env/**'
   push:
-    branches: [main]
+    branches: [develop]
     # Path filters are not evaluated for tag pushes: every release tag deploys.
     paths: *docs
     tags: ['v*']
@@ -46,12 +47,12 @@ jobs:
   deploy:
     name: Publish with mike
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One writer to gh-pages across every ref: a merge to main and the release
-    # tag pushed straight after it would otherwise both push, and the second
-    # is rejected as non-fast-forward. Never cancel one half-way through.
+    # One writer to gh-pages across every ref: a merge to develop and a release
+    # tag pushed while it runs would otherwise both push, and the second is
+    # rejected as non-fast-forward. Never cancel one half-way through.
     concurrency:
       group: docs-gh-pages
       cancel-in-progress: false
@@ -68,16 +69,18 @@ jobs:
           uv sync --project backend --frozen --only-group docs
           echo "$PWD/backend/.venv/bin" >> "$GITHUB_PATH"
 
-      # The docs version on the image tag's axis (ADR-0004): v1.4.0 -> 1.x.
-      # A release candidate's image gets only its exact tag and never :1, so
-      # its docs publish nowhere either — empty skips the deploy.
+      # The docs version on the image pin's axis (ADR-0004, ADR-0009):
+      # v1.4.0 -> 1.x, v0.3.1 -> 0.3.x. A release candidate's image gets only
+      # its exact tag and never a pin, so its docs publish nowhere either —
+      # empty skips the deploy.
       - id: version
         run: |
           case $GITHUB_REF in
-            refs/heads/main) version=dev ;;
-            refs/tags/v*-*)  version= ;;
-            refs/tags/v*)    version=${GITHUB_REF#refs/tags/v}; version=${version%%.*}.x ;;
-            *)               version= ;;
+            refs/heads/develop) version=dev ;;
+            refs/tags/v*-*)     version= ;;
+            refs/tags/v0.*)     version=${GITHUB_REF#refs/tags/v}; version=${version%.*}.x ;;
+            refs/tags/v*)       version=${GITHUB_REF#refs/tags/v}; version=${version%%.*}.x ;;
+            *)                  version= ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
 

@@ -159,17 +159,37 @@ def test_backend_workflow_cancels_superseded_runs():
     )
 
 
-def test_full_suite_workflow_still_reserved_for_release_candidates():
+def test_backend_workflow_runs_on_pull_requests():
+    """A fork's branch pushes never reach this repository's Actions, so a fork
+    PR into develop only gets CI from a pull_request trigger (#549)."""
+    triggers = _load(BACKEND_WORKFLOW)[True]
+    assert "pull_request" in triggers, triggers
+    paths_ignore = (triggers["pull_request"] or {}).get("paths-ignore", [])
+    assert "**.md" in paths_ignore and "docs/**" in paths_ignore, paths_ignore
+
+
+def test_full_suite_workflow_runs_on_release_candidates_and_prs_into_main():
     """
-    Regression guard: the split adds per-push signal, it does not move the
-    full suite onto every push. If that trigger ever widens it should be a
-    deliberate, reviewed change (option B in #336) rather than a side effect.
+    Regression guard: the full suite runs where a release is cut, not on every
+    push. Release and hotfix PRs into main need it as a required check (#549);
+    everything else stays on the backend-only job.
     """
     triggers = _load(FULL_SUITE_WORKFLOW)[True]
-    assert "pull_request" not in triggers, (
-        "the full suite must not fire on pull_request — that is option B in "
-        "#336 and was not adopted"
-    )
+    assert triggers["pull_request"] == {"branches": ["main"]}, triggers
     assert triggers["push"] == {"tags": ["v*-rc*"]}, (
         f"the full suite must stay on release-candidate tags; got {triggers['push']!r}"
     )
+
+
+def test_release_notes_lead_with_what_an_operator_must_act_on():
+    """Generated release notes group by label (#548): a Breaking change first,
+    then security, then features and fixes, then everything else."""
+    categories = _load(ROOT / ".github" / "release.yml")["changelog"]["categories"]
+    assert [c["labels"] for c in categories] == [
+        ["breaking"],
+        ["security"],
+        ["feature"],
+        ["bug"],
+        ["*"],
+    ], categories
+    assert categories[0]["title"] == "Breaking / Operator action", categories

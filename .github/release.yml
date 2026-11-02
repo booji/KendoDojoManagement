@@ -1,0 +1,14 @@
+# Generated release notes, grouped by PR label (#548): what an operator must
+# act on first. A PR goes under the first category whose label it carries.
+changelog:
+  categories:
+    - title: Breaking / Operator action
+      labels: [breaking]
+    - title: Security
+      labels: [security]
+    - title: Features
+      labels: [feature]
+    - title: Fixes
+      labels: [bug]
+    - title: Other changes
+      labels: ['*']

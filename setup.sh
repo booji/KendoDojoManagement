@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # First-run configuration (#411, #412).
 #
-#   podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+#   podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 #   ./setup.sh              # quick self-host: Compose + .env
 #   ./setup.sh --quadlet    # hardened: podman secrets + ~/kendo + Quadlet units
 #   ./setup.sh check [--quadlet]   # advisory preflight, any time (#413)
@@ -468,7 +468,7 @@ run_upgrade() {
   # the data is only half a rollback, as the new image would migrate it again.
   local image previous
   image=$(env_value .env KENDO_IMAGE)
-  image=${image:-ghcr.io/booji/kendodojomanagement:1}
+  image=${image:-ghcr.io/booji/kendodojomanagement:0.1}
   previous=$(podman image inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true)
 
   # Global, not local: the EXIT trap runs after this function has returned.
@@ -490,7 +490,7 @@ run_upgrade() {
   write_compose_secrets
 
   # --force-recreate: podman-compose recreates a container only when the YAML
-  # changed, and a new image under the same :1 tag is not a YAML change. And
+  # changed, and a new image under the same pinned tag is not a YAML change. And
   # it treats service_completed_successfully as merely "stopped", so a failed
   # migration does not fail `up` — migrate's exit code is read here instead.
   local code=""
@@ -870,7 +870,6 @@ quadlet_install() {
   elif have_secret kendo_postgres_password || have_secret kendo_migration_database_url; then
     echo "Only one of kendo_postgres_password / kendo_migration_database_url exists; they must embed the same password and neither can be read back. On a fresh install, remove both and re-run:" >&2
     echo "  podman secret rm kendo_postgres_password kendo_migration_database_url" >&2
-    echo "Upgrading an install from before #453 instead? See docs/install/upgrading.md." >&2
     exit 1
   else
     put_secret kendo_postgres_password "$db_password"
@@ -932,7 +931,7 @@ quadlet_install() {
   cp deploy/quadlet/kendo-*.network deploy/quadlet/kendo-*.volume \
      deploy/quadlet/kendo-*.container "$units/"
   # The bundle knows the tag it came from (ADR-0004); the shipped units carry the
-  # documented major pin, which is right for a release and wrong for a
+  # documented release-line pin, which is right for a release and wrong for a
   # prerelease rehearsal.
   [ -z "$image" ] || sed -i "s|^Image=ghcr.io/booji/kendodojomanagement:.*|Image=$image|" \
     "$units/kendo-app.container" "$units/kendo-migrate.container" \

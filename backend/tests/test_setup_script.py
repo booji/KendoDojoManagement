@@ -177,18 +177,18 @@ def test_rerunning_moves_a_pre_453_env_onto_the_app_user(tmp_path):
 
 def test_writes_the_tag_the_bundle_was_extracted_from(tmp_path):
     home = bundle(tmp_path)
-    (home / ".image-tag").write_text("ghcr.io/booji/kendodojomanagement:1.0.0-rc1\n")
+    (home / ".image-tag").write_text("ghcr.io/booji/kendodojomanagement:0.1.0-rc1\n")
     run(home, "dojo.example.com", "1", "1", "admin@example.com")
 
-    assert env_of(home)["KENDO_IMAGE"] == "ghcr.io/booji/kendodojomanagement:1.0.0-rc1"
+    assert env_of(home)["KENDO_IMAGE"] == "ghcr.io/booji/kendodojomanagement:0.1.0-rc1"
 
 
-def test_a_checkout_keeps_the_documented_major_pin(tmp_path):
+def test_a_checkout_keeps_the_documented_pin(tmp_path):
     # No .image-tag: a contributor runs this from a clone, not from a bundle.
     home = bundle(tmp_path)
     run(home, "dojo.example.com", "1", "1", "admin@example.com")
 
-    assert env_of(home)["KENDO_IMAGE"] == "ghcr.io/booji/kendodojomanagement:1"
+    assert env_of(home)["KENDO_IMAGE"] == "ghcr.io/booji/kendodojomanagement:0.1"
 
 
 def acme(home: Path) -> str:
@@ -327,7 +327,7 @@ def test_a_rerun_keeps_a_contributors_own_image_pin(tmp_path):
         (home / ".env")
         .read_text()
         .replace(
-            "KENDO_IMAGE=ghcr.io/booji/kendodojomanagement:1",
+            "KENDO_IMAGE=ghcr.io/booji/kendodojomanagement:0.1",
             "KENDO_IMAGE=localhost/kendodojo:latest",
         )
     )
@@ -629,7 +629,7 @@ def test_quadlet_refuses_a_half_present_database_url_pair(tmp_path):
 def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
     host = Host(tmp_path)
     (host.src / ".image-tag").write_text(
-        "ghcr.io/booji/kendodojomanagement:1.0.0-rc1\n"
+        "ghcr.io/booji/kendodojomanagement:0.1.0-rc1\n"
     )
     host.run("dojo.example.com", "4")
 
@@ -639,7 +639,7 @@ def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
         "kendo-ip-retention.container",
     ):
         assert (
-            "Image=ghcr.io/booji/kendodojomanagement:1.0.0-rc1"
+            "Image=ghcr.io/booji/kendodojomanagement:0.1.0-rc1"
             in (host.units() / unit).read_text()
         ), unit
 
@@ -1159,7 +1159,7 @@ def test_upgrade_takes_the_bundle_from_the_image_about_to_run(tmp_path):
     pulled = up.first("podman-compose pull")
     recreated = up.first("podman-compose up -d --force-recreate")
     assert (
-        "podman run --rm ghcr.io/booji/kendodojomanagement:1 init"
+        "podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init"
         in (up.calls()[pulled:recreated])
     )
     assert "# next release" in (up.src / "docker-compose.yml").read_text()

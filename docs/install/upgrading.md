@@ -39,23 +39,7 @@ Fix those rows, then run `./setup.sh upgrade` again.
 
 A plain `podman-compose pull && podman-compose up -d` is not enough on Podman:
 podman-compose recreates a container only when the compose file changes, so a
-new image under the same `:1` tag never starts.
-
-> **Upgrading a Compose stack first started before #385:** the image now runs as
-> the unprivileged user `kendo` (uid 1001), but Podman only takes a volume's
-> ownership from the image when the volume is *empty*, so a `static_uploads`
-> created by the old root-running image stays root-owned and the first upload
-> after the upgrade fails with a permission error. Chown it once:
->
-> ```bash
-> # Compose prefixes the volume with the project name — find it first:
-> vol=$(podman volume ls --format '{{.Name}}' | grep static_uploads)
-> podman unshare chown -R 1001:1001 \
->   "$(podman volume inspect "$vol" --format '{{.Mountpoint}}')"
-> ```
->
-> The Quadlet path needs no such step — `kendo-app.container` mounts the volume
-> with `:U`, which chowns it on every start. Fresh stacks need nothing either.
+new image under the same `:0.1` tag never starts.
 
 ## Hardened deployment (Quadlet)
 
@@ -68,7 +52,7 @@ copy made once at install time; pulling a new image updates neither.
 ```bash
 # Re-extract the bundle from the tag you are pinned to — it ships inside the
 # image, so the units below match the app they start.
-cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 
 # Units: re-run the copy from Hardened deployment §2-4, then daemon-reload so Quadlet regenerates.
 cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
@@ -76,7 +60,7 @@ cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
 cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-# Idempotent; enables the IP-retention timer on an install that predates it (#467).
+# Idempotent: enables the IP-retention timer if it is not already.
 systemctl --user enable --now kendo-ip-retention.timer
 
 # Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.
@@ -92,18 +76,6 @@ systemctl --user restart kendo-migrate kendo-app
 The env file is per-host and needs comparing rather than copying — see
 [Refreshing the env file](#refreshing-the-env-file-after-an-upgrade).
 
-**A host installed before #412 that uses DNS-01 needs the drop-in before its
-next unit refresh.** `kendo-traefik.container` used to hardcode
-`CF_DNS_API_TOKEN_FILE` and the `kendo_cf_dns_token` secret; it no longer
-does, so re-copying it leaves Traefik with no DNS credentials and ACME
-renewal fails. Write the drop-in from [§5](../deployment.md#5-tls-options) first — pointing
-`Secret=` at your existing `kendo_cf_dns_token` is fine, no new secret needed.
-
-**Hosts installed before #385 need the unit refresh now.** That change made
-the app run unprivileged and mounts the uploads volume `:U`; both live in
-`kendo-app.container`, so neither reaches an existing host until the copy
-above. The edge health check lives in the Traefik dynamic config.
-
 ## Checking an image came from this repository
 
 Each release image is signed by the release workflow with
@@ -111,72 +83,14 @@ Each release image is signed by the release workflow with
 the image you are about to run, with cosign installed:
 
 ```bash
-cosign verify ghcr.io/booji/kendodojomanagement:1 \
+cosign verify ghcr.io/booji/kendodojomanagement:0.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/booji/KendoDojoManagement/\.github/workflows/release\.yml@refs/tags/v'
 ```
 
 It fails unless the image's digest was signed by that workflow on a release
-tag. Images released before #457 are unsigned. Podman does not check this by
-itself yet (#518). The signature is recorded in Sigstore's public transparency log,
+tag. Podman does not check this by itself yet (#518). The signature is recorded in Sigstore's public transparency log,
 which names this repository, the workflow and the release tag.
-
-## Upgrading to the least-privilege app user (#453)
-
-The app now connects to PostgreSQL as its own user, `kendo_app`, which can only
-read and write rows; `kendo` stays the superuser and is given to the migration
-step alone ([ADR-0007](../adr/0007-the-app-connects-as-a-least-privilege-database-user.md)).
-`DATABASE_URL` is the app user's login and a new `MIGRATION_DATABASE_URL` holds
-the superuser's. The migration step creates `kendo_app` and sets its password
-from `DATABASE_URL` on every start, so nothing is done inside the database by
-hand. Until both URLs exist the migration step refuses to run — before touching
-the schema — and the app refuses to start as a superuser.
-
-**Quick self-host (Compose).** Run `./setup.sh upgrade` as usual: it brings the
-new `setup.sh` and compose file, then stops at the migration step because
-`MIGRATION_DATABASE_URL` is not in `.env` yet. Nothing has been migrated, so
-skip the rollback it prints. Re-run `./setup.sh` — it keeps `POSTGRES_PASSWORD`
-and every other secret, writes `MIGRATION_DATABASE_URL` with it, and moves
-`DATABASE_URL` onto `kendo_app` with a new password — then start the stack:
-
-```bash
-./setup.sh
-podman-compose up -d --force-recreate
-```
-
-**Hardened deployment (Quadlet).** `kendo_database_url` held the superuser's
-login; that becomes `kendo_migration_database_url`, and `kendo_database_url` is
-recreated with the app user's. The superuser password is the one `kendo-db`
-already has:
-
-```bash
-pw=$(podman exec kendo-db cat /run/secrets/postgres_password)
-printf '%s' "postgresql+asyncpg://kendo:$pw@kendo-db:5432/kendo" \
-  | podman secret create kendo_migration_database_url -
-unset pw
-
-podman secret rm kendo_database_url
-printf '%s' "postgresql+asyncpg://kendo_app:$(od -An -vtx1 -N24 /dev/urandom | tr -d ' \n')@kendo-db:5432/kendo" \
-  | podman secret create kendo_database_url -
-```
-
-Then refresh the units as above — `kendo-migrate.container` now attaches the
-new secret — and `systemctl --user restart kendo-migrate kendo-app`.
-
-## Upgrading to secrets as mounted files (#462)
-
-The app's secrets are now mounted into its containers as files, not passed as
-environment variables. Nothing about the secrets themselves changes.
-
-**Quick self-host (Compose).** Nothing to do: `./setup.sh upgrade` writes the
-new `secrets/` directory from your `.env` before it recreates the stack. If you
-start the stack yourself instead, run `./setup.sh` first (it keeps every
-secret it finds in `.env`), or `podman-compose up` fails on the missing
-secret files.
-
-**Hardened deployment (Quadlet).** Refresh the units as above. The podman
-secrets keep their names, so none needs recreating, then
-`systemctl --user restart kendo-migrate kendo-app`.
 
 ## Refreshing the env file after an upgrade
 
@@ -206,8 +120,8 @@ systemctl --user restart kendo-app
 ```
 
 A changed `EnvironmentFile` needs only a restart; a changed *unit* file needs
-re-copying and a `daemon-reload` first — the note under the table above has
-that sequence.
+re-copying and a `daemon-reload` first — [Hardened deployment
+(Quadlet)](#hardened-deployment-quadlet) above has that sequence.
 
 Then verify the app actually received it — a restart proves the unit started,
 not that the value arrived:
@@ -218,73 +132,14 @@ podman exec kendo-app printenv APP_ENV JWT_EXPIRE_MINUTES
 # JWT_EXPIRE_MINUTES=480
 ```
 
-> **Hosts deployed before #386 need this now.** That change added
-> `APP_ENV=production` (without it the app takes its development path and skips
-> every production WebAuthn check at startup) and raised
-> `JWT_EXPIRE_MINUTES` to 480. Both live in the env file, so neither reaches an
-> existing host until you copy them across.
->
-> #387 adds `SESSION_MAX_MINUTES` (default 10080 — 7 days), the ceiling on a
-> session that sliding renewal keeps alive. It defaults in `app/config.py`, so
-> an existing host needs it in the env file only to override that default.
->
-> **#485 signs everyone out once.** Sessions became server-side Auth Session
-> rows (ADR-0008), and the cookies issued before it name none, so every user
-> signs in again after the upgrade. `JWT_EXPIRE_MINUTES` and
-> `SESSION_MAX_MINUTES` keep their names and meaning: the idle timeout and the
-> absolute ceiling.
+## Upgrading to a new Release line
 
-## Upgrading a deployment created before the Alembic baseline (issue #264)
+Within a Release line (`:0.1`) every upgrade is the routine one above. The
+exception is a security fix that cannot avoid breaking: its release notes say
+so under a Security heading, and the upgrade stops until you have acted. Moving
+to the next (`:0.2`) is a **Breaking change**: it needs a step only you can
+take, or carries a migration that returning to the previous image cannot undo.
+Each one gets its own section here, headed "Upgrading to 0.Y", with the
+operator action its release notes list. Read it before you change the pin.
 
-As of issue #264, the Alembic chain has a baseline migration (`000000000000`)
-that creates the full schema from nothing, so `alembic upgrade head` now
-works against a genuinely empty database. This changes nothing for an
-instance that was already deployed and running:
-
-- **Any instance deployed before this change** already has an
-  `alembic_version` row naming a revision at or after `a1b2c3d4e5f6` (every
-  prior deploy got its schema from `Base.metadata.create_all` followed by
-  `alembic stamp head` on first boot). Alembic walks forward from whatever
-  revision is recorded in `alembic_version`; it does not replay or
-  re-verify ancestors behind that revision. The new baseline is an ancestor
-  of `a1b2c3d4e5f6` and is simply never visited. `alembic upgrade head`
-  continues to work exactly as before — no action needed.
-- **A legacy pre-Alembic instance** (tables exist, but there is no
-  `alembic_version` table at all — only possible if the instance predates
-  `a1b2c3d4e5f6` merging *and* has never restarted since; every restart
-  under the pre-#264 bootstrap already ran `alembic upgrade head`
-  unconditionally for a non-empty database, which creates
-  `alembic_version` on its first successful migration) needs one manual
-  step before its next `alembic upgrade head`:
-
-  ```bash
-  podman exec kendo-app alembic stamp head
-  ```
-
-  This is correct **only if you're confident the instance's schema matches
-  the current ORM exactly** (i.e. it's been kept current) — the same
-  assumption the pre-#264 bootstrap made for a "fresh" database
-  (`create_all` then `stamp head`), and safe for the same reason:
-  `test_migrated_schema_matches_orm_metadata_exactly` guarantees a
-  `create_all` schema and a fully-migrated schema are identical at head.
-  Do **not** stamp at `a1b2c3d4e5f6` or at the new baseline
-  (`000000000000`) — either leaves `alembic_version` naming a revision
-  *before* tables this instance's `create_all` already built (`federations`,
-  `member_federations`, `invites`, and everything added after them), so the
-  next `alembic upgrade head` tries to create things that already exist and
-  fails.
-
-  **If there's any doubt the schema is current** — the instance predates
-  some migration that shipped after it was last redeployed — **no single
-  stamp target is correct**, and guessing one will silently leave the
-  database wrong (either missing real schema changes, or erroring out
-  trying to redo ones it already has). Diff the live schema against
-  `app.db.base.Base.metadata` first (e.g. via
-  `alembic.autogenerate.compare_metadata`, the same check
-  `test_migrated_schema_matches_orm_metadata_exactly` runs) to see exactly
-  what's missing, then either apply those changes by hand and stamp head,
-  or — safer — back up the data, run `alembic upgrade head` against a fresh
-  empty database, and migrate the data across instead of reconciling the
-  old schema in place. See the baseline migration's docstring
-  (`backend/alembic/versions/000000000000_baseline_schema.py`) for the full
-  reasoning.
+None yet: 0.1 is the first Release line.

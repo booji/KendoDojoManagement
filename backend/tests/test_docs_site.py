@@ -10,11 +10,14 @@ Everything here inspects files on disk — no MkDocs, no GitHub API.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
+
+from tests.deploy_contract import PUBLISHED_IMAGE, RELEASE_PIN
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -52,10 +55,16 @@ def _version_for(ref: str, tmp_path: Path) -> str:
     [
         ("refs/tags/v1.4.0", "1.x"),
         ("refs/tags/v2.0.0", "2.x"),
-        ("refs/heads/main", "dev"),
+        # Before 1.0 the image pin is :0.Y (ADR-0009), so the docs are too.
+        ("refs/tags/v0.3.1", "0.3.x"),
+        ("refs/tags/v0.1.0", "0.1.x"),
+        # dev tracks the integration branch; main only moves on a release.
+        ("refs/heads/develop", "dev"),
+        ("refs/heads/main", ""),
         # A release candidate's image gets only its exact tag, never :1 — so
         # there is no 1.x for its docs to update either.
         ("refs/tags/v1.0.0-rc1", ""),
+        ("refs/tags/v0.1.0-rc1", ""),
     ],
 )
 def test_each_ref_publishes_the_docs_version_its_image_tag_implies(
@@ -73,6 +82,17 @@ def test_a_pull_request_builds_strict_and_never_deploys():
             assert "github.event_name == 'push'" in job.get("if", ""), name
 
 
+def test_dev_docs_publish_from_develop():
+    workflow = _workflow()
+    assert workflow[True]["push"]["branches"] == ["develop"]
+    [deploy] = [
+        job
+        for job in workflow["jobs"].values()
+        if any("mike" in s.get("run", "") for s in job["steps"])
+    ]
+    assert "refs/heads/main" not in deploy["if"], deploy["if"]
+
+
 def _nav_pages(nav) -> list[str]:
     if isinstance(nav, str):
         return [nav]
@@ -87,3 +107,19 @@ def test_every_page_in_the_nav_exists():
     assert pages
     missing = [p for p in pages if not (ROOT / "docs" / p).is_file()]
     assert not missing, missing
+
+
+def test_operator_docs_name_only_the_current_pin():
+    """Every page names the pin the bundle does: a new Release line moves it
+    everywhere at once, so the docs published for each line show that line's
+    pin (ADR-0009)."""
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    pins = {
+        (page.relative_to(ROOT).as_posix(), f"{PUBLISHED_IMAGE}:{tag}")
+        for page in pages
+        for tag in re.findall(
+            rf"{re.escape(PUBLISHED_IMAGE)}:([\w.-]+)", page.read_text()
+        )
+    }
+    assert pins
+    assert {pin for _, pin in pins} == {RELEASE_PIN}, sorted(pins)

@@ -1,5 +1,7 @@
 # Deployments run a published image pinned by major tag
 
+> Amended by [ADR-0009](0009-pre-1-0-releases-pin-by-minor.md): before 1.0, the pin is `:0.Y`.
+
 Tagged releases build the `prod` stage and push to GHCR as
 `ghcr.io/booji/kendodojomanagement` with `1.0.0`, `1.0`, `1` and `latest`. Both
 deployment paths reference that image — `docker-compose.yml` in place of

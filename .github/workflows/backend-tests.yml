@@ -1,19 +1,21 @@
 name: Backend tests
 
-# The full suite (see tests.yml) is ~15 minutes, almost all of it Playwright,
-# and this repository is private so Actions minutes are metered. This is the
-# fast half — no frontend install, no Vite, no browsers — cheap enough to run
-# on every push, which is where most regressions are caught. It is advisory:
-# no branch protection depends on it (#336).
+# The full suite (see tests.yml) is ~15 minutes, almost all of it Playwright.
+# This is the fast half — no frontend install, no Vite, no browsers — cheap
+# enough to run on every push and pull request, which is where most regressions
+# are caught (#336). It is the required check on develop (#548).
 on:
   push:
     # Branches only. Without this, a `v*-rc*` tag push would fire this job as
     # well as the full suite in tests.yml and bill for both.
     branches:
       - '**'
-    paths-ignore:
+    paths-ignore: &paths-ignore
       - '**.md'
       - 'docs/**'
+  # A fork's pushes never reach this repository's Actions; its PR does (#549).
+  pull_request:
+    paths-ignore: *paths-ignore
   workflow_dispatch:
 
 # Least privilege: the suite only ever needs to read the checked-out tree.

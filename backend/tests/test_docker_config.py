@@ -5,13 +5,19 @@ No live Docker required — these inspect files on disk.
 
 import os
 import re as _re
+import subprocess
 import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    PUBLISHED_IMAGE,
+    RELEASE_PIN,
+    SECRETS,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -683,13 +689,31 @@ def test_app_container_does_not_run_migrations():
 # ADR-0004)
 # ---------------------------------------------------------------------------
 
-PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
-MAJOR_PIN = f"{PUBLISHED_IMAGE}:1"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 QUADLET_UNITS = [
     ROOT / "deploy" / "quadlet" / "kendo-app.container",
     ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
     ROOT / "deploy" / "quadlet" / "kendo-ip-retention.container",
 ]
+
+
+BUNDLE_FILES = [
+    ROOT / "setup.sh",
+    ROOT / "entrypoint.sh",
+    COMPOSE_FILE,
+    ENV_EXAMPLE,
+    *sorted(p for p in (ROOT / "deploy").rglob("*") if p.is_file()),
+]
+
+
+@pytest.mark.parametrize("path", BUNDLE_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_shipped_files_name_only_the_current_pin(path: Path):
+    """No stale tag in what an operator runs or reads: before 1.0 a `:1` pin
+    names an image that does not exist yet, and `:0` one that is never pushed."""
+    pins = _re.findall(
+        rf"{_re.escape(PUBLISHED_IMAGE)}:[0-9]+(?:\.[0-9]+)*", path.read_text()
+    )
+    assert set(pins) <= {RELEASE_PIN}, pins
 
 
 @pytest.mark.parametrize("service", ["app", "migrate"])
@@ -698,11 +722,11 @@ def test_compose_runs_the_published_image_and_never_builds(service: str):
     quietly rebuild from a context they no longer have."""
     spec = load_compose()["services"][service]
     assert "build" not in spec, spec
-    assert spec["image"] == f"${{KENDO_IMAGE:-{MAJOR_PIN}}}", spec["image"]
+    assert spec["image"] == f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", spec["image"]
 
 
 def test_env_example_pins_the_same_image_as_the_compose_default():
-    assert f"\nKENDO_IMAGE={MAJOR_PIN}\n" in ENV_EXAMPLE.read_text()
+    assert f"\nKENDO_IMAGE={RELEASE_PIN}\n" in ENV_EXAMPLE.read_text()
 
 
 @pytest.mark.parametrize("unit", QUADLET_UNITS, ids=lambda p: p.name)
@@ -710,7 +734,7 @@ def test_quadlet_units_run_the_published_image(unit: Path):
     """Every app-image unit, always the same tag: the migration chain and the code that
     runs against it have to come from one artefact."""
     text = unit.read_text()
-    assert f"\nImage={MAJOR_PIN}\n" in text, text
+    assert f"\nImage={RELEASE_PIN}\n" in text, text
     assert "Image=localhost/kendodojo" not in text, text
 
 
@@ -749,9 +773,104 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
     assert 'ARG KENDO_IMAGE_REF=""' in stage, stage
     assert "/bundle/.image-tag" in stage, stage
 
-    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
-    assert "KENDO_IMAGE_REF=" in release, release
-    assert "${v%%.*}" in release, "a release must stamp the major tag it documents"
+    release = RELEASE_WORKFLOW.read_text()
+    assert "KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}" in release, release
+
+
+def _release_steps() -> list[dict]:
+    jobs = yaml.safe_load(RELEASE_WORKFLOW.read_text())["jobs"]
+    return [step for job in jobs.values() for step in job["steps"]]
+
+
+def _pin_for(version: str, tmp_path: Path) -> str:
+    """Run release.yml's own pin step for the version metadata-action emits."""
+    [step] = [s for s in _release_steps() if s.get("id") == "pin"]
+    script = step["run"].replace("${{ steps.meta.outputs.version }}", version)
+    out = tmp_path / "github_output"
+    out.touch()
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        env={**os.environ, "GITHUB_OUTPUT": str(out)},
+        check=True,
+    )
+    return dict(line.split("=", 1) for line in out.read_text().splitlines())["ref"]
+
+
+def _shipped_pin_check(ref: str) -> subprocess.CompletedProcess:
+    """Run release.yml's own check that the shipped files name REF."""
+    [step] = [s for s in _release_steps() if s.get("id") == "pin-check"]
+    return subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=ROOT,
+        env={**os.environ, "REF": ref},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_release_publishes_when_the_shipped_files_name_its_pin():
+    result = _shipped_pin_check(RELEASE_PIN)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_release_checks_the_pin_before_pushing_and_never_for_a_prerelease():
+    """An rc is pushed under its exact tag, which no shipped file names."""
+    steps = _release_steps()
+    ids = [s.get("id") for s in steps]
+    assert ids.index("pin") < ids.index("pin-check") < ids.index("build"), ids
+    check = steps[ids.index("pin-check")]
+    assert check["if"] == "${{ !contains(github.ref_name, '-') }}", check
+
+
+def test_release_refuses_a_pin_the_shipped_files_do_not_name():
+    """A new Release line that missed a file must not publish: an operator
+    would extract a bundle, or read a page, that pulls the old line. The
+    failure names every such file."""
+    result = _shipped_pin_check(f"{PUBLISHED_IMAGE}:99")
+    assert result.returncode != 0, result.stdout
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    stale = {
+        path.relative_to(ROOT).as_posix()
+        for path in [*BUNDLE_FILES, *pages]
+        if RELEASE_PIN in path.read_text(errors="ignore")
+    }
+    assert stale
+    missed = {path for path in stale if path not in result.stdout}
+    assert not missed, result.stdout
+
+
+@pytest.mark.parametrize(
+    ("version", "pin"),
+    [
+        # Before 1.0 the minor stands in for the major (ADR-0009): a :0 pin
+        # would hand every 0.x Breaking change to `pull && up -d`.
+        ("0.1.0", "0.1"),
+        ("0.3.1", "0.3"),
+        # From 1.0 the major, with no edit to the workflow (ADR-0004).
+        ("1.2.0", "1"),
+        ("2.0.5", "2"),
+        # A prerelease rehearses one exact image, never a moving tag.
+        ("0.1.0-rc1", "0.1.0-rc1"),
+        ("1.0.0-rc1", "1.0.0-rc1"),
+    ],
+)
+def test_release_bakes_the_pin_its_series_documents(version, pin, tmp_path):
+    assert _pin_for(version, tmp_path) == f"{PUBLISHED_IMAGE}:{pin}"
+
+
+def test_release_never_pushes_a_moving_zero_tag():
+    """metadata-action emits `0` for {{major}} on a 0.x version unless the
+    entry is disabled (its README's "Major version zero"), and `:0` would carry
+    every 0.x Breaking change. 0.Y and 0.Y.Z still publish."""
+    [meta] = [s for s in _release_steps() if s.get("id") == "meta"]
+    tags = meta["with"]["tags"].splitlines()
+    assert "type=semver,pattern={{version}}" in tags, tags
+    assert "type=semver,pattern={{major}}.{{minor}}" in tags, tags
+    [major] = [t for t in tags if "pattern={{major}}," in t or t.endswith("{{major}}")]
+    assert major == (
+        "type=semver,pattern={{major}},"
+        "enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}"
+    ), major
 
 
 # ---------------------------------------------------------------------------

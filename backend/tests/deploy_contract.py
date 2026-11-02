@@ -25,3 +25,11 @@ CAPABILITIES_ADDED_BACK = {
     "migrate": [],
     "proxy": ["NET_BIND_SERVICE"],
 }
+
+# The image tag every shipped file and operator page names: the pin of the
+# current Release line (ADR-0004), 0.Y before 1.0 (ADR-0009). A new Release
+# line changes it here, and the tests then name every file still on the old
+# one. release.yml refuses to publish a tag whose pin the files do not name,
+# so a line missed here and in a file alike cannot ship either.
+PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
+RELEASE_PIN = f"{PUBLISHED_IMAGE}:0.1"
