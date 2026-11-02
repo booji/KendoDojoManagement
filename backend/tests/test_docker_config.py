@@ -685,12 +685,34 @@ def test_app_container_does_not_run_migrations():
 # ---------------------------------------------------------------------------
 
 PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
-MAJOR_PIN = f"{PUBLISHED_IMAGE}:1"
+# The documented pin (ADR-0004): the major from 1.0, 0.Y before it (ADR-0009).
+# A Breaking change in 0.x bumps it here, and the test below names every file
+# that still carries the old one.
+RELEASE_PIN = f"{PUBLISHED_IMAGE}:0.1"
 QUADLET_UNITS = [
     ROOT / "deploy" / "quadlet" / "kendo-app.container",
     ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
     ROOT / "deploy" / "quadlet" / "kendo-ip-retention.container",
 ]
+
+
+BUNDLE_FILES = [
+    ROOT / "setup.sh",
+    ROOT / "entrypoint.sh",
+    COMPOSE_FILE,
+    ENV_EXAMPLE,
+    *sorted(p for p in (ROOT / "deploy").rglob("*") if p.is_file()),
+]
+
+
+@pytest.mark.parametrize("path", BUNDLE_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_shipped_files_name_only_the_current_pin(path: Path):
+    """No stale tag in what an operator runs or reads: before 1.0 a `:1` pin
+    names an image that does not exist yet, and `:0` one that is never pushed."""
+    pins = _re.findall(
+        rf"{_re.escape(PUBLISHED_IMAGE)}:[0-9]+(?:\.[0-9]+)*", path.read_text()
+    )
+    assert set(pins) <= {RELEASE_PIN}, pins
 
 
 @pytest.mark.parametrize("service", ["app", "migrate"])
@@ -699,11 +721,11 @@ def test_compose_runs_the_published_image_and_never_builds(service: str):
     quietly rebuild from a context they no longer have."""
     spec = load_compose()["services"][service]
     assert "build" not in spec, spec
-    assert spec["image"] == f"${{KENDO_IMAGE:-{MAJOR_PIN}}}", spec["image"]
+    assert spec["image"] == f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", spec["image"]
 
 
 def test_env_example_pins_the_same_image_as_the_compose_default():
-    assert f"\nKENDO_IMAGE={MAJOR_PIN}\n" in ENV_EXAMPLE.read_text()
+    assert f"\nKENDO_IMAGE={RELEASE_PIN}\n" in ENV_EXAMPLE.read_text()
 
 
 @pytest.mark.parametrize("unit", QUADLET_UNITS, ids=lambda p: p.name)
@@ -711,7 +733,7 @@ def test_quadlet_units_run_the_published_image(unit: Path):
     """Every app-image unit, always the same tag: the migration chain and the code that
     runs against it have to come from one artefact."""
     text = unit.read_text()
-    assert f"\nImage={MAJOR_PIN}\n" in text, text
+    assert f"\nImage={RELEASE_PIN}\n" in text, text
     assert "Image=localhost/kendodojo" not in text, text
 
 

@@ -19,7 +19,7 @@ After=kendo-migrate.service
 [Container]
 ContainerName=kendo-ip-retention
 # Same image and tag as kendo-app and kendo-migrate (ADR-0004).
-Image=ghcr.io/booji/kendodojomanagement:1
+Image=ghcr.io/booji/kendodojomanagement:0.1
 Network=kendo-backend.network
 EnvironmentFile=%h/kendo/kendo-app.env
 # Mounted as a file, not environment, as in kendo-app.container (#462).
