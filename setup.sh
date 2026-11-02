@@ -870,7 +870,6 @@ quadlet_install() {
   elif have_secret kendo_postgres_password || have_secret kendo_migration_database_url; then
     echo "Only one of kendo_postgres_password / kendo_migration_database_url exists; they must embed the same password and neither can be read back. On a fresh install, remove both and re-run:" >&2
     echo "  podman secret rm kendo_postgres_password kendo_migration_database_url" >&2
-    echo "Upgrading an install from before #453 instead? See docs/install/upgrading.md." >&2
     exit 1
   else
     put_secret kendo_postgres_password "$db_password"
