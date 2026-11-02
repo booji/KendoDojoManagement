@@ -607,32 +607,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrading to the least-privilege app user (#453)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#upgrading-to-secrets-as-mounted-files-462" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrading to secrets as mounted files (#462)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
         Refreshing the env file after an upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to a new Release line
       
     </span>
   </a>
@@ -1266,6 +1255,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-auth-sessions-are-opaque-server-side-rows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Sessions are opaque server-side rows, not JWTs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-pre-1-0-releases-pin-by-minor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Before 1.0, releases pin by minor, not major
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1445,6 +1490,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1512,32 +1585,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrading to the least-privilege app user (#453)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#upgrading-to-secrets-as-mounted-files-462" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Upgrading to secrets as mounted files (#462)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
       
         Refreshing the env file after an upgrade
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading to a new Release line
       
     </span>
   </a>
@@ -1561,7 +1623,7 @@
 
 
   
-    <a href="https://github.com/booji/KendoDojoManagement/edit/main/docs/install/upgrading.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/booji/KendoDojoManagement/edit/develop/docs/install/upgrading.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1601,21 +1663,7 @@ member, or a member whose email differs from the account that signs in as them
 Fix those rows, then run <code>./setup.sh upgrade</code> again.</p>
 <p>A plain <code>podman-compose pull &amp;&amp; podman-compose up -d</code> is not enough on Podman:
 podman-compose recreates a container only when the compose file changes, so a
-new image under the same <code>:1</code> tag never starts.</p>
-<blockquote>
-<p><strong>Upgrading a Compose stack first started before #385:</strong> the image now runs as
-the unprivileged user <code>kendo</code> (uid 1001), but Podman only takes a volume's
-ownership from the image when the volume is <em>empty</em>, so a <code>static_uploads</code>
-created by the old root-running image stays root-owned and the first upload
-after the upgrade fails with a permission error. Chown it once:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Compose prefixes the volume with the project name — find it first:</span>
-<span class="nv">vol</span><span class="o">=</span><span class="k">$(</span>podman<span class="w"> </span>volume<span class="w"> </span>ls<span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{.Name}}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>static_uploads<span class="k">)</span>
-podman<span class="w"> </span>unshare<span class="w"> </span>chown<span class="w"> </span>-R<span class="w"> </span><span class="m">1001</span>:1001<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">"</span><span class="k">$(</span>podman<span class="w"> </span>volume<span class="w"> </span>inspect<span class="w"> </span><span class="s2">"</span><span class="nv">$vol</span><span class="s2">"</span><span class="w"> </span>--format<span class="w"> </span><span class="s1">'{{.Mountpoint}}'</span><span class="k">)</span><span class="s2">"</span>
-</code></pre></div>
-<p>The Quadlet path needs no such step — <code>kendo-app.container</code> mounts the volume
-with <code>:U</code>, which chowns it on every start. Fresh stacks need nothing either.</p>
-</blockquote>
+new image under the same <code>:0.1</code> tag never starts.</p>
 <h2 id="hardened-deployment-quadlet">Hardened deployment (Quadlet)<a class="headerlink" href="#hardened-deployment-quadlet" title="Permanent link">&para;</a></h2>
 <p><strong>When a Quadlet unit, the Traefik config or the env file changes upstream</strong>,
 the Upgrade command above is not enough — it pulls the image but reuses the
@@ -1624,7 +1672,7 @@ units already in <code>~/.config/containers/systemd/</code>, the Traefik config 
 copy made once at install time; pulling a new image updates neither.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Re-extract the bundle from the tag you are pinned to — it ships inside the</span>
 <span class="c1"># image, so the units below match the app they start.</span>
-<span class="nb">cd</span><span class="w"> </span>~/src<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/booji/kendodojomanagement:1<span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x
+<span class="nb">cd</span><span class="w"> </span>~/src<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/booji/kendodojomanagement:0.1<span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x
 
 <span class="c1"># Units: re-run the copy from Hardened deployment §2-4, then daemon-reload so Quadlet regenerates.</span>
 cp<span class="w"> </span>deploy/quadlet/kendo-*.network<span class="w">   </span>~/.config/containers/systemd/
@@ -1632,7 +1680,7 @@ cp<span class="w"> </span>deploy/quadlet/kendo-*.volume<span class="w">    </spa
 cp<span class="w"> </span>deploy/quadlet/kendo-*.container<span class="w"> </span>~/.config/containers/systemd/
 cp<span class="w"> </span>deploy/systemd/kendo-ip-retention.timer<span class="w"> </span>~/.config/systemd/user/
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
-<span class="c1"># Idempotent; enables the IP-retention timer on an install that predates it (#467).</span>
+<span class="c1"># Idempotent: enables the IP-retention timer if it is not already.</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-ip-retention.timer
 
 <span class="c1"># Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.</span>
@@ -1646,72 +1694,17 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span clas
 </code></pre></div>
 <p>The env file is per-host and needs comparing rather than copying — see
 <a href="#refreshing-the-env-file-after-an-upgrade">Refreshing the env file</a>.</p>
-<p><strong>A host installed before #412 that uses DNS-01 needs the drop-in before its
-next unit refresh.</strong> <code>kendo-traefik.container</code> used to hardcode
-<code>CF_DNS_API_TOKEN_FILE</code> and the <code>kendo_cf_dns_token</code> secret; it no longer
-does, so re-copying it leaves Traefik with no DNS credentials and ACME
-renewal fails. Write the drop-in from <a href="../../deployment/#5-tls-options">§5</a> first — pointing
-<code>Secret=</code> at your existing <code>kendo_cf_dns_token</code> is fine, no new secret needed.</p>
-<p><strong>Hosts installed before #385 need the unit refresh now.</strong> That change made
-the app run unprivileged and mounts the uploads volume <code>:U</code>; both live in
-<code>kendo-app.container</code>, so neither reaches an existing host until the copy
-above. The edge health check lives in the Traefik dynamic config.</p>
 <h2 id="checking-an-image-came-from-this-repository">Checking an image came from this repository<a class="headerlink" href="#checking-an-image-came-from-this-repository" title="Permanent link">&para;</a></h2>
 <p>Each release image is signed by the release workflow with
 <a href="https://docs.sigstore.dev/cosign/">cosign</a> keyless signing (#457). To check
 the image you are about to run, with cosign installed:</p>
-<div class="highlight"><pre><span></span><code>cosign<span class="w"> </span>verify<span class="w"> </span>ghcr.io/booji/kendodojomanagement:1<span class="w"> </span><span class="se">\</span>
+<div class="highlight"><pre><span></span><code>cosign<span class="w"> </span>verify<span class="w"> </span>ghcr.io/booji/kendodojomanagement:0.1<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--certificate-oidc-issuer<span class="w"> </span>https://token.actions.githubusercontent.com<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--certificate-identity-regexp<span class="w"> </span><span class="s1">'^https://github\.com/booji/KendoDojoManagement/\.github/workflows/release\.yml@refs/tags/v'</span>
 </code></pre></div>
 <p>It fails unless the image's digest was signed by that workflow on a release
-tag. Images released before #457 are unsigned. Podman does not check this by
-itself yet (#518). The signature is recorded in Sigstore's public transparency log,
+tag. Podman does not check this by itself yet (#518). The signature is recorded in Sigstore's public transparency log,
 which names this repository, the workflow and the release tag.</p>
-<h2 id="upgrading-to-the-least-privilege-app-user-453">Upgrading to the least-privilege app user (#453)<a class="headerlink" href="#upgrading-to-the-least-privilege-app-user-453" title="Permanent link">&para;</a></h2>
-<p>The app now connects to PostgreSQL as its own user, <code>kendo_app</code>, which can only
-read and write rows; <code>kendo</code> stays the superuser and is given to the migration
-step alone (<a href="../../adr/0007-the-app-connects-as-a-least-privilege-database-user/">ADR-0007</a>).
-<code>DATABASE_URL</code> is the app user's login and a new <code>MIGRATION_DATABASE_URL</code> holds
-the superuser's. The migration step creates <code>kendo_app</code> and sets its password
-from <code>DATABASE_URL</code> on every start, so nothing is done inside the database by
-hand. Until both URLs exist the migration step refuses to run — before touching
-the schema — and the app refuses to start as a superuser.</p>
-<p><strong>Quick self-host (Compose).</strong> Run <code>./setup.sh upgrade</code> as usual: it brings the
-new <code>setup.sh</code> and compose file, then stops at the migration step because
-<code>MIGRATION_DATABASE_URL</code> is not in <code>.env</code> yet. Nothing has been migrated, so
-skip the rollback it prints. Re-run <code>./setup.sh</code> — it keeps <code>POSTGRES_PASSWORD</code>
-and every other secret, writes <code>MIGRATION_DATABASE_URL</code> with it, and moves
-<code>DATABASE_URL</code> onto <code>kendo_app</code> with a new password — then start the stack:</p>
-<div class="highlight"><pre><span></span><code>./setup.sh
-podman-compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>--force-recreate
-</code></pre></div>
-<p><strong>Hardened deployment (Quadlet).</strong> <code>kendo_database_url</code> held the superuser's
-login; that becomes <code>kendo_migration_database_url</code>, and <code>kendo_database_url</code> is
-recreated with the app user's. The superuser password is the one <code>kendo-db</code>
-already has:</p>
-<div class="highlight"><pre><span></span><code><span class="nv">pw</span><span class="o">=</span><span class="k">$(</span>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-db<span class="w"> </span>cat<span class="w"> </span>/run/secrets/postgres_password<span class="k">)</span>
-<span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"postgresql+asyncpg://kendo:</span><span class="nv">$pw</span><span class="s2">@kendo-db:5432/kendo"</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_migration_database_url<span class="w"> </span>-
-<span class="nb">unset</span><span class="w"> </span>pw
-
-podman<span class="w"> </span>secret<span class="w"> </span>rm<span class="w"> </span>kendo_database_url
-<span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"postgresql+asyncpg://kendo_app:</span><span class="k">$(</span>od<span class="w"> </span>-An<span class="w"> </span>-vtx1<span class="w"> </span>-N24<span class="w"> </span>/dev/urandom<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">' \n'</span><span class="k">)</span><span class="s2">@kendo-db:5432/kendo"</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_database_url<span class="w"> </span>-
-</code></pre></div>
-<p>Then refresh the units as above — <code>kendo-migrate.container</code> now attaches the
-new secret — and <code>systemctl --user restart kendo-migrate kendo-app</code>.</p>
-<h2 id="upgrading-to-secrets-as-mounted-files-462">Upgrading to secrets as mounted files (#462)<a class="headerlink" href="#upgrading-to-secrets-as-mounted-files-462" title="Permanent link">&para;</a></h2>
-<p>The app's secrets are now mounted into its containers as files, not passed as
-environment variables. Nothing about the secrets themselves changes.</p>
-<p><strong>Quick self-host (Compose).</strong> Nothing to do: <code>./setup.sh upgrade</code> writes the
-new <code>secrets/</code> directory from your <code>.env</code> before it recreates the stack. If you
-start the stack yourself instead, run <code>./setup.sh</code> first (it keeps every
-secret it finds in <code>.env</code>), or <code>podman-compose up</code> fails on the missing
-secret files.</p>
-<p><strong>Hardened deployment (Quadlet).</strong> Refresh the units as above. The podman
-secrets keep their names, so none needs recreating, then
-<code>systemctl --user restart kendo-migrate kendo-app</code>.</p>
 <h2 id="refreshing-the-env-file-after-an-upgrade">Refreshing the env file after an upgrade<a class="headerlink" href="#refreshing-the-env-file-after-an-upgrade" title="Permanent link">&para;</a></h2>
 <p>Re-extracting the bundle updates <code>deploy/env/kendo-app.env.example</code> in
 <code>~/src</code>. It does not update <code>~/kendo/kendo-app.env</code> — that file is yours, per
@@ -1732,79 +1725,23 @@ missing — copy it across with its comment, then restart:</p>
 <div class="highlight"><pre><span></span><code>systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-app
 </code></pre></div>
 <p>A changed <code>EnvironmentFile</code> needs only a restart; a changed <em>unit</em> file needs
-re-copying and a <code>daemon-reload</code> first — the note under the table above has
-that sequence.</p>
+re-copying and a <code>daemon-reload</code> first — <a href="#hardened-deployment-quadlet">Hardened deployment
+(Quadlet)</a> above has that sequence.</p>
 <p>Then verify the app actually received it — a restart proves the unit started,
 not that the value arrived:</p>
 <div class="highlight"><pre><span></span><code>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-app<span class="w"> </span>printenv<span class="w"> </span>APP_ENV<span class="w"> </span>JWT_EXPIRE_MINUTES
 <span class="c1"># APP_ENV=production</span>
 <span class="c1"># JWT_EXPIRE_MINUTES=480</span>
 </code></pre></div>
-<blockquote>
-<p><strong>Hosts deployed before #386 need this now.</strong> That change added
-<code>APP_ENV=production</code> (without it the app takes its development path and skips
-every production WebAuthn check at startup) and raised
-<code>JWT_EXPIRE_MINUTES</code> to 480. Both live in the env file, so neither reaches an
-existing host until you copy them across.</p>
-<h1 id="387-adds-session_max_minutes-default-10080-7-days-the-ceiling-on-a">387 adds <code>SESSION_MAX_MINUTES</code> (default 10080 — 7 days), the ceiling on a<a class="headerlink" href="#387-adds-session_max_minutes-default-10080-7-days-the-ceiling-on-a" title="Permanent link">&para;</a></h1>
-<p>session that sliding renewal keeps alive. It defaults in <code>app/config.py</code>, so
-an existing host needs it in the env file only to override that default.</p>
-<p><strong>#485 signs everyone out once.</strong> Sessions became server-side Auth Session
-rows (ADR-0008), and the cookies issued before it name none, so every user
-signs in again after the upgrade. <code>JWT_EXPIRE_MINUTES</code> and
-<code>SESSION_MAX_MINUTES</code> keep their names and meaning: the idle timeout and the
-absolute ceiling.</p>
-</blockquote>
-<h2 id="upgrading-a-deployment-created-before-the-alembic-baseline-issue-264">Upgrading a deployment created before the Alembic baseline (issue #264)<a class="headerlink" href="#upgrading-a-deployment-created-before-the-alembic-baseline-issue-264" title="Permanent link">&para;</a></h2>
-<p>As of issue #264, the Alembic chain has a baseline migration (<code>000000000000</code>)
-that creates the full schema from nothing, so <code>alembic upgrade head</code> now
-works against a genuinely empty database. This changes nothing for an
-instance that was already deployed and running:</p>
-<ul>
-<li><strong>Any instance deployed before this change</strong> already has an
-  <code>alembic_version</code> row naming a revision at or after <code>a1b2c3d4e5f6</code> (every
-  prior deploy got its schema from <code>Base.metadata.create_all</code> followed by
-  <code>alembic stamp head</code> on first boot). Alembic walks forward from whatever
-  revision is recorded in <code>alembic_version</code>; it does not replay or
-  re-verify ancestors behind that revision. The new baseline is an ancestor
-  of <code>a1b2c3d4e5f6</code> and is simply never visited. <code>alembic upgrade head</code>
-  continues to work exactly as before — no action needed.</li>
-<li><strong>A legacy pre-Alembic instance</strong> (tables exist, but there is no
-  <code>alembic_version</code> table at all — only possible if the instance predates
-  <code>a1b2c3d4e5f6</code> merging <em>and</em> has never restarted since; every restart
-  under the pre-#264 bootstrap already ran <code>alembic upgrade head</code>
-  unconditionally for a non-empty database, which creates
-  <code>alembic_version</code> on its first successful migration) needs one manual
-  step before its next <code>alembic upgrade head</code>:</li>
-</ul>
-<div class="highlight"><pre><span></span><code>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-app<span class="w"> </span>alembic<span class="w"> </span>stamp<span class="w"> </span>head
-</code></pre></div>
-<p>This is correct <strong>only if you're confident the instance's schema matches
-  the current ORM exactly</strong> (i.e. it's been kept current) — the same
-  assumption the pre-#264 bootstrap made for a "fresh" database
-  (<code>create_all</code> then <code>stamp head</code>), and safe for the same reason:
-  <code>test_migrated_schema_matches_orm_metadata_exactly</code> guarantees a
-  <code>create_all</code> schema and a fully-migrated schema are identical at head.
-  Do <strong>not</strong> stamp at <code>a1b2c3d4e5f6</code> or at the new baseline
-  (<code>000000000000</code>) — either leaves <code>alembic_version</code> naming a revision
-  <em>before</em> tables this instance's <code>create_all</code> already built (<code>federations</code>,
-  <code>member_federations</code>, <code>invites</code>, and everything added after them), so the
-  next <code>alembic upgrade head</code> tries to create things that already exist and
-  fails.</p>
-<p><strong>If there's any doubt the schema is current</strong> — the instance predates
-  some migration that shipped after it was last redeployed — <strong>no single
-  stamp target is correct</strong>, and guessing one will silently leave the
-  database wrong (either missing real schema changes, or erroring out
-  trying to redo ones it already has). Diff the live schema against
-  <code>app.db.base.Base.metadata</code> first (e.g. via
-  <code>alembic.autogenerate.compare_metadata</code>, the same check
-  <code>test_migrated_schema_matches_orm_metadata_exactly</code> runs) to see exactly
-  what's missing, then either apply those changes by hand and stamp head,
-  or — safer — back up the data, run <code>alembic upgrade head</code> against a fresh
-  empty database, and migrate the data across instead of reconciling the
-  old schema in place. See the baseline migration's docstring
-  (<code>backend/alembic/versions/000000000000_baseline_schema.py</code>) for the full
-  reasoning.</p>
+<h2 id="upgrading-to-a-new-release-line">Upgrading to a new Release line<a class="headerlink" href="#upgrading-to-a-new-release-line" title="Permanent link">&para;</a></h2>
+<p>Within a Release line (<code>:0.1</code>) every upgrade is the routine one above. The
+exception is a security fix that cannot avoid breaking: its release notes say
+so under a Security heading, and the upgrade stops until you have acted. Moving
+to the next (<code>:0.2</code>) is a <strong>Breaking change</strong>: it needs a step only you can
+take, or carries a migration that returning to the previous image cannot undo.
+Each one gets its own section here, headed "Upgrading to 0.Y", with the
+operator action its release notes list. Read it before you change the pin.</p>
+<p>None yet: 0.1 is the first Release line.</p>
 
 
 

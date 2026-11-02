@@ -1416,6 +1416,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0008-auth-sessions-are-opaque-server-side-rows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Sessions are opaque server-side rows, not JWTs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0009-pre-1-0-releases-pin-by-minor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Before 1.0, releases pin by minor, not major
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1582,6 +1638,34 @@
     
   
     TDD workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
   
 
     
@@ -1861,7 +1945,7 @@
 
 
   
-    <a href="https://github.com/booji/KendoDojoManagement/edit/main/docs/deployment.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/booji/KendoDojoManagement/edit/develop/docs/deployment.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1947,7 +2031,7 @@ sudo<span class="w"> </span>loginctl<span class="w"> </span>enable-linger<span c
 <span class="c1"># The bundle ships inside the image it configures, so the units below and the</span>
 <span class="c1"># app they start are one artefact (ADR-0004).</span>
 mkdir<span class="w"> </span>-p<span class="w"> </span>~/src<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>~/src
-podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/booji/kendodojomanagement:1<span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x
+podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/booji/kendodojomanagement:0.1<span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x
 
 ./setup.sh<span class="w"> </span>--quadlet
 </code></pre></div>

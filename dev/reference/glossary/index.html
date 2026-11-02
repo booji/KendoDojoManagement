@@ -1330,6 +1330,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-auth-sessions-are-opaque-server-side-rows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Sessions are opaque server-side rows, not JWTs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-pre-1-0-releases-pin-by-minor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Before 1.0, releases pin by minor, not major
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1496,6 +1552,34 @@
     
   
     TDD workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
   
 
     
@@ -1686,7 +1770,7 @@
 
 
   
-    <a href="https://github.com/booji/KendoDojoManagement/edit/main/docs/reference/glossary.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/booji/KendoDojoManagement/edit/develop/docs/reference/glossary.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1825,11 +1909,17 @@ The single-file Compose setup of the app and its database. A supported productio
 The rootless Podman and Quadlet setup, with TLS termination, secrets and automated backups. What an operator graduates to from the <strong>Quick self-host</strong>.
 <em>Avoid</em>: The Quadlet thing, systemd deploy</p>
 <p><strong>Release image</strong>:
-The published application container, pinned by its major version. The app and nothing else: it holds no operator configuration.
+The published application container, pinned by its <strong>Release line</strong>. The app and nothing else: it holds no operator configuration.
 <em>Avoid</em>: The container, the GHCR image, the build</p>
 <p><strong>Deployment bundle</strong>:
 The configuration a host needs beside the <strong>Release image</strong>, extracted from the image itself so the two are always on the same version.
 <em>Avoid</em>: The repo files, the deploy directory, the checkout</p>
+<p><strong>Release line</strong>:
+The series of releases an operator pins to and upgrades within without a <strong>Breaking change</strong>: <code>0.3</code> before 1.0, <code>1</code> after. Only the latest Release line is supported.
+<em>Avoid</em>: Major, version, branch</p>
+<p><strong>Breaking change</strong>:
+A change an operator cannot take by the routine upgrade alone: it needs a manual step, or it cannot be undone by returning to the previous <strong>Release image</strong>. The REST API is not part of this promise; it ships with its only client.
+<em>Avoid</em>: Major change, incompatible change</p>
 <h2 id="relationships">Relationships<a class="headerlink" href="#relationships" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Every <strong>Account</strong> belongs to exactly one <strong>Member</strong>; a <strong>Member</strong> has at most one <strong>Account</strong>. A <strong>Member</strong> has none until they redeem an invite (or, for the <strong>First-registered Admin</strong>, claim the instance), and none again after erasure.</li>

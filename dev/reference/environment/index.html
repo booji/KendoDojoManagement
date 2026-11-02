@@ -1225,6 +1225,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-auth-sessions-are-opaque-server-side-rows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Sessions are opaque server-side rows, not JWTs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-pre-1-0-releases-pin-by-minor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Before 1.0, releases pin by minor, not major
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1404,6 +1460,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1476,7 +1560,7 @@
 
 
   
-    <a href="https://github.com/booji/KendoDojoManagement/edit/main/docs/reference/environment.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/booji/KendoDojoManagement/edit/develop/docs/reference/environment.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1505,12 +1589,13 @@ set, and from <code>&lt;NAME&gt;</code> otherwise. The dev and test stacks use <
 <span class="c1"># secrets/ (#462). After changing one here, re-run ./setup.sh.</span>
 
 <span class="c1"># The image docker-compose.yml runs, for `app` and `migrate` alike. The</span>
-<span class="c1"># documented pin is the MAJOR tag (ADR-0004): `:1` takes fixes and features but</span>
-<span class="c1"># no migration that needs a restore from backup to undo; `./setup.sh upgrade`</span>
-<span class="c1"># backs up, pulls and migrates. Move to `:2` deliberately, after reading the</span>
-<span class="c1"># release notes. `:1.4`, `:1.4.0` and `:latest` are also published; a contributor</span>
-<span class="c1"># running their own build sets this to localhost/kendodojo:latest.</span>
-<span class="nv">KENDO_IMAGE</span><span class="o">=</span>ghcr.io/booji/kendodojomanagement:1
+<span class="c1"># documented pin is the Release line (ADR-0004; before 1.0 that is 0.Y,</span>
+<span class="c1"># ADR-0009): `:0.1` takes fixes and features but no Breaking change;</span>
+<span class="c1"># `./setup.sh upgrade` backs up, pulls and migrates. Move to `:0.2`</span>
+<span class="c1"># deliberately, after reading the release notes. `:0.1.0` and `:latest` are</span>
+<span class="c1"># also published; a contributor running their own build sets this to</span>
+<span class="c1"># localhost/kendodojo:latest.</span>
+<span class="nv">KENDO_IMAGE</span><span class="o">=</span>ghcr.io/booji/kendodojomanagement:0.1
 
 <span class="c1"># Container timezone (IANA name). Applies to app and db.</span>
 <span class="nv">TZ</span><span class="o">=</span>UTC

@@ -1163,6 +1163,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-auth-sessions-are-opaque-server-side-rows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth Sessions are opaque server-side rows, not JWTs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-pre-1-0-releases-pin-by-minor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Before 1.0, releases pin by minor, not major
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1342,6 +1398,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/releasing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releasing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1384,7 +1468,7 @@
 
 
   
-    <a href="https://github.com/booji/KendoDojoManagement/edit/main/docs/operating/day-2.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/booji/KendoDojoManagement/edit/develop/docs/operating/day-2.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1415,7 +1499,7 @@
 </tr>
 <tr>
 <td><strong>Upgrade</strong> — the full procedure is <a href="../../install/upgrading/#hardened-deployment-quadlet">Upgrading</a></td>
-<td><code>podman pull ghcr.io/booji/kendodojomanagement:1 &amp;&amp; systemctl --user restart kendo-migrate kendo-app</code></td>
+<td><code>podman pull ghcr.io/booji/kendodojomanagement:0.1 &amp;&amp; systemctl --user restart kendo-migrate kendo-app</code></td>
 </tr>
 <tr>
 <td>Stop all</td>
@@ -1438,9 +1522,9 @@
 <blockquote>
 <p>The pin is the <code>Image=</code> line in the three app-image Quadlet units (<code>kendo-app</code>,
 <code>kendo-migrate</code>, <code>kendo-ip-retention</code>), and the documented
-value is the <strong>major</strong> tag <code>:1</code> — fixes and features, but no migration that
-needs a restore from backup to undo. Moving to <code>:2</code> is a deliberate edit made
-after reading the release notes. Building from source still works
+value is the <strong>Release line</strong> tag <code>:0.1</code> — fixes and features, but no
+Breaking change. Moving to <code>:0.2</code> is a deliberate edit made after reading its
+section in <a href="../../install/upgrading/">Upgrading</a>. Building from source still works
 (<code>podman build -t localhost/kendodojo:latest .</code>); point <code>Image=</code> at it.</p>
 </blockquote>
 
