@@ -183,4 +183,4 @@ The five canonical roles, label strings unchanged. See `docs/agents/triage-label
 
 ### Domain docs
 
-Single-context. The glossary is `UBIQUITOUS_LANGUAGE.md` (not `CONTEXT.md`); ADRs in `docs/adr/`. See `docs/agents/domain.md`.
+Single-context. The glossary is `GLOSSARY.md`; ADRs in `docs/adr/`. See `docs/agents/domain.md`.

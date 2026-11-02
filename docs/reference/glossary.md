@@ -1,1 +1,3 @@
---8<-- "UBIQUITOUS_LANGUAGE.md"
+# Glossary
+
+--8<-- "GLOSSARY.md:3:"

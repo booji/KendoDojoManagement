@@ -43,7 +43,7 @@ Self-hosted web application for managing the members, sessions, and attendance o
   [Day-2 operations](docs/operating/day-2.md)
 - **Reference** — [Environment variables](docs/reference/environment.md) ·
   [Container architecture](docs/reference/container-architecture.md) ·
-  [Database schema](docs/schema.md) · [Glossary](UBIQUITOUS_LANGUAGE.md) ·
+  [Database schema](docs/schema.md) · [Glossary](GLOSSARY.md) ·
   [Decisions (ADRs)](docs/adr/)
 - **Contributing** — [Dev stack](docs/contributing/dev-stack.md) ·
   [Make targets](docs/contributing/make-targets.md) ·

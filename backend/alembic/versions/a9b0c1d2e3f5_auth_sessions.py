@@ -7,7 +7,7 @@ revocation for erasure (the Account goes) and for removing a lost device's
 passkey (the Auth Sessions it signed in go with it). `expires_at` is indexed
 for the sweep of expired rows at sign-in.
 
-Not `sessions`: a Session is a training event (UBIQUITOUS_LANGUAGE.md).
+Not `sessions`: a Session is a training event (GLOSSARY.md).
 
 Revision ID: a9b0c1d2e3f5
 Revises: f8a9b0c1d2e4
