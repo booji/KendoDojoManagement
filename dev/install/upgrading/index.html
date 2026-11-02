@@ -596,6 +596,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#checking-an-image-came-from-this-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking an image came from this repository
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1490,6 +1501,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#checking-an-image-came-from-this-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking an image came from this repository
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#upgrading-to-the-least-privilege-app-user-453" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1634,6 +1656,18 @@ renewal fails. Write the drop-in from <a href="../../deployment/#5-tls-options">
 the app run unprivileged and mounts the uploads volume <code>:U</code>; both live in
 <code>kendo-app.container</code>, so neither reaches an existing host until the copy
 above. The edge health check lives in the Traefik dynamic config.</p>
+<h2 id="checking-an-image-came-from-this-repository">Checking an image came from this repository<a class="headerlink" href="#checking-an-image-came-from-this-repository" title="Permanent link">&para;</a></h2>
+<p>Each release image is signed by the release workflow with
+<a href="https://docs.sigstore.dev/cosign/">cosign</a> keyless signing (#457). To check
+the image you are about to run, with cosign installed:</p>
+<div class="highlight"><pre><span></span><code>cosign<span class="w"> </span>verify<span class="w"> </span>ghcr.io/booji/kendodojomanagement:1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--certificate-oidc-issuer<span class="w"> </span>https://token.actions.githubusercontent.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--certificate-identity-regexp<span class="w"> </span><span class="s1">'^https://github\.com/booji/KendoDojoManagement/\.github/workflows/release\.yml@refs/tags/v'</span>
+</code></pre></div>
+<p>It fails unless the image's digest was signed by that workflow on a release
+tag. Images released before #457 are unsigned. Podman does not check this by
+itself yet (#518). The signature is recorded in Sigstore's public transparency log,
+which names this repository, the workflow and the release tag.</p>
 <h2 id="upgrading-to-the-least-privilege-app-user-453">Upgrading to the least-privilege app user (#453)<a class="headerlink" href="#upgrading-to-the-least-privilege-app-user-453" title="Permanent link">&para;</a></h2>
 <p>The app now connects to PostgreSQL as its own user, <code>kendo_app</code>, which can only
 read and write rows; <code>kendo</code> stays the superuser and is given to the migration
