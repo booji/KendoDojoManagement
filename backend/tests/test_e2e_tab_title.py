@@ -50,3 +50,18 @@ def test_signed_in_tab_shows_the_dojo_settings_name(page: Page) -> None:
     page.goto(BASE_URL)
 
     expect(page).to_have_title(name)
+
+
+def test_sign_out_without_a_public_name_shows_the_fallback(page: Page) -> None:
+    # Sign-out is a client-side navigation: the Dojo Settings name set while
+    # signed in must not outlive the session on the sign-in page.
+    token = authenticate(page, "admin")
+    name = f"Title Dojo {uuid.uuid4().hex[:6]}"
+    _set_dojo(token, dojo_name=name, login_show_name=False)
+    page.goto(BASE_URL)
+    expect(page).to_have_title(name)
+
+    page.get_by_role("button", name="Log out").click()
+
+    expect(page).to_have_url(f"{BASE_URL}/login")
+    expect(page).to_have_title(FALLBACK)

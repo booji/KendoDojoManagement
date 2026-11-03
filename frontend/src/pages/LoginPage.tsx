@@ -14,6 +14,7 @@ import { performPasskeyLogin } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import { getBranding } from "@/api/settings"
 import type { DojoBranding } from "@/api/settings"
+import { setTabTitle } from "@/lib/tabTitle"
 
 const LoginPage = () => {
   const [email, setEmail] = useState("")
@@ -29,9 +30,10 @@ const LoginPage = () => {
       })
   }, [])
 
-  // A null name keeps index.html's fallback title.
+  // Always set, even to the fallback: a client-side sign-out arrives here
+  // with the signed-in dojo name still in the tab.
   useEffect(() => {
-    if (branding?.dojo_name) document.title = branding.dojo_name
+    setTabTitle(branding?.dojo_name ?? null)
   }, [branding])
 
   const handlePasskeyLogin = async (e: React.FormEvent<HTMLFormElement>) => {
