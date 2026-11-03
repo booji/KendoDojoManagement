@@ -1917,6 +1917,9 @@ The configuration a host needs beside the <strong>Release image</strong>, extrac
 <p><strong>Release line</strong>:
 The series of releases an operator pins to and upgrades within without a <strong>Breaking change</strong>: <code>0.3</code> before 1.0, <code>1</code> after. Only the latest Release line is supported.
 <em>Avoid</em>: Major, version, branch</p>
+<p><strong>Version</strong>:
+The exact release an install is running, such as <code>0.1.5</code> or <code>0.2.0-rc.1</code>; a build that is not a release is <code>dev</code>. One <strong>Release line</strong> holds many Versions.
+<em>Avoid</em>: Release line, build, tag</p>
 <p><strong>Breaking change</strong>:
 A change an operator cannot take by the routine upgrade alone: it needs a manual step, or it cannot be undone by returning to the previous <strong>Release image</strong>. The REST API is not part of this promise; it ships with its only client.
 <em>Avoid</em>: Major change, incompatible change</p>
