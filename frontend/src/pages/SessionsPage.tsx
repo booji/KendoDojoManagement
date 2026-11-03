@@ -42,6 +42,8 @@ import SessionCardList from "@/components/SessionCardList"
 import CalendarView from "@/components/CalendarView"
 import SessionsTable from "@/components/SessionsTable"
 import { PageHeader } from "@/components/ui/page-header"
+import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
+import { calendarFeedUrl } from "@/lib/calendarFeed"
 
 // ── Markdown preview field ─────────────────────────────────────────────────────
 
@@ -491,6 +493,7 @@ const SessionsPage = () => {
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
   const [typeMap, setTypeMap] = useState<Map<string, SessionType>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
+  const { dojoName, loaded: dojoSettingsLoaded } = useDojoSettings()
   const [error, setError] = useState<string | null>(null)
   const [pageView, setPageView] = useState<PageView>("list")
 
@@ -527,7 +530,7 @@ const SessionsPage = () => {
     })
   }
 
-  const icalUrl = `${window.location.origin}/api/sessions/ical`
+  const icalUrl = calendarFeedUrl(window.location.origin, dojoName)
 
   if (error !== null) {
     return (
@@ -578,7 +581,7 @@ const SessionsPage = () => {
                   Calendar
                 </Button>
               </div>
-              {role !== null && <ICalButton icalUrl={icalUrl} />}
+              {role !== null && dojoSettingsLoaded && <ICalButton icalUrl={icalUrl} />}
               {isAdmin && (
                 <CreateSessionDialog
                   sessionTypes={sessionTypes}

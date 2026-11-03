@@ -21,7 +21,7 @@ from app.sessions.dependencies import (
     get_session_template_repo,
     get_session_type_repo,
 )
-from app.sessions.ical import build_ical
+from app.sessions.ical import build_ical, feed_url_name
 from app.sessions.models import (
     GenerateRequest,
     SessionInstanceCreate,
@@ -40,6 +40,8 @@ from app.sessions.repository import (
     AbstractSessionTemplateRepository,
     AbstractSessionTypeRepository,
 )
+from app.settings.dependencies import get_dojo_settings_repo
+from app.settings.repository import AbstractDojoSettingsRepository
 
 router = APIRouter(tags=["sessions"])
 
@@ -120,8 +122,23 @@ def _enrich_segments_with_type_names(
     ]
 
 
-@router.get("/sessions/ical")
-async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
+@router.get("/sessions/ical/{name}")
+async def get_sessions_ical(
+    name: str,
+    repo: _InstRepo,
+    type_repo: _TypeRepo,
+    settings_repo: Annotated[
+        AbstractDojoSettingsRepository, Depends(get_dojo_settings_repo)
+    ],
+) -> Response:
+    settings = await settings_repo.get()
+    # The URL must end in the current dojo name. Renaming the dojo breaks
+    # existing subscriptions on purpose: members re-subscribe, and the URL
+    # never names a dojo that no longer exists.
+    if name != feed_url_name(settings["dojo_name"]):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Calendar feed not found"
+        )
     sessions = await repo.list_upcoming()
     types = {t["id"]: t["name"] for t in await type_repo.list()}
     enriched = [
@@ -132,7 +149,9 @@ async def get_sessions_ical(repo: _InstRepo, type_repo: _TypeRepo) -> Response:
         }
         for s in sessions
     ]
-    content = build_ical(enriched, tz_name=config.TIMEZONE)
+    content = build_ical(
+        enriched, tz_name=config.TIMEZONE, calendar_name=settings["dojo_name"]
+    )
     return Response(content=content, media_type="text/calendar; charset=utf-8")
 
 

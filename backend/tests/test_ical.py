@@ -27,6 +27,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.sessions.dependencies import get_session_instance_repo, get_session_type_repo
+from app.settings.dependencies import get_dojo_settings_repo
+from app.settings.repository import StubDojoSettingsRepository
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTypeRepository,
@@ -41,6 +43,13 @@ from tests.fake_repositories import (
 def clear_overrides():
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def settings_repo() -> StubDojoSettingsRepository:
+    repo = StubDojoSettingsRepository()
+    app.dependency_overrides[get_dojo_settings_repo] = lambda: repo
+    return repo
 
 
 @pytest.fixture()
@@ -106,7 +115,7 @@ async def test_ical_endpoint_returns_200_no_auth(instance_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
     assert response.status_code == 200
     assert "text/calendar" in response.headers.get("content-type", "")
 
@@ -118,9 +127,9 @@ async def test_ical_endpoint_returns_valid_ical_structure(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     assert body.startswith("BEGIN:VCALENDAR")
     assert "END:VCALENDAR" in body
     assert "PRODID:-//KendoDojoManagement//EN" in body
@@ -140,8 +149,8 @@ async def test_ical_feed_includes_vevent_with_summary(instance_repo, type_repo) 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     assert "BEGIN:VEVENT" in body
     assert "SUMMARY:Men Waza Practice" in body
 
@@ -158,8 +167,8 @@ async def test_ical_feed_includes_dtstart_and_dtend(instance_repo, type_repo) ->
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     # DTSTART should encode 2099-06-02 19:00 in iCal format
     assert "DTSTART" in body
     assert "20990602" in body
@@ -173,8 +182,8 @@ async def test_ical_feed_includes_location(instance_repo, type_repo) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     assert "LOCATION:Dojo East Wing" in body
 
 
@@ -186,10 +195,12 @@ async def test_ical_feed_includes_description_from_info(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     description_line = next(
-        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in body.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     assert "Practice focus: kote strikes" in description_line
 
@@ -200,9 +211,9 @@ async def test_ical_feed_omits_location_when_null(instance_repo, type_repo) -> N
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     assert "BEGIN:VEVENT" in body
     assert "LOCATION" not in body
 
@@ -216,12 +227,14 @@ async def test_ical_feed_description_omits_info_when_info_null(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     assert "BEGIN:VEVENT" in body
     description_line = next(
-        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in body.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     # Only the segment breakdown line should be present, e.g. "19:00-20:30 ..."
     assert "19:00-20:30" in description_line
@@ -242,9 +255,9 @@ async def test_ical_feed_never_includes_coach_notes(instance_repo, type_repo) ->
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     assert "BEGIN:VEVENT" in body
     assert "SECRET" not in body
     assert "nuki-waza" not in body
@@ -262,8 +275,8 @@ async def test_ical_vevent_uid_equals_instance_uuid(instance_repo, type_repo) ->
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     assert f"UID:{inst['id']}" in body
 
 
@@ -273,8 +286,8 @@ async def test_ical_vevent_uid_stable_across_requests(instance_repo, type_repo) 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        r1 = await c.get("/sessions/ical")
-        r2 = await c.get("/sessions/ical")
+        r1 = await c.get("/sessions/ical/My%20Dojo")
+        r2 = await c.get("/sessions/ical/My%20Dojo")
     assert f"UID:{inst['id']}" in r1.text
     assert f"UID:{inst['id']}" in r2.text
 
@@ -315,8 +328,8 @@ async def test_ical_feed_includes_all_upcoming_sessions(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
-    body = response.text
+        response = await c.get("/sessions/ical/My%20Dojo")
+    body = response.text.replace("\r\n ", "")
     assert "SUMMARY:Session A" in body
     assert "SUMMARY:Session B" in body
     assert "SUMMARY:Cancelled Session" not in body
@@ -366,10 +379,10 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
 
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
 
     # Exactly one VEVENT for the whole multi-segment night.
     assert body.count("BEGIN:VEVENT") == 1
@@ -382,7 +395,9 @@ async def test_ical_feed_multi_segment_single_vevent_envelope_no_leak(
     assert "DTSTART;TZID=" in body
 
     description_line = next(
-        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in body.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     # Both segment breakdowns present, then the public info.
     assert "18:30-19:40" in description_line
@@ -495,7 +510,9 @@ def test_build_ical_strips_admin_only_fields() -> None:
     # Public fields should be present
     assert "SUMMARY:Tameshigiri Night" in result
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     assert "Public info" in description_line
 
@@ -571,8 +588,190 @@ def test_build_ical_escapes_crlf_injection_in_summary() -> None:
     result = build_ical(sessions)
     # Real CRLF line breaks must only occur between iCal property lines —
     # none of the injected text should produce a standalone CRLF-prefixed property.
-    lines = result.split("\r\n")
+    lines = result.replace("\r\n ", "").split("\r\n")
     assert not any(ln.startswith("STATUS:") for ln in lines)
     assert not any(ln.startswith("ATTACH:") for ln in lines)
     assert not any(ln.startswith("INJECTED:") for ln in lines)
     assert not any(ln.startswith("X-INJECTED:") for ln in lines)
+
+
+# ---------------------------------------------------------------------------
+# Calendar name — calendar apps show the Calendar Feed under the dojo's name
+# ---------------------------------------------------------------------------
+
+
+def test_build_ical_names_the_calendar() -> None:
+    result = build_ical([], calendar_name="Kenshikai, Leeds")
+    lines = result.replace("\r\n ", "").split("\r\n")
+    assert "X-WR-CALNAME:Kenshikai\\, Leeds" in lines
+    assert "NAME:Kenshikai\\, Leeds" in lines
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_build_ical_falls_back_when_dojo_name_blank(name: str | None) -> None:
+    lines = build_ical([], calendar_name=name).split("\r\n")
+    assert "X-WR-CALNAME:Kendo Dojo Management" in lines
+    assert "NAME:Kendo Dojo Management" in lines
+
+
+async def test_ical_feed_is_named_after_the_dojo(
+    instance_repo, type_repo, settings_repo
+) -> None:
+    await settings_repo.update({"dojo_name": "Kenshikai"})
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/sessions/ical/Kenshikai")
+    assert "X-WR-CALNAME:Kenshikai" in response.text.split("\r\n")
+
+
+# ---------------------------------------------------------------------------
+# Session info is markdown: DESCRIPTION carries it as readable plain text
+# ---------------------------------------------------------------------------
+
+
+def _session_with_info(info: str) -> dict[str, Any]:
+    return {
+        "id": "uid-md",
+        "title": "Keiko",
+        "date": "2099-10-01",
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 90, "type_names": ["General"]}
+        ],
+        "info": info,
+    }
+
+
+def _property(ical: str, name: str) -> str:
+    """The unfolded, unescaped value of the first `name` property."""
+    unfolded = ical.replace("\r\n ", "")
+    raw = next(
+        line.split(":", 1)[1]
+        for line in unfolded.split("\r\n")
+        if line.split(":", 1)[0].split(";", 1)[0] == name
+    )
+    out, i = [], 0
+    while i < len(raw):
+        if raw[i] == "\\" and i + 1 < len(raw):
+            out.append("\n" if raw[i + 1] in "nN" else raw[i + 1])
+            i += 2
+        else:
+            out.append(raw[i])
+            i += 1
+    return "".join(out)
+
+
+@pytest.mark.parametrize(
+    ("markdown", "plain"),
+    [
+        ("**Bring** your *shinai*", "Bring your shinai"),
+        ("~~Kata~~ Jigeiko", "Kata Jigeiko"),
+        ("Use `bogu`", "Use bogu"),
+        ("# Notes\n\nKeiko first", "Notes\n\nKeiko first"),
+        ("- bogu\n- tenugui", "• bogu\n• tenugui"),
+        ("1. warm up\n2. kata", "1. warm up\n2. kata"),
+        ("- bogu\n  - men", "• bogu\n  • men"),
+        ("[Map](https://x.example/map)", "Map (https://x.example/map)"),
+        ("<https://x.example/map>", "https://x.example/map"),
+        ("First\n\nSecond", "First\n\nSecond"),
+        ("<b>raw</b>", "<b>raw</b>"),
+    ],
+)
+def test_build_ical_description_renders_info_markdown_as_plain_text(
+    markdown: str, plain: str
+) -> None:
+    description = _property(build_ical([_session_with_info(markdown)]), "DESCRIPTION")
+    assert description == f"19:00-20:30 - General\n{plain}"
+
+
+# ---------------------------------------------------------------------------
+# X-ALT-DESC carries the same description as HTML, for apps that render it
+# ---------------------------------------------------------------------------
+
+
+def test_build_ical_alt_description_is_html() -> None:
+    session = {
+        **_session_with_info("**Bring** <b>x</b>"),
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 30, "type_names": ["Kihon"]},
+            {"start_time": "19:30", "duration_minutes": 60, "type_names": ["Jigeiko"]},
+        ],
+        "checkin_link": "https://dojo.example/checkin/session/1?a=1&b=2",
+    }
+    result = build_ical([session])
+    assert "X-ALT-DESC;FMTTYPE=text/html:" in result
+    link = "https://dojo.example/checkin/session/1?a=1&amp;b=2"
+    assert _property(result, "X-ALT-DESC") == (
+        "<html><body>"
+        f'<p>Check in: <a href="{link}">{link}</a></p>'
+        "<p>19:00-19:30 - Kihon<br>19:30-20:30 - Jigeiko</p>"
+        "<p><strong>Bring</strong> &lt;b&gt;x&lt;/b&gt;</p>\n"
+        "</body></html>"
+    )
+
+
+def test_build_ical_alt_description_drops_script_links() -> None:
+    html = _property(
+        build_ical([_session_with_info("[x](javascript:alert(1))")]), "X-ALT-DESC"
+    )
+    assert "javascript:" not in html.replace("[x](javascript:alert(1))", "")
+    assert "<a " not in html
+
+
+# ---------------------------------------------------------------------------
+# RFC 5545 §3.1: content lines fold at 75 octets
+# ---------------------------------------------------------------------------
+
+
+def test_build_ical_folds_long_lines_at_75_octets() -> None:
+    info = "剣道 keiko " * 40
+    result = build_ical([_session_with_info(info)], calendar_name="道場" * 50)
+    for line in result.split("\r\n"):
+        assert len(line.encode()) <= 75, line
+    # Folding splits between characters, so unfolding restores every value.
+    assert _property(result, "NAME") == "道場" * 50
+    assert _property(result, "DESCRIPTION").endswith(info.strip())
+
+
+# ---------------------------------------------------------------------------
+# The Calendar Feed URL ends in the dojo name: Thunderbird and GNOME Calendar
+# name a subscription after the URL's last segment, not X-WR-CALNAME.
+# ---------------------------------------------------------------------------
+
+
+async def _get(path: str):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        return await c.get(path)
+
+
+@pytest.mark.parametrize(
+    ("dojo_name", "segment"),
+    [
+        ("Shoshinkai Reading", "Shoshinkai%20Reading"),
+        ("Kendo Club A/B", "Kendo%20Club%20A-B"),
+        ("  Shoshinkai  ", "Shoshinkai"),
+        ("   ", "Kendo%20Dojo%20Management"),
+    ],
+)
+async def test_ical_feed_url_ends_in_the_dojo_name(
+    instance_repo, type_repo, settings_repo, dojo_name: str, segment: str
+) -> None:
+    await settings_repo.update({"dojo_name": dojo_name})
+    response = await _get(f"/sessions/ical/{segment}")
+    assert response.status_code == 200
+    assert "text/calendar" in response.headers["content-type"]
+
+
+async def test_ical_feed_url_with_another_name_is_not_found(
+    instance_repo, type_repo, settings_repo
+) -> None:
+    await settings_repo.update({"dojo_name": "Shoshinkai Reading"})
+    response = await _get("/sessions/ical/My%20Dojo")
+    assert response.status_code == 404
+
+
+async def test_ical_feed_has_no_url_without_a_name(instance_repo, type_repo) -> None:
+    response = await _get("/sessions/ical")
+    assert "text/calendar" not in response.headers.get("content-type", "")

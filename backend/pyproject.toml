@@ -36,6 +36,7 @@ dependencies = [
     "click>=8.5.0",
     "Mako>=1.4.3",
     "pyasn1>=0.6.5",
+    "markdown-it-py>=4.2.0",
 ]
 
 [dependency-groups]

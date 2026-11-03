@@ -494,7 +494,7 @@ wheels = [
 
 [[package]]
 name = "kendodojomanagement"
-version = "0"
+version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
@@ -505,6 +505,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "idna" },
     { name = "mako" },
+    { name = "markdown-it-py" },
     { name = "publicsuffixlist" },
     { name = "pyasn1" },
     { name = "pydantic", extra = ["email"] },
@@ -546,6 +547,7 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.162.0" },
     { name = "idna", specifier = ">=3.20" },
     { name = "mako", specifier = ">=1.4.3" },
+    { name = "markdown-it-py", specifier = ">=4.2.0" },
     { name = "publicsuffixlist", specifier = "==1.1.2.20261029" },
     { name = "pyasn1", specifier = ">=0.6.5" },
     { name = "pydantic", extras = ["email"], specifier = "==2.14.2" },
