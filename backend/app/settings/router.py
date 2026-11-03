@@ -155,12 +155,12 @@ async def update_dojo_settings(
 
 @router.get("/version")
 async def get_version(claims: _Admin) -> dict[str, str]:
-    """Admin-only: the exact Version would help an attacker pick known holes.
+    """The Version this server is running: the release image's exact tag from
+    KENDO_VERSION, or `dev` for any other build (#556).
 
-    The release image sets KENDO_VERSION from its build arg; any other build
-    is `dev` (#556).
+    Admin-only: the exact Version would help an attacker pick known holes.
     """
-    return {"version": os.environ.get("KENDO_VERSION", "dev")}
+    return {"version": os.environ.get("KENDO_VERSION") or "dev"}
 
 
 @router.get("/branding")

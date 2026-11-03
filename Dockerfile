@@ -78,8 +78,8 @@ ARG KENDO_IMAGE_REF=""
 RUN if [ -n "$KENDO_IMAGE_REF" ]; then printf '%s\n' "$KENDO_IMAGE_REF" > /bundle/.image-tag; fi
 
 # The exact Version (`0.1.5`, not the pin `0.1`), shown to Admins in Admin
-# Settings (#556). Only release.yml sets it; every other build is `dev`.
-ARG KENDO_VERSION=dev
+# Settings (#556). Only release.yml sets it; left empty, the app reports `dev`.
+ARG KENDO_VERSION=
 ENV KENDO_VERSION=$KENDO_VERSION
 
 # Run unprivileged. Rootless Podman already maps container-root to an

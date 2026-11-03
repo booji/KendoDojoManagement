@@ -382,6 +382,19 @@ async def test_a_build_that_is_not_a_release_reports_dev(monkeypatch) -> None:
     assert response.json() == {"version": "dev"}
 
 
+async def test_an_image_built_without_a_version_reports_dev(monkeypatch) -> None:
+    # The Dockerfile's KENDO_VERSION build arg defaults to empty.
+    monkeypatch.setenv("KENDO_VERSION", "")
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/settings/version")
+
+    assert response.json() == {"version": "dev"}
+
+
 async def test_a_member_cannot_get_the_version() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
