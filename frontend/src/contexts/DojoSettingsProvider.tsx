@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type { ReactNode } from "react"
 import { getDojoSettings } from "@/api/settings"
 import { applyPrimaryColour } from "@/lib/primaryColour"
+import { setTabTitle } from "@/lib/tabTitle"
 
 type DojoSettingsContextValue = {
   dojoName: string
@@ -25,8 +26,16 @@ export const DojoSettingsProvider = ({ children }: DojoSettingsProviderProps) =>
   const [dojoName, setDojoName] = useState(DEFAULTS.dojoName)
   const [logoUrl, setLogoUrl] = useState<string | null>(DEFAULTS.logoUrl)
   const [primaryColour, setPrimaryColour] = useState(DEFAULTS.primaryColour)
+  const [loaded, setLoaded] = useState(false)
+
+  // Only a loaded name reaches the tab: the "My Dojo" placeholder never does,
+  // and until then index.html's fallback title stands.
+  useEffect(() => {
+    if (loaded) setTabTitle(dojoName)
+  }, [loaded, dojoName])
 
   const applySettings = useCallback((data: { dojo_name: string; logo_url: string | null; primary_colour: string }) => {
+    setLoaded(true)
     setDojoName(data.dojo_name)
     setLogoUrl(data.logo_url)
     setPrimaryColour(data.primary_colour)

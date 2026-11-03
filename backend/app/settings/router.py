@@ -153,6 +153,16 @@ async def update_dojo_settings(
     }
 
 
+@router.get("/version")
+async def get_version(claims: _Admin) -> dict[str, str]:
+    """The Version this server is running: the release image's exact tag from
+    KENDO_VERSION, or `dev` for any other build (#556).
+
+    Admin-only: the exact Version would help an attacker pick known holes.
+    """
+    return {"version": os.environ.get("KENDO_VERSION") or "dev"}
+
+
 @router.get("/branding")
 async def get_branding(repo: _SettingsRepo) -> dict[str, Any]:
     """Public, unauthenticated — returns the gated login-screen branding view."""

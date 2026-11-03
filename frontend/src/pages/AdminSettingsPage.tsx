@@ -4,6 +4,7 @@ import {
   updateDojoSettings,
   uploadDojoLogo,
   uploadDojoBackground,
+  getVersion,
 } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
 import {
@@ -1364,6 +1365,23 @@ export const AdminFederationCatalogue = () => {
   )
 }
 
+// ── Version (#556) ─────────────────────────────────────────────────────────────
+
+// Nothing renders until the Version arrives: a failed fetch leaves no line
+// rather than an error, since it is only there for bug reports.
+const VersionLine = () => {
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    getVersion()
+      .then((data) => setVersion(data.version))
+      .catch(() => {})
+  }, [])
+
+  if (version === null) return null
+  return <p className="text-xs text-muted-foreground">Version {version}</p>
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const AdminSettingsPage = () => (
@@ -1402,6 +1420,8 @@ const AdminSettingsPage = () => (
         </CardContent>
       </Card>
     </Section>
+
+    <VersionLine />
   </div>
 )
 

@@ -96,6 +96,7 @@ jobs:
           push: true
           build-args: |
             KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}
+            KENDO_VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 

@@ -77,6 +77,11 @@ COPY deploy/ /bundle/deploy/
 ARG KENDO_IMAGE_REF=""
 RUN if [ -n "$KENDO_IMAGE_REF" ]; then printf '%s\n' "$KENDO_IMAGE_REF" > /bundle/.image-tag; fi
 
+# The exact Version (`0.1.5`, not the pin `0.1`), shown to Admins in Admin
+# Settings (#556). Only release.yml sets it; left empty, the app reports `dev`.
+ARG KENDO_VERSION=
+ENV KENDO_VERSION=$KENDO_VERSION
+
 # Run unprivileged. Rootless Podman already maps container-root to an
 # unprivileged host user, but inside the container root can rewrite the app's
 # own code and site-packages, so a compromise survives a restart (#385).

@@ -14,6 +14,7 @@ import { performPasskeyLogin } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import { getBranding } from "@/api/settings"
 import type { DojoBranding } from "@/api/settings"
+import { setTabTitle } from "@/lib/tabTitle"
 
 const LoginPage = () => {
   const [email, setEmail] = useState("")
@@ -28,6 +29,12 @@ const LoginPage = () => {
         // Tolerate failure silently — fall back to the bare card.
       })
   }, [])
+
+  // Always set, even to the fallback: a client-side sign-out arrives here
+  // with the signed-in dojo name still in the tab.
+  useEffect(() => {
+    setTabTitle(branding?.dojo_name ?? null)
+  }, [branding])
 
   const handlePasskeyLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

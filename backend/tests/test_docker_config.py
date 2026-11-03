@@ -777,6 +777,20 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
     assert "KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}" in release, release
 
 
+def test_release_image_reports_its_exact_version():
+    """Admin Settings shows the Version the image was built from (#556): the
+    exact tag, `0.1.5`, never the pin `0.1`. Any other build reports `dev`."""
+    stage = _prod_stage()
+    # Empty, so `dev` lives only in the router: an unset or empty
+    # KENDO_VERSION reports `dev` there.
+    assert "\nARG KENDO_VERSION=\n" in stage, stage
+    assert "ENV KENDO_VERSION=$KENDO_VERSION" in stage, stage
+
+    [build] = [s for s in _release_steps() if s.get("id") == "build"]
+    args = build["with"]["build-args"].splitlines()
+    assert "KENDO_VERSION=${{ steps.meta.outputs.version }}" in args, args
+
+
 def _release_steps() -> list[dict]:
     jobs = yaml.safe_load(RELEASE_WORKFLOW.read_text())["jobs"]
     return [step for job in jobs.values() for step in job["steps"]]

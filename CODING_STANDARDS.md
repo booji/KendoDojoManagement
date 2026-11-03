@@ -13,6 +13,13 @@ not hand-roll `navigator.clipboard.writeText` with its own `copied` state. Four
 pages predate the component and still do (issue #367); if you are editing one
 of them anyway, migrate it.
 
+### Dismissing Dialogs
+Dialogs do not close on an outside click; menus and sheets do. A stray click
+must not throw away a half-filled form or a one-time secret, so the `Dialog`
+wrapper (`frontend/src/components/ui/dialog.tsx`) sets
+`disablePointerDismissal` for every dialog — do not override it per dialog.
+Esc, the ✕ button and Cancel still close a dialog.
+
 ### Button Ordering (macOS HIG)
 Action buttons are right-aligned (`justify-end`). Order left-to-right: most destructive → least destructive → primary/safe action. Example: `Cancel Series` | `Cancel Session` | `Edit`. The default/safe action always sits rightmost.
 

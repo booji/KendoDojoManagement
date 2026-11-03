@@ -192,6 +192,10 @@ _Avoid_: The repo files, the deploy directory, the checkout
 The series of releases an operator pins to and upgrades within without a **Breaking change**: `0.3` before 1.0, `1` after. Only the latest Release line is supported.
 _Avoid_: Major, version, branch
 
+**Version**:
+The exact release an install is running, such as `0.1.5` or `0.2.0-rc.1`; a build that is not a release is `dev`. One **Release line** holds many Versions.
+_Avoid_: Release line, build, tag
+
 **Breaking change**:
 A change an operator cannot take by the routine upgrade alone: it needs a manual step, or it cannot be undone by returning to the previous **Release image**. The REST API is not part of this promise; it ships with its only client.
 _Avoid_: Major change, incompatible change

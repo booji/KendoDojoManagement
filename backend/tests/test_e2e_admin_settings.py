@@ -92,6 +92,16 @@ def test_admin_settings_page_renders_non_blank_content(page: Page) -> None:
     expect(page.get_by_role("heading", name="Admin Settings")).to_be_visible()
 
 
+def test_admin_settings_shows_the_running_version(page: Page) -> None:
+    """#556: the test servers are not a release build, so the Version is dev."""
+    token = _make_token("admin")
+    _inject_cookie(page, token)
+
+    page.goto(f"{BASE_URL}/admin/settings")
+
+    expect(page.get_by_text("Version dev", exact=True)).to_be_visible()
+
+
 # ── AC9 — /admin/settings is not accessible to a regular member ───────────
 
 
