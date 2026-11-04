@@ -1,4 +1,5 @@
 import { apiFetch, request, throwApiError } from "@/api/client"
+import type { MembershipStatus } from "@/api/members"
 
 export type SessionSummary = {
   session_id: string
@@ -69,4 +70,22 @@ export const downloadMembersCsv = async (): Promise<void> => {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+// ── Charts tab (#558) ─────────────────────────────────────────────────────────
+
+export type GradeCount = {
+  grade: string
+  display_name: string
+  count: number
+}
+
+/** Members holding each Grade today, Mukyū up to the highest held, zeros kept. */
+export const fetchGradeDistribution = async (
+  statuses: MembershipStatus[],
+): Promise<GradeCount[]> => {
+  const params = new URLSearchParams(statuses.map((s) => ["status", s]))
+  return request<GradeCount[]>(`/api/reports/grades?${params.toString()}`, {
+    errorMessage: "Failed to fetch grade distribution",
+  })
 }

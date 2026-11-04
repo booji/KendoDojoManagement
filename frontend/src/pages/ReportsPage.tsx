@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 import {
   fetchAttendanceReport,
   fetchMembersReport,
@@ -16,6 +16,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DownloadIcon } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyState } from "@/components/ui/empty-state"
+
+// Recharts is big and only Admins open this tab: keep it out of the main bundle.
+const ChartsTab = lazy(() => import("@/components/reports/ChartsTab"))
 
 // ── Attendance tab ─────────────────────────────────────────────────────────────
 
@@ -376,6 +379,7 @@ const ReportsPage = () => (
       <TabsList className="mb-6">
         <TabsTrigger value="attendance">Attendance</TabsTrigger>
         <TabsTrigger value="members">Members</TabsTrigger>
+        <TabsTrigger value="charts">Charts</TabsTrigger>
       </TabsList>
 
       <TabsContent value="attendance">
@@ -384,6 +388,12 @@ const ReportsPage = () => (
 
       <TabsContent value="members">
         <MembersSection />
+      </TabsContent>
+
+      <TabsContent value="charts">
+        <Suspense fallback={<Skeleton className="h-64 w-full rounded-lg" />}>
+          <ChartsTab />
+        </Suspense>
       </TabsContent>
     </Tabs>
   </div>
