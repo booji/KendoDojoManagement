@@ -16,6 +16,7 @@ import json
 import re
 import uuid
 
+import httpx
 from playwright.sync_api import Page, expect
 
 from app.auth.models import AccountClaims
@@ -138,6 +139,11 @@ def test_ical_url_displayed_for_authenticated_member(page: Page) -> None:
     assert "/api/sessions/ical" in url_value, (
         f"Expected iCal URL to contain '/api/sessions/ical', got: {url_value}"
     )
+    # The URL ends in the dojo name and the server answers only the current
+    # one: the popover and feed_url_name must agree, or subscribing 404s.
+    feed = httpx.get(url_value)
+    assert feed.status_code == 200, f"{url_value} -> {feed.status_code}"
+    assert "text/calendar" in feed.headers["content-type"]
 
 
 # ---------------------------------------------------------------------------

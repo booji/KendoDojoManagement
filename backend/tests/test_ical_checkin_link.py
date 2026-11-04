@@ -33,6 +33,8 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app
 from app.sessions.dependencies import get_session_instance_repo, get_session_type_repo
 from app.sessions.ical import build_ical
+from app.settings.dependencies import get_dojo_settings_repo
+from app.settings.repository import StubDojoSettingsRepository
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTypeRepository,
@@ -71,7 +73,9 @@ def test_description_first_line_is_checkin_link_when_present() -> None:
     sessions = [_session(checkin_link=url)]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     # DESCRIPTION escaping turns real newlines into literal "\n" — the first
     # line of the (unescaped) description content is "Check in: {url}".
@@ -86,7 +90,9 @@ def test_description_has_blank_line_after_checkin_link() -> None:
     sessions = [_session(checkin_link=url)]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     content = description_line[len("DESCRIPTION:") :]
     # Escaped newlines appear as literal "\n" in the DESCRIPTION value.
@@ -100,7 +106,9 @@ def test_description_still_contains_breakdown_and_info_after_checkin_link() -> N
     sessions = [_session(checkin_link=url)]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     content = description_line[len("DESCRIPTION:") :]
     assert "19:00-20:30" in content
@@ -114,7 +122,9 @@ def test_description_omits_checkin_line_when_checkin_link_absent() -> None:
     sessions = [_session()]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     content = description_line[len("DESCRIPTION:") :]
     assert "Check in:" not in content
@@ -127,7 +137,9 @@ def test_description_omits_checkin_line_when_checkin_link_is_none() -> None:
     sessions = [_session(checkin_link=None)]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     content = description_line[len("DESCRIPTION:") :]
     assert "Check in:" not in content
@@ -184,6 +196,12 @@ def _clear_overrides():
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _settings_repo() -> None:
+    repo = StubDojoSettingsRepository()
+    app.dependency_overrides[get_dojo_settings_repo] = lambda: repo
+
+
 @pytest.fixture()
 def instance_repo() -> InMemorySessionInstanceRepository:
     repo = InMemorySessionInstanceRepository()
@@ -228,13 +246,15 @@ async def test_get_sessions_ical_enriches_upcoming_session_with_checkin_link(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
 
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     expected_url = f"https://dojo.example.com/checkin/session/{inst_id}"
     description_line = next(
-        line for line in body.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in body.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     content = description_line[len("DESCRIPTION:") :]
     assert content.startswith(f"Check in: {expected_url}")
@@ -266,10 +286,10 @@ async def test_get_sessions_ical_falls_back_to_webauthn_origin(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
 
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     expected_url = f"https://fallback.dojo.test/checkin/session/{inst_id}"
     assert expected_url in body
 
@@ -298,10 +318,10 @@ async def test_get_sessions_ical_cancelled_session_has_no_checkin_link_leak(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/sessions/ical")
+        response = await c.get("/sessions/ical/My%20Dojo")
 
     assert response.status_code == 200
-    body = response.text
+    body = response.text.replace("\r\n ", "")
     assert "Cancelled Keiko" not in body
     assert f"/checkin/session/{cancelled_id}" not in body
 

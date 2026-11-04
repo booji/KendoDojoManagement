@@ -28,6 +28,7 @@ criterion here is about wall-clock latency of a service/HTTP call, which a
 headless browser cannot measure meaningfully -- it would only add flake.
 """
 
+import gc
 import time
 import uuid
 
@@ -172,6 +173,10 @@ async def test_login_begin_floor_is_configurable(db_client, monkeypatch) -> None
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
+        # Collect first: this compares two single requests, and a full
+        # (generation 2) collection over the whole suite's heap took ~265ms on
+        # a CI runner when it landed inside the first one (#566).
+        gc.collect()
         monkeypatch.setattr(config, "AUTH_BEGIN_MIN_DURATION_MS", 15)
         low_elapsed = await _timed_post(
             c, "/auth/login/passkey/begin", "configurable-floor@dojo.test"

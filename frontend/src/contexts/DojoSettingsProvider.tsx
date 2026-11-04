@@ -8,6 +8,8 @@ type DojoSettingsContextValue = {
   dojoName: string
   logoUrl: string | null
   primaryColour: string
+  // False until the real settings arrive: until then dojoName is a placeholder.
+  loaded: boolean
   refresh: () => void
 }
 
@@ -15,6 +17,7 @@ const DEFAULTS: DojoSettingsContextValue = {
   dojoName: "My Dojo",
   logoUrl: null,
   primaryColour: "#4F46E5",
+  loaded: false,
   refresh: () => undefined,
 }
 
@@ -55,7 +58,7 @@ export const DojoSettingsProvider = ({ children }: DojoSettingsProviderProps) =>
   }, [refresh])
 
   return (
-    <DojoSettingsContext.Provider value={{ dojoName, logoUrl, primaryColour, refresh }}>
+    <DojoSettingsContext.Provider value={{ dojoName, logoUrl, primaryColour, loaded, refresh }}>
       {children}
     </DojoSettingsContext.Provider>
   )

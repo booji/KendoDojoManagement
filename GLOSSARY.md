@@ -128,6 +128,10 @@ _Avoid_: Session category, class type
 **Cancellation**:
 Marking a specific **Session** as not taking place.
 
+**Calendar Feed**:
+The subscription of upcoming **Sessions**, without **Cancellations**, that anyone with its link can add to their own calendar app. Calendar apps show it under the dojo's name.
+_Avoid_: iCal, ICS feed
+
 ### Attendance
 
 **Attendance**:
