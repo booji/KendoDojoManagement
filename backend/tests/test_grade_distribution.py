@@ -10,20 +10,29 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.grades.repository import SqlGradeRepository
 from app.main import app
+from app.members.db_models import Member
 from app.members.repository import SqlMemberRepository
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="a@dojo.test", role="admin")
 
 
-@pytest.fixture
-def as_admin():
+@pytest_asyncio.fixture
+async def as_admin(db_client):
+    """Sign in as an Admin and count only the Members this test seeds.
+
+    Other tests leave Members in the shared database. Parking them under a
+    status no filter asks for hides them; db_client's savepoint rollback
+    puts them back.
+    """
+    await db_client.execute(update(Member).values(membership_status="parked"))
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
     yield
     app.dependency_overrides.pop(REQUIRE_ADMIN, None)
