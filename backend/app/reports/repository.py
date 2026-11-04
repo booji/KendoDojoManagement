@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.members.models import member_name
+
 
 class AbstractReportRepository(ABC):
     @abstractmethod
@@ -127,7 +129,7 @@ class SqlReportRepository(AbstractReportRepository):
             rows.append(
                 {
                     "member_id": member_id,
-                    "display_name": display_name or f"{first_name} {surname}",
+                    "display_name": member_name(display_name, first_name, surname),
                     "sessions_attended": count,
                     "total_sessions": total,
                     "attendance_rate": round(count / total, 4),
@@ -151,8 +153,9 @@ class SqlReportRepository(AbstractReportRepository):
             rows.append(
                 {
                     "member_id": member.id,
-                    "display_name": member.display_name
-                    or f"{member.first_name} {member.surname}",
+                    "display_name": member_name(
+                        member.display_name, member.first_name, member.surname
+                    ),
                     "join_date": member.join_date,
                     "current_grade": current["grade"] if current else None,
                 }

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grades.db_models import GradeHistory
 from app.members.db_models import Member
+from app.members.models import member_name
 
 
 class AbstractGradeRepository(ABC):
@@ -173,7 +174,7 @@ class SqlGradeRepository(AbstractGradeRepository):
         return [
             {
                 **_to_dict(gh),
-                "member_name": display_name or f"{first_name} {surname}",
+                "member_name": member_name(display_name, first_name, surname),
             }
             for gh, display_name, first_name, surname in result.all()
         ]
