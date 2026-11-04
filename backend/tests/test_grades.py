@@ -91,12 +91,13 @@ class StubGradeRepo:
     def __init__(self) -> None:
         self._history: list[dict[str, Any]] = []
 
-    async def get_current_grade(self, member_id: str) -> str | None:
-        """Return the machine value of the member's current grade, or None."""
-        member_entries = [e for e in self._history if e["member_id"] == member_id]
-        if not member_entries:
-            return None
-        return member_entries[-1]["grade"]
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
+        confirmed = [
+            e
+            for e in self._history
+            if e["member_id"] == member_id and e["status"] == "confirmed"
+        ]
+        return max(confirmed, key=lambda e: e["promoted_at"], default=None)
 
     async def add_promotion(
         self,

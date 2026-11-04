@@ -189,18 +189,16 @@ async def get_current_grade(
             status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
-    history = await grade_repo.get_history(str(member_id))
-    confirmed = [e for e in history if e.get("status") == "confirmed"]
-    if not confirmed:
+    current = await grade_repo.get_current_grade(str(member_id))
+    if current is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No grade history found"
         )
 
-    latest = max(confirmed, key=lambda e: e["promoted_at"])
     return CurrentGradeResponse(
-        grade=latest["grade"],
-        display_name=latest["display_name"],
-        awarded_at=latest["promoted_at"],
+        grade=current["grade"],
+        display_name=current["display_name"],
+        awarded_at=current["promoted_at"],
     )
 
 

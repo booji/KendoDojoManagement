@@ -157,7 +157,8 @@ class StubReportRepository:
         """Return all members with current grade and join date."""
         result = []
         for member in self._members:
-            # Current grade = most recent grade history entry
+            # Seeded grades are all confirmed; the confirmed-only rule is
+            # tested against PostgreSQL in test_current_grade.py (#565).
             member_grades = [g for g in self._grades if g["member_id"] == member["id"]]
             current_grade = (
                 max(member_grades, key=lambda g: g["promoted_at"])["grade"]
