@@ -13,7 +13,13 @@ from app.members.db_models import Member
 
 class AbstractGradeRepository(ABC):
     @abstractmethod
-    async def get_current_grade(self, member_id: str) -> str | None: ...
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
+        """The Member's current Grade: their latest *confirmed* Promotion.
+
+        A pending, self-reported Promotion is nobody's current Grade until an
+        Admin confirms it (#565). None when there is no confirmed Promotion.
+        """
+        ...
 
     @abstractmethod
     async def add_promotion(
@@ -69,15 +75,18 @@ class SqlGradeRepository(AbstractGradeRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_current_grade(self, member_id: str) -> str | None:
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
         result = await self._session.execute(
             select(GradeHistory)
-            .where(GradeHistory.member_id == member_id)
+            .where(
+                GradeHistory.member_id == member_id,
+                GradeHistory.status == "confirmed",
+            )
             .order_by(GradeHistory.promoted_at.desc())
             .limit(1)
         )
         obj = result.scalar_one_or_none()
-        return obj.grade if obj else None
+        return _to_dict(obj) if obj else None
 
     async def add_promotion(
         self,

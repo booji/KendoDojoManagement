@@ -100,28 +100,23 @@ class SqlReportRepository(AbstractReportRepository):
     async def members_report(self) -> list[dict[str, Any]]:
         from sqlalchemy import select
 
-        from app.grades.db_models import GradeHistory
+        from app.grades.repository import SqlGradeRepository
         from app.members.db_models import Member
 
         members_result = await self._session.execute(select(Member))
         members = members_result.scalars().all()
 
+        grades = SqlGradeRepository(self._session)
         rows = []
         for member in members:
-            grades_result = await self._session.execute(
-                select(GradeHistory)
-                .where(GradeHistory.member_id == member.id)
-                .order_by(GradeHistory.promoted_at.desc())
-                .limit(1)
-            )
-            latest_grade = grades_result.scalar_one_or_none()
+            current = await grades.get_current_grade(member.id)
             rows.append(
                 {
                     "member_id": member.id,
                     "display_name": member.display_name
                     or f"{member.first_name} {member.surname}",
                     "join_date": member.join_date,
-                    "current_grade": latest_grade.grade if latest_grade else None,
+                    "current_grade": current["grade"] if current else None,
                 }
             )
         return rows
