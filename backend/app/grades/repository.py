@@ -76,17 +76,28 @@ class SqlGradeRepository(AbstractGradeRepository):
         self._session = session
 
     async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
+        return (await self.get_current_grades([member_id])).get(member_id)
+
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """get_current_grade for many Members in one query, by member id.
+
+        The one place the confirmed-only rule lives (#565). A Member with no
+        confirmed Promotion is absent from the result.
+        """
+        if not member_ids:
+            return {}
         result = await self._session.execute(
             select(GradeHistory)
             .where(
-                GradeHistory.member_id == member_id,
+                GradeHistory.member_id.in_(member_ids),
                 GradeHistory.status == "confirmed",
             )
-            .order_by(GradeHistory.promoted_at.desc())
-            .limit(1)
+            .order_by(GradeHistory.member_id, GradeHistory.promoted_at.desc())
+            .distinct(GradeHistory.member_id)
         )
-        obj = result.scalar_one_or_none()
-        return _to_dict(obj) if obj else None
+        return {obj.member_id: _to_dict(obj) for obj in result.scalars().all()}
 
     async def add_promotion(
         self,

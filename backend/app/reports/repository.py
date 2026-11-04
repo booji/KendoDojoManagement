@@ -20,6 +20,9 @@ class AbstractReportRepository(ABC):
     @abstractmethod
     async def members_report(self) -> list[dict[str, Any]]: ...
 
+    @abstractmethod
+    async def grade_distribution(self, statuses: list[str]) -> list[dict[str, Any]]: ...
+
 
 class SqlReportRepository(AbstractReportRepository):
     def __init__(self, session: AsyncSession) -> None:
@@ -120,3 +123,34 @@ class SqlReportRepository(AbstractReportRepository):
                 }
             )
         return rows
+
+    async def grade_distribution(self, statuses: list[str]) -> list[dict[str, Any]]:
+        """How many Members with one of these Membership Statuses hold each
+        Grade, today: Mukyū up to the highest Grade held, zeros kept.
+
+        Visitors are not Members, so they are never counted.
+        """
+        from collections import Counter
+
+        from sqlalchemy import select
+
+        from app.grades.models import Grade
+        from app.grades.repository import SqlGradeRepository
+        from app.members.db_models import Member
+
+        result = await self._session.execute(
+            select(Member.id).where(Member.membership_status.in_(statuses))
+        )
+        member_ids = list(result.scalars().all())
+        if not member_ids:
+            return []
+        current = await SqlGradeRepository(self._session).get_current_grades(member_ids)
+        counts = Counter(
+            current[m]["grade"] if m in current else Grade.MUKYUU for m in member_ids
+        )
+        grades = list(Grade)
+        highest = max(grades.index(Grade(g)) for g in counts)
+        return [
+            {"grade": g.value, "display_name": g.display_name, "count": counts[g]}
+            for g in grades[: highest + 1]
+        ]
