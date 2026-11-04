@@ -150,6 +150,18 @@ _Avoid_: Check-in token, sign-in code
 An **Admin** adding or removing a **Member's** **Attendance** after the fact.
 _Avoid_: Manual attendance, correction
 
+**Attendance Rate**:
+The share of held **Sessions** in a period that a **Member** attended, counting only from the later of the period's start and the day they joined. A **Session** under **Cancellation** is not held.
+_Avoid_: Consistency, attendance %
+
+**Attendance Streak**:
+A run of consecutive weeks, Monday to Sunday, in each of which a **Member** attended at least one **Session**. A week with no held **Sessions** neither breaks nor extends it.
+_Avoid_: Run, streak
+
+**Absent Member**:
+A **Member** with no **Attendance** in the last 14 days, including one who joined more than 14 days ago and has never attended. A state read from **Attendance**, not a **Membership Status**: nobody sets it, and it ends at their next **Attendance**.
+_Avoid_: Lapsed, inactive, missing
+
 ### Settings
 
 **User Settings**:
@@ -229,5 +241,6 @@ _Avoid_: Major change, incompatible change
 - **"Session"** is a training event. Signed-in state is an **Auth Session**, always qualified.
 - **"Grading"** has meant both the event where grades are awarded and the act of awarding one. Say **Session Type** Grading for the event and **Promotion** for the act.
 - **"Guest"** and **"Visitor"** were used interchangeably. Say **Visitor**.
+- **"Inactive"** is a **Membership Status** someone sets. A **Member** who has stopped turning up is an **Absent Member**, never "inactive" or "lapsed".
 - **"Rank"** and **"Grade"**: say **Grade**, in line with kendo federation terminology.
 - **"Production"** meant two different stacks, both supported production paths. Never use it to tell them apart: say **Quick self-host** or **Hardened deployment**.
