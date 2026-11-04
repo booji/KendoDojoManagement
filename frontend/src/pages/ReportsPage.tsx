@@ -157,7 +157,7 @@ const AttendanceSection = () => {
                         className="border-t border-foreground/5 hover:bg-muted/30"
                       >
                         <td className="py-2.5 pl-4 pr-2">
-                          {formatSessionDate(s.scheduled_at)}
+                          {formatSessionDate(s.date)}
                         </td>
                         <td className="py-2.5 pl-2 pr-4 text-right tabular-nums">
                           {s.headcount}

@@ -3,7 +3,7 @@ import type { MembershipStatus } from "@/api/members"
 
 export type SessionSummary = {
   session_id: string
-  scheduled_at: string
+  date: string
   headcount: number
 }
 
@@ -11,6 +11,7 @@ export type MemberAttendanceRate = {
   member_id: string
   display_name: string
   sessions_attended: number
+  total_sessions: number
   attendance_rate: number
 }
 
