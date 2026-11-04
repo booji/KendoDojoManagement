@@ -50,7 +50,10 @@ async def _get(path: str, params: dict[str, str] = _RANGE):
 
 
 async def _member(
-    db, join_date: str = "2025-01-01", display_name: str | None = None
+    db,
+    join_date: str = "2025-01-01",
+    display_name: str | None = None,
+    membership_status: str = "active",
 ) -> str:
     member = await SqlMemberRepository(db).add(
         {
@@ -59,6 +62,7 @@ async def _member(
             "surname": "Sato",
             "display_name": display_name,
             "join_date": join_date,
+            "membership_status": membership_status,
         }
     )
     return member["id"]
@@ -153,3 +157,28 @@ async def test_csv_leaves_out_cancelled_sessions(db_client) -> None:
 
     rows = list(csv.DictReader(io.StringIO(response.text)))
     assert [(r["session_id"], r["date"]) for r in rows] == [(held, "2026-03-05")]
+
+
+async def test_active_member_who_never_attended_is_listed_at_zero(
+    db_client,
+) -> None:
+    absent = await _member(db_client, join_date="2026-03-10")
+    inactive = await _member(db_client, membership_status="inactive")
+    joined_after_range = await _member(db_client, join_date="2026-04-01")
+    joined_after_last_session = await _member(db_client, join_date="2026-03-20")
+    await _session(db_client, "2026-03-05")
+    await _session(db_client, "2026-03-12")
+    await _session(db_client, "2026-03-17")
+    await _session(db_client, "2026-03-19", cancelled=True)
+    db_client.expire_all()
+
+    body = (await _get("/reports/attendance")).json()
+
+    rate = _rate(body, absent)
+    assert (rate["sessions_attended"], rate["total_sessions"]) == (0, 2)
+    assert rate["attendance_rate"] == 0.0
+    listed = {r["member_id"] for r in body["member_rates"]}
+    assert inactive not in listed
+    assert joined_after_range not in listed
+    # No held Session since joining: left out, not listed at 0 of 0.
+    assert joined_after_last_session not in listed

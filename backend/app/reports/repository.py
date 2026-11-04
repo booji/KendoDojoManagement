@@ -62,12 +62,14 @@ class SqlReportRepository(AbstractReportRepository):
     async def member_attendance_rates(
         self, date_from: str, date_to: str
     ) -> list[dict[str, Any]]:
-        """Attendance Rate (GLOSSARY.md) for each Member who attended in range.
+        """Attendance Rate (GLOSSARY.md) for each Member who attended in range,
+        and for each active Member who did not (at 0%).
 
         Both sides count only held Sessions on or after the later of
-        date_from and the Member's join date.
+        date_from and the Member's join date. A Member with no such Session
+        is left out rather than listed at 0 of 0.
         """
-        from sqlalchemy import func, select
+        from sqlalchemy import and_, func, or_, select
 
         from app.attendance.db_models import Attendance
         from app.members.db_models import Member
@@ -80,16 +82,8 @@ class SqlReportRepository(AbstractReportRepository):
         )
         held_dates = (await self._session.execute(held)).scalars().all()
 
-        att_stmt = (
-            select(
-                Member.id,
-                Member.display_name,
-                Member.first_name,
-                Member.surname,
-                Member.join_date,
-                func.count().label("cnt"),
-            )
-            .select_from(Attendance)
+        attended = (
+            select(Attendance.member_id, func.count().label("cnt"))
             .join(Member, Member.id == Attendance.member_id)
             .join(SessionInstance, SessionInstance.id == Attendance.session_id)
             .where(
@@ -98,15 +92,38 @@ class SqlReportRepository(AbstractReportRepository):
                 SessionInstance.cancelled.is_(False),
                 SessionInstance.date >= Member.join_date,
             )
-            .group_by(Member.id)
+            .group_by(Attendance.member_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Member.id,
+                Member.display_name,
+                Member.first_name,
+                Member.surname,
+                Member.join_date,
+                func.coalesce(attended.c.cnt, 0),
+            )
+            .outerjoin(attended, attended.c.member_id == Member.id)
+            .where(
+                or_(
+                    attended.c.cnt.is_not(None),
+                    and_(
+                        Member.membership_status == "active",
+                        Member.join_date <= date_to,
+                    ),
+                )
+            )
         )
 
         rows = []
         for member_id, display_name, first_name, surname, join_date, count in (
-            await self._session.execute(att_stmt)
+            await self._session.execute(stmt)
         ).all():
             # ISO date strings compare in date order.
             total = sum(1 for d in held_dates if d >= join_date)
+            if total == 0:
+                continue
             rows.append(
                 {
                     "member_id": member_id,
