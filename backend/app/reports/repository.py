@@ -37,6 +37,7 @@ class SqlReportRepository(AbstractReportRepository):
         stmt = select(SessionInstance).where(
             SessionInstance.date >= date_from,
             SessionInstance.date <= date_to,
+            SessionInstance.cancelled.is_(False),
         )
         result = await self._session.execute(stmt)
         sessions = result.scalars().all()
@@ -58,41 +59,58 @@ class SqlReportRepository(AbstractReportRepository):
     async def member_attendance_rates(
         self, date_from: str, date_to: str
     ) -> list[dict[str, Any]]:
+        """Attendance Rate (GLOSSARY.md) for each Member who attended in range.
+
+        Both sides count only held Sessions on or after the later of
+        date_from and the Member's join date.
+        """
         from sqlalchemy import func, select
 
         from app.attendance.db_models import Attendance
+        from app.members.db_models import Member
         from app.sessions.db_models import SessionInstance
 
-        sessions_stmt = select(SessionInstance).where(
+        held = select(SessionInstance.date).where(
             SessionInstance.date >= date_from,
             SessionInstance.date <= date_to,
+            SessionInstance.cancelled.is_(False),
         )
-        sessions_result = await self._session.execute(sessions_stmt)
-        sessions = sessions_result.scalars().all()
-        total = len(sessions)
-        session_ids = [s.id for s in sessions]
-
-        if not session_ids:
-            return []
+        held_dates = (await self._session.execute(held)).scalars().all()
 
         att_stmt = (
-            select(Attendance.member_id, func.count().label("cnt"))
-            .where(
-                Attendance.session_id.in_(session_ids),
-                Attendance.member_id.is_not(None),
+            select(
+                Member.id,
+                Member.display_name,
+                Member.first_name,
+                Member.surname,
+                Member.join_date,
+                func.count().label("cnt"),
             )
-            .group_by(Attendance.member_id)
+            .select_from(Attendance)
+            .join(Member, Member.id == Attendance.member_id)
+            .join(SessionInstance, SessionInstance.id == Attendance.session_id)
+            .where(
+                SessionInstance.date >= date_from,
+                SessionInstance.date <= date_to,
+                SessionInstance.cancelled.is_(False),
+                SessionInstance.date >= Member.join_date,
+            )
+            .group_by(Member.id)
         )
 
-        att_result = await self._session.execute(att_stmt)
         rows = []
-        for member_id, count in att_result.all():
+        for member_id, display_name, first_name, surname, join_date, count in (
+            await self._session.execute(att_stmt)
+        ).all():
+            # ISO date strings compare in date order.
+            total = sum(1 for d in held_dates if d >= join_date)
             rows.append(
                 {
                     "member_id": member_id,
+                    "display_name": display_name or f"{first_name} {surname}",
                     "sessions_attended": count,
                     "total_sessions": total,
-                    "attendance_rate": round(count / total, 4) if total > 0 else 0.0,
+                    "attendance_rate": round(count / total, 4),
                 }
             )
         return rows
