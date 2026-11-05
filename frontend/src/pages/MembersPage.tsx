@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { listMembers, createMember, formatMemberName } from "@/api/members"
+import { listMembers, createMember, formatMemberName, MEMBERSHIP_STATUSES } from "@/api/members"
 import type { MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
 import { formatMemberDate, formatShortDate } from "@/lib/date"
@@ -238,9 +238,12 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
+                {/* A new Member is never created archived. */}
+                {MEMBERSHIP_STATUSES.filter((s) => s.value !== "archived").map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -454,10 +457,11 @@ const MembersPage = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="suspended">Suspended</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
+            {MEMBERSHIP_STATUSES.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
+import {
+  getMember,
+  getMyMember,
+  updateMember,
+  eraseMember,
+  formatMemberName,
+  MEMBERSHIP_STATUSES,
+} from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { AccountClaims } from "@/api/auth"
@@ -199,10 +206,11 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="suspended">Suspended</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
+            {MEMBERSHIP_STATUSES.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

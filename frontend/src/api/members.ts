@@ -2,6 +2,14 @@ import { apiFetch, throwApiError } from "@/api/client"
 
 export type MembershipStatus = "active" | "inactive" | "suspended" | "archived"
 
+/** Every Membership Status with its label, in display order. */
+export const MEMBERSHIP_STATUSES: readonly { value: MembershipStatus; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+  { value: "archived", label: "Archived" },
+]
+
 export type MemberResponse = {
   id: string
   email: string

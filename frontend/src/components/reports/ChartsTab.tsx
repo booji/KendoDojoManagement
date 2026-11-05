@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { isApiError } from "@/api/auth"
-import type { MembershipStatus } from "@/api/members"
+import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
 import { fetchGradeDistribution, type GradeCount } from "@/api/reports"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -9,13 +9,6 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Label } from "@/components/ui/label"
 import { Section } from "@/components/ui/section"
 import { Skeleton } from "@/components/ui/skeleton"
-
-const STATUSES: { value: MembershipStatus; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-  { value: "suspended", label: "Suspended" },
-  { value: "archived", label: "Archived" },
-]
 
 /**
  * The Charts tab on /reports (#558). One Membership Status filter scopes every
@@ -46,7 +39,7 @@ const ChartsTab = () => {
 
   const toggle = (value: MembershipStatus, checked: boolean) =>
     setStatuses(
-      STATUSES.map((s) => s.value).filter((v) =>
+      MEMBERSHIP_STATUSES.map((s) => s.value).filter((v) =>
         v === value ? checked : statuses.includes(v),
       ),
     )
@@ -55,7 +48,7 @@ const ChartsTab = () => {
     <div className="space-y-6">
       <fieldset className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <legend className="mb-2 text-sm font-medium">Membership Status</legend>
-        {STATUSES.map(({ value, label }) => (
+        {MEMBERSHIP_STATUSES.map(({ value, label }) => (
           <div key={value} className="flex items-center gap-2">
             <Checkbox
               id={`charts-status-${value}`}
