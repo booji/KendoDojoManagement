@@ -29,8 +29,11 @@ const stubFetch = (body: unknown = MUKYU_3_SHODAN_1) => {
   return fetchMock
 }
 
+// The grade distribution's requests only: other charts on the tab fetch too.
 const requestedUrls = (fetchMock: ReturnType<typeof stubFetch>) =>
-  fetchMock.mock.calls.map((call) => String((call as unknown[])[0]))
+  fetchMock.mock.calls
+    .map((call) => String((call as unknown[])[0]))
+    .filter((url) => url.startsWith("/api/reports/grades"))
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -72,6 +75,7 @@ describe("Charts tab", () => {
     const fetchMock = stubFetch()
     render(<ChartsTab />)
     await screen.findByRole("table", { name: "Grade distribution" })
+    const before = fetchMock.mock.calls.length
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Active" }))
 
@@ -79,7 +83,7 @@ describe("Charts tab", () => {
       screen.getByText("Choose at least one Membership Status."),
     ).toBeInTheDocument()
     expect(screen.queryByRole("table", { name: "Grade distribution" })).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(before)
   })
 
   it("says so when no Member is counted", async () => {
