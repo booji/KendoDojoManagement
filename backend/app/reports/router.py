@@ -77,7 +77,7 @@ async def grade_distribution(
     # Membership Status.
     status: Annotated[list[MembershipStatus], Query()] = ["active"],
 ) -> list[dict[str, Any]]:
-    return await repo.grade_distribution(list(status))
+    return await repo.grade_distribution(status)
 
 
 @router.get("/attendance/csv")

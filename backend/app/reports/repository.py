@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.members.models import member_name
+from app.members.models import MembershipStatus, member_name
 
 
 class AbstractReportRepository(ABC):
@@ -23,7 +23,9 @@ class AbstractReportRepository(ABC):
     async def members_report(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    async def grade_distribution(self, statuses: list[str]) -> list[dict[str, Any]]: ...
+    async def grade_distribution(
+        self, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]: ...
 
 
 class SqlReportRepository(AbstractReportRepository):
@@ -164,7 +166,9 @@ class SqlReportRepository(AbstractReportRepository):
             )
         return rows
 
-    async def grade_distribution(self, statuses: list[str]) -> list[dict[str, Any]]:
+    async def grade_distribution(
+        self, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]:
         """How many Members with one of these Membership Statuses hold each
         Grade, today: Mukyū up to the highest Grade held, zeros kept.
 
