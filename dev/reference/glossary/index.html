@@ -1887,6 +1887,15 @@ A <strong>Session's</strong> one public link for checking in. It grants nothing 
 <p><strong>Admin Override</strong>:
 An <strong>Admin</strong> adding or removing a <strong>Member's</strong> <strong>Attendance</strong> after the fact.
 <em>Avoid</em>: Manual attendance, correction</p>
+<p><strong>Attendance Rate</strong>:
+The share of held <strong>Sessions</strong> in a period that a <strong>Member</strong> attended, counting only from the later of the period's start and the day they joined. A <strong>Session</strong> under <strong>Cancellation</strong> is not held.
+<em>Avoid</em>: Consistency, attendance %</p>
+<p><strong>Attendance Streak</strong>:
+A run of consecutive weeks, Monday to Sunday, in each of which a <strong>Member</strong> attended at least one <strong>Session</strong>. A week with no held <strong>Sessions</strong> neither breaks nor extends it.
+<em>Avoid</em>: Run, streak</p>
+<p><strong>Absent Member</strong>:
+A <strong>Member</strong> with no <strong>Attendance</strong> in the last 14 days, including one who joined more than 14 days ago and has never attended. A state read from <strong>Attendance</strong>, not a <strong>Membership Status</strong>: nobody sets it, and it ends at their next <strong>Attendance</strong>.
+<em>Avoid</em>: Lapsed, inactive, missing</p>
 <h3 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h3>
 <p><strong>User Settings</strong>:
 The configuration every signed-in <strong>Member</strong> has for themselves: <strong>Personal Details</strong> and <strong>Appearance</strong>.
@@ -1951,6 +1960,7 @@ A change an operator cannot take by the routine upgrade alone: it needs a manual
 <li><strong>"Session"</strong> is a training event. Signed-in state is an <strong>Auth Session</strong>, always qualified.</li>
 <li><strong>"Grading"</strong> has meant both the event where grades are awarded and the act of awarding one. Say <strong>Session Type</strong> Grading for the event and <strong>Promotion</strong> for the act.</li>
 <li><strong>"Guest"</strong> and <strong>"Visitor"</strong> were used interchangeably. Say <strong>Visitor</strong>.</li>
+<li><strong>"Inactive"</strong> is a <strong>Membership Status</strong> someone sets. A <strong>Member</strong> who has stopped turning up is an <strong>Absent Member</strong>, never "inactive" or "lapsed".</li>
 <li><strong>"Rank"</strong> and <strong>"Grade"</strong>: say <strong>Grade</strong>, in line with kendo federation terminology.</li>
 <li><strong>"Production"</strong> meant two different stacks, both supported production paths. Never use it to tell them apart: say <strong>Quick self-host</strong> or <strong>Hardened deployment</strong>.</li>
 </ul>
