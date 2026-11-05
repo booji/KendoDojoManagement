@@ -80,6 +80,15 @@ async def grade_distribution(
     return await repo.grade_distribution(status)
 
 
+@router.get("/absent-members")
+async def absent_members(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.absent_members(status, date.today())
+
+
 @router.get("/attendance/csv")
 async def attendance_csv(
     date_from: date,

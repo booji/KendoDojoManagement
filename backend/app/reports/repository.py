@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.members.models import MembershipStatus, member_name
+
+# An Absent Member has no Attendance in this many days (GLOSSARY.md).
+_ABSENT_AFTER = timedelta(days=14)
 
 
 class AbstractReportRepository(ABC):
@@ -25,6 +29,11 @@ class AbstractReportRepository(ABC):
     @abstractmethod
     async def grade_distribution(
         self, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def absent_members(
+        self, statuses: list[MembershipStatus], today: date
     ) -> list[dict[str, Any]]: ...
 
 
@@ -198,3 +207,54 @@ class SqlReportRepository(AbstractReportRepository):
             {"grade": g.value, "display_name": g.display_name, "count": counts[g]}
             for g in grades[: highest + 1]
         ]
+
+    async def absent_members(
+        self, statuses: list[MembershipStatus], today: date
+    ) -> list[dict[str, Any]]:
+        """Absent Members (GLOSSARY.md) with one of these Membership Statuses,
+        as of today, longest absent first.
+        """
+        from sqlalchemy import func, select
+
+        from app.attendance.db_models import Attendance
+        from app.members.db_models import Member
+        from app.sessions.db_models import SessionInstance
+
+        last = (
+            select(
+                Attendance.member_id,
+                func.max(SessionInstance.date).label("last_attended"),
+            )
+            .join(SessionInstance, SessionInstance.id == Attendance.session_id)
+            .group_by(Attendance.member_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Member.id,
+                Member.display_name,
+                Member.first_name,
+                Member.surname,
+                Member.email,
+                last.c.last_attended,
+            )
+            .join(last, last.c.member_id == Member.id)
+            .where(Member.membership_status.in_(statuses))
+        )
+        rows = []
+        for member_id, display_name, first_name, surname, email, last_attended in (
+            await self._session.execute(stmt)
+        ).all():
+            days = (today - date.fromisoformat(last_attended)).days
+            if days <= _ABSENT_AFTER.days:
+                continue
+            rows.append(
+                {
+                    "member_id": member_id,
+                    "display_name": member_name(display_name, first_name, surname),
+                    "email": email,
+                    "last_attended": last_attended,
+                    "days_absent": days,
+                }
+            )
+        return rows
