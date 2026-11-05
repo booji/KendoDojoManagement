@@ -90,3 +90,21 @@ export const fetchGradeDistribution = async (
     errorMessage: "Failed to fetch grade distribution",
   })
 }
+
+export type SessionHeadcount = {
+  session_id: string
+  date: string
+  members: number
+  visitors: number
+}
+
+/** Members and Visitors at each held Session in the range, oldest first. */
+export const fetchHeadcount = async (
+  dateFrom: string,
+  dateTo: string,
+): Promise<SessionHeadcount[]> => {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+  return request<SessionHeadcount[]>(`/api/reports/headcount?${params.toString()}`, {
+    errorMessage: "Failed to fetch headcount",
+  })
+}
