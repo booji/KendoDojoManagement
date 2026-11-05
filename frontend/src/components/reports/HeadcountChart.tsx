@@ -39,7 +39,7 @@ const HeadcountChart = ({ sessions }: { sessions: SessionHeadcount[] }) => (
           cursor={false}
           content={
             <ChartTooltipContent
-              labelFormatter={(date: string) => formatSessionDate(date)}
+              labelFormatter={(date) => formatSessionDate(String(date))}
             />
           }
         />

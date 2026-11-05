@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import ChartsTab from "@/components/reports/ChartsTab"
@@ -127,5 +127,66 @@ describe("Headcount per Session", () => {
     ])
     expect(screen.getByLabelText("From")).toHaveValue("2026-04-01")
     expect(screen.getByLabelText("To")).toHaveValue("2026-06-30")
+  })
+
+  it("asks again over the range the Admin picks", async () => {
+    const fetchMock = stubFetch()
+    render(<ChartsTab />)
+    await screen.findByRole("table", { name: "Headcount per Session" })
+
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-01" },
+    })
+
+    await waitFor(() =>
+      expect(requestedUrls(fetchMock, "/api/reports/headcount").at(-1)).toMatch(
+        /^\/api\/reports\/headcount\?date_from=2026-01-01&date_to=/,
+      ),
+    )
+  })
+
+  it("ignores the Membership Status filter", async () => {
+    const fetchMock = stubFetch()
+    render(<ChartsTab />)
+    await screen.findByRole("table", { name: "Headcount per Session" })
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Active" }))
+    await userEvent.click(screen.getByRole("checkbox", { name: "Archived" }))
+
+    expect(
+      screen.getByRole("table", { name: "Headcount per Session" }),
+    ).toBeInTheDocument()
+    expect(requestedUrls(fetchMock, "/api/reports/headcount")).toHaveLength(1)
+  })
+
+  it("shows the server's reason when it refuses the range", async () => {
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        url.includes("/headcount")
+          ? ({
+              ok: false,
+              status: 422,
+              json: () =>
+                Promise.resolve({ detail: "Date range must not exceed 366 days" }),
+              text: () =>
+                Promise.resolve(
+                  JSON.stringify({ detail: "Date range must not exceed 366 days" }),
+                ),
+            } as unknown as Response)
+          : ({
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve(MUKYU_3_SHODAN_1),
+              text: () => Promise.resolve(JSON.stringify(MUKYU_3_SHODAN_1)),
+            } as unknown as Response),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<ChartsTab />)
+
+    expect(
+      await screen.findByText("Date range must not exceed 366 days"),
+    ).toBeInTheDocument()
   })
 })
