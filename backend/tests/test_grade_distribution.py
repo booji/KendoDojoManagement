@@ -3,6 +3,9 @@
 How many counted Members hold each Grade, as of today. A Member's Grade is
 their latest *confirmed* Promotion (#565); no confirmed Promotion means Mukyū.
 Served from PostgreSQL (db_client) through GET /reports/grades.
+
+Other tests leave Members in the shared database, so each test records the
+distribution before it seeds and asserts only the change its own Members make.
 """
 
 from __future__ import annotations
@@ -10,29 +13,22 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-import pytest_asyncio
+import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import update
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
+from app.grades.models import Grade
 from app.grades.repository import SqlGradeRepository
 from app.main import app
-from app.members.db_models import Member
 from app.members.repository import SqlMemberRepository
+from app.reports.repository import SqlReportRepository
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="a@dojo.test", role="admin")
 
 
-@pytest_asyncio.fixture
-async def as_admin(db_client):
-    """Sign in as an Admin and count only the Members this test seeds.
-
-    Other tests leave Members in the shared database. Parking them under a
-    status no filter asks for hides them; db_client's savepoint rollback
-    puts them back.
-    """
-    await db_client.execute(update(Member).values(membership_status="parked"))
+@pytest.fixture
+def as_admin(db_client):
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
     yield
     app.dependency_overrides.pop(REQUIRE_ADMIN, None)
@@ -64,58 +60,78 @@ async def _promote(session, member_id: str, grade: str, status: str = "confirmed
     )
 
 
-async def _distribution(params: str = "") -> list[tuple[str, int]]:
+async def _distribution(params: str = "") -> list[dict]:
     response = await _get(f"/reports/grades{params}")
     assert response.status_code == 200, response.text
-    return [(row["grade"], row["count"]) for row in response.json()]
+    return response.json()
+
+
+async def _counts(params: str = "") -> dict[str, int]:
+    return {row["grade"]: row["count"] for row in await _distribution(params)}
+
+
+def _change(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    """Each Grade whose count moved, by how much."""
+    return {
+        g: after.get(g, 0) - before.get(g, 0)
+        for g in before.keys() | after.keys()
+        if after.get(g, 0) != before.get(g, 0)
+    }
 
 
 async def test_a_member_with_no_promotion_counts_as_mukyu(db_client, as_admin):
+    before = await _counts()
     await _member(db_client)
 
-    response = await _get("/reports/grades")
+    after = await _distribution()
 
-    assert response.status_code == 200, response.text
-    assert response.json() == [{"grade": "MUKYUU", "display_name": "Mukyū", "count": 1}]
+    assert after[0]["display_name"] == "Mukyū"
+    assert _change(before, {r["grade"]: r["count"] for r in after}) == {"MUKYUU": 1}
 
 
 async def test_bars_run_in_grade_order_up_to_the_highest_held_with_zeros_kept(
     db_client, as_admin
 ):
+    before = await _counts()
     await _member(db_client)
     sankyu = await _member(db_client)
     await _promote(db_client, sankyu, "SANKYUU")
     ikkyu = await _member(db_client)
     await _promote(db_client, ikkyu, "IKKYUU")
-    # Pending, so not their Grade yet (#565): the chart stops at Ikkyū.
+    # Pending, so not their Grade yet (#565): Shodan does not move.
     await _promote(db_client, ikkyu, "SHODAN", status="pending")
 
-    assert await _distribution() == [
-        ("MUKYUU", 1),
-        ("ROKKYUU", 0),
-        ("GOKYUU", 0),
-        ("YONKYUU", 0),
-        ("SANKYUU", 1),
-        ("NIKYUU", 0),
-        ("IKKYUU", 1),
-    ]
+    after = await _distribution()
+
+    grades = [row["grade"] for row in after]
+    assert grades == [g.value for g in Grade][: len(grades)]
+    assert "IKKYUU" in grades
+    assert after[-1]["count"] > 0
+    assert _change(before, {r["grade"]: r["count"] for r in after}) == {
+        "MUKYUU": 1,
+        "SANKYUU": 1,
+        "IKKYUU": 1,
+    }
 
 
 async def test_only_active_members_are_counted_by_default(db_client, as_admin):
+    before = await _counts()
     await _member(db_client, "active")
     await _member(db_client, "inactive")
     await _member(db_client, "suspended")
 
-    assert await _distribution() == [("MUKYUU", 1)]
+    assert _change(before, await _counts()) == {"MUKYUU": 1}
 
 
 async def test_the_status_filter_chooses_who_is_counted(db_client, as_admin):
+    params = "?status=inactive&status=archived"
+    before = await _counts(params)
     await _member(db_client, "active")
     await _member(db_client, "inactive")
     await _member(db_client, "suspended")
     await _member(db_client, "archived")
 
-    assert await _distribution("?status=inactive&status=archived") == [("MUKYUU", 2)]
+    assert _change(before, await _counts(params)) == {"MUKYUU": 2}
 
 
 async def test_an_unknown_status_is_rejected(db_client, as_admin):
@@ -124,10 +140,8 @@ async def test_an_unknown_status_is_rejected(db_client, as_admin):
     assert response.status_code == 422
 
 
-async def test_no_counted_members_means_no_bars(db_client, as_admin):
-    await _member(db_client, "inactive")
-
-    assert await _distribution() == []
+async def test_no_counted_members_means_no_bars(db_client):
+    assert await SqlReportRepository(db_client).grade_distribution([]) == []
 
 
 async def test_members_may_not_see_the_distribution(cookies_for):
