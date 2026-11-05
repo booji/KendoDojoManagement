@@ -247,6 +247,7 @@ class SqlReportRepository(AbstractReportRepository):
                 Member.membership_status.in_(statuses),
                 since < today - _ABSENT_AFTER,
             )
+            .order_by(since, Member.surname, Member.first_name)
         )
         rows = []
         for member_id, display_name, first_name, surname, email, last_attended, s in (
