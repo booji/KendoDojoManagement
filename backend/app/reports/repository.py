@@ -27,6 +27,9 @@ class AbstractReportRepository(ABC):
         self, statuses: list[MembershipStatus]
     ) -> list[dict[str, Any]]: ...
 
+    @abstractmethod
+    async def headcount(self, date_from: str, date_to: str) -> list[dict[str, Any]]: ...
+
 
 class SqlReportRepository(AbstractReportRepository):
     def __init__(self, session: AsyncSession) -> None:
@@ -197,4 +200,36 @@ class SqlReportRepository(AbstractReportRepository):
         return [
             {"grade": g.value, "display_name": g.display_name, "count": counts[g]}
             for g in grades[: highest + 1]
+        ]
+
+    async def headcount(self, date_from: str, date_to: str) -> list[dict[str, Any]]:
+        """Members and Visitors at each held Session in range, oldest first.
+
+        Every Member counts whatever their Membership Status today: a past
+        Session's headcount does not change with it.
+        """
+        from sqlalchemy import func, select
+
+        from app.attendance.db_models import Attendance
+        from app.sessions.db_models import SessionInstance
+
+        stmt = (
+            select(
+                SessionInstance.id,
+                SessionInstance.date,
+                func.count(Attendance.member_id),
+                func.count(Attendance.visitor_name),
+            )
+            .outerjoin(Attendance, Attendance.session_id == SessionInstance.id)
+            .where(
+                SessionInstance.date >= date_from,
+                SessionInstance.date <= date_to,
+                SessionInstance.cancelled.is_(False),
+            )
+            .group_by(SessionInstance.id, SessionInstance.date)
+            .order_by(SessionInstance.date)
+        )
+        return [
+            {"session_id": sid, "date": d, "members": m, "visitors": v}
+            for sid, d, m, v in (await self._session.execute(stmt)).all()
         ]

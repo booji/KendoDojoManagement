@@ -80,6 +80,17 @@ async def grade_distribution(
     return await repo.grade_distribution(status)
 
 
+@router.get("/headcount")
+async def headcount(
+    date_from: date,
+    date_to: date,
+    claims: _Admin,
+    repo: _ReportRepo,
+) -> list[dict[str, Any]]:
+    _validate_date_range(date_from, date_to)
+    return await repo.headcount(date_from.isoformat(), date_to.isoformat())
+
+
 @router.get("/attendance/csv")
 async def attendance_csv(
     date_from: date,
