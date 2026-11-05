@@ -96,3 +96,30 @@ async def test_a_member_last_seen_20_days_ago_is_absent(db_client, as_admin):
     assert row["email"].endswith("@dojo.test")
     assert row["last_attended"] == _ago(20)
     assert row["days_absent"] == 20
+
+
+async def test_attendance_14_days_ago_is_within_the_last_14_days(db_client, as_admin):
+    seen_14_days_ago = await _member(db_client)
+    await _attend(db_client, seen_14_days_ago, 14)
+    seen_15_days_ago = await _member(db_client)
+    await _attend(db_client, seen_15_days_ago, 15)
+    db_client.expire_all()
+
+    absent = await _absent()
+
+    assert seen_14_days_ago not in absent
+    assert absent[seen_15_days_ago]["days_absent"] == 15
+
+
+async def test_a_member_who_joined_over_14_days_ago_and_never_attended_is_absent(
+    db_client, as_admin
+):
+    never = await _member(db_client, joined_days_ago=30)
+    new = await _member(db_client, joined_days_ago=14)
+    db_client.expire_all()
+
+    absent = await _absent()
+
+    assert new not in absent
+    assert absent[never]["last_attended"] is None
+    assert absent[never]["days_absent"] == 30

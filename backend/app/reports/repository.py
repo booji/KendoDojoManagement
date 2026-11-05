@@ -229,6 +229,8 @@ class SqlReportRepository(AbstractReportRepository):
             .group_by(Attendance.member_id)
             .subquery()
         )
+        # Never attended: absent from the join date.
+        since = func.coalesce(last.c.last_attended, Member.join_date)
         stmt = (
             select(
                 Member.id,
@@ -237,24 +239,25 @@ class SqlReportRepository(AbstractReportRepository):
                 Member.surname,
                 Member.email,
                 last.c.last_attended,
+                since,
             )
-            .join(last, last.c.member_id == Member.id)
-            .where(Member.membership_status.in_(statuses))
+            .outerjoin(last, last.c.member_id == Member.id)
+            .where(
+                Member.membership_status.in_(statuses),
+                since < today - _ABSENT_AFTER,
+            )
         )
         rows = []
-        for member_id, display_name, first_name, surname, email, last_attended in (
+        for member_id, display_name, first_name, surname, email, last_attended, s in (
             await self._session.execute(stmt)
         ).all():
-            days = (today - date.fromisoformat(last_attended)).days
-            if days <= _ABSENT_AFTER.days:
-                continue
             rows.append(
                 {
                     "member_id": member_id,
                     "display_name": member_name(display_name, first_name, surname),
                     "email": email,
                     "last_attended": last_attended,
-                    "days_absent": days,
+                    "days_absent": (today - date.fromisoformat(s)).days,
                 }
             )
         return rows
