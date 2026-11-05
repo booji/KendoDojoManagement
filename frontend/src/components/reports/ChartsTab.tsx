@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { isApiError } from "@/api/auth"
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
 import { fetchGradeDistribution, type GradeCount } from "@/api/reports"
+import AbsentMembersList from "@/components/reports/AbsentMembersList"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import { Checkbox } from "@/components/ui/checkbox"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -80,6 +81,8 @@ const ChartsTab = () => {
           )}
         </Section>
       )}
+
+      {statuses.length > 0 && <AbsentMembersList statuses={statuses} />}
     </div>
   )
 }

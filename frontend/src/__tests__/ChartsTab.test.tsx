@@ -17,20 +17,24 @@ const MUKYU_3_SHODAN_1 = [
 ]
 
 const stubFetch = (body: unknown = MUKYU_3_SHODAN_1) => {
-  const fetchMock = vi.fn(() =>
-    Promise.resolve({
+  // Grades only: the tab's other views (AbsentMembers.test.tsx) get nothing.
+  const fetchMock = vi.fn((url: string) => {
+    const data = String(url).includes("/reports/grades") ? body : []
+    return Promise.resolve({
       ok: true,
       status: 200,
-      json: () => Promise.resolve(body),
-      text: () => Promise.resolve(JSON.stringify(body)),
-    } as unknown as Response),
-  )
+      json: () => Promise.resolve(data),
+      text: () => Promise.resolve(JSON.stringify(data)),
+    } as unknown as Response)
+  })
   vi.stubGlobal("fetch", fetchMock)
   return fetchMock
 }
 
 const requestedUrls = (fetchMock: ReturnType<typeof stubFetch>) =>
-  fetchMock.mock.calls.map((call) => String((call as unknown[])[0]))
+  fetchMock.mock.calls
+    .map((call) => String((call as unknown[])[0]))
+    .filter((url) => url.includes("/reports/grades"))
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -79,7 +83,7 @@ describe("Charts tab", () => {
       screen.getByText("Choose at least one Membership Status."),
     ).toBeInTheDocument()
     expect(screen.queryByRole("table", { name: "Grade distribution" })).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(requestedUrls(fetchMock)).toHaveLength(1)
   })
 
   it("says so when no Member is counted", async () => {
