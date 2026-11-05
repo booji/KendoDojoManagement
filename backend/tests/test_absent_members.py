@@ -144,3 +144,49 @@ async def test_the_longest_absent_come_first(db_client, as_admin):
     rows = list(await _absent())
 
     assert rows[:2] == [longest, a_while]
+
+
+async def test_only_active_members_are_listed_by_default(db_client, as_admin):
+    active = await _member(db_client, status="active")
+    inactive = await _member(db_client, status="inactive")
+    db_client.expire_all()
+
+    absent = await _absent()
+
+    assert active in absent
+    assert inactive not in absent
+
+
+async def test_the_status_filter_chooses_who_is_listed(db_client, as_admin):
+    by_status = {
+        s: await _member(db_client, status=s)
+        for s in ("active", "inactive", "suspended", "archived")
+    }
+    db_client.expire_all()
+
+    absent = await _absent("?status=inactive&status=archived")
+
+    assert {s for s, m in by_status.items() if m in absent} == {
+        "inactive",
+        "archived",
+    }
+
+
+async def test_an_unknown_status_is_rejected(db_client, as_admin):
+    response = await _get("/reports/absent-members?status=visitor")
+
+    assert response.status_code == 422
+
+
+async def test_members_may_not_see_absent_members(cookies_for):
+    member = AccountClaims(sub=str(uuid.uuid4()), email="m@dojo.test", role="member")
+
+    response = await _get("/reports/absent-members", cookies=cookies_for(member))
+
+    assert response.status_code == 403
+
+
+async def test_absent_members_need_a_signed_in_admin():
+    response = await _get("/reports/absent-members")
+
+    assert response.status_code == 401
