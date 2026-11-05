@@ -80,6 +80,17 @@ async def grade_distribution(
     return await repo.grade_distribution(status)
 
 
+@router.get("/streaks")
+async def attendance_streaks(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    """Top 10 Attendance Streaks this year. Takes no date range: a streak
+    always covers 1 January to today."""
+    return await repo.attendance_streaks(status, date.today())
+
+
 @router.get("/attendance/csv")
 async def attendance_csv(
     date_from: date,

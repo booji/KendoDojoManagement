@@ -13,7 +13,7 @@ wiring and the guards.
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -157,3 +157,58 @@ async def test_attendance_outside_the_year_to_date_is_not_ranked(
     await _attend(db_client, await _session(db_client, "2019-04-04"), member)
 
     assert await _streaks(db_client) == []
+
+
+# --- GET /reports/streaks ---------------------------------------------------
+
+
+@pytest.fixture
+def as_admin(db_client):
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
+    yield
+    app.dependency_overrides.pop(REQUIRE_ADMIN, None)
+
+
+async def _get(path: str, **kwargs):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        return await c.get(path, **kwargs)
+
+
+async def test_admin_gets_streaks_up_to_today_for_the_ticked_statuses(
+    db_client, as_admin
+) -> None:
+    # Suspended, so Members other tests leave behind are unlikely to crowd it
+    # out of the top 10.
+    member = await _member(db_client, membership_status="suspended")
+    today = await _session(db_client, date.today().isoformat())
+    await _attend(db_client, today, member)
+    db_client.expire_all()
+
+    by_default = await _get("/reports/streaks")
+    suspended = await _get("/reports/streaks?status=suspended")
+
+    assert by_default.status_code == 200, by_default.text
+    assert member not in {s["member_id"] for s in by_default.json()}
+    assert suspended.status_code == 200, suspended.text
+    [streak] = [s for s in suspended.json() if s["member_id"] == member]
+    assert (streak["weeks"], streak["running"]) == (1, True)
+
+
+async def test_an_unknown_status_is_rejected(db_client, as_admin) -> None:
+    response = await _get("/reports/streaks?status=active&status=visitor")
+
+    assert response.status_code == 422
+
+
+async def test_members_may_not_see_streaks(cookies_for) -> None:
+    member = AccountClaims(sub=str(uuid.uuid4()), email="m@dojo.test", role="member")
+
+    response = await _get("/reports/streaks", cookies=cookies_for(member))
+
+    assert response.status_code == 403
+
+
+async def test_streaks_need_a_signed_in_admin() -> None:
+    assert (await _get("/reports/streaks")).status_code == 401
