@@ -123,3 +123,12 @@ async def test_a_member_who_joined_over_14_days_ago_and_never_attended_is_absent
     assert new not in absent
     assert absent[never]["last_attended"] is None
     assert absent[never]["days_absent"] == 30
+
+
+async def test_attendance_at_a_cancelled_session_does_not_count(db_client, as_admin):
+    member = await _member(db_client)
+    await _attend(db_client, member, 20)
+    await _attend(db_client, member, 3, cancelled=True)
+    db_client.expire_all()
+
+    assert (await _absent())[member]["last_attended"] == _ago(20)
