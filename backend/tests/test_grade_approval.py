@@ -15,7 +15,6 @@ Acceptance criteria exercised here:
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 import pytest
@@ -26,7 +25,7 @@ from app.auth.models import AccountClaims
 from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryGradeRepository, InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Auth claim helpers
@@ -52,7 +51,7 @@ def _member_a_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
+# Seed data
 # ---------------------------------------------------------------------------
 
 _MEMBER_A_RECORD: dict[str, Any] = {
@@ -63,100 +62,6 @@ _MEMBER_A_RECORD: dict[str, Any] = {
     "user_id": _MEMBER_A.sub,
     "membership_status": "active",
 }
-
-
-class StubGradeRepo:
-    """In-memory grade repository supporting approve_entry and delete_entry.
-
-    Seeded with one pending entry and one confirmed entry for member A.
-    """
-
-    def __init__(self) -> None:
-        self._history: list[dict[str, Any]] = [
-            {
-                "id": _PENDING_ENTRY_ID,
-                "member_id": _MEMBER_A_ID,
-                "grade": "SHODAN",
-                "display_name": "Shodan (1-dan)",
-                "assigned_by": None,
-                "promoted_at": "2025-01-01T10:00:00+00:00",
-                "status": "pending",
-            },
-            {
-                "id": _CONFIRMED_ENTRY_ID,
-                "member_id": _MEMBER_A_ID,
-                "grade": "ROKKYUU",
-                "display_name": "Rokkyū (6-kyu)",
-                "assigned_by": "admin-uuid",
-                "promoted_at": "2024-01-01T10:00:00+00:00",
-                "status": "confirmed",
-            },
-        ]
-
-    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
-        confirmed = [
-            e
-            for e in self._history
-            if e["member_id"] == member_id and e["status"] == "confirmed"
-        ]
-        return max(confirmed, key=lambda e: e["promoted_at"], default=None)
-
-    async def add_promotion(
-        self,
-        member_id: str,
-        grade: str,
-        display_name: str,
-        assigned_by: str | None,
-        promoted_at: str,
-        status: str = "confirmed",
-    ) -> dict[str, Any]:
-        entry: dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "member_id": member_id,
-            "grade": grade,
-            "display_name": display_name,
-            "assigned_by": assigned_by,
-            "promoted_at": promoted_at,
-            "status": status,
-        }
-        self._history.append(entry)
-        return entry
-
-    async def get_history(self, member_id: str) -> list[dict[str, Any]]:
-        return [e for e in self._history if e["member_id"] == member_id]
-
-    async def approve_entry(
-        self, member_id: str, entry_id: str, approved_by: str
-    ) -> dict[str, Any]:
-        """Transition a pending entry to confirmed, setting assigned_by.
-
-        Raises KeyError if entry not found.
-        Raises ValueError if entry is not pending.
-        """
-        # NOTE: These methods do not yet exist on AbstractGradeRepository —
-        # this stub implements the expected interface for the RED phase.
-        for entry in self._history:
-            if entry["id"] == entry_id and entry["member_id"] == member_id:
-                if entry["status"] != "pending":
-                    raise ValueError("Entry is not pending")
-                entry["status"] = "confirmed"
-                entry["assigned_by"] = approved_by
-                return entry
-        raise KeyError(f"Entry {entry_id} not found")
-
-    async def delete_entry(self, member_id: str, entry_id: str) -> None:
-        """Remove a pending entry.
-
-        Raises KeyError if entry not found.
-        Raises ValueError if entry is not pending (confirmed entries cannot be deleted).
-        """
-        for i, entry in enumerate(self._history):
-            if entry["id"] == entry_id and entry["member_id"] == member_id:
-                if entry["status"] != "pending":
-                    raise ValueError("Only pending entries may be deleted")
-                self._history.pop(i)
-                return
-        raise KeyError(f"Entry {entry_id} not found")
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +83,29 @@ def member_repo() -> InMemoryMemberRepository:
 
 
 @pytest.fixture()
-def grade_repo() -> StubGradeRepo:
-    repo = StubGradeRepo()
+def grade_repo() -> InMemoryGradeRepository:
+    repo = InMemoryGradeRepository(
+        [
+            {
+                "id": _PENDING_ENTRY_ID,
+                "member_id": _MEMBER_A_ID,
+                "grade": "SHODAN",
+                "display_name": "Shodan (1-dan)",
+                "assigned_by": None,
+                "promoted_at": "2025-01-01T10:00:00+00:00",
+                "status": "pending",
+            },
+            {
+                "id": _CONFIRMED_ENTRY_ID,
+                "member_id": _MEMBER_A_ID,
+                "grade": "ROKKYUU",
+                "display_name": "Rokkyū (6-kyu)",
+                "assigned_by": "admin-uuid",
+                "promoted_at": "2024-01-01T10:00:00+00:00",
+                "status": "confirmed",
+            },
+        ]
+    )
     app.dependency_overrides[get_grade_repo] = lambda: repo
     return repo
 

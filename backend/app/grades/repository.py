@@ -14,13 +14,21 @@ from app.members.models import member_name
 
 class AbstractGradeRepository(ABC):
     @abstractmethod
-    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
-        """The Member's current Grade: their latest *confirmed* Promotion.
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Each Member's current Grade, by member id: their latest *confirmed*
+        Promotion.
 
         A pending, self-reported Promotion is nobody's current Grade until an
-        Admin confirms it (#565). None when there is no confirmed Promotion.
+        Admin confirms it (#565). A Member with no confirmed Promotion (Mukyū)
+        is absent from the result.
         """
         ...
+
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
+        """get_current_grades for one Member; None when they are Mukyū."""
+        return (await self.get_current_grades([member_id])).get(member_id)
 
     @abstractmethod
     async def add_promotion(
@@ -76,17 +84,10 @@ class SqlGradeRepository(AbstractGradeRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
-        return (await self.get_current_grades([member_id])).get(member_id)
-
     async def get_current_grades(
         self, member_ids: list[str]
     ) -> dict[str, dict[str, Any]]:
-        """get_current_grade for many Members in one query, by member id.
-
-        The one place the confirmed-only rule lives (#565). A Member with no
-        confirmed Promotion is absent from the result.
-        """
+        # The one place the confirmed-only rule lives (#565).
         if not member_ids:
             return {}
         result = await self._session.execute(

@@ -1,4 +1,4 @@
-"""In-memory fakes for the session, attendance, member and Auth Session
+"""In-memory fakes for the session, attendance, member, Auth Session and grade
 repository interfaces.
 
 These are *fakes*, not stubs: a working implementation of the whole interface,
@@ -45,6 +45,7 @@ from typing import Any
 # guarantee that without a second copy of it drifting.
 from sqlalchemy.exc import IntegrityError
 
+from app.grades.repository import AbstractGradeRepository
 from app.sessions.repository import _minutes_between, _segments_envelope
 
 # ---------------------------------------------------------------------------
@@ -761,3 +762,109 @@ class InMemoryAuthSessionRepository:
         self._store = {
             h: row for h, row in self._store.items() if row["expires_at"] > now
         }
+
+
+# ---------------------------------------------------------------------------
+# Grades
+# ---------------------------------------------------------------------------
+
+
+class InMemoryGradeRepository(AbstractGradeRepository):
+    """In-memory implementation of ``AbstractGradeRepository``.
+
+    ``member_names`` stands in for the members join ``list_pending`` makes:
+    member id -> the name it reports.
+    """
+
+    _DEFAULTS: dict[str, Any] = {
+        "id": None,
+        "member_id": None,
+        "grade": None,
+        "display_name": None,
+        "promoted_at": None,
+        "assigned_by": None,
+        "status": "confirmed",
+    }
+
+    def __init__(
+        self,
+        records: list[dict[str, Any]] | None = None,
+        member_names: dict[str, str] | None = None,
+    ) -> None:
+        self._store: list[dict[str, Any]] = []
+        self._member_names = member_names or {}
+        for record in records or []:
+            self._insert(record)
+
+    def _insert(self, data: dict[str, Any]) -> dict[str, Any]:
+        row = _row(self._DEFAULTS, data)
+        row["id"] = row["id"] or str(uuid.uuid4())
+        self._store.append(row)
+        return dict(row)
+
+    def _by_date(self, member_id: str | None = None) -> list[dict[str, Any]]:
+        return sorted(
+            (r for r in self._store if member_id in (None, r["member_id"])),
+            key=lambda r: r["promoted_at"],
+        )
+
+    def _find(self, member_id: str, entry_id: str) -> dict[str, Any]:
+        for row in self._store:
+            if row["id"] == entry_id and row["member_id"] == member_id:
+                return row
+        raise KeyError(f"Entry {entry_id} not found")
+
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            r["member_id"]: dict(r)
+            for r in self._by_date()
+            if r["member_id"] in member_ids and r["status"] == "confirmed"
+        }
+
+    async def add_promotion(
+        self,
+        member_id: str,
+        grade: str,
+        display_name: str,
+        assigned_by: str | None,
+        promoted_at: str,
+        status: str = "confirmed",
+    ) -> dict[str, Any]:
+        return self._insert(
+            {
+                "member_id": member_id,
+                "grade": grade,
+                "display_name": display_name,
+                "assigned_by": assigned_by,
+                "promoted_at": promoted_at,
+                "status": status,
+            }
+        )
+
+    async def get_history(self, member_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._by_date(member_id)]
+
+    async def approve_entry(
+        self, member_id: str, entry_id: str, approved_by: str
+    ) -> dict[str, Any]:
+        row = self._find(member_id, entry_id)
+        if row["status"] != "pending":
+            raise ValueError("Entry is not pending")
+        row["status"] = "confirmed"
+        row["assigned_by"] = approved_by
+        return dict(row)
+
+    async def delete_entry(self, member_id: str, entry_id: str) -> None:
+        row = self._find(member_id, entry_id)
+        if row["status"] != "pending":
+            raise ValueError("Only pending entries may be deleted")
+        self._store.remove(row)
+
+    async def list_pending(self) -> list[dict[str, Any]]:
+        return [
+            {**r, "member_name": self._member_names.get(r["member_id"])}
+            for r in self._by_date()
+            if r["status"] == "pending"
+        ]

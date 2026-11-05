@@ -146,10 +146,12 @@ class SqlReportRepository(AbstractReportRepository):
         members_result = await self._session.execute(select(Member))
         members = members_result.scalars().all()
 
-        grades = SqlGradeRepository(self._session)
+        grades = await SqlGradeRepository(self._session).get_current_grades(
+            [m.id for m in members]
+        )
         rows = []
         for member in members:
-            current = await grades.get_current_grade(member.id)
+            current = grades.get(member.id)
             rows.append(
                 {
                     "member_id": member.id,
