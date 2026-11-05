@@ -74,7 +74,9 @@ async def _attend(db, session_id: str, member_id: str) -> None:
 
 
 async def _visitor(db, session_id: str) -> None:
-    await SqlAttendanceRepository(db).add_visitor(session_id, "Visiting Sensei", _ADMIN.sub)
+    await SqlAttendanceRepository(db).add_visitor(
+        session_id, "Visiting Sensei", _ADMIN.sub
+    )
 
 
 async def test_a_held_session_counts_its_members_and_visitors(db_client, as_admin):
@@ -91,3 +93,47 @@ async def test_a_held_session_counts_its_members_and_visitors(db_client, as_admi
         "members": 2,
         "visitors": 1,
     }
+
+
+async def test_only_held_sessions_in_range_are_points_oldest_first(db_client, as_admin):
+    later = await _session(db_client, "2026-03-20")
+    earlier = await _session(db_client, "2026-03-02")
+    cancelled = await _session(db_client, "2026-03-10")
+    await SqlSessionInstanceRepository(db_client).cancel(cancelled)
+    before_range = await _session(db_client, "2026-02-28")
+    after_range = await _session(db_client, "2026-04-01")
+    ours = {later, earlier, cancelled, before_range, after_range}
+
+    points = [p for p in await _points() if p["session_id"] in ours]
+
+    assert [p["session_id"] for p in points] == [earlier, later]
+    assert points[0]["members"] == points[0]["visitors"] == 0
+
+
+async def test_every_member_counts_whatever_their_status_today(db_client, as_admin):
+    session = await _session(db_client, "2026-03-05")
+    for status in ("active", "inactive", "suspended", "archived"):
+        await _attend(db_client, session, await _member(db_client, status))
+
+    point = next(p for p in await _points() if p["session_id"] == session)
+
+    assert point["members"] == 4
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"date_from": "2026-03-31", "date_to": "2026-03-01"},
+        {"date_from": "2025-01-01", "date_to": "2026-01-03"},
+    ],
+)
+async def test_a_backwards_or_over_long_range_is_rejected(as_admin, params):
+    assert (await _get(params)).status_code == 422
+
+
+async def test_members_may_not_see_the_headcount(cookies_for):
+    member = AccountClaims(sub=str(uuid.uuid4()), email="m@dojo.test", role="member")
+
+    response = await _get(cookies=cookies_for(member))
+
+    assert response.status_code == 403
