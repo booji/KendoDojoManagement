@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.attendance.db_models import Attendance
 from app.members.db_models import Member
+from app.members.models import member_name
 from app.sessions.db_models import SessionInstance
 from app.sessions.envelope import session_time_envelope
 
@@ -103,8 +104,9 @@ class SqlAttendanceRepository:
         return [
             {
                 **_attendance_to_dict(row.Attendance),
-                "display_name": row.display_name
-                or (f"{row.first_name} {row.surname}" if row.first_name else None),
+                "display_name": member_name(
+                    row.display_name, row.first_name, row.surname
+                ),
             }
             for row in result.all()
         ]
@@ -141,8 +143,7 @@ class SqlAttendanceRepository:
         row = result.one()
         return {
             **_attendance_to_dict(row.Attendance),
-            "display_name": row.display_name
-            or (f"{row.first_name} {row.surname}" if row.first_name else None),
+            "display_name": member_name(row.display_name, row.first_name, row.surname),
         }
 
     async def remove_attendance(self, session_id: str, member_id: str) -> bool:

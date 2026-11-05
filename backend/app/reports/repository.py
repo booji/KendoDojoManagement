@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.members.models import MembershipStatus, member_name
+
 
 class AbstractReportRepository(ABC):
     @abstractmethod
@@ -19,6 +21,11 @@ class AbstractReportRepository(ABC):
 
     @abstractmethod
     async def members_report(self) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def grade_distribution(
+        self, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]: ...
 
 
 class SqlReportRepository(AbstractReportRepository):
@@ -37,6 +44,7 @@ class SqlReportRepository(AbstractReportRepository):
         stmt = select(SessionInstance).where(
             SessionInstance.date >= date_from,
             SessionInstance.date <= date_to,
+            SessionInstance.cancelled.is_(False),
         )
         result = await self._session.execute(stmt)
         sessions = result.scalars().all()
@@ -58,41 +66,75 @@ class SqlReportRepository(AbstractReportRepository):
     async def member_attendance_rates(
         self, date_from: str, date_to: str
     ) -> list[dict[str, Any]]:
-        from sqlalchemy import func, select
+        """Attendance Rate (GLOSSARY.md) for each Member who attended in range,
+        and for each active Member who did not (at 0%).
+
+        Both sides count only held Sessions on or after the later of
+        date_from and the Member's join date. A Member with no such Session
+        is left out rather than listed at 0 of 0.
+        """
+        from sqlalchemy import and_, func, or_, select
 
         from app.attendance.db_models import Attendance
+        from app.members.db_models import Member
         from app.sessions.db_models import SessionInstance
 
-        sessions_stmt = select(SessionInstance).where(
+        held = select(SessionInstance.date).where(
             SessionInstance.date >= date_from,
             SessionInstance.date <= date_to,
+            SessionInstance.cancelled.is_(False),
         )
-        sessions_result = await self._session.execute(sessions_stmt)
-        sessions = sessions_result.scalars().all()
-        total = len(sessions)
-        session_ids = [s.id for s in sessions]
+        held_dates = (await self._session.execute(held)).scalars().all()
 
-        if not session_ids:
-            return []
-
-        att_stmt = (
+        attended = (
             select(Attendance.member_id, func.count().label("cnt"))
+            .join(Member, Member.id == Attendance.member_id)
+            .join(SessionInstance, SessionInstance.id == Attendance.session_id)
             .where(
-                Attendance.session_id.in_(session_ids),
-                Attendance.member_id.is_not(None),
+                SessionInstance.date >= date_from,
+                SessionInstance.date <= date_to,
+                SessionInstance.cancelled.is_(False),
+                SessionInstance.date >= Member.join_date,
             )
             .group_by(Attendance.member_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Member.id,
+                Member.display_name,
+                Member.first_name,
+                Member.surname,
+                Member.join_date,
+                func.coalesce(attended.c.cnt, 0),
+            )
+            .outerjoin(attended, attended.c.member_id == Member.id)
+            .where(
+                or_(
+                    attended.c.cnt.is_not(None),
+                    and_(
+                        Member.membership_status == "active",
+                        Member.join_date <= date_to,
+                    ),
+                )
+            )
         )
 
-        att_result = await self._session.execute(att_stmt)
         rows = []
-        for member_id, count in att_result.all():
+        for member_id, display_name, first_name, surname, join_date, count in (
+            await self._session.execute(stmt)
+        ).all():
+            # ISO date strings compare in date order.
+            total = sum(1 for d in held_dates if d >= join_date)
+            if total == 0:
+                continue
             rows.append(
                 {
                     "member_id": member_id,
+                    "display_name": member_name(display_name, first_name, surname),
                     "sessions_attended": count,
                     "total_sessions": total,
-                    "attendance_rate": round(count / total, 4) if total > 0 else 0.0,
+                    "attendance_rate": round(count / total, 4),
                 }
             )
         return rows
@@ -100,28 +142,59 @@ class SqlReportRepository(AbstractReportRepository):
     async def members_report(self) -> list[dict[str, Any]]:
         from sqlalchemy import select
 
-        from app.grades.db_models import GradeHistory
+        from app.grades.repository import SqlGradeRepository
         from app.members.db_models import Member
 
         members_result = await self._session.execute(select(Member))
         members = members_result.scalars().all()
 
+        grades = await SqlGradeRepository(self._session).get_current_grades(
+            [m.id for m in members]
+        )
         rows = []
         for member in members:
-            grades_result = await self._session.execute(
-                select(GradeHistory)
-                .where(GradeHistory.member_id == member.id)
-                .order_by(GradeHistory.promoted_at.desc())
-                .limit(1)
-            )
-            latest_grade = grades_result.scalar_one_or_none()
+            current = grades.get(member.id)
             rows.append(
                 {
                     "member_id": member.id,
-                    "display_name": member.display_name
-                    or f"{member.first_name} {member.surname}",
+                    "display_name": member_name(
+                        member.display_name, member.first_name, member.surname
+                    ),
                     "join_date": member.join_date,
-                    "current_grade": latest_grade.grade if latest_grade else None,
+                    "current_grade": current["grade"] if current else None,
                 }
             )
         return rows
+
+    async def grade_distribution(
+        self, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]:
+        """How many Members with one of these Membership Statuses hold each
+        Grade, today: Mukyū up to the highest Grade held, zeros kept.
+
+        Visitors are not Members, so they are never counted.
+        """
+        from collections import Counter
+
+        from sqlalchemy import select
+
+        from app.grades.models import Grade
+        from app.grades.repository import SqlGradeRepository
+        from app.members.db_models import Member
+
+        result = await self._session.execute(
+            select(Member.id).where(Member.membership_status.in_(statuses))
+        )
+        member_ids = list(result.scalars().all())
+        if not member_ids:
+            return []
+        current = await SqlGradeRepository(self._session).get_current_grades(member_ids)
+        counts = Counter(
+            current[m]["grade"] if m in current else Grade.MUKYUU for m in member_ids
+        )
+        grades = list(Grade)
+        highest = max(grades.index(Grade(g)) for g in counts)
+        return [
+            {"grade": g.value, "display_name": g.display_name, "count": counts[g]}
+            for g in grades[: highest + 1]
+        ]

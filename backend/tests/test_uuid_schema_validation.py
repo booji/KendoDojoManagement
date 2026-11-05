@@ -69,7 +69,7 @@ _BAD_UUID = "not-a-uuid"
 
 
 class _NoOpGradeRepo:
-    async def get_current_grade(self, member_id: str) -> str | None:
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
         return None
 
     async def add_promotion(self, **kwargs: Any) -> dict[str, Any]:

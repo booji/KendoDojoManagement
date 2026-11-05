@@ -9,11 +9,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grades.db_models import GradeHistory
 from app.members.db_models import Member
+from app.members.models import member_name
 
 
 class AbstractGradeRepository(ABC):
     @abstractmethod
-    async def get_current_grade(self, member_id: str) -> str | None: ...
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Each Member's current Grade, by member id: their latest *confirmed*
+        Promotion.
+
+        A pending, self-reported Promotion is nobody's current Grade until an
+        Admin confirms it (#565). A Member with no confirmed Promotion (Mukyū)
+        is absent from the result.
+        """
+        ...
+
+    async def get_current_grade(self, member_id: str) -> dict[str, Any] | None:
+        """get_current_grades for one Member; None when they are Mukyū."""
+        return (await self.get_current_grades([member_id])).get(member_id)
 
     @abstractmethod
     async def add_promotion(
@@ -69,15 +84,22 @@ class SqlGradeRepository(AbstractGradeRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_current_grade(self, member_id: str) -> str | None:
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        # The one place the confirmed-only rule lives (#565).
+        if not member_ids:
+            return {}
         result = await self._session.execute(
             select(GradeHistory)
-            .where(GradeHistory.member_id == member_id)
-            .order_by(GradeHistory.promoted_at.desc())
-            .limit(1)
+            .where(
+                GradeHistory.member_id.in_(member_ids),
+                GradeHistory.status == "confirmed",
+            )
+            .order_by(GradeHistory.member_id, GradeHistory.promoted_at.desc())
+            .distinct(GradeHistory.member_id)
         )
-        obj = result.scalar_one_or_none()
-        return obj.grade if obj else None
+        return {obj.member_id: _to_dict(obj) for obj in result.scalars().all()}
 
     async def add_promotion(
         self,
@@ -153,7 +175,7 @@ class SqlGradeRepository(AbstractGradeRepository):
         return [
             {
                 **_to_dict(gh),
-                "member_name": display_name or f"{first_name} {surname}",
+                "member_name": member_name(display_name, first_name, surname),
             }
             for gh, display_name, first_name, surname in result.all()
         ]

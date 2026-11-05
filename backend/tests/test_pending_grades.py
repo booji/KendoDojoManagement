@@ -17,7 +17,6 @@ Acceptance criteria exercised here:
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 import pytest
@@ -28,7 +27,7 @@ from app.auth.models import AccountClaims
 from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryGradeRepository, InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Auth claim helpers
@@ -49,7 +48,7 @@ def _admin_override() -> AccountClaims:
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
+# Seed data
 # ---------------------------------------------------------------------------
 
 _MEMBER_A_RECORD: dict[str, Any] = {
@@ -71,67 +70,6 @@ _MEMBER_B_RECORD: dict[str, Any] = {
 }
 
 
-class StubGradeRepo:
-    """In-memory grade repository stub with list_pending() support.
-
-    Each entry shape:
-      { id, member_id, grade, display_name, promoted_at, assigned_by, status }
-
-    list_pending() returns entries with status=="pending", each enriched with
-    a member_name field (joined from the members store).
-    """
-
-    def __init__(self, member_names: dict[str, str] | None = None) -> None:
-        self._history: list[dict[str, Any]] = []
-        # member_id -> full_name lookup used by list_pending
-        self._member_names: dict[str, str] = member_names or {
-            _MEMBER_A_ID: "Alice Kendo",
-            _MEMBER_B_ID: "Bob Kendo",
-        }
-
-    async def get_current_grade(self, member_id: str) -> str | None:
-        member_entries = [e for e in self._history if e["member_id"] == member_id]
-        if not member_entries:
-            return None
-        return member_entries[-1]["grade"]
-
-    async def add_promotion(
-        self,
-        member_id: str,
-        grade: str,
-        display_name: str,
-        assigned_by: str | None,
-        promoted_at: str,
-        status: str = "confirmed",
-    ) -> dict[str, Any]:
-        entry: dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "member_id": member_id,
-            "grade": grade,
-            "display_name": display_name,
-            "assigned_by": assigned_by,
-            "promoted_at": promoted_at,
-            "status": status,
-        }
-        self._history.append(entry)
-        return entry
-
-    async def get_history(self, member_id: str) -> list[dict[str, Any]]:
-        return [e for e in self._history if e["member_id"] == member_id]
-
-    async def list_pending(self) -> list[dict[str, Any]]:
-        """Return all pending entries across all members, each with member_name."""
-        results = []
-        for entry in self._history:
-            if entry.get("status") == "pending":
-                enriched = dict(entry)
-                enriched["member_name"] = self._member_names.get(
-                    entry["member_id"], "Unknown"
-                )
-                results.append(enriched)
-        return results
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -151,8 +89,10 @@ def member_repo() -> InMemoryMemberRepository:
 
 
 @pytest.fixture()
-def grade_repo() -> StubGradeRepo:
-    repo = StubGradeRepo()
+def grade_repo() -> InMemoryGradeRepository:
+    repo = InMemoryGradeRepository(
+        member_names={_MEMBER_A_ID: "Alice Kendo", _MEMBER_B_ID: "Bob Kendo"}
+    )
     app.dependency_overrides[get_grade_repo] = lambda: repo
     return repo
 

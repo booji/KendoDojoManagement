@@ -5,12 +5,13 @@ import io
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.core.security_logger import log_admin_event
+from app.members.models import MembershipStatus
 from app.reports.dependencies import get_report_repo
 from app.reports.repository import AbstractReportRepository
 
@@ -66,6 +67,17 @@ async def members_report(
     repo: _ReportRepo,
 ) -> list[dict[str, Any]]:
     return await repo.members_report()
+
+
+@router.get("/grades")
+async def grade_distribution(
+    claims: _Admin,
+    repo: _ReportRepo,
+    # Literal-typed, so FastAPI answers 422 for any value that is not a known
+    # Membership Status.
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.grade_distribution(status)
 
 
 @router.get("/attendance/csv")

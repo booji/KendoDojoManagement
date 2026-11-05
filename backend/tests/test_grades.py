@@ -14,7 +14,6 @@ Acceptance criteria exercised here:
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -27,7 +26,7 @@ from app.grades.dependencies import get_grade_repo  # noqa: F401 — will fail (
 from app.grades.models import Grade  # noqa: F401 — will fail (red)
 from app.main import app
 from app.members.dependencies import get_member_repo  # noqa: F401 — will fail (red)
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryGradeRepository, InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Auth claim helpers
@@ -59,7 +58,7 @@ def _member_b_override():
 
 
 # ---------------------------------------------------------------------------
-# Stub repositories
+# Seed data
 # ---------------------------------------------------------------------------
 
 _MEMBER_A_RECORD: dict[str, Any] = {
@@ -81,49 +80,6 @@ _MEMBER_B_RECORD: dict[str, Any] = {
 }
 
 
-class StubGradeRepo:
-    """In-memory grade history repository.
-
-    Each entry shape:
-      { id, member_id, grade (machine value), display_name, promoted_at (ISO), assigned_by, status }
-    """
-
-    def __init__(self) -> None:
-        self._history: list[dict[str, Any]] = []
-
-    async def get_current_grade(self, member_id: str) -> str | None:
-        """Return the machine value of the member's current grade, or None."""
-        member_entries = [e for e in self._history if e["member_id"] == member_id]
-        if not member_entries:
-            return None
-        return member_entries[-1]["grade"]
-
-    async def add_promotion(
-        self,
-        member_id: str,
-        grade: str,
-        display_name: str,
-        assigned_by: str,
-        promoted_at: str,
-        status: str = "confirmed",
-    ) -> dict[str, Any]:
-        entry: dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "member_id": member_id,
-            "grade": grade,
-            "display_name": display_name,
-            "assigned_by": assigned_by,
-            "promoted_at": promoted_at,
-            "status": status,
-        }
-        self._history.append(entry)
-        return entry
-
-    async def get_history(self, member_id: str) -> list[dict[str, Any]]:
-        """Return history for member in chronological order (oldest first)."""
-        return [e for e in self._history if e["member_id"] == member_id]
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -143,8 +99,8 @@ def member_repo() -> InMemoryMemberRepository:
 
 
 @pytest.fixture()
-def grade_repo() -> StubGradeRepo:
-    repo = StubGradeRepo()
+def grade_repo() -> InMemoryGradeRepository:
+    repo = InMemoryGradeRepository()
     app.dependency_overrides[get_grade_repo] = lambda: repo
     return repo
 
@@ -802,7 +758,7 @@ async def test_rokkyu_bug_cannot_skip_grade_via_post_grades(
     body = response.json()
     assert body["grade"] == "ROKKYUU"
     # No phantom MUKYUU entry should have been created
-    history = grade_repo._history
+    history = await grade_repo.get_history(member_id)
     assert len(history) == 1, (
         f"Only one entry should exist — no phantom MUKYUU; found {len(history)}"
     )

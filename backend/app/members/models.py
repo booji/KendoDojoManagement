@@ -10,6 +10,16 @@ from app.auth.models import LenientEmail
 MembershipStatus = Literal["active", "inactive", "suspended", "archived"]
 
 
+def member_name(
+    display_name: str | None, first_name: str | None, surname: str | None
+) -> str | None:
+    """A Member's name as shown: display name, else "first surname".
+
+    None when there is no first name either, as on an outer-joined Visitor row.
+    """
+    return display_name or (f"{first_name} {surname}" if first_name else None)
+
+
 class CreateMemberRequest(BaseModel):
     # Normalised as sign-in normalises it: this address is the one the
     # Member signs in with, matched exactly (#432).

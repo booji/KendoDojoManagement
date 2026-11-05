@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getMyMember, updateMyMember } from "@/api/members"
+import { formatMemberName, getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError, getMe, performPasskeyAdd, signOutEverywhere } from "@/api/auth"
 import { errorMessage } from "@/api/client"
@@ -129,11 +129,6 @@ const ProfileSummary = ({
     </Card>
   )
 }
-
-// ── Name formatting ───────────────────────────────────────────────────────────
-
-const formatMemberName = (m: MemberResponse): string =>
-  m.display_name ?? `${m.first_name} ${m.surname}`
 
 // ── Passkey row ───────────────────────────────────────────────────────────────
 
