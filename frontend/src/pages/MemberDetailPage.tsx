@@ -11,7 +11,7 @@ import {
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { AccountClaims } from "@/api/auth"
-import { setMemberGrade, proposeGrade, getGradeHistory, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
+import { setMemberGrade, proposeGrade, getGradeHistory, getCurrentGrade, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { AttendanceRecord } from "@/api/attendance"
@@ -316,20 +316,24 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
 
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
 
+  // The server owns the current-Grade rule (#565): no current Grade is Mukyū.
+  const [currentGrade, setCurrentGrade] = useState<string | null>(null)
+
+  const loadCurrentGrade = async () => {
+    const current = await getCurrentGrade(memberId)
+    setCurrentGrade(current?.display_name ?? "Mukyū")
+  }
+
   useEffect(() => {
-    getGradeHistory(memberId)
-      .then(setHistory)
+    Promise.all([getGradeHistory(memberId), getCurrentGrade(memberId)])
+      .then(([entries, current]) => {
+        setHistory(entries)
+        setCurrentGrade(current?.display_name ?? "Mukyū")
+      })
       .catch((err: unknown) => {
         setHistoryError(isApiError(err) ? err.message : "Failed to load grade history")
       })
   }, [memberId])
-
-  const confirmedHistory = history !== null ? history.filter((e) => e.status === "confirmed") : null
-
-  const currentGrade =
-    confirmedHistory !== null && confirmedHistory.length > 0
-      ? confirmedHistory.at(-1)!.display_name
-      : "Mukyū"
 
   const openEditDialog = () => {
     setSelectedGrade("")
@@ -356,6 +360,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
       // Refetch full history to keep the list accurate
       const updated = await getGradeHistory(memberId)
       setHistory(updated)
+      await loadCurrentGrade()
       // If refetch somehow fails, at least append the new entry
       void result
       setEditOpen(false)
@@ -392,6 +397,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
       setHistory((prev) =>
         prev === null ? null : prev.map((e) => (e.id === updated.id ? updated : e))
       )
+      await loadCurrentGrade()
     } catch {
       // silently ignore — the button will re-enable
     } finally {
