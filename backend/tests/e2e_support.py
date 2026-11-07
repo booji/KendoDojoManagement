@@ -14,13 +14,27 @@ It also holds UI-driving helpers shared across e2e files, such as
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import os
 import uuid
+from collections.abc import Coroutine, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import requests
 from playwright.sync_api import Locator, Page, expect
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.attendance.db_models import Attendance
+from app.auth.accounts import delete_account
+from app.auth.db_models import Account, AdminRecoveryToken
 from app.auth.models import AccountClaims
+from app.grades.db_models import GradeHistory
+from app.member_federations.db_models import MemberFederation
+from app.members.db_models import Member
 
 BASE_URL = "http://localhost:5173"
 API_URL = "http://localhost:8000/api"
@@ -52,6 +66,65 @@ def make_token(
         role=role,  # type: ignore[arg-type]
     )
     return login_as(claims)
+
+
+async def _member_ids() -> set[str]:
+    engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            return set((await conn.execute(select(Member.id))).scalars())
+    finally:
+        await engine.dispose()
+
+
+async def _remove_members(member_ids: set[str]) -> None:
+    """Delete these Members, their Accounts and every row that hangs off them."""
+    engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            account_ids = list(
+                (
+                    await session.execute(
+                        select(Account.id).where(Account.member_id.in_(member_ids))
+                    )
+                ).scalars()
+            )
+            # delete_account leaves the tokens an Account issued for others.
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.created_by_id.in_(account_ids)
+                )
+            )
+            for account_id in account_ids:
+                await delete_account(session, account_id)
+            for child in (Attendance, GradeHistory, MemberFederation):
+                await session.execute(
+                    delete(child).where(child.member_id.in_(member_ids))
+                )
+            await session.execute(delete(Member).where(Member.id.in_(member_ids)))
+    finally:
+        await engine.dispose()
+
+
+def _run[T](coro: Coroutine[Any, Any, T]) -> T:
+    # Playwright's sync API keeps an event loop running on this thread.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+@contextmanager
+def leaves_members_as_found() -> Iterator[None]:
+    """Remove every Member created inside the block, with its Account (#568).
+
+    e2e tests write through the live server, which commits for real, so
+    nothing else rolls their rows back. conftest wraps each e2e test and
+    module in this; tests do not call it themselves.
+    """
+    before = _run(_member_ids())
+    yield
+    created = _run(_member_ids()) - before
+    if created:
+        _run(_remove_members(created))
 
 
 def set_cookie(page: Page, token: str) -> None:
