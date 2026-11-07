@@ -33,11 +33,15 @@ def _ago(days: int) -> str:
     return (date.today() - timedelta(days=days)).isoformat()
 
 
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
 @pytest.fixture
 def as_admin(db_client):
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
-    yield
-    app.dependency_overrides.pop(REQUIRE_ADMIN, None)
 
 
 async def _get(path: str, **kwargs):

@@ -162,11 +162,15 @@ async def test_attendance_outside_the_year_to_date_is_not_ranked(
 # --- GET /reports/streaks ---------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
 @pytest.fixture
 def as_admin(db_client):
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
-    yield
-    app.dependency_overrides.pop(REQUIRE_ADMIN, None)
 
 
 async def _get(path: str, **kwargs):
