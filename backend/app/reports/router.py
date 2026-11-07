@@ -61,14 +61,6 @@ async def attendance_report(
     return {"sessions": sessions, "member_rates": member_rates}
 
 
-@router.get("/members")
-async def members_report(
-    claims: _Admin,
-    repo: _ReportRepo,
-) -> list[dict[str, Any]]:
-    return await repo.members_report()
-
-
 @router.get("/grades")
 async def grade_distribution(
     claims: _Admin,

@@ -6,13 +6,16 @@ app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
   1. GET /reports/attendance returns sessions in date range with headcount and member rates
-  2. GET /reports/members returns all members with current grade and join date
+  2. GET /reports/members/csv lists every member with current grade and join
+     date; the JSON GET /reports/members is gone (#571)
   3. GET /reports/attendance/csv and GET /reports/members/csv return valid CSV files
   5. Reports are accessible to admins only (401/403 guards)
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from typing import Any
 
@@ -350,73 +353,46 @@ async def test_attendance_report_missing_date_params_returns_422(
 
 
 # ---------------------------------------------------------------------------
-# AC2 — GET /reports/members
+# AC2 — the Members report: GET /reports/members/csv only (#571)
 # ---------------------------------------------------------------------------
 
 
-async def test_members_report_returns_all_members(
+async def test_members_report_json_endpoint_is_gone(
     report_repo: StubReportRepository,
 ) -> None:
-    """Members report lists all members with join_date."""
+    """The Members tab left /reports (#571); its JSON endpoint went with it."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m1 = report_repo.seed_member("Alice Kendo", "2023-04-01")
-    m2 = report_repo.seed_member("Bob Kendo", "2024-09-01")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body, list)
-    assert len(body) == 2
-    member_ids = {m["member_id"] for m in body}
-    assert m1["id"] in member_ids
-    assert m2["id"] in member_ids
-    for entry in body:
-        assert "display_name" in entry
-        assert "join_date" in entry
-        assert "current_grade" in entry
+    assert response.status_code == 404
 
 
-async def test_members_report_current_grade_none_when_no_history(
+async def test_members_csv_lists_every_member_with_current_grade(
     report_repo: StubReportRepository,
 ) -> None:
-    """current_grade is None for a member with no grade history."""
+    """One row per Member; current_grade is the latest *confirmed* Promotion
+    (#565), blank for a Member with none."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m = report_repo.seed_member("New Member", "2025-01-01")
+    graded = report_repo.seed_member("Graded Member", "2022-06-01")
+    report_repo.seed_grade(graded["id"], "ROKKYUU", "2023-01-01T10:00:00")
+    report_repo.seed_grade(graded["id"], "GOKYUU", "2024-01-01T10:00:00")
+    report_repo.seed_grade(graded["id"], "YONKYUU", "2025-01-01T10:00:00", "pending")
+    ungraded = report_repo.seed_member("New Member", "2025-01-01")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/reports/members")
+        response = await c.get("/reports/members/csv")
 
     assert response.status_code == 200
-    body = response.json()
-    entry = next(e for e in body if e["member_id"] == m["id"])
-    assert entry["current_grade"] is None
-
-
-async def test_members_report_shows_current_grade(
-    report_repo: StubReportRepository,
-) -> None:
-    """current_grade is the most recent *confirmed* Promotion (#565)."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m = report_repo.seed_member("Graded Member", "2022-06-01")
-    report_repo.seed_grade(m["id"], "ROKKYUU", "2023-01-01T10:00:00")
-    report_repo.seed_grade(m["id"], "GOKYUU", "2024-01-01T10:00:00")
-    report_repo.seed_grade(m["id"], "YONKYUU", "2025-01-01T10:00:00", "pending")
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.get("/reports/members")
-
-    assert response.status_code == 200
-    body = response.json()
-    entry = next(e for e in body if e["member_id"] == m["id"])
-    assert entry["current_grade"] == "GOKYUU"
+    rows = {r["member_id"]: r for r in csv.DictReader(io.StringIO(response.text))}
+    assert rows[graded["id"]]["current_grade"] == "GOKYUU"
+    assert rows[ungraded["id"]]["current_grade"] == ""
+    assert len(rows) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -541,25 +517,14 @@ async def test_attendance_report_member_returns_403(
     assert response.status_code == 403
 
 
-async def test_members_report_unauthenticated_returns_401(
-    report_repo: StubReportRepository,
-) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.get("/reports/members")
-
-    assert response.status_code == 401
-
-
-async def test_members_report_member_returns_403(
+async def test_members_csv_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
-            "/reports/members",
+            "/reports/members/csv",
             cookies={"access_token": _member_token()},
         )
 

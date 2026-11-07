@@ -1,13 +1,8 @@
 import { lazy, Suspense, useState } from "react"
-import {
-  fetchAttendanceReport,
-  fetchMembersReport,
-  downloadAttendanceCsv,
-  downloadMembersCsv,
-} from "@/api/reports"
-import type { AttendanceReport, MemberReport } from "@/api/reports"
+import { fetchAttendanceReport, downloadAttendanceCsv } from "@/api/reports"
+import type { AttendanceReport } from "@/api/reports"
 import { isApiError } from "@/api/auth"
-import { formatSessionDate, formatMemberDate } from "@/lib/date"
+import { formatSessionDate } from "@/lib/date"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -234,139 +229,6 @@ const AttendanceSection = () => {
   )
 }
 
-// ── Members tab ────────────────────────────────────────────────────────────────
-
-const MembersSection = () => {
-  const [report, setReport] = useState<MemberReport[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleGenerate = async () => {
-    setError(null)
-    setLoading(true)
-    try {
-      const data = await fetchMembersReport()
-      setReport(data)
-    } catch (err) {
-      setError(isApiError(err) ? err.message : "Failed to generate report")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    try {
-      await downloadMembersCsv()
-    } catch (err) {
-      setError(isApiError(err) ? err.message : "Failed to download CSV")
-    } finally {
-      setDownloading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Button
-          size="lg"
-          onClick={() => void handleGenerate()}
-          disabled={loading}
-          aria-label="Generate members report"
-        >
-          {loading ? "Generating…" : "Generate"}
-        </Button>
-        <Button
-          size="lg"
-          variant="outline"
-          onClick={() => void handleDownload()}
-          disabled={report === null || downloading}
-          aria-label="Download members CSV"
-        >
-          <DownloadIcon aria-hidden="true" className="size-4" />
-          <span>{downloading ? "Downloading…" : "Download CSV"}</span>
-        </Button>
-      </div>
-
-      {error !== null && (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-
-      {loading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-lg" />
-          ))}
-        </div>
-      )}
-
-      {!loading && report !== null && (
-        <div>
-          <h2 className="text-base font-semibold mb-3">
-            Members ({report.length})
-          </h2>
-          {report.length === 0 ? (
-            <EmptyState message="No members found." />
-          ) : (
-            <div className="rounded-xl ring-1 ring-foreground/10 overflow-x-auto">
-              <table
-                className="w-full text-sm"
-                role="table"
-                aria-label="Members report"
-              >
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th
-                      className="py-2.5 pl-4 pr-2 text-left font-medium text-muted-foreground"
-                      scope="col"
-                    >
-                      Name
-                    </th>
-                    <th
-                      className="py-2.5 px-2 text-left font-medium text-muted-foreground hidden sm:table-cell"
-                      scope="col"
-                    >
-                      Current Grade
-                    </th>
-                    <th
-                      className="py-2.5 pl-2 pr-4 text-right font-medium text-muted-foreground"
-                      scope="col"
-                    >
-                      Join Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.map((m) => (
-                    <tr
-                      key={m.member_id}
-                      className="border-t border-foreground/5 hover:bg-muted/30"
-                    >
-                      <td className="py-2.5 pl-4 pr-2 font-medium">
-                        {m.display_name}
-                      </td>
-                      <td className="py-2.5 px-2 text-muted-foreground hidden sm:table-cell">
-                        {m.current_grade ?? "—"}
-                      </td>
-                      <td className="py-2.5 pl-2 pr-4 text-right text-muted-foreground">
-                        {formatMemberDate(m.join_date)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 const ReportsPage = () => (
@@ -378,16 +240,11 @@ const ReportsPage = () => (
     <Tabs defaultValue="attendance">
       <TabsList className="mb-6">
         <TabsTrigger value="attendance">Attendance</TabsTrigger>
-        <TabsTrigger value="members">Members</TabsTrigger>
         <TabsTrigger value="charts">Charts</TabsTrigger>
       </TabsList>
 
       <TabsContent value="attendance">
         <AttendanceSection />
-      </TabsContent>
-
-      <TabsContent value="members">
-        <MembersSection />
       </TabsContent>
 
       <TabsContent value="charts">

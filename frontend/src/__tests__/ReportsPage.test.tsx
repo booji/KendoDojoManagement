@@ -49,3 +49,12 @@ describe("ReportsPage attendance report", () => {
     expect(rates).toHaveTextContent("50%")
   })
 })
+
+describe("ReportsPage tabs", () => {
+  it("has no Members tab: the Members list carries its Grade and CSV (#571)", () => {
+    render(<ReportsPage />)
+
+    expect(screen.getByRole("tab", { name: "Attendance" })).toBeInTheDocument()
+    expect(screen.queryByRole("tab", { name: "Members" })).not.toBeInTheDocument()
+  })
+})

@@ -20,23 +20,12 @@ export type AttendanceReport = {
   member_rates: MemberAttendanceRate[]
 }
 
-export type MemberReport = {
-  member_id: string
-  display_name: string
-  join_date: string
-  current_grade: string | null
-}
-
 export const fetchAttendanceReport = async (
   dateFrom: string,
   dateTo: string,
 ): Promise<AttendanceReport> => {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
   return request<AttendanceReport>(`/api/reports/attendance?${params.toString()}`, { errorMessage: "Failed to fetch attendance report" })
-}
-
-export const fetchMembersReport = async (): Promise<MemberReport[]> => {
-  return request<MemberReport[]>("/api/reports/members", { errorMessage: "Failed to fetch members report" })
 }
 
 export const downloadAttendanceCsv = async (
