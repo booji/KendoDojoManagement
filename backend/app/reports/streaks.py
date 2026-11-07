@@ -32,6 +32,11 @@ def longest_streak(
 
     held_weeks = sorted({_monday(d) for d in in_year(held)})
     attended_weeks = {_monday(d) for d in in_year(attended)}
+    # The current week has not ended, so until it has Attendance it can
+    # neither break nor extend the streak.
+    this_week = _monday(today)
+    if this_week not in attended_weeks and this_week in held_weeks:
+        held_weeks.remove(this_week)
     run = best = 0
     for week in held_weeks:
         run = run + 1 if week in attended_weeks else 0

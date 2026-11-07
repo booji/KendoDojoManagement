@@ -70,3 +70,13 @@ def test_sessions_after_today_do_not_count():
     assert longest_streak(held, [WEEK_1, WEEK_2], date(2026, 3, 15)) == Streak(
         weeks=2, running=True
     )
+
+
+def test_a_missed_session_this_week_does_not_break_a_running_streak():
+    # Today is Wednesday 1 April and Monday's Session was missed. The week has
+    # not ended, so it cannot break the Attendance Streak yet.
+    held = [WEEK_2, WEEK_3, WEEK_4, date(2026, 3, 30)]
+
+    assert longest_streak(held, [WEEK_2, WEEK_3, WEEK_4], date(2026, 4, 1)) == Streak(
+        weeks=3, running=True
+    )
