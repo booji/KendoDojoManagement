@@ -1,5 +1,6 @@
 import asyncio
 import os
+from contextlib import nullcontext
 
 import pytest
 import pytest_asyncio
@@ -151,6 +152,29 @@ def _reset_rate_limiter():
         app.state.limiter._storage.reset()
     except Exception:
         pass
+
+
+def _e2e_cleanup(request: pytest.FixtureRequest):
+    """e2e tests write through the live server, which commits for real: remove
+    the Members and Accounts they created (#568). Other tests roll back."""
+    if not request.path.name.startswith("test_e2e_"):
+        return nullcontext()
+    from tests.e2e_support import leaves_members_as_found
+
+    return leaves_members_as_found()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _e2e_module_cleanup(request: pytest.FixtureRequest):
+    """For module-scoped fixtures that sign someone in."""
+    with _e2e_cleanup(request):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _e2e_test_cleanup(request: pytest.FixtureRequest):
+    with _e2e_cleanup(request):
+        yield
 
 
 # ---------------------------------------------------------------------------
