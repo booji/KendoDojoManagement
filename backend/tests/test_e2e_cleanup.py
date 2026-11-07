@@ -63,3 +63,18 @@ def test_their_grades_attendance_and_recovery_tokens_go_too() -> None:
     assert _member_of(member).status_code == 401
     assert _member_of(admin).status_code == 401
 
+
+# The next two run in file order: conftest's wrapper removes what the first
+# left behind before the second starts.
+_left_behind: list[str] = []
+
+
+def test_an_e2e_test_that_leaves_a_user_behind() -> None:
+    token = make_token("member")
+    complete_onboarding(token)
+    _left_behind.append(token)
+
+
+def test_finds_it_gone_by_the_next_test() -> None:
+    assert _left_behind, "runs after test_an_e2e_test_that_leaves_a_user_behind"
+    assert _member_of(_left_behind[0]).status_code == 401
