@@ -375,7 +375,10 @@ class SqlReportRepository(AbstractReportRepository):
                 func.max(SessionInstance.date).label("last_attended"),
             )
             .join(SessionInstance, SessionInstance.id == Attendance.session_id)
-            .where(SessionInstance.cancelled.is_(False))
+            .where(
+                SessionInstance.cancelled.is_(False),
+                SessionInstance.date <= today.isoformat(),
+            )
             .group_by(Attendance.member_id)
             .subquery()
         )

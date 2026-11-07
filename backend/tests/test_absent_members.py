@@ -134,6 +134,17 @@ async def test_attendance_at_a_cancelled_session_does_not_count(db_client, as_ad
     assert (await _absent())[member]["last_attended"] == _ago(20)
 
 
+async def test_attendance_at_a_future_session_does_not_end_an_absence(
+    db_client, as_admin
+):
+    member = await _member(db_client)
+    await _attend(db_client, member, 20)
+    await _attend(db_client, member, -3)
+    db_client.expire_all()
+
+    assert (await _absent())[member]["last_attended"] == _ago(20)
+
+
 async def test_the_longest_absent_come_first(db_client, as_admin):
     # Further back than anyone else's absence, so these lead the list.
     a_while = await _member(db_client, joined_days_ago=5000)
