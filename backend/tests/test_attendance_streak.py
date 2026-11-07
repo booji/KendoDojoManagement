@@ -28,6 +28,13 @@ def test_a_held_week_without_attendance_ends_the_streak():
     assert longest_streak(held, attended, TODAY) == Streak(weeks=2, running=False)
 
 
+def test_a_new_streak_after_a_break_is_still_running():
+    held = [WEEK_1, WEEK_2, WEEK_3, WEEK_4]
+    attended = [WEEK_1, WEEK_3, WEEK_4]  # WEEK_2 is the gap
+
+    assert longest_streak(held, attended, TODAY) == Streak(weeks=2, running=True)
+
+
 def test_a_week_with_no_held_sessions_neither_breaks_nor_extends_it():
     # WEEK_3's only Session was cancelled, so it is not held at all.
     held = [WEEK_1, WEEK_2, WEEK_4]
