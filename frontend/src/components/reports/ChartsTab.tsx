@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { isApiError } from "@/api/auth"
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
 import { fetchGradeDistribution, type GradeCount } from "@/api/reports"
+import AbsentMembersList from "@/components/reports/AbsentMembersList"
 import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -82,6 +83,7 @@ const ChartsTab = () => {
             )}
           </Section>
           <AttendanceStreaksChart statuses={statuses} />
+          <AbsentMembersList statuses={statuses} />
         </>
       )}
     </div>

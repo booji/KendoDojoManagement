@@ -17,14 +17,17 @@ const MUKYU_3_SHODAN_1 = [
 ]
 
 const stubFetch = (body: unknown = MUKYU_3_SHODAN_1) => {
-  const fetchMock = vi.fn(() =>
-    Promise.resolve({
+  // Answers per URL: grades get `body`; the tab's other views (Attendance
+  // Streaks, Absent Members) get an empty list, tested in their own files.
+  const fetchMock = vi.fn((url: string) => {
+    const data = String(url).startsWith("/api/reports/grades") ? body : []
+    return Promise.resolve({
       ok: true,
       status: 200,
-      json: () => Promise.resolve(body),
-      text: () => Promise.resolve(JSON.stringify(body)),
-    } as unknown as Response),
-  )
+      json: () => Promise.resolve(data),
+      text: () => Promise.resolve(JSON.stringify(data)),
+    } as unknown as Response)
+  })
   vi.stubGlobal("fetch", fetchMock)
   return fetchMock
 }
@@ -84,6 +87,7 @@ describe("Charts tab", () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole("table", { name: "Grade distribution" })).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(before)
+    expect(requestedUrls(fetchMock)).toHaveLength(1)
   })
 
   it("says so when no Member is counted", async () => {
