@@ -215,6 +215,36 @@ def test_member_list_search_by_name_or_email(page: Page) -> None:
 
 
 # ---------------------------------------------------------------------------
+# #571 — the list shows each Member's current Grade and exports the CSV
+# ---------------------------------------------------------------------------
+
+
+def test_member_list_shows_current_grade_and_downloads_csv(page: Page) -> None:
+    admin_token = _make_token("admin")
+    suffix = uuid.uuid4().hex[:8]
+    full_name = f"Graded {suffix}"
+    member_id = _create_member_via_api(admin_token, full_name)
+    requests.post(
+        f"{API_BASE}/members/{member_id}/grades",
+        cookies=_cookie_dict(admin_token),
+        json={"grade": "SHODAN"},
+    ).raise_for_status()
+    _inject_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/members")
+    page.get_by_placeholder("Search").fill(suffix)
+
+    table = page.get_by_role("table", name="Members list")
+    expect(table.get_by_role("columnheader", name="Current Grade")).to_be_visible()
+    expect(table.get_by_role("row", name=f"View {full_name}")).to_contain_text(
+        "Shodan (1-dan)", timeout=8000
+    )
+
+    with page.expect_download() as download:
+        page.get_by_role("button", name="Download members CSV").click()
+    assert download.value.suggested_filename == "members.csv"
+
+
+# ---------------------------------------------------------------------------
 # AC8 — Mobile viewport renders member list
 # ---------------------------------------------------------------------------
 

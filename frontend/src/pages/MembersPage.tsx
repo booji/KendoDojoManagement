@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { listMembers, createMember, formatMemberName, MEMBERSHIP_STATUSES } from "@/api/members"
 import type { MemberListItem, MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
+import { downloadMembersCsv } from "@/api/reports"
 import { isApiError } from "@/api/auth"
 import { formatMemberDate, formatShortDate } from "@/lib/date"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { PlusIcon, SearchIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
 import { EmptyState } from "@/components/ui/empty-state"
 
@@ -392,6 +393,7 @@ const MembersPage = () => {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<MembershipStatus | "all">("all")
   const [addOpen, setAddOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const load = useCallback(() => {
     setError(null)
@@ -412,6 +414,17 @@ const MembersPage = () => {
     return () => clearTimeout(timer)
   }, [load, search])
 
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await downloadMembersCsv()
+    } catch (err) {
+      setError(isApiError(err) ? err.message : "Failed to download CSV")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const handleCreated = (member: MemberResponse) => {
     setAddOpen(false)
     // A new Member has no Promotion yet, so no current Grade.
@@ -426,14 +439,28 @@ const MembersPage = () => {
         <PageHeader
           title="Members"
           action={
-            <Button
-              size="lg"
-              onClick={() => setAddOpen(true)}
-              aria-label="Add member"
-            >
-              <PlusIcon aria-hidden="true" />
-              <span className="hidden sm:inline">Add member</span>
-            </Button>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => void handleDownload()}
+                disabled={downloading}
+                aria-label="Download members CSV"
+              >
+                <DownloadIcon aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {downloading ? "Downloading…" : "Download CSV"}
+                </span>
+              </Button>
+              <Button
+                size="lg"
+                onClick={() => setAddOpen(true)}
+                aria-label="Add member"
+              >
+                <PlusIcon aria-hidden="true" />
+                <span className="hidden sm:inline">Add member</span>
+              </Button>
+            </div>
           }
         />
       </div>

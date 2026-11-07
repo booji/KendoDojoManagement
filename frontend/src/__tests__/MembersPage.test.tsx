@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
 import MembersPage from "@/pages/MembersPage"
@@ -73,5 +74,21 @@ describe("MembersPage current Grade", () => {
       "Shodan (1-dan)",
     )
     expect(within(cards).getByRole("button", { name: "View Ai Tanaka" })).toHaveTextContent("—")
+  })
+})
+
+describe("MembersPage members CSV", () => {
+  it("downloads the members CSV", async () => {
+    const fetchMock = stubFetch()
+    // jsdom has no object URLs; the download only needs them to exist.
+    URL.createObjectURL = vi.fn(() => "blob:members")
+    URL.revokeObjectURL = vi.fn()
+    renderPage()
+
+    await userEvent.click(await screen.findByRole("button", { name: "Download members CSV" }))
+
+    const urls = fetchMock.mock.calls.map((call) => String((call as unknown[])[0]))
+    expect(urls.some((url) => url.endsWith("/api/reports/members/csv"))).toBe(true)
+    expect(URL.createObjectURL).toHaveBeenCalled()
   })
 })
