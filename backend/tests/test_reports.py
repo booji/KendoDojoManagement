@@ -24,6 +24,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
+from app.grades.models import Grade
 from app.main import app
 from tests.auth_support import sign_in
 
@@ -176,7 +177,7 @@ class StubReportRepository:
                 if g["member_id"] == member["id"] and g["status"] == "confirmed"
             ]
             current = max(confirmed, key=lambda g: g["promoted_at"], default=None)
-            current_grade = current["grade"] if current else None
+            current_grade = Grade(current["grade"]).short_name if current else None
             result.append(
                 {
                     "member_id": member["id"],
@@ -390,7 +391,7 @@ async def test_members_csv_lists_every_member_with_current_grade(
 
     assert response.status_code == 200
     rows = {r["member_id"]: r for r in csv.DictReader(io.StringIO(response.text))}
-    assert rows[graded["id"]]["current_grade"] == "GOKYUU"
+    assert rows[graded["id"]]["current_grade"] == "Gokyū"
     assert rows[ungraded["id"]]["current_grade"] == ""
     assert len(rows) == 2
 

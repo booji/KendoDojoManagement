@@ -45,6 +45,11 @@ class Grade(StrEnum):
     def display_name(self) -> str:
         return _DISPLAY_NAMES[self.value]
 
+    @property
+    def short_name(self) -> str:
+        """display_name without its bracketed helper: "Shodan", "Mukyū"."""
+        return self.display_name.split(" (")[0]
+
 
 class GradeHistoryEntry(BaseModel):
     id: str

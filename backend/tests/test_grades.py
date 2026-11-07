@@ -171,6 +171,13 @@ def test_grade_display_names() -> None:
     assert "8-dan" in Grade.HACHIDAN.display_name
 
 
+def test_grade_short_name_drops_the_bracketed_helper() -> None:
+    """The members CSV writes the short name (#571); Mukyū has no bracket."""
+    assert Grade.SHODAN.short_name == "Shodan"
+    assert Grade.IKKYUU.short_name == "Ikkyū"
+    assert Grade.MUKYUU.short_name == "Mukyū"
+
+
 # ---------------------------------------------------------------------------
 # AC2/AC3 — POST /members/{id}/promote
 # ---------------------------------------------------------------------------
