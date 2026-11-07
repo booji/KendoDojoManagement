@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
@@ -10,6 +11,8 @@ from app.members.models import MembershipStatus, member_name
 
 # An Absent Member has no Attendance in this many days (GLOSSARY.md).
 _ABSENT_AFTER = timedelta(days=14)
+# Fewer eligible held Sessions than this and a rate is too thin to rank (#562).
+_RANKED_FROM_SESSIONS = 4
 
 
 class AbstractReportRepository(ABC):
@@ -21,6 +24,11 @@ class AbstractReportRepository(ABC):
     @abstractmethod
     async def member_attendance_rates(
         self, date_from: str, date_to: str
+    ) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def top_attendance_rates(
+        self, date_from: str, date_to: str, statuses: list[MembershipStatus]
     ) -> list[dict[str, Any]]: ...
 
     @abstractmethod
@@ -90,7 +98,59 @@ class SqlReportRepository(AbstractReportRepository):
         date_from and the Member's join date. A Member with no such Session
         is left out rather than listed at 0 of 0.
         """
-        from sqlalchemy import and_, func, or_, select
+        from sqlalchemy import and_, or_
+
+        from app.members.db_models import Member
+
+        return await self._attendance_rates(
+            date_from,
+            date_to,
+            lambda attended: or_(
+                attended.is_not(None),
+                and_(
+                    Member.membership_status == "active",
+                    Member.join_date <= date_to,
+                ),
+            ),
+        )
+
+    async def top_attendance_rates(
+        self, date_from: str, date_to: str, statuses: list[MembershipStatus]
+    ) -> list[dict[str, Any]]:
+        """The 10 highest Attendance Rates in range among Members with one of
+        these Membership Statuses, highest first.
+
+        Only Members with at least 4 eligible held Sessions are ranked, so a
+        newcomer with one Session does not top it at 100%. Visitors are not
+        Members, so they are never ranked.
+        """
+        from app.members.db_models import Member
+
+        rates = await self._attendance_rates(
+            date_from,
+            date_to,
+            lambda _: Member.membership_status.in_(statuses),
+        )
+        ranked = [r for r in rates if r["total_sessions"] >= _RANKED_FROM_SESSIONS]
+        # On a tie, the rate held over more Sessions ranks higher.
+        ranked.sort(
+            key=lambda r: (
+                -r["sessions_attended"] / r["total_sessions"],
+                -r["total_sessions"],
+                r["display_name"] or "",
+            )
+        )
+        return ranked[:10]
+
+    async def _attendance_rates(
+        self, date_from: str, date_to: str, which: Callable[[Any], Any]
+    ) -> list[dict[str, Any]]:
+        """Attendance Rate in range for the Members ``which`` picks. It is
+        given the Member's attended count (NULL when they attended none) and
+        returns a WHERE clause; a Member with no eligible held Session is
+        dropped.
+        """
+        from sqlalchemy import func, select
 
         from app.attendance.db_models import Attendance
         from app.members.db_models import Member
@@ -126,15 +186,7 @@ class SqlReportRepository(AbstractReportRepository):
                 func.coalesce(attended.c.cnt, 0),
             )
             .outerjoin(attended, attended.c.member_id == Member.id)
-            .where(
-                or_(
-                    attended.c.cnt.is_not(None),
-                    and_(
-                        Member.membership_status == "active",
-                        Member.join_date <= date_to,
-                    ),
-                )
-            )
+            .where(which(attended.c.cnt))
         )
 
         rows = []
