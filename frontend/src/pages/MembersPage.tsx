@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { listMembers, createMember, formatMemberName, MEMBERSHIP_STATUSES } from "@/api/members"
-import type { MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
+import type { MemberListItem, MemberResponse, MembershipStatus, CreateMemberRequest } from "@/api/members"
 import { isApiError } from "@/api/auth"
 import { formatMemberDate, formatShortDate } from "@/lib/date"
 import { Button } from "@/components/ui/button"
@@ -319,7 +319,7 @@ const AddMemberDialog = ({ open, onClose, onCreated }: AddMemberDialogProps) => 
 // ── Member row (desktop table row) ────────────────────────────────────────────
 
 type MemberRowProps = {
-  member: MemberResponse
+  member: MemberListItem
   onClick: () => void
 }
 
@@ -340,6 +340,9 @@ const MemberRow = ({ member, onClick }: MemberRowProps) => (
     </td>
     <td className="py-3 px-2">
       <StatusBadge status={member.membership_status} />
+    </td>
+    <td className="py-3 px-2 text-muted-foreground">
+      {member.current_grade ?? "—"}
     </td>
     <td className="py-3 px-2 hidden sm:table-cell">
       <RoleBadges member={member} />
@@ -366,6 +369,7 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
         <div className="min-w-0">
           <p className="font-medium truncate">{formatMemberName(member)}</p>
           <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+          <p className="text-xs text-muted-foreground truncate">{member.current_grade ?? "—"}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <StatusBadge status={member.membership_status} />
             <RoleBadges member={member} />
@@ -383,7 +387,7 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
 
 const MembersPage = () => {
   const navigate = useNavigate()
-  const [members, setMembers] = useState<MemberResponse[] | null>(null)
+  const [members, setMembers] = useState<MemberListItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<MembershipStatus | "all">("all")
@@ -410,7 +414,9 @@ const MembersPage = () => {
 
   const handleCreated = (member: MemberResponse) => {
     setAddOpen(false)
-    setMembers((prev) => (prev !== null ? [member, ...prev] : [member]))
+    // A new Member has no Promotion yet, so no current Grade.
+    const row = { ...member, current_grade: null }
+    setMembers((prev) => (prev !== null ? [row, ...prev] : [row]))
   }
 
   return (
@@ -509,6 +515,7 @@ const MembersPage = () => {
                 <tr role="row">
                   <th className="py-2.5 pl-4 pr-2 text-left font-medium text-muted-foreground" scope="col">Name</th>
                   <th className="py-2.5 px-2 text-left font-medium text-muted-foreground" scope="col">Status</th>
+                  <th className="py-2.5 px-2 text-left font-medium text-muted-foreground" scope="col">Current Grade</th>
                   <th className="py-2.5 px-2 text-left font-medium text-muted-foreground hidden sm:table-cell" scope="col">Roles</th>
                   <th className="py-2.5 pl-2 pr-4 text-left font-medium text-muted-foreground hidden md:table-cell" scope="col">Joined</th>
                 </tr>
