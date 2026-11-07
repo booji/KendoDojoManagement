@@ -90,3 +90,21 @@ export const fetchGradeDistribution = async (
     errorMessage: "Failed to fetch grade distribution",
   })
 }
+
+export type AttendanceStreak = {
+  member_id: string
+  display_name: string
+  weeks: number
+  /** Still unbroken as of today. */
+  running: boolean
+}
+
+/** The 10 longest Attendance Streaks from 1 January to today, longest first. */
+export const fetchAttendanceStreaks = async (
+  statuses: MembershipStatus[],
+): Promise<AttendanceStreak[]> => {
+  const params = new URLSearchParams(statuses.map((s) => ["status", s]))
+  return request<AttendanceStreak[]>(`/api/reports/streaks?${params.toString()}`, {
+    errorMessage: "Failed to fetch Attendance Streaks",
+  })
+}

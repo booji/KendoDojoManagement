@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { isApiError } from "@/api/auth"
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
 import { fetchGradeDistribution, type GradeCount } from "@/api/reports"
+import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import { Checkbox } from "@/components/ui/checkbox"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -63,22 +64,25 @@ const ChartsTab = () => {
       {statuses.length === 0 ? (
         <EmptyState message="Choose at least one Membership Status." />
       ) : (
-        <Section heading="Grade distribution">
-          <p className="text-sm text-muted-foreground">
-            Members by current Grade, as of today.
-          </p>
-          {error !== null ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
+        <>
+          <Section heading="Grade distribution">
+            <p className="text-sm text-muted-foreground">
+              Members by current Grade, as of today.
             </p>
-          ) : grades === null ? (
-            <Skeleton className="h-64 w-full rounded-lg" />
-          ) : grades.length === 0 ? (
-            <EmptyState message="No Members with these Membership Statuses." />
-          ) : (
-            <GradeDistributionChart grades={grades} />
-          )}
-        </Section>
+            {error !== null ? (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : grades === null ? (
+              <Skeleton className="h-64 w-full rounded-lg" />
+            ) : grades.length === 0 ? (
+              <EmptyState message="No Members with these Membership Statuses." />
+            ) : (
+              <GradeDistributionChart grades={grades} />
+            )}
+          </Section>
+          <AttendanceStreaksChart statuses={statuses} />
+        </>
       )}
     </div>
   )
