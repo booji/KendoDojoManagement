@@ -1,14 +1,8 @@
-import { useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { format, subDays } from "date-fns"
 
-import { isApiError } from "@/api/auth"
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
-import {
-  fetchGradeDistribution,
-  fetchHeadcount,
-  type GradeCount,
-  type SessionHeadcount,
-} from "@/api/reports"
+import { fetchGradeDistribution } from "@/api/reports"
 import AbsentMembersList from "@/components/reports/AbsentMembersList"
 import AttendanceRatesChart from "@/components/reports/AttendanceRatesChart"
 import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
@@ -20,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Section } from "@/components/ui/section"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useReport } from "@/hooks/useReport"
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd")
 
@@ -32,47 +27,13 @@ const ChartsTab = () => {
   const [statuses, setStatuses] = useState<MembershipStatus[]>(["active"])
   const [dateFrom, setDateFrom] = useState(() => ymd(subDays(new Date(), 90)))
   const [dateTo, setDateTo] = useState(() => ymd(new Date()))
-  const [headcount, setHeadcount] = useState<SessionHeadcount[] | null>(null)
-  const [headcountError, setHeadcountError] = useState<string | null>(null)
-  const [grades, setGrades] = useState<GradeCount[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (statuses.length === 0) return
-    let stale = false
-    fetchGradeDistribution(statuses)
-      .then((data) => {
-        if (stale) return
-        setGrades(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (stale) return
-        setError(isApiError(err) ? err.message : "Failed to load grade distribution")
-      })
-    return () => {
-      stale = true
-    }
-  }, [statuses])
-
-  useEffect(() => {
-    // An emptied date input: wait for a whole date rather than ask for none.
-    if (dateFrom === "" || dateTo === "") return
-    let stale = false
-    fetchHeadcount(dateFrom, dateTo)
-      .then((data) => {
-        if (stale) return
-        setHeadcount(data)
-        setHeadcountError(null)
-      })
-      .catch((err: unknown) => {
-        if (stale) return
-        setHeadcountError(isApiError(err) ? err.message : "Failed to load headcount")
-      })
-    return () => {
-      stale = true
-    }
-  }, [dateFrom, dateTo])
+  const { data: grades, error } = useReport(
+    useCallback(
+      () => (statuses.length === 0 ? null : fetchGradeDistribution(statuses)),
+      [statuses],
+    ),
+    "Failed to load grade distribution",
+  )
 
   const toggle = (value: MembershipStatus, checked: boolean) =>
     setStatuses(
@@ -121,23 +82,7 @@ const ChartsTab = () => {
         </fieldset>
       </div>
 
-      <Section heading="Headcount per Session">
-        <p className="text-sm text-muted-foreground">
-          Members and Visitors at each held Session in the range. Every Member
-          counts, whatever their Membership Status today.
-        </p>
-        {headcountError !== null ? (
-          <p className="text-sm text-destructive" role="alert">
-            {headcountError}
-          </p>
-        ) : headcount === null ? (
-          <Skeleton className="h-72 w-full rounded-lg" />
-        ) : headcount.length === 0 ? (
-          <EmptyState message="No held Sessions in this range." />
-        ) : (
-          <HeadcountChart sessions={headcount} />
-        )}
-      </Section>
+      <HeadcountChart dateFrom={dateFrom} dateTo={dateTo} />
 
       {statuses.length === 0 ? (
         <EmptyState message="Choose at least one Membership Status." />

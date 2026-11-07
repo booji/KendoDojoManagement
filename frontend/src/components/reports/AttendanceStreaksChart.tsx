@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback } from "react"
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 
-import { isApiError } from "@/api/auth"
 import type { MembershipStatus } from "@/api/members"
 import { fetchAttendanceStreaks, type AttendanceStreak } from "@/api/reports"
 import {
@@ -13,6 +12,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state"
 import { Section } from "@/components/ui/section"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useReport } from "@/hooks/useReport"
 
 // One series, so one hue and no legend: the heading names what is plotted.
 const config = {
@@ -29,25 +29,10 @@ const label = (s: AttendanceStreak) => (s.running ? `${s.weeks} · unbroken` : `
  * tab (#563). Always 1 January to today: it ignores the tab's date range.
  */
 const AttendanceStreaksChart = ({ statuses }: { statuses: MembershipStatus[] }) => {
-  const [streaks, setStreaks] = useState<AttendanceStreak[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let stale = false
-    fetchAttendanceStreaks(statuses)
-      .then((data) => {
-        if (stale) return
-        setStreaks(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (stale) return
-        setError(isApiError(err) ? err.message : "Failed to load Attendance Streaks")
-      })
-    return () => {
-      stale = true
-    }
-  }, [statuses])
+  const { data: streaks, error } = useReport(
+    useCallback(() => fetchAttendanceStreaks(statuses), [statuses]),
+    "Failed to load Attendance Streaks",
+  )
 
   return (
     <Section heading="Attendance Streaks">

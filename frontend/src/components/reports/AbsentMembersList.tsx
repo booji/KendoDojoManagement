@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react"
+import { useCallback } from "react"
 import { Link } from "react-router-dom"
 
-import { isApiError } from "@/api/auth"
 import type { MembershipStatus } from "@/api/members"
-import { fetchAbsentMembers, type AbsentMember } from "@/api/reports"
+import { fetchAbsentMembers } from "@/api/reports"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Section } from "@/components/ui/section"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -15,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useReport } from "@/hooks/useReport"
 import { formatMemberDate } from "@/lib/date"
 
 /**
@@ -23,25 +23,10 @@ import { formatMemberDate } from "@/lib/date"
  * emergency contact's, which is not for this.
  */
 const AbsentMembersList = ({ statuses }: { statuses: MembershipStatus[] }) => {
-  const [members, setMembers] = useState<AbsentMember[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let stale = false
-    fetchAbsentMembers(statuses)
-      .then((data) => {
-        if (stale) return
-        setMembers(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (stale) return
-        setError(isApiError(err) ? err.message : "Failed to load Absent Members")
-      })
-    return () => {
-      stale = true
-    }
-  }, [statuses])
+  const { data: members, error } = useReport(
+    useCallback(() => fetchAbsentMembers(statuses), [statuses]),
+    "Failed to load Absent Members",
+  )
 
   return (
     <Section heading="Absent Members">

@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback } from "react"
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 
-import { isApiError } from "@/api/auth"
 import type { MembershipStatus } from "@/api/members"
 import { fetchTopAttendanceRates, type MemberAttendanceRate } from "@/api/reports"
 import {
@@ -13,6 +12,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state"
 import { Section } from "@/components/ui/section"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useReport } from "@/hooks/useReport"
 
 // One series, so one hue and no legend: the heading names what is plotted.
 const config = {
@@ -37,27 +37,17 @@ const AttendanceRatesChart = ({
   dateTo: string
   statuses: MembershipStatus[]
 }) => {
-  const [rates, setRates] = useState<MemberAttendanceRate[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    // An emptied date input: wait for a whole date rather than ask for none.
-    if (dateFrom === "" || dateTo === "") return
-    let stale = false
-    fetchTopAttendanceRates(dateFrom, dateTo, statuses)
-      .then((data) => {
-        if (stale) return
-        setRates(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (stale) return
-        setError(isApiError(err) ? err.message : "Failed to load Attendance Rates")
-      })
-    return () => {
-      stale = true
-    }
-  }, [dateFrom, dateTo, statuses])
+  const { data: rates, error } = useReport(
+    useCallback(
+      // An emptied date input: wait for a whole date rather than ask for none.
+      () =>
+        dateFrom === "" || dateTo === ""
+          ? null
+          : fetchTopAttendanceRates(dateFrom, dateTo, statuses),
+      [dateFrom, dateTo, statuses],
+    ),
+    "Failed to load Attendance Rates",
+  )
 
   return (
     <Section heading="Attendance Rate">
