@@ -27,11 +27,15 @@ _SEGMENT = {"start_time": "19:00", "duration_minutes": 90, "type_ids": []}
 _RANGE = {"date_from": "2026-03-01", "date_to": "2026-03-31"}
 
 
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
 @pytest.fixture
 def as_admin(db_client):
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
-    yield
-    app.dependency_overrides.pop(REQUIRE_ADMIN, None)
 
 
 async def _get(params: dict[str, str] = _RANGE, **kwargs):
