@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
 import AttendancePage from "@/pages/AttendancePage"
@@ -61,10 +60,8 @@ describe("My Attendance", () => {
 
     renderPage()
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /show attendance \(1 sessions\)/i }),
-    )
-    expect(screen.getByText("Thursday keiko")).toBeInTheDocument()
+    // Open by default here, unlike on the Member page.
+    expect(await screen.findByText("Thursday keiko")).toBeInTheDocument()
     expect(screen.getByText("Thu, 6 Mar 2025")).toBeInTheDocument()
     expect(screen.queryByText(/bbbbbbbb/)).not.toBeInTheDocument()
   })

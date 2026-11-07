@@ -9,12 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 type AttendanceHistoryCardProps = {
   memberId: string
+  /** Show the list without a click. The Member page starts collapsed. */
+  defaultOpen?: boolean
 }
 
-const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
+const AttendanceHistoryCard = ({ memberId, defaultOpen = false }: AttendanceHistoryCardProps) => {
   const [records, setRecords] = useState<MemberAttendanceRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
 
   useEffect(() => {
     getMemberAttendanceHistory(memberId)
