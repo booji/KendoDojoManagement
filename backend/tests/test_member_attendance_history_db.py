@@ -83,3 +83,15 @@ async def test_each_record_carries_its_session_title_and_date(db_client) -> None
     assert record["session_id"] == session
     assert record["session_title"] == "Thursday keiko"
     assert record["session_date"] == "2026-03-05"
+
+
+async def test_history_is_most_recent_session_first(db_client) -> None:
+    member = await _member(db_client)
+    older = await _attended(db_client, member, "Keiko", "2026-03-05")
+    newest = await _attended(db_client, member, "Keiko", "2026-04-02")
+    middle = await _attended(db_client, member, "Keiko", "2026-03-19")
+    db_client.expire_all()
+
+    history = await _history(member)
+
+    assert [r["session_id"] for r in history] == [newest, middle, older]

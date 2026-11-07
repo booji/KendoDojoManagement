@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { getMemberAttendanceHistory } from "@/api/attendance"
 import type { MemberAttendanceRecord } from "@/api/attendance"
 import { isApiError } from "@/api/auth"
-import { formatMemberDate } from "@/lib/date"
+import { formatSessionDate } from "@/lib/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -63,9 +63,9 @@ const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
               >
                 {records.map((record) => (
                   <li key={record.id} className="text-sm">
-                    <span className="font-mono text-xs">{record.session_id.slice(0, 8)}…</span>
+                    <span>{record.session_title}</span>
                     <span className="text-muted-foreground ml-2 text-xs">
-                      {formatMemberDate(record.checked_in_at)}
+                      {formatSessionDate(record.session_date)}
                     </span>
                   </li>
                 ))}

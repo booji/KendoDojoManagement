@@ -179,6 +179,7 @@ class SqlAttendanceRepository:
             select(Attendance, SessionInstance.title, SessionInstance.date)
             .join(SessionInstance, Attendance.session_id == SessionInstance.id)
             .where(Attendance.member_id == member_id)
+            .order_by(SessionInstance.date.desc(), Attendance.checked_in_at.desc())
         )
         return [
             {

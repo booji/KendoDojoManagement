@@ -40,7 +40,7 @@ beforeEach(() => {
 })
 
 describe("My Attendance", () => {
-  it("lists the signed-in Member's own Attendance", async () => {
+  it("lists each Session the signed-in Member attended, by title and date", async () => {
     serve({
       "/api/accounts/me/member": ownMember,
       [`/api/members/${MEMBER_ID}/attendance`]: () =>
@@ -50,9 +50,11 @@ describe("My Attendance", () => {
             session_id: "bbbbbbbb-0000-0000-0000-000000000001",
             member_id: MEMBER_ID,
             visitor_name: null,
-            checked_in_at: "2025-03-04T19:00:00Z",
+            checked_in_at: "2025-03-06T19:00:00Z",
             recorded_by: "x",
             display_name: null,
+            session_title: "Thursday keiko",
+            session_date: "2025-03-06",
           },
         ]),
     })
@@ -62,7 +64,9 @@ describe("My Attendance", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /show attendance \(1 sessions\)/i }),
     )
-    expect(screen.getByText(/bbbbbbbb/)).toBeInTheDocument()
+    expect(screen.getByText("Thursday keiko")).toBeInTheDocument()
+    expect(screen.getByText("Thu, 6 Mar 2025")).toBeInTheDocument()
+    expect(screen.queryByText(/bbbbbbbb/)).not.toBeInTheDocument()
   })
 
   it("shows an empty state, not an error, when the Account has no Member", async () => {
