@@ -33,14 +33,14 @@ def longest_streak(
     held_weeks = sorted({_monday(d) for d in in_year(held)})
     attended_weeks = {_monday(d) for d in in_year(attended)}
     # The current week has not ended, so until it has Attendance it can
-    # neither break nor extend the streak.
+    # neither break nor extend an Attendance Streak.
     this_week = _monday(today)
     if this_week not in attended_weeks and this_week in held_weeks:
         held_weeks.remove(this_week)
-    run = best = 0
+    current = best = 0
     for week in held_weeks:
-        run = run + 1 if week in attended_weeks else 0
-        best = max(best, run)
-    # The run still open at the end is unbroken as of today. On a tie it is the
-    # one reported, so the chart can mark it.
-    return Streak(weeks=best, running=run > 0 and run == best)
+        current = current + 1 if week in attended_weeks else 0
+        best = max(best, current)
+    # The Attendance Streak still open at the end is unbroken as of today. On a
+    # tie it is the one reported, so the chart can mark it.
+    return Streak(weeks=best, running=current > 0 and current == best)

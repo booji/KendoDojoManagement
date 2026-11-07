@@ -21,8 +21,8 @@ const config = {
 
 const ROW_HEIGHT = 32
 
-// A running streak is marked in the bar's label, so it never rests on colour.
-const label = (s: AttendanceStreak) => (s.running ? `${s.weeks} · running` : `${s.weeks}`)
+// An unbroken Attendance Streak is marked in the bar's label, so it never rests on colour.
+const label = (s: AttendanceStreak) => (s.running ? `${s.weeks} · unbroken` : `${s.weeks}`)
 
 /**
  * The 10 longest Attendance Streaks (GLOSSARY.md) this year, for the Charts
@@ -52,7 +52,7 @@ const AttendanceStreaksChart = ({ statuses }: { statuses: MembershipStatus[] }) 
   return (
     <Section heading="Attendance Streaks">
       <p className="text-sm text-muted-foreground">
-        Longest runs of consecutive weeks attended, 1 January to today.
+        Longest Attendance Streaks of consecutive weeks attended, 1 January to today.
       </p>
       {error !== null ? (
         <p className="text-sm text-destructive" role="alert">
@@ -108,7 +108,7 @@ const AttendanceStreaksChart = ({ statuses }: { statuses: MembershipStatus[] }) 
               <tr>
                 <th scope="col">Member</th>
                 <th scope="col">Weeks</th>
-                <th scope="col">Still running</th>
+                <th scope="col">Unbroken</th>
               </tr>
             </thead>
             <tbody>

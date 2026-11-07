@@ -1,6 +1,6 @@
 /**
  * The Attendance Streaks chart on the Charts tab (#563): the 10 longest this
- * year, a running one marked. The server owns the week walk; these tests cover
+ * year, an unbroken one marked. The server owns the week walk; these tests cover
  * what the Admin asks for and what they are shown.
  */
 
@@ -39,7 +39,7 @@ afterEach(() => {
 })
 
 describe("Attendance Streaks chart", () => {
-  it("lists the longest streaks this year, marking one still running", async () => {
+  it("lists the longest Attendance Streaks this year, marking one still unbroken", async () => {
     const fetchMock = stubFetch()
 
     render(<ChartsTab />)
@@ -65,7 +65,7 @@ describe("Attendance Streaks chart", () => {
     )
   })
 
-  it("says so when nobody has a streak this year", async () => {
+  it("says so when nobody has an Attendance Streak this year", async () => {
     stubFetch([])
 
     render(<ChartsTab />)
