@@ -9,6 +9,7 @@ import {
   type GradeCount,
   type SessionHeadcount,
 } from "@/api/reports"
+import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import HeadcountChart from "@/components/reports/HeadcountChart"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -136,24 +137,29 @@ const ChartsTab = () => {
         )}
       </Section>
 
-      <Section heading="Grade distribution">
-        <p className="text-sm text-muted-foreground">
-          Members by current Grade, as of today.
-        </p>
-        {statuses.length === 0 ? (
-          <EmptyState message="Choose at least one Membership Status." />
-        ) : error !== null ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : grades === null ? (
-          <Skeleton className="h-64 w-full rounded-lg" />
-        ) : grades.length === 0 ? (
-          <EmptyState message="No Members with these Membership Statuses." />
-        ) : (
-          <GradeDistributionChart grades={grades} />
-        )}
-      </Section>
+      {statuses.length === 0 ? (
+        <EmptyState message="Choose at least one Membership Status." />
+      ) : (
+        <>
+          <Section heading="Grade distribution">
+            <p className="text-sm text-muted-foreground">
+              Members by current Grade, as of today.
+            </p>
+            {error !== null ? (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : grades === null ? (
+              <Skeleton className="h-64 w-full rounded-lg" />
+            ) : grades.length === 0 ? (
+              <EmptyState message="No Members with these Membership Statuses." />
+            ) : (
+              <GradeDistributionChart grades={grades} />
+            )}
+          </Section>
+          <AttendanceStreaksChart statuses={statuses} />
+        </>
+      )}
     </div>
   )
 }

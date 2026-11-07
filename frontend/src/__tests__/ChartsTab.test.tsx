@@ -38,6 +38,7 @@ const stubFetch = (
   return fetchMock
 }
 
+// The grade distribution's requests only, unless another path is given.
 const requestedUrls = (
   fetchMock: ReturnType<typeof stubFetch>,
   path = "/api/reports/grades",
@@ -87,6 +88,7 @@ describe("Charts tab", () => {
     const fetchMock = stubFetch()
     render(<ChartsTab />)
     await screen.findByRole("table", { name: "Grade distribution" })
+    const before = fetchMock.mock.calls.length
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Active" }))
 
@@ -94,7 +96,7 @@ describe("Charts tab", () => {
       screen.getByText("Choose at least one Membership Status."),
     ).toBeInTheDocument()
     expect(screen.queryByRole("table", { name: "Grade distribution" })).toBeNull()
-    expect(requestedUrls(fetchMock)).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(before)
   })
 
   it("says so when no Member is counted", async () => {

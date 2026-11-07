@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import date
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,11 @@ class AbstractReportRepository(ABC):
 
     @abstractmethod
     async def headcount(self, date_from: str, date_to: str) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    async def attendance_streaks(
+        self, statuses: list[MembershipStatus], today: date
+    ) -> list[dict[str, Any]]: ...
 
 
 class SqlReportRepository(AbstractReportRepository):
@@ -233,3 +239,60 @@ class SqlReportRepository(AbstractReportRepository):
             {"session_id": sid, "date": d, "members": m, "visitors": v}
             for sid, d, m, v in (await self._session.execute(stmt)).all()
         ]
+
+    async def attendance_streaks(
+        self, statuses: list[MembershipStatus], today: date
+    ) -> list[dict[str, Any]]:
+        """The 10 longest Attendance Streaks (GLOSSARY.md) from 1 January to
+        today, one per Member with one of these Membership Statuses, longest
+        first. ``running`` marks a streak still unbroken as of today.
+
+        Visitors are not Members, so they never have one.
+        """
+        from collections import defaultdict
+
+        from sqlalchemy import select
+
+        from app.attendance.db_models import Attendance
+        from app.members.db_models import Member
+        from app.reports.streaks import longest_streak
+        from app.sessions.db_models import SessionInstance
+
+        in_year = (
+            SessionInstance.date >= date(today.year, 1, 1).isoformat(),
+            SessionInstance.date <= today.isoformat(),
+            SessionInstance.cancelled.is_(False),
+        )
+        held = await self._session.execute(select(SessionInstance.date).where(*in_year))
+        held_dates = [date.fromisoformat(d) for d in held.scalars()]
+
+        rows = await self._session.execute(
+            select(
+                Member.id,
+                Member.display_name,
+                Member.first_name,
+                Member.surname,
+                SessionInstance.date,
+            )
+            .join(Attendance, Attendance.member_id == Member.id)
+            .join(SessionInstance, SessionInstance.id == Attendance.session_id)
+            .where(Member.membership_status.in_(statuses), *in_year)
+        )
+        names: dict[str, str | None] = {}
+        attended: dict[str, list[date]] = defaultdict(list)
+        for member_id, display_name, first_name, surname, day in rows.all():
+            names[member_id] = member_name(display_name, first_name, surname)
+            attended[member_id].append(date.fromisoformat(day))
+
+        streaks = [
+            {
+                "member_id": member_id,
+                "display_name": names[member_id],
+                "weeks": streak.weeks,
+                "running": streak.running,
+            }
+            for member_id, days in attended.items()
+            if (streak := longest_streak(held_dates, days, today)).weeks
+        ]
+        streaks.sort(key=lambda s: (-s["weeks"], s["display_name"] or ""))
+        return streaks[:10]
