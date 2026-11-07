@@ -156,7 +156,14 @@ async def members_csv(
     log_admin_event("report_exported", claims.sub, report="members")
     output = io.StringIO()
     writer = csv.DictWriter(
-        output, fieldnames=["member_id", "display_name", "join_date", "current_grade"]
+        output,
+        fieldnames=[
+            "member_id",
+            "display_name",
+            "join_date",
+            "current_grade",
+            "grade_number",
+        ],
     )
     writer.writeheader()
     writer.writerows(_sanitize_row(r) for r in members)

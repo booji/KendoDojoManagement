@@ -224,6 +224,7 @@ class SqlReportRepository(AbstractReportRepository):
         rows = []
         for member in members:
             current = grades.get(member.id)
+            grade = Grade(current["grade"]) if current else None
             rows.append(
                 {
                     "member_id": member.id,
@@ -231,9 +232,8 @@ class SqlReportRepository(AbstractReportRepository):
                         member.display_name, member.first_name, member.surname
                     ),
                     "join_date": member.join_date,
-                    "current_grade": (
-                        Grade(current["grade"]).short_name if current else None
-                    ),
+                    "current_grade": grade.short_name if grade else None,
+                    "grade_number": grade.number if grade else None,
                 }
             )
         return rows

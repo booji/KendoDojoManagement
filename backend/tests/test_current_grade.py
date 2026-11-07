@@ -76,11 +76,12 @@ async def test_only_pending_promotions_means_no_current_grade(db_session) -> Non
     assert await SqlGradeRepository(db_session).get_current_grade(member_id) is None
 
 
-async def test_members_csv_writes_the_short_name_of_the_confirmed_grade(
+async def test_members_csv_writes_the_confirmed_grade_name_and_number(
     db_client,
 ) -> None:
-    """The members CSV's current_grade is the short Grade name (#571): the
-    latest confirmed Promotion, blank for a Member with none."""
+    """The members CSV's current_grade is the short Grade name, and
+    grade_number right after it the sortable Grade number (#571): the latest
+    confirmed Promotion, both blank for a Member with none."""
     shodan = await _member(db_client)
     await _confirmed_shodan_then_pending_nidan(db_client, shodan)
     ikkyuu = await _member(db_client)
@@ -96,7 +97,16 @@ async def test_members_csv_writes_the_short_name_of_the_confirmed_grade(
         response = await c.get("/reports/members/csv")
 
     assert response.status_code == 200, response.text
-    rows = {r["member_id"]: r for r in csv.DictReader(io.StringIO(response.text))}
-    assert rows[shodan]["current_grade"] == "Shodan"
-    assert rows[ikkyuu]["current_grade"] == "Ikkyū"
-    assert rows[ungraded]["current_grade"] == ""
+    reader = csv.DictReader(io.StringIO(response.text))
+    rows = {r["member_id"]: r for r in reader}
+    assert reader.fieldnames == [
+        "member_id",
+        "display_name",
+        "join_date",
+        "current_grade",
+        "grade_number",
+    ]
+    grade = {m: (rows[m]["current_grade"], rows[m]["grade_number"]) for m in rows}
+    assert grade[shodan] == ("Shodan", "1")
+    assert grade[ikkyuu] == ("Ikkyū", "-1")
+    assert grade[ungraded] == ("", "")
