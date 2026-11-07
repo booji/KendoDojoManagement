@@ -126,3 +126,21 @@ export const fetchAttendanceStreaks = async (
     errorMessage: "Failed to fetch Attendance Streaks",
   })
 }
+
+export type AbsentMember = {
+  member_id: string
+  display_name: string
+  email: string | null
+  last_attended: string | null
+  days_absent: number
+}
+
+/** Members with no Attendance in the last 14 days, as of today, longest first. */
+export const fetchAbsentMembers = async (
+  statuses: MembershipStatus[],
+): Promise<AbsentMember[]> => {
+  const params = new URLSearchParams(statuses.map((s) => ["status", s]))
+  return request<AbsentMember[]>(`/api/reports/absent-members?${params.toString()}`, {
+    errorMessage: "Failed to fetch Absent Members",
+  })
+}

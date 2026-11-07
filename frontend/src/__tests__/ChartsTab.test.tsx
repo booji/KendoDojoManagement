@@ -25,8 +25,16 @@ const stubFetch = (
   body: unknown = MUKYU_3_SHODAN_1,
   headcount: unknown = TWO_SESSIONS,
 ) => {
+  // Answers per URL: grades get `body`, the headcount gets `headcount`; the
+  // tab's other views (Attendance Streaks, Absent Members) get an empty list,
+  // tested in their own files.
   const fetchMock = vi.fn((url: string) => {
-    const data = url.includes("/headcount") ? headcount : body
+    const path = String(url)
+    const data = path.startsWith("/api/reports/grades")
+      ? body
+      : path.startsWith("/api/reports/headcount")
+        ? headcount
+        : []
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -97,6 +105,7 @@ describe("Charts tab", () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole("table", { name: "Grade distribution" })).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(before)
+    expect(requestedUrls(fetchMock)).toHaveLength(1)
   })
 
   it("says so when no Member is counted", async () => {
@@ -162,28 +171,19 @@ describe("Headcount per Session", () => {
   })
 
   it("shows the server's reason when it refuses the range", async () => {
-    const fetchMock = vi.fn((url: string) =>
-      Promise.resolve(
-        url.includes("/headcount")
-          ? ({
-              ok: false,
-              status: 422,
-              json: () =>
-                Promise.resolve({ detail: "Date range must not exceed 366 days" }),
-              text: () =>
-                Promise.resolve(
-                  JSON.stringify({ detail: "Date range must not exceed 366 days" }),
-                ),
-            } as unknown as Response)
-          : ({
-              ok: true,
-              status: 200,
-              json: () => Promise.resolve(MUKYU_3_SHODAN_1),
-              text: () => Promise.resolve(JSON.stringify(MUKYU_3_SHODAN_1)),
-            } as unknown as Response),
-      ),
+    const fetchMock = stubFetch()
+    const answer = fetchMock.getMockImplementation()!
+    const refusal = { detail: "Date range must not exceed 366 days" }
+    fetchMock.mockImplementation((url: string) =>
+      url.includes("/headcount")
+        ? Promise.resolve({
+            ok: false,
+            status: 422,
+            json: () => Promise.resolve(refusal),
+            text: () => Promise.resolve(JSON.stringify(refusal)),
+          } as unknown as Response)
+        : answer(url),
     )
-    vi.stubGlobal("fetch", fetchMock)
 
     render(<ChartsTab />)
 

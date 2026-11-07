@@ -102,6 +102,15 @@ async def attendance_streaks(
     return await repo.attendance_streaks(status, date.today())
 
 
+@router.get("/absent-members")
+async def absent_members(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.absent_members(status, date.today())
+
+
 @router.get("/attendance/csv")
 async def attendance_csv(
     date_from: date,
