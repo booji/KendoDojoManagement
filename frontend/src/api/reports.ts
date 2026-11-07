@@ -90,3 +90,77 @@ export const fetchGradeDistribution = async (
     errorMessage: "Failed to fetch grade distribution",
   })
 }
+
+export type SessionHeadcount = {
+  session_id: string
+  date: string
+  members: number
+  visitors: number
+}
+
+/** Members and Visitors at each held Session in the range, oldest first. */
+export const fetchHeadcount = async (
+  dateFrom: string,
+  dateTo: string,
+): Promise<SessionHeadcount[]> => {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+  return request<SessionHeadcount[]>(`/api/reports/headcount?${params.toString()}`, {
+    errorMessage: "Failed to fetch headcount",
+  })
+}
+
+export type AttendanceStreak = {
+  member_id: string
+  display_name: string
+  weeks: number
+  /** Still unbroken as of today. */
+  running: boolean
+}
+
+/** The 10 longest Attendance Streaks from 1 January to today, longest first. */
+export const fetchAttendanceStreaks = async (
+  statuses: MembershipStatus[],
+): Promise<AttendanceStreak[]> => {
+  const params = new URLSearchParams(statuses.map((s) => ["status", s]))
+  return request<AttendanceStreak[]>(`/api/reports/streaks?${params.toString()}`, {
+    errorMessage: "Failed to fetch Attendance Streaks",
+  })
+}
+
+/**
+ * The 10 highest Attendance Rates in the range, highest first, among Members
+ * with 4 or more eligible held Sessions in it.
+ */
+export const fetchTopAttendanceRates = async (
+  dateFrom: string,
+  dateTo: string,
+  statuses: MembershipStatus[],
+): Promise<MemberAttendanceRate[]> => {
+  const params = new URLSearchParams([
+    ["date_from", dateFrom],
+    ["date_to", dateTo],
+    ...statuses.map((s) => ["status", s]),
+  ])
+  return request<MemberAttendanceRate[]>(
+    `/api/reports/attendance-rates?${params.toString()}`,
+    { errorMessage: "Failed to fetch Attendance Rates" },
+  )
+}
+
+export type AbsentMember = {
+  member_id: string
+  display_name: string
+  email: string | null
+  last_attended: string | null
+  days_absent: number
+}
+
+/** Members with no Attendance in the last 14 days, as of today, longest first. */
+export const fetchAbsentMembers = async (
+  statuses: MembershipStatus[],
+): Promise<AbsentMember[]> => {
+  const params = new URLSearchParams(statuses.map((s) => ["status", s]))
+  return request<AbsentMember[]>(`/api/reports/absent-members?${params.toString()}`, {
+    errorMessage: "Failed to fetch Absent Members",
+  })
+}

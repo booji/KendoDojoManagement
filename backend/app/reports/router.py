@@ -80,6 +80,53 @@ async def grade_distribution(
     return await repo.grade_distribution(status)
 
 
+@router.get("/headcount")
+async def headcount(
+    date_from: date,
+    date_to: date,
+    claims: _Admin,
+    repo: _ReportRepo,
+) -> list[dict[str, Any]]:
+    _validate_date_range(date_from, date_to)
+    return await repo.headcount(date_from.isoformat(), date_to.isoformat())
+
+
+@router.get("/attendance-rates")
+async def top_attendance_rates(
+    date_from: date,
+    date_to: date,
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    """Top 10 Attendance Rates over the range, among Members with at least 4
+    eligible held Sessions in it."""
+    _validate_date_range(date_from, date_to)
+    return await repo.top_attendance_rates(
+        date_from.isoformat(), date_to.isoformat(), status
+    )
+
+
+@router.get("/streaks")
+async def attendance_streaks(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    """Top 10 Attendance Streaks this year. Takes no date range: a streak
+    always covers 1 January to today."""
+    return await repo.attendance_streaks(status, date.today())
+
+
+@router.get("/absent-members")
+async def absent_members(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.absent_members(status, date.today())
+
+
 @router.get("/attendance/csv")
 async def attendance_csv(
     date_from: date,
