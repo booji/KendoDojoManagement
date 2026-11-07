@@ -127,6 +127,26 @@ export const fetchAttendanceStreaks = async (
   })
 }
 
+/**
+ * The 10 highest Attendance Rates in the range, highest first, among Members
+ * with 4 or more eligible held Sessions in it.
+ */
+export const fetchTopAttendanceRates = async (
+  dateFrom: string,
+  dateTo: string,
+  statuses: MembershipStatus[],
+): Promise<MemberAttendanceRate[]> => {
+  const params = new URLSearchParams([
+    ["date_from", dateFrom],
+    ["date_to", dateTo],
+    ...statuses.map((s) => ["status", s]),
+  ])
+  return request<MemberAttendanceRate[]>(
+    `/api/reports/attendance-rates?${params.toString()}`,
+    { errorMessage: "Failed to fetch Attendance Rates" },
+  )
+}
+
 export type AbsentMember = {
   member_id: string
   display_name: string

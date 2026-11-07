@@ -10,6 +10,7 @@ import {
   type SessionHeadcount,
 } from "@/api/reports"
 import AbsentMembersList from "@/components/reports/AbsentMembersList"
+import AttendanceRatesChart from "@/components/reports/AttendanceRatesChart"
 import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
 import GradeDistributionChart from "@/components/reports/GradeDistributionChart"
 import HeadcountChart from "@/components/reports/HeadcountChart"
@@ -158,6 +159,7 @@ const ChartsTab = () => {
               <GradeDistributionChart grades={grades} />
             )}
           </Section>
+          <AttendanceRatesChart dateFrom={dateFrom} dateTo={dateTo} statuses={statuses} />
           <AttendanceStreaksChart statuses={statuses} />
           <AbsentMembersList statuses={statuses} />
         </>
