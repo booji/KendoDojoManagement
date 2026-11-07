@@ -232,6 +232,28 @@ def test_bottom_tab_bar_renders_on_mobile_viewport(member_page: Page) -> None:
     expect(tab_bar).to_be_visible()
 
 
+def test_my_attendance_tab_label_fits_one_line_at_375px(member_page: Page) -> None:
+    """Issue #572: in the 375px bottom tab bar the My Attendance tab's label
+    sits on one line, unclipped, like its neighbours."""
+    member_page.set_viewport_size({"width": 375, "height": 667})
+    tab = member_page.get_by_role("navigation", name="Main navigation").get_by_role(
+        "link", name="My Attendance"
+    )
+    expect(tab).to_be_visible()
+
+    metrics = tab.locator("span").evaluate(
+        """el => ({
+            height: el.getBoundingClientRect().height,
+            lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+            text: el.textContent,
+        })"""
+    )
+    assert metrics["height"] <= metrics["lineHeight"] * 1.5, metrics
+    assert metrics["scrollWidth"] <= metrics["clientWidth"], metrics
+
+
 def test_member_nav_excludes_restricted_sections(member_page: Page) -> None:
     """Issue #12: Member nav does NOT contain Members, Grades, Reports, Settings links."""
     member_page.set_viewport_size({"width": 1280, "height": 800})
