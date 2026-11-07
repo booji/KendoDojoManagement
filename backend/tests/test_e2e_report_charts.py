@@ -70,3 +70,28 @@ def test_admin_sees_the_grade_distribution_chart(
     expect(
         page.locator("[data-slot=chart]").get_by_text("Mukyū", exact=True)
     ).to_be_visible()
+
+
+def test_admin_sees_the_headcount_over_the_range(
+    page: Page, admin_claims: AccountClaims
+) -> None:
+    # Other tests decide whether the range holds any Session, so this checks
+    # the headcount loads (a chart or its empty state), not what it counts.
+    token = login_as(admin_claims)
+    complete_onboarding(token)
+    page.context.add_cookies(
+        [{"name": "access_token", "value": token, "url": BASE_URL}]
+    )
+
+    page.goto(f"{BASE_URL}/reports")
+    page.get_by_role("tab", name="Charts").click()
+    charts = page.get_by_role("tabpanel", name="Charts")
+
+    expect(charts.get_by_label("From")).not_to_have_value("")
+    expect(charts.get_by_role("heading", name="Headcount per Session")).to_be_visible()
+    expect(
+        charts.get_by_role("table", name="Headcount per Session").or_(
+            charts.get_by_text("No held Sessions in this range.")
+        )
+    ).to_be_attached()
+    expect(charts.get_by_role("alert")).to_have_count(0)
