@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { getMyMember } from "@/api/accounts"
 import { isApiError } from "@/api/auth"
 import AttendanceHistoryCard from "@/components/AttendanceHistoryCard"
+import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -32,10 +33,12 @@ const AttendancePage = () => {
       </p>
       {error !== null ? (
         <p className="text-sm text-destructive" role="alert">{error}</p>
-      ) : memberId ? (
-        <AttendanceHistoryCard memberId={memberId} />
-      ) : (
+      ) : memberId === undefined ? (
         <Skeleton className="h-24 w-full" />
+      ) : memberId === null ? (
+        <EmptyState message="Your account has no Member record yet, so there is no attendance to show." />
+      ) : (
+        <AttendanceHistoryCard memberId={memberId} />
       )}
     </div>
   )

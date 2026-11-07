@@ -64,4 +64,36 @@ describe("My Attendance", () => {
     )
     expect(screen.getByText(/bbbbbbbb/)).toBeInTheDocument()
   })
+
+  it("shows an empty state, not an error, when the Account has no Member", async () => {
+    serve({})
+
+    renderPage()
+
+    expect(await screen.findByText(/no member record/i)).toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+  })
+
+  it("shows an empty state, not an error, when the Member has no Attendance", async () => {
+    serve({
+      "/api/accounts/me/member": ownMember,
+      [`/api/members/${MEMBER_ID}/attendance`]: () => json([]),
+    })
+
+    renderPage()
+
+    expect(await screen.findByText(/no attendance records yet/i)).toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+  })
+
+  it("points to the Sessions page for check-in", async () => {
+    serve({})
+
+    renderPage()
+
+    expect(screen.getByRole("link", { name: /sessions page/i })).toHaveAttribute(
+      "href",
+      "/sessions",
+    )
+  })
 })
