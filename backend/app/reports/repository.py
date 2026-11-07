@@ -143,9 +143,9 @@ class SqlReportRepository(AbstractReportRepository):
         return ranked[:10]
 
     async def _attendance_rates(
-        self, date_from: str, date_to: str, which: Callable[[Any], Any]
+        self, date_from: str, date_to: str, where_for: Callable[[Any], Any]
     ) -> list[dict[str, Any]]:
-        """Attendance Rate in range for the Members ``which`` picks. It is
+        """Attendance Rate in range for the Members ``where_for`` picks. It is
         given the Member's attended count (NULL when they attended none) and
         returns a WHERE clause; a Member with no eligible held Session is
         dropped.
@@ -186,7 +186,7 @@ class SqlReportRepository(AbstractReportRepository):
                 func.coalesce(attended.c.cnt, 0),
             )
             .outerjoin(attended, attended.c.member_id == Member.id)
-            .where(which(attended.c.cnt))
+            .where(where_for(attended.c.cnt))
         )
 
         rows = []
@@ -402,16 +402,22 @@ class SqlReportRepository(AbstractReportRepository):
             .order_by(since, Member.surname, Member.first_name)
         )
         rows = []
-        for member_id, display_name, first_name, surname, email, last_attended, s in (
-            await self._session.execute(stmt)
-        ).all():
+        for (
+            member_id,
+            display_name,
+            first_name,
+            surname,
+            email,
+            last_attended,
+            since_day,
+        ) in (await self._session.execute(stmt)).all():
             rows.append(
                 {
                     "member_id": member_id,
                     "display_name": member_name(display_name, first_name, surname),
                     "email": email,
                     "last_attended": last_attended,
-                    "days_absent": (today - date.fromisoformat(s)).days,
+                    "days_absent": (today - date.fromisoformat(since_day)).days,
                 }
             )
         return rows
