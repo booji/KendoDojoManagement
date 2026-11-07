@@ -76,3 +76,10 @@ class MemberResponse(BaseModel):
     emergency_contact_phone: str | None
     anonymised_at: str | None = None
     anonymised_by: str | None = None
+
+
+class MemberListItem(MemberResponse):
+    """A row of GET /members: the Member plus their current Grade's display
+    name, None for a Member with no confirmed Promotion (#571)."""
+
+    current_grade: str | None
