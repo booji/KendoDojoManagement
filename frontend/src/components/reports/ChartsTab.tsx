@@ -1,8 +1,7 @@
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import { format, subDays } from "date-fns"
 
 import { MEMBERSHIP_STATUSES, type MembershipStatus } from "@/api/members"
-import { fetchGradeDistribution } from "@/api/reports"
 import AbsentMembersList from "@/components/reports/AbsentMembersList"
 import AttendanceRatesChart from "@/components/reports/AttendanceRatesChart"
 import AttendanceStreaksChart from "@/components/reports/AttendanceStreaksChart"
@@ -12,9 +11,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Section } from "@/components/ui/section"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useReport } from "@/hooks/useReport"
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd")
 
@@ -27,13 +23,6 @@ const ChartsTab = () => {
   const [statuses, setStatuses] = useState<MembershipStatus[]>(["active"])
   const [dateFrom, setDateFrom] = useState(() => ymd(subDays(new Date(), 90)))
   const [dateTo, setDateTo] = useState(() => ymd(new Date()))
-  const { data: grades, error } = useReport(
-    useCallback(
-      () => (statuses.length === 0 ? null : fetchGradeDistribution(statuses)),
-      [statuses],
-    ),
-    "Failed to load grade distribution",
-  )
 
   const toggle = (value: MembershipStatus, checked: boolean) =>
     setStatuses(
@@ -88,22 +77,7 @@ const ChartsTab = () => {
         <EmptyState message="Choose at least one Membership Status." />
       ) : (
         <>
-          <Section heading="Grade distribution">
-            <p className="text-sm text-muted-foreground">
-              Members by current Grade, as of today.
-            </p>
-            {error !== null ? (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : grades === null ? (
-              <Skeleton className="h-64 w-full rounded-lg" />
-            ) : grades.length === 0 ? (
-              <EmptyState message="No Members with these Membership Statuses." />
-            ) : (
-              <GradeDistributionChart grades={grades} />
-            )}
-          </Section>
+          <GradeDistributionChart statuses={statuses} />
           <AttendanceRatesChart dateFrom={dateFrom} dateTo={dateTo} statuses={statuses} />
           <AttendanceStreaksChart statuses={statuses} />
           <AbsentMembersList statuses={statuses} />
