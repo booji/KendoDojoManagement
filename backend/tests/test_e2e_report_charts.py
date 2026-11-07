@@ -67,6 +67,9 @@ def test_admin_sees_the_grade_distribution_chart(
     expect(page.get_by_role("checkbox", name="Active", exact=True)).to_be_checked()
     expect(page.get_by_role("heading", name="Grade distribution")).to_be_visible()
     expect(page.get_by_role("heading", name="Attendance Streaks")).to_be_visible()
+    expect(
+        page.get_by_role("heading", name="Attendance Rate", exact=True)
+    ).to_be_visible()
     expect(page.locator(".recharts-bar-rectangle").first).to_be_visible()
     expect(
         page.locator("[data-slot=chart]").get_by_text("Mukyū", exact=True)
