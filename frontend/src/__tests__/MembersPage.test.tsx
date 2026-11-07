@@ -10,7 +10,7 @@ import { MemoryRouter } from "react-router-dom"
 
 import MembersPage from "@/pages/MembersPage"
 
-const member = (id: string, first_name: string, current_grade: string | null) => ({
+const member = (id: string, first_name: string, current_grade_name: string | null) => ({
   id,
   email: `${id}@dojo.test`,
   first_name,
@@ -25,7 +25,7 @@ const member = (id: string, first_name: string, current_grade: string | null) =>
   emergency_contact_phone: null,
   anonymised_at: null,
   anonymised_by: null,
-  current_grade,
+  current_grade_name,
 })
 
 const MEMBERS = [member("m-1", "Kenji", "Shodan (1-dan)"), member("m-2", "Ai", null)]

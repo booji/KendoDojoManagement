@@ -343,7 +343,7 @@ const MemberRow = ({ member, onClick }: MemberRowProps) => (
       <StatusBadge status={member.membership_status} />
     </td>
     <td className="py-3 px-2 text-muted-foreground">
-      {member.current_grade ?? "—"}
+      {member.current_grade_name ?? "—"}
     </td>
     <td className="py-3 px-2 hidden sm:table-cell">
       <RoleBadges member={member} />
@@ -370,7 +370,7 @@ const MemberCard = ({ member, onClick }: MemberRowProps) => (
         <div className="min-w-0">
           <p className="font-medium truncate">{formatMemberName(member)}</p>
           <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-          <p className="text-xs text-muted-foreground truncate">{member.current_grade ?? "—"}</p>
+          <p className="text-xs text-muted-foreground truncate">{member.current_grade_name ?? "—"}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <StatusBadge status={member.membership_status} />
             <RoleBadges member={member} />
@@ -428,7 +428,7 @@ const MembersPage = () => {
   const handleCreated = (member: MemberResponse) => {
     setAddOpen(false)
     // A new Member has no Promotion yet, so no current Grade.
-    const row = { ...member, current_grade: null }
+    const row = { ...member, current_grade_name: null }
     setMembers((prev) => (prev !== null ? [row, ...prev] : [row]))
   }
 

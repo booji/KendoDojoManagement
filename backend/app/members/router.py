@@ -123,7 +123,7 @@ async def list_members(
     return [
         MemberListItem(
             **_to_response(r).model_dump(),
-            current_grade=grades[r["id"]]["display_name"]
+            current_grade_name=grades[r["id"]]["display_name"]
             if r["id"] in grades
             else None,
         )

@@ -57,7 +57,7 @@ export type UpdateMemberRequest = {
 
 /** A row of GET /api/members: the Member plus their current Grade's display
  * name, null for a Member with no confirmed Promotion. */
-export type MemberListItem = MemberResponse & { current_grade: string | null }
+export type MemberListItem = MemberResponse & { current_grade_name: string | null }
 
 export type ListMembersParams = {
   status?: MembershipStatus

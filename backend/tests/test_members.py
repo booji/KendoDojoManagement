@@ -701,7 +701,7 @@ async def test_get_members_shows_each_members_current_grade(
     ) as c:
         response = await c.get("/members")
     assert response.status_code == 200
-    grades = {m["id"]: m["current_grade"] for m in response.json()}
+    grades = {m["id"]: m["current_grade_name"] for m in response.json()}
     assert grades == {graded["id"]: "Shodan (1-dan)", ungraded["id"]: None}
 
 

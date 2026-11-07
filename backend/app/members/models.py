@@ -82,4 +82,4 @@ class MemberListItem(MemberResponse):
     """A row of GET /members: the Member plus their current Grade's display
     name, None for a Member with no confirmed Promotion (#571)."""
 
-    current_grade: str | None
+    current_grade_name: str | None
