@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { getMemberAttendanceHistory } from "@/api/attendance"
-import type { AttendanceRecord } from "@/api/attendance"
+import type { MemberAttendanceRecord } from "@/api/attendance"
 import { isApiError } from "@/api/auth"
 import { formatMemberDate } from "@/lib/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ type AttendanceHistoryCardProps = {
 }
 
 const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
-  const [records, setRecords] = useState<AttendanceRecord[] | null>(null)
+  const [records, setRecords] = useState<MemberAttendanceRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 

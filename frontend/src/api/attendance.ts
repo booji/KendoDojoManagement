@@ -10,6 +10,12 @@ export type AttendanceRecord = {
   display_name: string | null
 }
 
+/** A record in a Member's Attendance history, with the Session it was at. */
+export type MemberAttendanceRecord = AttendanceRecord & {
+  session_title: string
+  session_date: string
+}
+
 // Structured detail returned by POST /sessions/{id}/checkin when the
 // check-in window (issue #192) rejects the attempt with a 403.
 export type CheckinWindowError = {
@@ -109,6 +115,6 @@ export const addVisitor = async (sessionId: string, visitorName: string): Promis
   return request<AttendanceRecord>(`/api/sessions/${sessionId}/visitors`, { method: "POST", body: { visitor_name: visitorName }, errorMessage: "Failed to add visitor" })
 }
 
-export const getMemberAttendanceHistory = async (memberId: string): Promise<AttendanceRecord[]> => {
-  return request<AttendanceRecord[]>(`/api/members/${memberId}/attendance`, { errorMessage: "Failed to fetch attendance history" })
+export const getMemberAttendanceHistory = async (memberId: string): Promise<MemberAttendanceRecord[]> => {
+  return request<MemberAttendanceRecord[]>(`/api/members/${memberId}/attendance`, { errorMessage: "Failed to fetch attendance history" })
 }
