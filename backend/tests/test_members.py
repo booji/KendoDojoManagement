@@ -30,9 +30,10 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo  # noqa: F401 — will fail (red)
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryGradeRepository, InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -84,6 +85,14 @@ def clear_overrides():
 def member_repo() -> InMemoryMemberRepository:
     repo = InMemoryMemberRepository()
     app.dependency_overrides[get_member_repo] = lambda: repo
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def grade_repo() -> InMemoryGradeRepository:
+    """GET /members reads current Grades: keep it off the database."""
+    repo = InMemoryGradeRepository()
+    app.dependency_overrides[get_grade_repo] = lambda: repo
     return repo
 
 
@@ -665,6 +674,35 @@ async def test_get_members_returns_all_for_admin(member_repo) -> None:
         response = await c.get("/members")
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+async def test_get_members_shows_each_members_current_grade(
+    member_repo, grade_repo
+) -> None:
+    """The list carries each Member's current Grade (#571): their latest
+    confirmed Promotion, never a pending one; None for a Member with none."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    graded = await member_repo.add(_valid_member_payload(email="g@dojo.test"))
+    ungraded = await member_repo.add(_valid_member_payload(email="u@dojo.test"))
+    await grade_repo.add_promotion(
+        graded["id"], "SHODAN", "Shodan (1-dan)", None, "2024-01-01T10:00:00+00:00"
+    )
+    await grade_repo.add_promotion(
+        graded["id"],
+        "NIDAN",
+        "Nidan (2-dan)",
+        None,
+        "2025-01-01T10:00:00+00:00",
+        status="pending",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/members")
+    assert response.status_code == 200
+    grades = {m["id"]: m["current_grade_name"] for m in response.json()}
+    assert grades == {graded["id"]: "Shodan (1-dan)", ungraded["id"]: None}
 
 
 async def test_get_members_filter_by_active_status(member_repo) -> None:

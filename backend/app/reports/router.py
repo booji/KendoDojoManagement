@@ -61,14 +61,6 @@ async def attendance_report(
     return {"sessions": sessions, "member_rates": member_rates}
 
 
-@router.get("/members")
-async def members_report(
-    claims: _Admin,
-    repo: _ReportRepo,
-) -> list[dict[str, Any]]:
-    return await repo.members_report()
-
-
 @router.get("/grades")
 async def grade_distribution(
     claims: _Admin,
@@ -164,7 +156,14 @@ async def members_csv(
     log_admin_event("report_exported", claims.sub, report="members")
     output = io.StringIO()
     writer = csv.DictWriter(
-        output, fieldnames=["member_id", "display_name", "join_date", "current_grade"]
+        output,
+        fieldnames=[
+            "member_id",
+            "display_name",
+            "join_date",
+            "current_grade",
+            "grade_number",
+        ],
     )
     writer.writeheader()
     writer.writerows(_sanitize_row(r) for r in members)

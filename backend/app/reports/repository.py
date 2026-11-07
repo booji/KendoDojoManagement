@@ -211,6 +211,7 @@ class SqlReportRepository(AbstractReportRepository):
     async def members_report(self) -> list[dict[str, Any]]:
         from sqlalchemy import select
 
+        from app.grades.models import Grade
         from app.grades.repository import SqlGradeRepository
         from app.members.db_models import Member
 
@@ -223,6 +224,7 @@ class SqlReportRepository(AbstractReportRepository):
         rows = []
         for member in members:
             current = grades.get(member.id)
+            grade = Grade(current["grade"]) if current else None
             rows.append(
                 {
                     "member_id": member.id,
@@ -230,7 +232,8 @@ class SqlReportRepository(AbstractReportRepository):
                         member.display_name, member.first_name, member.surname
                     ),
                     "join_date": member.join_date,
-                    "current_grade": current["grade"] if current else None,
+                    "current_grade": grade.short_name if grade else None,
+                    "grade_number": grade.number if grade else None,
                 }
             )
         return rows

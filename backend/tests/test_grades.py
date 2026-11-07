@@ -171,6 +171,38 @@ def test_grade_display_names() -> None:
     assert "8-dan" in Grade.HACHIDAN.display_name
 
 
+def test_grade_short_name_drops_the_bracketed_helper() -> None:
+    """The members CSV writes the short name (#571); Mukyū has no bracket."""
+    assert Grade.SHODAN.short_name == "Shodan"
+    assert Grade.IKKYUU.short_name == "Ikkyū"
+    assert Grade.MUKYUU.short_name == "Mukyū"
+
+
+def test_grade_number_is_negative_for_kyu_and_positive_for_dan() -> None:
+    """The members CSV's sortable grade_number (#571); Mukyū sits below 6-kyu."""
+    assert {g.value: g.number for g in Grade} == {
+        "MUKYUU": -7,
+        "ROKKYUU": -6,
+        "GOKYUU": -5,
+        "YONKYUU": -4,
+        "SANKYUU": -3,
+        "NIKYUU": -2,
+        "IKKYUU": -1,
+        "SHODAN": 1,
+        "NIDAN": 2,
+        "SANDAN": 3,
+        "YONDAN": 4,
+        "GODAN": 5,
+        "ROKUDAN": 6,
+        "NANADAN": 7,
+        "HACHIDAN": 8,
+    }
+    # Mukyū < Rokkyū < … < Ikkyū < Shodan < … < Hachidan
+    assert [g.value for g in sorted(Grade, key=lambda g: g.number)] == (
+        EXPECTED_GRADE_ORDER
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC2/AC3 — POST /members/{id}/promote
 # ---------------------------------------------------------------------------

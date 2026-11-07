@@ -16,12 +16,19 @@ from app.core.security_logger import changed_fields, log_admin_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.grades.db_models import GradeHistory
+from app.grades.dependencies import get_grade_repo
+from app.grades.repository import AbstractGradeRepository
 from app.member_federations.db_models import MemberFederation
 from app.members.admin_directory import AbstractAdminDirectory
 from app.members.db_models import BARRED_FROM_SIGN_IN
 from app.members.dependencies import get_admin_directory, get_member_repo
 from app.members.erasure import build_erasure_plan, can_erase
-from app.members.models import CreateMemberRequest, MemberResponse, UpdateMemberRequest
+from app.members.models import (
+    CreateMemberRequest,
+    MemberListItem,
+    MemberResponse,
+    UpdateMemberRequest,
+)
 from app.members.repository import AbstractMemberRepository
 
 router = APIRouter(tags=["members"])
@@ -31,6 +38,7 @@ _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AdminDirectory = Annotated[AbstractAdminDirectory, Depends(get_admin_directory)]
+_GradeRepo = Annotated[AbstractGradeRepository, Depends(get_grade_repo)]
 
 # Member fields an admin may clear by sending an explicit null. Every other
 # field on UpdateMemberRequest is required-by-domain, so a null there means
@@ -106,11 +114,21 @@ async def create_member(
 async def list_members(
     _claims: _Admin,
     repo: _Repo,
+    grade_repo: _GradeRepo,
     status: str | None = None,
     search: str | None = None,
-) -> list[MemberResponse]:
+) -> list[MemberListItem]:
     records = await repo.list(status=status, search=search)
-    return [_to_response(r) for r in records]
+    grades = await grade_repo.get_current_grades([r["id"] for r in records])
+    return [
+        MemberListItem(
+            **_to_response(r).model_dump(),
+            current_grade_name=grades[r["id"]]["display_name"]
+            if r["id"] in grades
+            else None,
+        )
+        for r in records
+    ]
 
 
 # ---------------------------------------------------------------------------
