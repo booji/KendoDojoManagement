@@ -28,3 +28,38 @@ def test_a_signed_in_and_onboarded_user_is_removed_afterwards() -> None:
         assert _member_of(token).status_code == 200
 
     assert _member_of(token).status_code == 401
+
+
+def test_their_grades_attendance_and_recovery_tokens_go_too() -> None:
+    with leaves_members_as_found():
+        admin = make_token("admin")
+        member = make_token("member")
+        member_id = complete_onboarding(member)["id"]
+
+        def post(path: str, token: str = admin, **body: object) -> dict:
+            r = requests.post(
+                f"{API_URL}{path}", json=body, cookies={"access_token": token}
+            )
+            r.raise_for_status()
+            return r.json()
+
+        type_id = requests.get(
+            f"{API_URL}/session-types", cookies={"access_token": admin}
+        ).json()[0]["id"]
+        session = post(
+            "/sessions",
+            title="Cleanup Test Session",
+            date="2299-06-01",
+            segments=[
+                {"start_time": "18:00", "duration_minutes": 60, "type_ids": [type_id]}
+            ],
+        )
+        post(f"/sessions/{session['id']}/attendance", member_id=member_id)
+        post(f"/members/{member_id}/grades", grade="GOKYUU")
+        post("/auth/recovery/codes/generate", token=member)
+        # Issued by one new Account for another: both are removed.
+        post("/auth/recovery/admin-token", member_id=member_id)
+
+    assert _member_of(member).status_code == 401
+    assert _member_of(admin).status_code == 401
+
