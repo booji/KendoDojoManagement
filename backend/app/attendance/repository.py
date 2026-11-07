@@ -176,9 +176,19 @@ class SqlAttendanceRepository:
 
     async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
         result = await self._session.execute(
-            select(Attendance).where(Attendance.member_id == member_id)
+            select(Attendance, SessionInstance.title, SessionInstance.date)
+            .join(SessionInstance, Attendance.session_id == SessionInstance.id)
+            .where(Attendance.member_id == member_id)
+            .order_by(SessionInstance.date.desc(), Attendance.checked_in_at.desc())
         )
-        return [_attendance_to_dict(row) for row in result.scalars().all()]
+        return [
+            {
+                **_attendance_to_dict(row.Attendance),
+                "session_title": row.title,
+                "session_date": row.date,
+            }
+            for row in result.all()
+        ]
 
     async def summary_for_sessions(
         self, session_ids: list[str], member_id: str | None

@@ -13,6 +13,13 @@ class AttendanceRead(BaseModel):
     display_name: str | None = None
 
 
+class MemberAttendanceRead(AttendanceRead):
+    """A record in a Member's Attendance history, with the Session it was at."""
+
+    session_title: str
+    session_date: str
+
+
 class MarkAttendedRequest(BaseModel):
     member_id: uuid.UUID
 

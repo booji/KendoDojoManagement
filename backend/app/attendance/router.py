@@ -14,6 +14,7 @@ from app.attendance.models import (
     AddVisitorRequest,
     AttendanceRead,
     MarkAttendedRequest,
+    MemberAttendanceRead,
 )
 from app.attendance.repository import (
     AbstractAttendanceRepository,
@@ -217,7 +218,7 @@ async def get_member_attendance_history(
     current_user: _Member,
     current_member_id: _CurrentMemberId,
     attendance_repo: _AttRepo,
-) -> list[AttendanceRead]:
+) -> list[MemberAttendanceRead]:
     if current_user.role != "admin":
         try:
             own_member_id = (
@@ -233,4 +234,4 @@ async def get_member_attendance_history(
                 detail="Cannot access another member's attendance history",
             )
     records = await attendance_repo.list_for_member(str(member_id))
-    return [AttendanceRead(**r) for r in records]
+    return [MemberAttendanceRead(**r) for r in records]

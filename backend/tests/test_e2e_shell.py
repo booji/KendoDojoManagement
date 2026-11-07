@@ -2,6 +2,7 @@
 E2E tests for Issue #13 — AppShell & role-aware navigation.
 """
 
+import re
 import uuid
 
 import pytest
@@ -125,7 +126,7 @@ def test_member_nav_has_no_restricted_links(member_page: Page) -> None:
 
 def test_admin_nav_contains_all_seven_sections(admin_page: Page) -> None:
     """AC5: Admin nav contains all 7 sections:
-    Dashboard, Members, Sessions, Attendance, Grades, Reports, Settings.
+    Dashboard, Members, Sessions, My Attendance, Grades, Reports, Settings.
     """
     admin_page.set_viewport_size({"width": 1280, "height": 800})
     sidebar = admin_page.locator("[data-slot='sidebar']")
@@ -135,7 +136,7 @@ def test_admin_nav_contains_all_seven_sections(admin_page: Page) -> None:
         "Dashboard",
         "Members",
         "Sessions",
-        "Attendance",
+        "My Attendance",
         "Grades",
         "Reports",
         "Settings",
@@ -231,6 +232,28 @@ def test_bottom_tab_bar_renders_on_mobile_viewport(member_page: Page) -> None:
     expect(tab_bar).to_be_visible()
 
 
+def test_my_attendance_tab_label_fits_one_line_at_375px(member_page: Page) -> None:
+    """Issue #572: in the 375px bottom tab bar the My Attendance tab's label
+    sits on one line, unclipped, like its neighbours."""
+    member_page.set_viewport_size({"width": 375, "height": 667})
+    tab = member_page.get_by_role("navigation", name="Main navigation").get_by_role(
+        "link", name="My Attendance"
+    )
+    expect(tab).to_be_visible()
+
+    metrics = tab.locator("span").evaluate(
+        """el => ({
+            height: el.getBoundingClientRect().height,
+            lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+            text: el.textContent,
+        })"""
+    )
+    assert metrics["height"] <= metrics["lineHeight"] * 1.5, metrics
+    assert metrics["scrollWidth"] <= metrics["clientWidth"], metrics
+
+
 def test_member_nav_excludes_restricted_sections(member_page: Page) -> None:
     """Issue #12: Member nav does NOT contain Members, Grades, Reports, Settings links."""
     member_page.set_viewport_size({"width": 1280, "height": 800})
@@ -241,8 +264,22 @@ def test_member_nav_excludes_restricted_sections(member_page: Page) -> None:
         expect(sidebar.get_by_role("link", name=label)).not_to_be_attached()
 
 
+def test_member_nav_opens_my_attendance(member_page: Page) -> None:
+    """Issue #572: the Member nav's My Attendance link opens the Member's own
+    Attendance history, with a pointer to check-in on the Sessions page."""
+    member_page.set_viewport_size({"width": 1280, "height": 800})
+    sidebar = member_page.locator("[data-slot='sidebar']")
+    sidebar.get_by_role("link", name="My Attendance", exact=True).click()
+
+    expect(member_page).to_have_url(re.compile(r"/attendance$"))
+    expect(
+        member_page.get_by_role("heading", name="My Attendance", level=1)
+    ).to_be_visible()
+    expect(member_page.get_by_role("link", name="Sessions page")).to_be_visible()
+
+
 def test_admin_nav_contains_all_sections(admin_page: Page) -> None:
-    """Issue #12: Admin nav contains Dashboard, Members, Sessions, Attendance,
+    """Issue #12: Admin nav contains Dashboard, Members, Sessions, My Attendance,
     Grades, Reports, Settings."""
     admin_page.set_viewport_size({"width": 1280, "height": 800})
     sidebar = admin_page.locator("[data-slot='sidebar']")
@@ -252,7 +289,7 @@ def test_admin_nav_contains_all_sections(admin_page: Page) -> None:
         "Dashboard",
         "Members",
         "Sessions",
-        "Attendance",
+        "My Attendance",
         "Grades",
         "Reports",
         "Settings",

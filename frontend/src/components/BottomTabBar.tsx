@@ -51,7 +51,7 @@ const BottomTabBar = ({ primaryItems, overflowItems }: BottomTabBarProps) => {
               )}
             >
               <item.icon className="size-5 shrink-0" aria-hidden="true" />
-              <span>{item.label}</span>
+              <span>{item.tabLabel ?? item.label}</span>
             </Link>
           )
         })}
