@@ -409,11 +409,16 @@ def validate_startup_config() -> None:
         # also "WEBAUTHN_ORIGIN is not localhost": production already refuses
         # a localhost origin below, and inferring production from other
         # settings is what the APP_ENV comment at the top rules out.
-        if globals().get("ALLOW_TEST_AUTH"):
+        #
+        # Anything but the parsed False refuses: the import-time parse always
+        # yields a bool, so a missing or non-bool global is tampered state and
+        # fails closed, as APP_ENV does (#313).
+        if globals().get("ALLOW_TEST_AUTH") is not False:
             raise RuntimeError(
-                "ALLOW_TEST_AUTH is set while APP_ENV=production. It registers "
-                "POST /api/auth/login/test, which signs anyone in as an admin "
-                "with no credential. Remove it: it is for the test suite only."
+                "ALLOW_TEST_AUTH is set (or not a bool) while APP_ENV=production. "
+                "It registers POST /api/auth/login/test, which signs anyone in "
+                "as an admin with no credential. Remove it: it is for the test "
+                "suite only."
             )
 
         # Stripped/lowercased here BECAUSE these values are read raw
