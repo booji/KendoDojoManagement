@@ -16,7 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, QUADLET_UNITS, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    QUADLET_UNITS,
+    SECRETS,
+    TEST_ONLY_FILES,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -575,4 +580,38 @@ def test_unit_settings_carry_no_inline_comment(path: Path):
     ]
     assert not offenders, (
         f"{path.name}: move the comment onto its own line: {offenders}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# ALLOW_TEST_AUTH stays in the test-only files (#590)
+# ---------------------------------------------------------------------------
+
+
+def _shipped_config_files() -> list[Path]:
+    candidates = [
+        *ROOT.glob("docker-compose*.yml"),
+        *ROOT.glob(".env.*"),
+        *QUADLET_DIR.iterdir(),
+        *(ROOT / "deploy" / "env").iterdir(),
+    ]
+    return sorted(
+        p for p in candidates if p.is_file() and p.name not in TEST_ONLY_FILES
+    )
+
+
+def test_no_shipped_file_sets_allow_test_auth():
+    """A shipped file that sets it hands the operator who copies it an
+    unauthenticated admin sign-in. validate_startup_config() refuses it in
+    production; this keeps it out of every deploy file in the first place."""
+    files = _shipped_config_files()
+    assert any(p.name == "docker-compose.yml" for p in files)
+    offenders = [
+        str(p.relative_to(ROOT))
+        for p in files
+        if re.search(r"^[^#\n]*\bALLOW_TEST_AUTH\b", p.read_text(), re.MULTILINE)
+    ]
+    assert offenders == [], (
+        f"ALLOW_TEST_AUTH is set in {offenders}. Only {list(TEST_ONLY_FILES)} "
+        "may set it."
     )
