@@ -79,10 +79,9 @@ COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 TRUST_PROXY_XFF: bool = os.getenv("TRUST_PROXY_XFF", "false").lower() == "true"
 
 # Registers POST /auth/login/test, which mints an admin session for any email
-# with no credential. Parsed exactly as app/auth/router.py parses it to decide
-# whether to register the route (that module reads the variable itself at
-# import, so its gating tests can reload it alone). Test-only:
-# validate_startup_config() refuses it in production (#590).
+# with no credential; app/auth/router.py reads this to decide whether to
+# register the route. Test-only: validate_startup_config() refuses it in
+# production (#590).
 ALLOW_TEST_AUTH: bool = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 # IANA timezone the dojo runs in. Sourced from the container's TZ env var so the
