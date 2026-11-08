@@ -78,6 +78,12 @@ COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 # UAT/PROD) that overwrites the header; leaving it off keeps dev spoof-proof.
 TRUST_PROXY_XFF: bool = os.getenv("TRUST_PROXY_XFF", "false").lower() == "true"
 
+# Registers POST /auth/login/test, which mints an admin session for any email
+# with no credential; app/auth/router.py reads this to decide whether to
+# register the route. Test-only: validate_startup_config() refuses it in
+# production (#590).
+ALLOW_TEST_AUTH: bool = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
+
 # IANA timezone the dojo runs in. Sourced from the container's TZ env var so the
 # calendar feed anchors event wall-clock times to the dojo's zone (with correct
 # DST) instead of emitting floating time. Defaults to UTC.
@@ -399,6 +405,22 @@ def validate_startup_config() -> None:
         )
 
     if app_env == "production":
+        # Keyed off APP_ENV alone, like every check in this block, rather than
+        # also "WEBAUTHN_ORIGIN is not localhost": production already refuses
+        # a localhost origin below, and inferring production from other
+        # settings is what the APP_ENV comment at the top rules out.
+        #
+        # Anything but the parsed False refuses: the import-time parse always
+        # yields a bool, so a missing or non-bool global is tampered state and
+        # fails closed, as APP_ENV does (#313).
+        if globals().get("ALLOW_TEST_AUTH") is not False:
+            raise RuntimeError(
+                "ALLOW_TEST_AUTH is set (or not a bool) while APP_ENV=production. "
+                "It registers POST /api/auth/login/test, which signs anyone in "
+                "as an admin with no credential. Remove it: it is for the test "
+                "suite only."
+            )
+
         # Stripped/lowercased here BECAUSE these values are read raw
         # elsewhere (passkey_service.py, invite_service.py) and passed
         # straight to py_webauthn — validating a cleaned-up copy while

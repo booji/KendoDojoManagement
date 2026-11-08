@@ -2,7 +2,7 @@
 Tests for issue #240 — `/auth/login/test` must not exist in a production build.
 
 The endpoint mints an admin cookie for an arbitrary email with no credential.
-Env-gating it at request time (`if not _ALLOW_TEST_AUTH: 404`) leaves the route
+Env-gating it at request time (`if not ALLOW_TEST_AUTH: 404`) leaves the route
 registered and one bad env var away from being a full auth bypass. These tests
 pin two stronger properties:
 
@@ -26,13 +26,15 @@ from app.main import app
 def _load_auth_router(monkeypatch: pytest.MonkeyPatch, allow: str | None):
     """Import a fresh copy of app.auth.router under a given ALLOW_TEST_AUTH.
 
-    Reloads in place and restores the original module afterwards so the
-    already-mounted app keeps working for every other test.
+    app.config parses the variable and the router reads it from there, so
+    config reloads first. Both reload in place, and callers restore them
+    afterwards so the already-mounted app keeps working for every other test.
     """
     if allow is None:
         monkeypatch.delenv("ALLOW_TEST_AUTH", raising=False)
     else:
         monkeypatch.setenv("ALLOW_TEST_AUTH", allow)
+    importlib.reload(sys.modules["app.config"])
     return importlib.reload(sys.modules["app.auth.router"])
 
 

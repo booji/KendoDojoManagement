@@ -1,4 +1,3 @@
-import os
 import uuid
 from typing import Annotated, Any, Literal
 
@@ -15,6 +14,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from app import config
 from app.auth.accounts import (
     account_for_email,
     account_for_member,
@@ -98,8 +98,6 @@ from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-_ALLOW_TEST_AUTH = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 
 @router.post("/logout", status_code=200)
@@ -570,7 +568,7 @@ async def invite_redeem_complete_route(
 # future refactor of the handler body can turn it back into an auth bypass.
 # ---------------------------------------------------------------------------
 
-if _ALLOW_TEST_AUTH:
+if config.ALLOW_TEST_AUTH:
 
     class _TestLoginRequest(BaseModel):
         email: LenientEmail
