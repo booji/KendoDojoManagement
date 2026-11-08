@@ -9,12 +9,13 @@ on:
     # Branches only, as in backend-tests.yml: tag pushes belong to release.yml.
     branches:
       - '**'
-    paths: &paths
+    paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
   # A fork's pushes never reach this repository's Actions; its PR does (#549).
+  # No path filter here: this is a required check, and a required check that a
+  # filter skips never reports, so it would block every backend-only PR.
   pull_request:
-    paths: *paths
   workflow_dispatch:
 
 # Least privilege: the checks only ever need to read the checked-out tree.
