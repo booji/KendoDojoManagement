@@ -16,12 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.deploy_contract import (
-    CAPABILITIES_ADDED_BACK,
-    QUADLET_UNITS,
-    SECRETS,
-    TEST_ONLY_FILES,
-)
+from tests.deploy_contract import CAPABILITIES_ADDED_BACK, QUADLET_UNITS, SECRETS
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -586,6 +581,11 @@ def test_unit_settings_carry_no_inline_comment(path: Path):
 # ---------------------------------------------------------------------------
 # ALLOW_TEST_AUTH stays in the test-only files (#590)
 # ---------------------------------------------------------------------------
+
+# The only files that may set ALLOW_TEST_AUTH, which registers a route that
+# signs anyone in as an admin with no credential. Every other compose,
+# Quadlet and env file in the repo ships to someone.
+TEST_ONLY_FILES = (".env.test", "docker-compose.test.yml")
 
 
 def _shipped_config_files() -> list[Path]:

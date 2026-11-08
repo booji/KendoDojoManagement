@@ -33,8 +33,3 @@ CAPABILITIES_ADDED_BACK = {
 # so a line missed here and in a file alike cannot ship either.
 PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
 RELEASE_PIN = f"{PUBLISHED_IMAGE}:0.1"
-
-# The only files that may set ALLOW_TEST_AUTH, which registers a route that
-# signs anyone in as an admin with no credential (#590). Every other compose,
-# Quadlet and env file in the repo ships to someone.
-TEST_ONLY_FILES = (".env.test", "docker-compose.test.yml")
