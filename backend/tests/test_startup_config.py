@@ -942,3 +942,28 @@ def test_validate_startup_config_rejects_template_placeholder_secrets(
         config.validate_startup_config()
 
     assert name in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# ALLOW_TEST_AUTH registers POST /auth/login/test, which mints an admin
+# session for any email with no credential (#590).
+# ---------------------------------------------------------------------------
+
+
+def _set_production_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production")
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "dojo.example.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
+
+
+def test_validate_startup_config_refuses_test_auth_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_production_baseline(monkeypatch)
+    monkeypatch.setattr(config, "ALLOW_TEST_AUTH", True)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "ALLOW_TEST_AUTH" in str(exc_info.value)

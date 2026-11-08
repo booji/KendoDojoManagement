@@ -154,6 +154,19 @@ def _reset_rate_limiter():
         pass
 
 
+@pytest.fixture(autouse=True)
+def _test_auth_off_for_startup_validation(monkeypatch: pytest.MonkeyPatch):
+    """.env.test sets ALLOW_TEST_AUTH=true so the suite can sign in through
+    POST /auth/login/test, and validate_startup_config() refuses that in
+    production (#590). Every test that drives the production path would then
+    fail on it instead of on what it checks. The route was registered at
+    import, so turning the flag off here leaves it in place; a test of the
+    refusal sets it back itself."""
+    import app.config as config
+
+    monkeypatch.setattr(config, "ALLOW_TEST_AUTH", False)
+
+
 def _e2e_cleanup(request: pytest.FixtureRequest):
     """e2e tests write through the live server, which commits for real: remove
     the Members and Accounts they created (#568). Other tests roll back."""
