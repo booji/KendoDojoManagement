@@ -239,9 +239,9 @@ erDiagram
   value — see `app/auth/invite_service.py` for why that differs).
 - **`recovery_attempts` retention** (#434). A successful attempt deletes that
   Account's earlier rows, leaving only the success. Rows that remain (an
-  Account that keeps failing) are kept — lockout counts failures since the
-  last success with no time window, so deleting by age would expire lockouts
-  — but `ip_address` is cleared to NULL once a row is 30 days old
+  Account that keeps failing) are kept as its audit trail — lockout counts
+  only failures from the last 24 hours, and none from before the Account's
+  latest admin or CLI recovery token (#580) — but `ip_address` is cleared to NULL once a row is 30 days old
   (`IP_RETENTION` in `app/auth/attempt_repository.py`). The clear runs for all
   Accounts on every app start and, under Quadlet, daily from
   `kendo-ip-retention.timer` (#467), so an address outlives 30 days by at most

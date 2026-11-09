@@ -386,8 +386,7 @@ async def redeem_recovery_code(
     if user is None or not await may_sign_in(uow.session, user.id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    failures = await attempt_repo.count_failures_since_last_success(user.id)
-    if failures >= 5:
+    if await attempt_repo.is_locked_out(user.id):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
     # Try recovery codes first
@@ -426,7 +425,7 @@ async def redeem_recovery_code(
     await attempt_repo.log_attempt(user.id, ip, success=False)
     await uow.commit()
     log_security_event("recovery_redeem", "failure", user_id=user.id)
-    if failures + 1 >= 5:
+    if await attempt_repo.is_locked_out(user.id):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
