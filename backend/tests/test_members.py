@@ -259,6 +259,22 @@ async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
     assert response.status_code == 409
 
 
+async def test_emails_differing_only_by_case_are_duplicates(member_repo) -> None:
+    # #592: the part before the @ is case-folded too, not just the domain.
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        first = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "Taro@Dojo.test"}
+        )
+        second = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "taro@dojo.test"}
+        )
+    assert first.json()["email"] == "taro@dojo.test"
+    assert second.status_code == 409
+
+
 # ---------------------------------------------------------------------------
 # AC4 — GET /members/{id}
 # ---------------------------------------------------------------------------

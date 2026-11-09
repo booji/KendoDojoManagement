@@ -2,15 +2,18 @@
 
 Exposes /setup, /setup/passkey/begin, and /setup/passkey/complete.
 
-All three endpoints share the same guard: _has_registered_user().  A "registered
-user" is one who has at least one PasskeyCredential row.
+All three endpoints share the same guard: _is_claimed().  The instance is
+claimed once any Admin Account exists (#589).
 
-Using this definition instead of a raw user-count means:
-- Phantom users created by an abandoned begin ceremony (no credentials yet) do
-  NOT block a legitimate first-run setup.
-- Concurrent begin calls both create phantom rows, but neither blocks the other's
-  complete call — the first to complete creates a PasskeyCredential, which causes
-  the second complete call to see a registered user and return 404.
+Counting Admin Accounts, not passkeys or users, means:
+- Phantom Accounts from an abandoned begin ceremony are members (admin is
+  granted only when a claim completes), so they do NOT block a legitimate
+  first-run setup.
+- The claim stays closed when the only Admin deletes their only passkey to
+  re-enrol: a leaked SETUP_TOKEN never reopens a claimed instance.
+- Nothing removes the last Admin Account: archiving or suspending the last
+  Admin who may sign in is refused, and erasure needs a different, signed-in
+  Admin to act.
 - The guard is identical for GET, begin, and complete — no fragile asymmetry.
 
 begin and complete carry a second gate in front of that one: the
@@ -66,7 +69,7 @@ SetupTokenHeader = Annotated[str | None, Header(alias="X-Setup-Token")]
 def _require_setup_token(presented: str | None) -> None:
     """Reject unless the caller presents the pre-provisioned SETUP_TOKEN.
 
-    Called from inside the handlers, after _has_registered_user(), so a claimed
+    Called from inside the handlers, after _is_claimed(), so a claimed
     instance still answers 404 whatever token is presented — a dependency would
     run first and turn that into a 401.
 
@@ -90,17 +93,12 @@ def _require_setup_token(presented: str | None) -> None:
         raise _BAD_SETUP_TOKEN
 
 
-async def _has_registered_user(uow: AbstractUnitOfWork) -> bool:
-    """Return True if any fully-registered user exists.
-
-    A "registered user" is one who has at least one PasskeyCredential row.
-    Phantom users from abandoned passkey ceremonies have no credentials, so
-    they do not count as registered.
-    """
-    passkey_count = await uow.session.execute(
-        select(func.count()).select_from(PasskeyCredential)
+async def _is_claimed(uow: AbstractUnitOfWork) -> bool:
+    """True once any Admin Account exists, whatever its passkeys or status."""
+    admins = await uow.session.execute(
+        select(func.count()).select_from(Account).where(Account.role == "admin")
     )
-    return passkey_count.scalar_one() > 0
+    return admins.scalar_one() > 0
 
 
 async def _discard_abandoned_claims(uow: AbstractUnitOfWork, claimant: Account) -> None:
@@ -142,7 +140,7 @@ async def get_setup(
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict:
     """Return 200 when instance is unconfigured, 404 otherwise."""
-    if await _has_registered_user(uow):
+    if await _is_claimed(uow):
         raise _ALREADY_DONE
     return {"detail": "Setup available"}
 
@@ -155,7 +153,7 @@ async def setup_passkey_begin(
 ) -> dict:
     """Begin passkey registration for the first admin, creating their Member
     and Account in this one transaction (#432)."""
-    if await _has_registered_user(uow):
+    if await _is_claimed(uow):
         raise _ALREADY_DONE
     _require_setup_token(x_setup_token)
     return await register_passkey_begin(
@@ -174,7 +172,7 @@ async def setup_passkey_complete(
     x_setup_token: SetupTokenHeader = None,
 ) -> AccountClaims:
     """Complete passkey registration, promote user to admin, set cookie."""
-    if await _has_registered_user(uow):
+    if await _is_claimed(uow):
         raise _ALREADY_DONE
     _require_setup_token(x_setup_token)
 

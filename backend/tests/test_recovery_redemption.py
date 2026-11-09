@@ -215,6 +215,25 @@ async def test_redeem_valid_code_returns_200(db_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_redeem_ignores_the_case_of_the_email(db_client) -> None:
+    # #592: the address is stored folded; the Member may type it any way.
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": "Musashi@Dojo.test", "code": plaintext},
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
