@@ -168,6 +168,16 @@ def test_cli_create_recovery_token_prints_to_stdout(seeded_db) -> None:
     assert len(result.stdout.strip()) > 0
 
 
+def test_cli_ignores_the_case_of_the_email(seeded_db) -> None:
+    # #592: the operator may type the address as the Admin first entered it.
+    result = runner.invoke(
+        cli_app,
+        ["create-recovery-token", seeded_db["email"].upper()],
+        env={"DATABASE_URL": seeded_db["url"]},
+    )
+    assert result.exit_code == 0, result.stderr
+
+
 # ── AC2 — Token stored with created_by_id = NULL ──────────────────────────────
 
 
