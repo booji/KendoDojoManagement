@@ -135,6 +135,16 @@ restarted or upgraded claimed instance returns 404 as it does today. The token
 is a second gate in front of that guard, never a replacement for it — and an
 instance whose token leaks after it is claimed is not thereby claimable.
 
+> **Amended by #589.** Counting passkeys broke that last promise: the only
+> Admin may delete their only passkey while holding recovery codes, which
+> left no `PasskeyCredential` row and reopened the claim to anyone holding the
+> token. The guard (now `_is_claimed()`) counts Admin Accounts instead. Admin
+> is granted only when a claim completes (#432), so an abandoned ceremony's
+> Account is a member and still does not count. Nothing removes the last Admin
+> Account: barring the last Admin who may sign in is refused, and erasure
+> needs another signed-in Admin. So the latch needs no migration and no new
+> state.
+
 **No migration and no new state.** The token is a config value compared with
 `secrets.compare_digest` at `complete`. It travels as an `X-Setup-Token`
 header rather than a body field: the request models are shared with the

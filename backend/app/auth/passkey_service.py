@@ -102,10 +102,8 @@ async def register_passkey_complete(
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
 
-    # Only an Account nobody has enrolled yet. Setup reopens once the last
-    # passkey on the instance is gone, and an Admin who deleted their only
-    # passkey while holding recovery codes still owns that Account; the claim
-    # must not hand it to whoever holds the setup token. Adding a passkey to
+    # Only an Account nobody has enrolled yet: the claim must never hand an
+    # Account someone holds to whoever holds the setup token. Adding a passkey to
     # an enrolled Account goes through add_passkey_*, which takes the Account
     # from the session.
     if await _is_enrolled(uow, user.id):

@@ -34,6 +34,7 @@ from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
 from tests.account_support import seed_account, seed_member
+from tests.e2e_support import leaves_members_as_found
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(sub=str(uuid.uuid4()), email="member@dojo.test", role="member")
@@ -59,7 +60,10 @@ async def db_client(database_url: str):
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield engine
+    # Real commits: remove what each test seeded, or its Admin Accounts would
+    # claim the instance for test_setup.py (#589).
+    with leaves_members_as_found():
+        yield engine
     await engine.dispose()
 
 
