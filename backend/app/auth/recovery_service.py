@@ -1,10 +1,11 @@
-"""Recovery code generation — pure functions, no I/O."""
+"""Recovery code generation and checking — pure functions, no I/O."""
 
 from __future__ import annotations
 
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
+from functools import cache
 
 import bcrypt
 
@@ -14,6 +15,8 @@ _SEGMENTS = 3
 _CODE_COUNT = 8
 _ADMIN_TOKEN_BYTES = 32
 _ADMIN_TOKEN_EXPIRY_MINUTES = 60
+# bcrypt cost of every recovery code and admin token hash: the default.
+BCRYPT_ROUNDS = 12
 
 
 def _random_segment() -> str:
@@ -30,7 +33,10 @@ def generate_recovery_codes() -> list[str]:
 
 def hash_codes(codes: list[str]) -> list[str]:
     """Bcrypt-hash each plaintext recovery code."""
-    return [bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode() for code in codes]
+    return [
+        bcrypt.hashpw(code.encode(), bcrypt.gensalt(BCRYPT_ROUNDS)).decode()
+        for code in codes
+    ]
 
 
 def generate_admin_token_plaintext() -> str:
@@ -40,7 +46,7 @@ def generate_admin_token_plaintext() -> str:
 
 def hash_admin_token(plaintext: str) -> str:
     """Bcrypt-hash a plaintext admin recovery token."""
-    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt(BCRYPT_ROUNDS)).decode()
 
 
 def admin_token_expiry() -> datetime:
@@ -48,9 +54,23 @@ def admin_token_expiry() -> datetime:
     return datetime.now(UTC) + timedelta(minutes=_ADMIN_TOKEN_EXPIRY_MINUTES)
 
 
-def check_admin_token(plaintext: str, token_hash: str) -> bool:
-    """Return True if plaintext matches token_hash."""
-    return bcrypt.checkpw(plaintext.encode(), token_hash.encode())
+@cache
+def _dummy_hash(rounds: int) -> str:
+    return bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt(rounds)).decode()
+
+
+def first_match(code: str, hashes: list[str]) -> int | None:
+    """Index of the first of `hashes` that `code` matches, or None.
+
+    Compares against at least a full code set plus one admin token, padding
+    with a dummy hash, so the cost does not say whether an email has an
+    Account, or how many unused codes it has (#588).
+    """
+    padding = [_dummy_hash(BCRYPT_ROUNDS)] * (_CODE_COUNT + 1 - len(hashes))
+    for index, code_hash in enumerate(hashes + padding):
+        if bcrypt.checkpw(code.encode(), code_hash.encode()) and index < len(hashes):
+            return index
+    return None
 
 
 def is_admin_token_valid(token_record: dict) -> bool:

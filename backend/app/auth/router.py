@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any, Literal
 
-import bcrypt
+import anyio
 from fastapi import (
     APIRouter,
     Cookie,
@@ -12,7 +12,7 @@ from fastapi import (
     Response,
     status,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import config
 from app.auth.accounts import (
@@ -80,7 +80,7 @@ from app.auth.recovery_repository import (
 )
 from app.auth.recovery_service import (
     admin_token_expiry,
-    check_admin_token,
+    first_match,
     generate_admin_token_plaintext,
     generate_recovery_codes,
     hash_admin_token,
@@ -328,7 +328,7 @@ async def generate_codes(
             detail="Recovery codes already exist. Use regenerate to replace them.",
         )
     codes = generate_recovery_codes()
-    hashes = hash_codes(codes)
+    hashes = await anyio.to_thread.run_sync(hash_codes, codes)
     set_id = str(uuid.uuid4())
     await recovery_repo.create_codes(claims.sub, hashes, set_id)
     await uow.commit()
@@ -343,7 +343,7 @@ async def regenerate_codes(
 ) -> dict[str, Any]:
     await recovery_repo.invalidate_all(claims.sub)
     codes = generate_recovery_codes()
-    hashes = hash_codes(codes)
+    hashes = await anyio.to_thread.run_sync(hash_codes, codes)
     set_id = str(uuid.uuid4())
     await recovery_repo.create_codes(claims.sub, hashes, set_id)
     await uow.commit()
@@ -362,7 +362,15 @@ async def recovery_codes_status(
 
 class _RedeemRequest(BaseModel):
     email: LenientEmail
-    code: str = Field(..., min_length=1, max_length=128)
+    code: str = Field(..., min_length=1)
+
+    @field_validator("code")
+    @classmethod
+    def _fits_bcrypt(cls, code: str) -> str:
+        # bcrypt reads at most 72 bytes and raises past them (#588).
+        if len(code.encode()) > 72:
+            raise ValueError("code must be at most 72 bytes")
+        return code
 
 
 @router.post("/recovery/redeem", status_code=200)
@@ -383,51 +391,40 @@ async def redeem_recovery_code(
     ip = client_ip(request)
 
     user = await account_for_email(uow.session, payload.email)
-    if user is None or not await may_sign_in(uow.session, user.id):
+    if user is not None and not await may_sign_in(uow.session, user.id):
+        user = None
+    # An unknown or barred email, or a locked-out Account, has nothing to
+    # check, but checks the code all the same: it costs and answers as a bad
+    # code does, so none of them says the email has an Account (#588).
+    locked = user is not None and await attempt_repo.is_locked_out(user.id)
+    codes: list[dict[str, Any]] = []
+    admin_tokens: list[dict[str, Any]] = []
+    if user is not None and not locked:
+        codes = await recovery_repo.get_unused_codes_with_hash(user.id)
+        admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
+    hashes = [c["code_hash"] for c in codes] + [t["token_hash"] for t in admin_tokens]
+    # bcrypt takes a second or two: off the event loop, which it would stall.
+    index = await anyio.to_thread.run_sync(first_match, payload.code, hashes)
+
+    if user is None or locked:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    if await attempt_repo.is_locked_out(user.id):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
-
-    # Try recovery codes first
-    codes = await recovery_repo.get_unused_codes_with_hash(user.id)
-    matched_id: str | None = None
-    for record in codes:
-        if bcrypt.checkpw(payload.code.encode(), record["code_hash"].encode()):
-            matched_id = record["id"]
-            break
-
-    if matched_id is not None:
-        await recovery_repo.mark_used(matched_id)
-        await attempt_repo.log_attempt(user.id, ip, success=True)
-        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
+    matched = None if index is None else (codes + admin_tokens)[index]
+    if index is not None and index < len(codes):
+        await recovery_repo.mark_used(codes[index]["id"])
+    elif matched is not None and is_admin_token_valid(matched):
+        await admin_token_repo.mark_admin_token_used(matched["id"])
+    else:
+        await attempt_repo.log_attempt(user.id, ip, success=False)
         await uow.commit()
-        log_security_event("recovery_redeem", "success", user_id=user.id)
-        return {"access_token": token, "token_type": "bearer"}
+        log_security_event("recovery_redeem", "failure", user_id=user.id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    # Try admin tokens
-    admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
-    matched_admin_id: str | None = None
-    for record in admin_tokens:
-        if check_admin_token(payload.code, record["token_hash"]):
-            if is_admin_token_valid(record):
-                matched_admin_id = record["id"]
-            break
-
-    if matched_admin_id is not None:
-        await admin_token_repo.mark_admin_token_used(matched_admin_id)
-        await attempt_repo.log_attempt(user.id, ip, success=True)
-        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
-        await uow.commit()
-        log_security_event("recovery_redeem", "success", user_id=user.id)
-        return {"access_token": token, "token_type": "bearer"}
-
-    await attempt_repo.log_attempt(user.id, ip, success=False)
+    await attempt_repo.log_attempt(user.id, ip, success=True)
+    token = await start_auth_session(auth_sessions, user.id, kind="recovery")
     await uow.commit()
-    log_security_event("recovery_redeem", "failure", user_id=user.id)
-    if await attempt_repo.is_locked_out(user.id):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    log_security_event("recovery_redeem", "success", user_id=user.id)
+    return {"access_token": token, "token_type": "bearer"}
 
 
 class _AdminTokenRequest(BaseModel):
@@ -470,7 +467,7 @@ async def generate_admin_token(
         )
 
     plaintext = generate_admin_token_plaintext()
-    token_hash = hash_admin_token(plaintext)
+    token_hash = await anyio.to_thread.run_sync(hash_admin_token, plaintext)
     expires_at = admin_token_expiry()
 
     await admin_token_repo.create_admin_token(

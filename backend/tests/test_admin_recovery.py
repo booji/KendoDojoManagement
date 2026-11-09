@@ -613,8 +613,9 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
-    """After 4 prior failures, a 5th bad attempt at admin token redeem returns 429."""
+async def test_fifth_failed_admin_token_attempt_locks_recovery(db_client) -> None:
+    """After a 5th bad attempt the valid admin token is refused too, answered
+    as a bad code (#588)."""
     target_id = str(uuid.uuid4())
     target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
@@ -624,12 +625,16 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post(
+        fifth = await c.post(
             "/auth/recovery/redeem",
             json={"email": target_email, "code": "wrong-token-xxxx"},
         )
+        valid = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": target_email, "code": plaintext},
+        )
 
-    assert response.status_code == 429
+    assert (fifth.status_code, valid.status_code) == (401, 401)
 
 
 @pytest.mark.asyncio
