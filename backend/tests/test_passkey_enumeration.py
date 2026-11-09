@@ -64,13 +64,7 @@ def _setup_token(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _seed_user(session, email: str, role: str = "member") -> str:
-    """Seed a fully-registered user: an Account row plus a PasskeyCredential.
-
-    The credential is what makes the instance count as "already set up" --
-    the setup claim defines bootstrap as zero PasskeyCredential rows,
-    not zero Account rows, so that a phantom user left behind by an abandoned
-    first-run ceremony cannot permanently brick setup.
-    """
+    """Seed a fully-registered user: an Account row plus a PasskeyCredential."""
     user_id = str(uuid.uuid4())
     await seed_account(session, email, user_id=user_id, role=role)
     await session.execute(
@@ -86,10 +80,10 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     return user_id
 
 
-async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
+async def _seed_phantom_user(session, email: str) -> str:
     """Seed an Account with NO credential -- an abandoned registration ceremony."""
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role=role)
+    await seed_account(session, email, user_id=user_id)
     await session.flush()
     return user_id
 
@@ -229,7 +223,9 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
     """
     session = db_client
     await _reset_to_fresh_instance(session)
-    await _seed_phantom_user(session, "first-ever@dojo.test", role="admin")
+    # A member: begin never grants admin, only a completed claim does (#432),
+    # and an Admin Account claims the instance (#589).
+    await _seed_phantom_user(session, "first-ever@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
