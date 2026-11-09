@@ -450,6 +450,48 @@ async def test_each_failure_past_the_lockout_doubles_it(db_client) -> None:
     assert (await _redeem(plaintext)).status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_failures_older_than_a_day_stop_counting(db_client) -> None:
+    """Five day-old failures and one fresh one are one failure, not a sixth
+    that locks for 30 minutes (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=5,
+        attempted_at=datetime.now(UTC) - timedelta(hours=25),
+    )
+    await _seed_failed_attempt(db_client, user_id)
+
+    assert (await _redeem(plaintext)).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hours_ago", "expected"), [(15, 401), (17, 200)], ids=["inside", "past"]
+)
+async def test_the_doubling_stops_at_sixteen_hours(
+    db_client, hours_ago, expected
+) -> None:
+    """Twelve failures would lock for 32 hours if each doubled the lockout;
+    it stops doubling at 16 (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=12,
+        attempted_at=datetime.now(UTC) - timedelta(hours=hours_ago),
+    )
+
+    assert (await _redeem(plaintext)).status_code == expected
+
+
 # ── AC7 — Attempts logged ──────────────────────────────────────────────────────
 
 
