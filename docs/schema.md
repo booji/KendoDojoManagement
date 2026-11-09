@@ -287,6 +287,10 @@ erDiagram
   - `uq_dojo_settings_single_row` — a unique index on the constant `(true)`:
     `dojo_settings` holds one row.
   - `uq_federations_name` — UNIQUE `federations.name`.
+  - `ck_members_email_lowercase` — CHECK `email = lower(email)` on `members`
+    (#592). Sign-in looks a Member up by exact match on the lowercase form
+    `LenientEmail` produces, so this also makes the UNIQUE on `members.email`
+    case-insensitive in effect.
 - **Index policy** (#418). No indexes beyond those that keys and constraints
   create and the `index=True` lookup columns on the ORM. Add one when a query
   is measured slow — at dojo scale a sequential scan is microseconds.
