@@ -633,6 +633,68 @@ async def test_login_completes_end_to_end_without_allow_credentials(
     assert "access_token" in login_complete.cookies
 
 
+@pytest.mark.asyncio
+async def test_sign_in_ignores_the_case_of_the_email(db_client) -> None:
+    """#592: an address claimed as `Kenji@…` signs in as `kenji@…`."""
+    await _reset_to_fresh_instance(db_client)
+    credential_id_b64 = "Y2FzZS1jcmVkZW50aWFsLWlk"  # b"case-credential-id"
+
+    def credential(response: dict) -> dict:
+        return {
+            "id": credential_id_b64,
+            "rawId": credential_id_b64,
+            "response": response,
+            "type": "public-key",
+        }
+
+    registration = MagicMock(
+        credential_id=b"case-credential-id",
+        credential_public_key=b"case-public-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    login = MagicMock(credential_id=b"case-credential-id", new_sign_count=1)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        await c.post(
+            "/setup/passkey/begin",
+            json={"email": "Kenji@Dojo.test", "first_name": "Ai", "surname": "Sato"},
+            headers=_SETUP_HEADERS,
+        )
+        with patch("webauthn.verify_registration_response", return_value=registration):
+            claimed = await c.post(
+                "/setup/passkey/complete",
+                headers=_SETUP_HEADERS,
+                json={
+                    "email": "Kenji@Dojo.test",
+                    "credential": credential(
+                        {"clientDataJSON": "dGVzdA", "attestationObject": "dGVzdA"}
+                    ),
+                },
+            )
+        assert claimed.status_code == 201
+
+        await c.post("/auth/login/passkey/begin", json={"email": "kenji@dojo.test"})
+        with patch("webauthn.verify_authentication_response", return_value=login):
+            signed_in = await c.post(
+                "/auth/login/passkey/complete",
+                json={
+                    "email": "kenji@dojo.test",
+                    "credential": credential(
+                        {
+                            "clientDataJSON": "dGVzdA",
+                            "authenticatorData": "dGVzdA",
+                            "signature": "dGVzdA",
+                        }
+                    ),
+                },
+            )
+
+    assert signed_in.status_code == 200
+
+
 # ── Account verification enforcement (issue #267 follow-up) ──────────────────────
 #
 # Issue #267 made registration request `userVerification: "required"` as part
