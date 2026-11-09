@@ -629,6 +629,33 @@ async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_issuing_an_admin_token_lifts_a_recovery_lockout(db_client) -> None:
+    """Five failures lock recovery, but a token the admin issues afterwards
+    still redeems: issuing it clears the Account's failures (#580)."""
+    admin_id = str(uuid.uuid4())
+    target_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    target_email = await _seed_user(db_client, target_id)
+    await _seed_failed_attempt(db_client, target_id, count=5)
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        issued = await c.post(
+            "/auth/recovery/admin-token",
+            json={"member_id": await _member_of(db_client, target_id)},
+        )
+        response = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": target_email, "code": issued.json()["token"]},
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_four_failures_still_allows_admin_token_attempt(db_client) -> None:
     """3 prior failures: 4th attempt with valid admin token should succeed."""
     target_id = str(uuid.uuid4())
