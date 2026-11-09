@@ -11,7 +11,7 @@ Acceptance criteria exercised:
   AC1. admin_recovery_tokens table exists with correct fields
   AC2. POST /auth/recovery/admin-token (admin only) generates token, stores hash, returns plaintext
   AC3. POST /auth/recovery/redeem accepts admin tokens; expired/used tokens rejected
-  AC6. 5-attempt lockout applies to admin token redemption
+  AC6. 5-attempt lockout refuses recovery codes, not an unused admin token
   AC7. Unit: valid redeems+marked used; expired rejected; used rejected; non-admin blocked
 """
 
@@ -609,32 +609,80 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     assert r2.status_code == 401
 
 
-# ── AC6 — 5-attempt lockout applies to admin token redemption ─────────────────
+# ── AC6 — a lockout refuses recovery codes, never an issued admin token ──────
 
 
 @pytest.mark.asyncio
-async def test_fifth_failed_admin_token_attempt_locks_recovery(db_client) -> None:
-    """After a 5th bad attempt the valid admin token is refused too, answered
-    as a bad code (#588)."""
+async def test_junk_redeems_after_a_token_is_issued_do_not_lock_it_out(
+    db_client,
+) -> None:
+    """Five junk redeems after the admin issues a token lock the Account's
+    recovery codes again, but not the token: too long to guess, it has
+    nothing to fear from the lockout (#580)."""
+    from app.auth.db_models import RecoveryCode
+
+    admin_id = str(uuid.uuid4())
     target_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
     target_email = await _seed_user(db_client, target_id)
-    plaintext = "admn-tok1-abcd"
-    await _seed_admin_token(db_client, target_id, plaintext)
-    await _seed_failed_attempt(db_client, target_id, count=4)
+    code = "abcd-efgh-ijkl"
+    async with db_client.begin() as conn:
+        await conn.execute(
+            insert(RecoveryCode).values(
+                id=str(uuid.uuid4()),
+                user_id=target_id,
+                code_hash=bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode(),
+                set_id=str(uuid.uuid4()),
+                created_at=datetime.now(UTC),
+            )
+        )
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        fifth = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": target_email, "code": "wrong-token-xxxx"},
+        issued = await c.post(
+            "/auth/recovery/admin-token",
+            json={"member_id": await _member_of(db_client, target_id)},
         )
-        valid = await c.post(
+
+        async def redeem(secret: str) -> int:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": secret},
+            )
+            return response.status_code
+
+        junk = [await redeem("wrong-token-xxxx") for _ in range(5)]
+        valid_code = await redeem(code)
+        token = await redeem(issued.json()["token"])
+
+    assert (junk, valid_code, token) == ([401] * 5, 401, 200)
+
+
+@pytest.mark.asyncio
+async def test_a_lockout_still_refuses_an_expired_admin_token(db_client) -> None:
+    target_id = str(uuid.uuid4())
+    target_email = await _seed_user(db_client, target_id)
+    plaintext = "admn-tok1-abcd"
+    await _seed_admin_token(
+        db_client,
+        target_id,
+        plaintext,
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    await _seed_failed_attempt(db_client, target_id, count=5)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
             "/auth/recovery/redeem",
             json={"email": target_email, "code": plaintext},
         )
 
-    assert (fifth.status_code, valid.status_code) == (401, 401)
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

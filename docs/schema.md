@@ -241,9 +241,10 @@ erDiagram
   Account's earlier rows, leaving only the success. Rows that remain (an
   Account that keeps failing) are kept as its audit trail — lockout counts
   only failures from the last 24 hours, and none from before the Account's
-  latest admin or CLI recovery token (#580) — but `ip_address` is cleared to NULL once a row is 30 days old
-  (`IP_RETENTION` in `app/auth/attempt_repository.py`). The clear runs for all
-  Accounts on every app start and, under Quadlet, daily from
+  latest admin or CLI recovery token (#580) — but `ip_address` is cleared to
+  NULL once a row is 30 days old (`IP_RETENTION` in
+  `app/auth/attempt_repository.py`). The clear runs for all Accounts on every
+  app start and, under Quadlet, daily from
   `kendo-ip-retention.timer` (#467), so an address outlives 30 days by at most
   a day. The Compose stack has no timer: there it runs only at app start, and
   an address can outlive 30 days until the next restart.

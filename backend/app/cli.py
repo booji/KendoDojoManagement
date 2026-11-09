@@ -92,7 +92,7 @@ def create_recovery_token(email: str) -> None:
             raise typer.Exit(code=1)
 
         plaintext = generate_admin_token_plaintext()
-        token_hash = hash_admin_token(plaintext)
+        token_hash = await hash_admin_token(plaintext)
         expires_at = admin_token_expiry()
 
         obj = AdminRecoveryToken(

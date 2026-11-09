@@ -553,6 +553,56 @@ async def test_setup_stays_claimed_after_the_only_admin_deletes_their_only_passk
     assert completed.status_code == 404
 
 
+@pytest.mark.parametrize("holds", ["passkey", "recovery codes"])
+@pytest.mark.asyncio
+async def test_a_claim_cannot_take_an_account_somebody_holds(db_client, holds) -> None:
+    """A claim stores its passkey, then grants admin in a second commit. If
+    that grant never lands, the instance is unclaimed but the claimant holds
+    a member Account; a later claim under their address must not enrol on it."""
+    from app.auth.db_models import RecoveryCode
+
+    session = db_client
+    user_id = await seed_account(session, "sensei@dojo.test", role="member")
+    if holds == "passkey":
+        held = PasskeyCredential(
+            user_id=user_id,
+            credential_id=b"held-cred",
+            public_key=b"held-key",
+            sign_count=0,
+        )
+    else:
+        held = RecoveryCode(user_id=user_id, code_hash="hash", set_id=str(uuid.uuid4()))
+    session.add(held)
+    await session.flush()
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "sensei@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 200
+    mock_verified = MagicMock(
+        credential_id=b"claim-cred",
+        credential_public_key=b"claim-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    with patch("webauthn.verify_registration_response", return_value=mock_verified):
+        completed = await _post(
+            "/setup/passkey/complete",
+            {**_CREDENTIAL_PAYLOAD, "email": "sensei@dojo.test"},
+            SETUP_HEADERS,
+        )
+
+    assert completed.status_code == 401
+    claimed = await session.execute(
+        select(PasskeyCredential).where(
+            PasskeyCredential.credential_id == b"claim-cred"
+        )
+    )
+    assert claimed.scalars().all() == []
+
+
 @pytest.mark.parametrize("membership_status", ["archived", "suspended"])
 @pytest.mark.asyncio
 async def test_a_claim_cannot_take_a_member_barred_from_signing_in(
