@@ -393,20 +393,25 @@ async def redeem_recovery_code(
     user = await account_for_email(uow.session, payload.email)
     if user is not None and not await may_sign_in(uow.session, user.id):
         user = None
-    # An unknown or barred email, or a locked-out Account, has nothing to
-    # check, but checks the code all the same: it costs and answers as a bad
-    # code does, so none of them says the email has an Account (#588).
+    # An unknown or barred email has nothing to check, and a locked-out
+    # Account only its live admin tokens -- too long to guess, so nothing a
+    # lockout guards (#580) -- but each checks the code all the same: it
+    # costs and answers as a bad code does, so none of them says the email
+    # has an Account (#588).
     locked = user is not None and await attempt_repo.is_locked_out(user.id)
     codes: list[dict[str, Any]] = []
     admin_tokens: list[dict[str, Any]] = []
-    if user is not None and not locked:
-        codes = await recovery_repo.get_unused_codes_with_hash(user.id)
+    if user is not None:
         admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
+    if locked:
+        admin_tokens = [t for t in admin_tokens if is_admin_token_valid(t)]
+    elif user is not None:
+        codes = await recovery_repo.get_unused_codes_with_hash(user.id)
     hashes = [c["code_hash"] for c in codes] + [t["token_hash"] for t in admin_tokens]
     # bcrypt takes a second or two: off the event loop, which it would stall.
     index = await anyio.to_thread.run_sync(first_match, payload.code, hashes)
 
-    if user is None or locked:
+    if user is None or (locked and index is None):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     matched = None if index is None else (codes + admin_tokens)[index]
