@@ -3,22 +3,31 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from itertools import takewhile
 from typing import Protocol, runtime_checkable
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.db_models import RecoveryAttempt
+from app.auth.db_models import AdminRecoveryToken, RecoveryAttempt
 
 # Attempt rows outlive this only for an Account that keeps failing and never
-# succeeds -- they must, since lockout counts failures with no time window --
-# but their IP addresses do not (#434).
+# succeeds -- they are its audit trail -- but their IP addresses do not (#434).
 IP_RETENTION = timedelta(days=30)
+
+# LOCKOUT_THRESHOLD failures within FAILURE_WINDOW, since the Account's last
+# success, lock recovery for LOCKOUT_PERIOD after the latest of them; each
+# failure past the threshold doubles that, up to MAX_DOUBLINGS (16 hours).
+# A lockout always ends: no failure older than FAILURE_WINDOW counts (#580).
+LOCKOUT_THRESHOLD = 5
+LOCKOUT_PERIOD = timedelta(minutes=15)
+MAX_DOUBLINGS = 6
+FAILURE_WINDOW = timedelta(hours=24)
 
 
 @runtime_checkable
 class AbstractAttemptRepository(Protocol):
-    async def count_failures_since_last_success(self, user_id: str) -> int: ...
+    async def is_locked_out(self, user_id: str) -> bool: ...
 
     async def log_attempt(
         self, user_id: str, ip_address: str, *, success: bool
@@ -29,19 +38,31 @@ class SqlAttemptRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def count_failures_since_last_success(self, user_id: str) -> int:
+    async def is_locked_out(self, user_id: str) -> bool:
+        now = datetime.now(UTC)
+        since = now - FAILURE_WINDOW
+        # Issuing an admin or CLI recovery token clears the Account's
+        # failures: only those after it count. The rows stay, as audit.
+        last_token_issued = (
+            select(func.max(AdminRecoveryToken.created_at))
+            .where(AdminRecoveryToken.user_id == user_id)
+            .scalar_subquery()
+        )
         result = await self._session.execute(
-            select(RecoveryAttempt)
-            .where(RecoveryAttempt.user_id == user_id)
+            select(RecoveryAttempt.attempted_at, RecoveryAttempt.success)
+            .where(
+                RecoveryAttempt.user_id == user_id,
+                RecoveryAttempt.attempted_at > since,
+                RecoveryAttempt.attempted_at > func.coalesce(last_token_issued, since),
+            )
             .order_by(RecoveryAttempt.attempted_at.desc())
         )
-        rows = result.scalars().all()
-        count = 0
-        for row in rows:
-            if row.success:
-                break
-            count += 1
-        return count
+        failures = list(takewhile(lambda row: not row.success, result.all()))
+        excess = len(failures) - LOCKOUT_THRESHOLD
+        if excess < 0:
+            return False
+        lockout = LOCKOUT_PERIOD * 2 ** min(excess, MAX_DOUBLINGS)
+        return now < failures[0].attempted_at + lockout
 
     async def clear_expired_ip_addresses(self) -> None:
         """NULL the IP of every Account's attempt row older than IP_RETENTION.
