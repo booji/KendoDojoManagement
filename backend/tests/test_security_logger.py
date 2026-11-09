@@ -142,8 +142,8 @@ class StubAttemptRepo:
         self._failures = failures
         self.logged: list[dict[str, Any]] = []
 
-    async def count_failures_since_last_success(self, user_id: str) -> int:
-        return self._failures
+    async def is_locked_out(self, user_id: str) -> bool:
+        return self._failures >= 5
 
     async def log_attempt(self, user_id: str, ip: str, *, success: bool) -> None:
         self.logged.append({"user_id": user_id, "ip": ip, "success": success})

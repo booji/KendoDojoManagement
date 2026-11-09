@@ -375,6 +375,50 @@ async def test_four_failures_still_allows_attempt(db_client) -> None:
     assert response.status_code == 200
 
 
+async def _redeem(code: str):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        return await c.post(
+            "/auth/recovery/redeem",
+            json={"email": "musashi@dojo.test", "code": code},
+        )
+
+
+@pytest.mark.asyncio
+async def test_lockout_expires_after_fifteen_minutes(db_client) -> None:
+    """Five failures lock recovery for 15 minutes, not forever (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=5,
+        attempted_at=datetime.now(UTC) - timedelta(minutes=16),
+    )
+
+    assert (await _redeem(plaintext)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_each_failure_past_the_lockout_doubles_it(db_client) -> None:
+    """A sixth failure locks recovery for 30 minutes, not 15 (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=6,
+        attempted_at=datetime.now(UTC) - timedelta(minutes=20),
+    )
+
+    assert (await _redeem(plaintext)).status_code == 429
+
+
 # ── AC7 — Attempts logged ──────────────────────────────────────────────────────
 
 
