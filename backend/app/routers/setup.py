@@ -26,7 +26,7 @@ import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import config
@@ -45,6 +45,7 @@ from app.auth.session_cookie import set_session_cookie
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.members.admin_directory import SqlAdminDirectory
 from app.members.db_models import Member
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -95,10 +96,7 @@ def _require_setup_token(presented: str | None) -> None:
 
 async def _is_claimed(uow: AbstractUnitOfWork) -> bool:
     """True once any Admin Account exists, whatever its passkeys or status."""
-    admins = await uow.session.execute(
-        select(func.count()).select_from(Account).where(Account.role == "admin")
-    )
-    return admins.scalar_one() > 0
+    return await SqlAdminDirectory(uow.session).any_admin_account()
 
 
 async def _discard_abandoned_claims(uow: AbstractUnitOfWork, claimant: Account) -> None:

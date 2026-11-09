@@ -1,6 +1,7 @@
 """Small read-only lookup over the auth accounts table, used when a Member's
 status changes to decide whether they are an admin and how many admins who can
-still sign in remain (#484). Kept separate from AbstractMemberRepository since
+still sign in remain (#484), and by first-run setup to decide whether the
+dojo has been claimed (#589). Kept separate from AbstractMemberRepository since
 it queries a different aggregate (accounts, not members).
 """
 
@@ -8,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.db_models import Account
@@ -20,6 +21,8 @@ class AbstractAdminDirectory(Protocol):
     async def is_admin(self, user_id: str | None) -> bool: ...
 
     async def count_admins(self) -> int: ...
+
+    async def any_admin_account(self) -> bool: ...
 
 
 class SqlAdminDirectory:
@@ -53,3 +56,15 @@ class SqlAdminDirectory:
             .with_for_update(of=Account)
         )
         return len(result.scalars().all())
+
+    async def any_admin_account(self) -> bool:
+        """Whether any Admin Account exists, whatever its Membership Status.
+
+        The setup claim's latch (#589): an archived or suspended Admin still
+        means the dojo has been claimed, so a leaked SETUP_TOKEN must not
+        claim it again. Reinstating them is the way back, not a new claim.
+        """
+        result = await self._session.execute(
+            select(exists().where(Account.role == "admin"))
+        )
+        return result.scalar_one()
