@@ -9,7 +9,9 @@ def _validate_email(v: object) -> str:
     if not isinstance(v, str):
         raise ValueError("email must be a string")
     result = _ev.validate_email(v, check_deliverability=False, test_environment=True)
-    return result.normalized
+    # `normalized` lowercases only the domain. Every writer and lookup goes
+    # through here and compares exactly, so the whole address is folded (#592).
+    return result.normalized.lower()
 
 
 LenientEmail = Annotated[str, BeforeValidator(_validate_email)]
