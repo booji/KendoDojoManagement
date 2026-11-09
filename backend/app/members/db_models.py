@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import IsoDate, UUIDBase, UUIDType
@@ -16,6 +16,10 @@ BARRED_FROM_SIGN_IN: tuple[MembershipStatus, ...] = ("archived", "suspended")
 
 class Member(UUIDBase):
     __tablename__ = "members"
+    # Lookups match exactly against LenientEmail's lowercase form (#592).
+    __table_args__ = (
+        CheckConstraint("email = lower(email)", name="ck_members_email_lowercase"),
+    )
 
     # Nullable to allow GDPR erasure to scrub email to NULL while keeping the
     # unique constraint (Postgres treats multiple NULLs as distinct).
