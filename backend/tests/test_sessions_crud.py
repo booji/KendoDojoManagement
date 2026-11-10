@@ -28,10 +28,12 @@ from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
+    get_session_type_repo,
 )
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -40,6 +42,7 @@ from tests.fake_repositories import (
 
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
+_TYPE_ID = str(uuid.uuid4())
 
 
 def _admin_override():
@@ -59,6 +62,14 @@ def _member_override():
 def clear_overrides():
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def type_repo() -> InMemorySessionTypeRepository:
+    """Segment writes check their types exist, so the one _segment uses does."""
+    repo = InMemorySessionTypeRepository([{"id": _TYPE_ID, "name": "Keiko"}])
+    app.dependency_overrides[get_session_type_repo] = lambda: repo
+    return repo
 
 
 @pytest.fixture()
@@ -88,7 +99,7 @@ def _segment(
     return {
         "start_time": start_time,
         "duration_minutes": duration_minutes,
-        "type_ids": [str(uuid.uuid4())],
+        "type_ids": [_TYPE_ID],
     }
 
 

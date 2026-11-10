@@ -35,10 +35,12 @@ from app.auth.models import AccountClaims
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
+    get_session_template_repo,
     get_session_type_repo,
 )
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
+    InMemorySessionTemplateRepository,
     InMemorySessionTypeRepository,
 )
 
@@ -48,6 +50,7 @@ from tests.fake_repositories import (
 
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
+_TYPE_ID = "00000000-0000-0000-0000-0000000000a1"
 
 
 def _admin_override():
@@ -246,6 +249,103 @@ async def test_create_session_with_segment_missing_types_returns_422(
     assert response.status_code == 422
 
 
+async def test_create_session_with_unknown_type_returns_404(
+    type_repo, instance_repo
+) -> None:
+    """A well-formed type id naming no session type is a 404 before the
+    foreign key can raise an unmapped 500 (#586's federation_id, again)."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    payload = {
+        "title": "Unknown Type",
+        "date": "2026-07-03",
+        "segments": [
+            {
+                "start_time": "19:00",
+                "duration_minutes": 60,
+                "type_ids": ["00000000-0000-0000-0000-000000000099"],
+            }
+        ],
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post("/sessions", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Session type not found"
+    assert await instance_repo.list() == []
+
+
+async def test_create_session_with_unknown_template_returns_404(
+    type_repo, instance_repo
+) -> None:
+    """template_id is a foreign key as well: an unknown one is a 404, not an
+    unmapped 500."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    template_repo = InMemorySessionTemplateRepository()
+    app.dependency_overrides[get_session_template_repo] = lambda: template_repo
+    known = (await type_repo.list())[0]["id"]
+    payload = {
+        "title": "Orphan",
+        "date": "2026-07-03",
+        "template_id": "00000000-0000-0000-0000-000000000099",
+        "segments": [
+            {"start_time": "19:00", "duration_minutes": 60, "type_ids": [known]}
+        ],
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post("/sessions", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Template not found"
+    assert await instance_repo.list() == []
+
+
+async def test_unknown_type_is_404_on_every_segment_write(
+    type_repo, instance_repo
+) -> None:
+    """Template create and both updates carry segments too; each rejects an
+    unknown type and leaves what it would have written untouched."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    template_repo = InMemorySessionTemplateRepository()
+    app.dependency_overrides[get_session_template_repo] = lambda: template_repo
+    known = (await type_repo.list())[0]["id"]
+    good = [{"start_time": "19:00", "duration_minutes": 60, "type_ids": [known]}]
+    bad = [{**good[0], "type_ids": ["00000000-0000-0000-0000-000000000099"]}]
+    template_body = {"title": "Keiko", "start_date": "2026-07-06"}
+    template = await template_repo.add(
+        {**template_body, "end_date": "2026-08-06", "segments": good}
+    )
+    instance = await instance_repo.add(
+        {"title": "Keiko", "date": "2026-07-03", "segments": good}
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        responses = [
+            await c.post(
+                "/sessions/templates",
+                json={**template_body, "end_date": "2026-08-06", "segments": bad},
+            ),
+            await c.patch(
+                f"/sessions/templates/{template['id']}", json={"segments": bad}
+            ),
+            await c.put(f"/sessions/{instance['id']}", json={"segments": bad}),
+        ]
+
+    for response in responses:
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Session type not found"
+    assert len(await template_repo.list()) == 1
+    assert (await template_repo.get(template["id"]))["segments"][0]["type_ids"] == [
+        known
+    ]
+    assert (await instance_repo.get(instance["id"]))["segments"][0]["type_ids"] == [
+        known
+    ]
+
+
 async def test_create_session_with_nonpositive_duration_returns_422(
     type_repo, instance_repo
 ) -> None:
@@ -415,7 +515,7 @@ def test_segment_read_model_dump_has_no_coach_notes() -> None:
         start_time="19:00",
         duration_minutes=60,
         title="Warm-up",
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
     )
     dumped = segment.model_dump()
     assert "coach_notes" not in dumped
@@ -431,7 +531,7 @@ def test_segment_read_ignores_extra_coach_notes_key() -> None:
         id="seg-1",
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         coach_notes="Focus on kirikaeshi",
     )
     assert not hasattr(segment, "coach_notes")
@@ -461,7 +561,7 @@ def test_segment_create_ignores_extra_coach_notes_key() -> None:
     segment = SegmentCreate(
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         coach_notes="Focus on kirikaeshi",
     )
     assert not hasattr(segment, "coach_notes")
@@ -476,7 +576,7 @@ def test_segment_create_title_still_present_and_normalized() -> None:
     segment = SegmentCreate(
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         title="  Warm-up  ",
     )
     assert segment.title == "Warm-up"
@@ -490,7 +590,7 @@ def test_segment_read_title_still_present() -> None:
     segment = SegmentRead(
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         title="Warm-up",
     )
     assert segment.title == "Warm-up"
@@ -522,7 +622,7 @@ def test_session_template_create_coach_notes_still_round_trips() -> None:
         end_date="2026-07-07",
         coach_notes="Bring extra shinai",
         segments=[
-            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=["type-1"])
+            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=[_TYPE_ID])
         ],
     )
     assert template.coach_notes == "Bring extra shinai"
@@ -560,7 +660,7 @@ def test_session_instance_create_coach_notes_still_round_trips() -> None:
         date="2026-06-30",
         coach_notes="Bring extra shinai",
         segments=[
-            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=["type-1"])
+            SegmentCreate(start_time="19:00", duration_minutes=60, type_ids=[_TYPE_ID])
         ],
     )
     assert instance.coach_notes == "Bring extra shinai"
@@ -616,13 +716,13 @@ def test_segment_models_ignore_a_stray_note_key() -> None:
     created = SegmentCreate(
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         note="Bring your own bokuto",
     )
     read = SegmentRead(
         start_time="19:00",
         duration_minutes=60,
-        type_ids=["type-1"],
+        type_ids=[_TYPE_ID],
         note="Bring your own bokuto",
     )
     assert not hasattr(created, "note")

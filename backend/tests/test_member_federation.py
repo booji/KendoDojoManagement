@@ -46,9 +46,12 @@ from tests.fake_repositories import InMemoryMemberRepository
 # Auth helpers
 # ---------------------------------------------------------------------------
 
+_MEMBER_A_ID = "aaaaaaaa-0000-0000-0000-00000000000a"
+_FED_ID = "fedfedfe-0000-0000-0000-000000000001"
+
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER_A = AccountClaims(
-    sub="aaaaaaaa-0000-0000-0000-00000000000a",
+    sub=_MEMBER_A_ID,
     email="member-a@dojo.test",
     role="member",
 )
@@ -76,7 +79,7 @@ def _member_b_override():
 # ---------------------------------------------------------------------------
 
 _MEMBER_A_RECORD: dict[str, Any] = {
-    "id": "aaaaaaaa-0000-0000-0000-00000000000a",
+    "id": _MEMBER_A_ID,
     "email": "member-a@dojo.test",
     "first_name": "Member",
     "surname": "A",
@@ -94,7 +97,7 @@ _MEMBER_B_RECORD: dict[str, Any] = {
 }
 
 _FED_RECORD: dict[str, Any] = {
-    "id": "fedfedfe-0000-0000-0000-000000000001",
+    "id": _FED_ID,
     "name": "All Japan Kendo Federation",
     "abbreviation": "AJKF",
     "is_active": True,
@@ -237,8 +240,8 @@ async def test_admin_can_add_federation_membership(
 ) -> None:
     """AC1/AC9: Admin can add a federation membership to any member."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    member_id = "aaaaaaaa-0000-0000-0000-00000000000a"
-    fed_id = "fedfedfe-0000-0000-0000-000000000001"
+    member_id = _MEMBER_A_ID
+    fed_id = _FED_ID
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -263,7 +266,7 @@ async def test_add_federation_membership_missing_federation_id_returns_422(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={"member_number": "12345"},
         )
     assert response.status_code == 422
@@ -277,8 +280,8 @@ async def test_add_federation_membership_missing_member_number_returns_422(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001"},
+            f"/members/{_MEMBER_A_ID}/federations",
+            json={"federation_id": _FED_ID},
         )
     assert response.status_code == 422
 
@@ -292,9 +295,9 @@ async def test_add_federation_membership_member_number_too_long_returns_422(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "X" * 101,
             },
         )
@@ -310,9 +313,9 @@ async def test_add_federation_membership_max_100_chars_accepted(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "X" * 100,
             },
         )
@@ -330,7 +333,7 @@ async def test_add_federation_membership_member_not_found_returns_404(
         response = await c.post(
             f"/members/{fake_id}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "123",
             },
         )
@@ -340,7 +343,7 @@ async def test_add_federation_membership_member_not_found_returns_404(
 @pytest.mark.parametrize(
     ("path", "override"),
     [
-        ("/members/aaaaaaaa-0000-0000-0000-00000000000a/federations", REQUIRE_ADMIN),
+        (f"/members/{_MEMBER_A_ID}/federations", REQUIRE_ADMIN),
         ("/accounts/me/federations", REQUIRE_MEMBER),
     ],
 )
@@ -368,9 +371,9 @@ async def test_add_federation_membership_unauthenticated_returns_401(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "123",
             },
         )
@@ -390,7 +393,7 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
         response = await c.post(
             "/members/bbbbbbbb-0000-0000-0000-00000000000b/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "123",
             },
             cookies={"access_token": token},
@@ -410,9 +413,9 @@ async def test_add_membership_with_renewal_date(member_repo, fed_repo, mf_repo) 
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-001",
                 "renewal_date": "2026-04-01",
             },
@@ -430,9 +433,9 @@ async def test_add_membership_without_renewal_date(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-002",
             },
         )
@@ -452,9 +455,9 @@ async def test_renewal_status_none_when_no_date(member_repo, fed_repo, mf_repo) 
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-003",
             },
         )
@@ -472,9 +475,9 @@ async def test_renewal_status_expired_when_past_date(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-004",
                 "renewal_date": past_date,
             },
@@ -493,9 +496,9 @@ async def test_renewal_status_expiring_soon_within_30_days(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-005",
                 "renewal_date": soon_date,
             },
@@ -514,9 +517,9 @@ async def test_renewal_status_expiring_soon_exactly_30_days(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-006",
                 "renewal_date": boundary_date,
             },
@@ -535,9 +538,9 @@ async def test_renewal_status_ok_when_beyond_30_days(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
+            f"/members/{_MEMBER_A_ID}/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "AJKF-007",
                 "renewal_date": future_date,
             },
@@ -560,8 +563,8 @@ async def test_admin_can_edit_federation_membership(
     # Seed a membership directly in the stub
     membership = await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "OLD-001",
         }
     )
@@ -571,7 +574,7 @@ async def test_admin_can_edit_federation_membership(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{mf_id}",
+            f"/members/{_MEMBER_A_ID}/federations/{mf_id}",
             json={"member_number": "NEW-999"},
         )
     assert response.status_code == 200
@@ -583,8 +586,8 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     membership = await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "AJKF-010",
         }
     )
@@ -595,7 +598,7 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{mf_id}",
+            f"/members/{_MEMBER_A_ID}/federations/{mf_id}",
             json={"renewal_date": new_date},
         )
     assert response.status_code == 200
@@ -611,7 +614,7 @@ async def test_edit_federation_membership_not_found_returns_404(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.put(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{fake_id}",
+            f"/members/{_MEMBER_A_ID}/federations/{fake_id}",
             json={"member_number": "Ghost"},
         )
     assert response.status_code == 404
@@ -629,8 +632,8 @@ async def test_admin_can_remove_federation_membership(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     membership = await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "TO-BE-REMOVED",
         }
     )
@@ -639,9 +642,7 @@ async def test_admin_can_remove_federation_membership(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{mf_id}"
-        )
+        response = await c.delete(f"/members/{_MEMBER_A_ID}/federations/{mf_id}")
     assert response.status_code == 204
 
 
@@ -653,9 +654,7 @@ async def test_remove_federation_membership_not_found_returns_404(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{fake_id}"
-        )
+        response = await c.delete(f"/members/{_MEMBER_A_ID}/federations/{fake_id}")
     assert response.status_code == 404
 
 
@@ -664,8 +663,8 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
 ) -> None:
     membership = await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "UNAUTH",
         }
     )
@@ -673,7 +672,7 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.delete(
-            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{membership.id}"
+            f"/members/{_MEMBER_A_ID}/federations/{membership.id}"
         )
     assert response.status_code == 401
 
@@ -690,15 +689,15 @@ async def test_admin_can_list_member_federations(
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "AJKF-100",
         }
     )
     await mf_repo.add(
         {
-            "member_id": "aaaaaaaa-0000-0000-0000-00000000000a",
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
             "member_number": "AJKF-200",
         }
     )
@@ -706,9 +705,7 @@ async def test_admin_can_list_member_federations(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get(
-            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations"
-        )
+        response = await c.get(f"/members/{_MEMBER_A_ID}/federations")
     assert response.status_code == 200
     assert len(response.json()) == 2
 
@@ -741,7 +738,7 @@ async def test_member_can_add_own_federation_membership(
         response = await c.post(
             "/accounts/me/federations",
             json={
-                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "federation_id": _FED_ID,
                 "member_number": "SELF-001",
             },
         )
@@ -759,7 +756,7 @@ async def test_member_can_list_own_federation_memberships(
     await mf_repo.add(
         {
             "member_id": _MEMBER_A.sub,
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "federation_id": _FED_ID,
             "member_number": "SELF-A",
         }
     )
@@ -780,7 +777,7 @@ async def test_member_can_edit_own_federation_membership(
     membership = await mf_repo.add(
         {
             "member_id": _MEMBER_A.sub,
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "federation_id": _FED_ID,
             "member_number": "BEFORE",
         }
     )
@@ -804,7 +801,7 @@ async def test_member_can_remove_own_federation_membership(
     membership = await mf_repo.add(
         {
             "member_id": _MEMBER_A.sub,
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "federation_id": _FED_ID,
             "member_number": "REMOVE-ME",
         }
     )
@@ -825,7 +822,7 @@ async def test_member_cannot_edit_other_members_federation_via_me_endpoint(
     membership = await mf_repo.add(
         {
             "member_id": _MEMBER_A.sub,
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "federation_id": _FED_ID,
             "member_number": "MEMBER-A-ONLY",
         }
     )
@@ -848,7 +845,7 @@ async def test_member_cannot_delete_other_members_federation_via_me_endpoint(
     membership = await mf_repo.add(
         {
             "member_id": _MEMBER_A.sub,
-            "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+            "federation_id": _FED_ID,
             "member_number": "MEMBER-A-ONLY-2",
         }
     )

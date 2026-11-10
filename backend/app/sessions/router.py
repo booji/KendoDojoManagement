@@ -24,6 +24,7 @@ from app.sessions.dependencies import (
 from app.sessions.ical import build_ical, feed_url_name
 from app.sessions.models import (
     GenerateRequest,
+    SegmentCreate,
     SessionInstanceCreate,
     SessionInstanceRead,
     SessionInstanceUpdate,
@@ -83,6 +84,20 @@ _Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AttendanceRepo = Annotated[AbstractAttendanceRepository, Depends(get_attendance_repo)]
 _CurrentMemberId = Annotated[str | None, Depends(get_current_member_id)]
+
+
+async def _require_known_types(
+    segments: list[SegmentCreate] | None, type_repo: AbstractSessionTypeRepository
+) -> None:
+    # Checked here rather than left to the foreign key, whose violation would
+    # surface as an unmapped 500 (#586).
+    if not segments:
+        return
+    known = {t["id"] for t in await type_repo.list()}
+    if any(str(tid) not in known for seg in segments for tid in seg.type_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +245,10 @@ async def create_session_template(
     _claims: _Admin,
     repo: _TmplRepo,
     instance_repo: _InstRepo,
+    type_repo: _TypeRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
+    await _require_known_types(payload.segments, type_repo)
     template = await templates.create(payload.model_dump(), repo, instance_repo)
     await uow.commit()
     return _normalize_template(template)
@@ -284,8 +301,19 @@ async def create_adhoc_session(
     payload: SessionInstanceCreate,
     _claims: _Admin,
     repo: _InstRepo,
+    type_repo: _TypeRepo,
+    template_repo: _TmplRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
+    await _require_known_types(payload.segments, type_repo)
+    # Same reason as the types: template_id is a foreign key (#586).
+    if (
+        payload.template_id is not None
+        and await template_repo.get(str(payload.template_id)) is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     result = await repo.add(payload.model_dump())
     await uow.commit()
     return _normalize_instance(result)
@@ -384,8 +412,10 @@ async def update_session_instance(
     payload: SessionInstanceUpdate,
     _claims: _Admin,
     repo: _InstRepo,
+    type_repo: _TypeRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
+    await _require_known_types(payload.segments, type_repo)
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
     # checkin window overrides are nullable-by-design: an explicitly provided
     # None clears the override to "use the live dojo default", so it must
@@ -412,8 +442,10 @@ async def update_session_template(
     _claims: _Admin,
     template_repo: _TmplRepo,
     instance_repo: _InstRepo,
+    type_repo: _TypeRepo,
     uow: _UoW,
 ) -> dict[str, Any]:
+    await _require_known_types(payload.segments, type_repo)
     data = {k: v for k, v in payload.model_dump().items() if v is not None}
     template = await templates.reschedule(
         str(template_id), data, template_repo, instance_repo

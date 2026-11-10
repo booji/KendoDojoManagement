@@ -315,7 +315,17 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
 # ---------------------------------------------------------------------------
 
 _SOME_UUID = "00000000-0000-0000-0000-000000000099"
-_MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
+_FEDERATION_MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
+_BAD_SEGMENTS = [
+    {"start_time": "19:00", "duration_minutes": 60, "type_ids": [_BAD_UUID]}
+]
+_SESSION = {"title": "Keiko", "date": "2026-06-01", "segments": _BAD_SEGMENTS}
+_TEMPLATE = {
+    "title": "Keiko",
+    "start_date": "2026-06-01",
+    "end_date": "2026-07-01",
+    "segments": _BAD_SEGMENTS,
+}
 
 
 @pytest.mark.parametrize(
@@ -329,7 +339,7 @@ _MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
         ("DELETE", f"/auth/passkeys/{_BAD_UUID}", None),
         ("POST", f"/auth/admin/invites/{_BAD_UUID}/revoke", None),
         ("GET", f"/members/{_BAD_UUID}/federations", None),
-        ("POST", f"/members/{_BAD_UUID}/federations", _MEMBERSHIP),
+        ("POST", f"/members/{_BAD_UUID}/federations", _FEDERATION_MEMBERSHIP),
         ("PUT", f"/members/{_SOME_UUID}/federations/{_BAD_UUID}", {}),
         ("PUT", f"/members/{_BAD_UUID}/federations/{_SOME_UUID}", {}),
         ("DELETE", f"/members/{_SOME_UUID}/federations/{_BAD_UUID}", None),
@@ -340,12 +350,27 @@ _MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
         (
             "POST",
             f"/members/{_SOME_UUID}/federations",
-            {**_MEMBERSHIP, "federation_id": _BAD_UUID},
+            {**_FEDERATION_MEMBERSHIP, "federation_id": _BAD_UUID},
         ),
         (
             "POST",
             "/accounts/me/federations",
-            {**_MEMBERSHIP, "federation_id": _BAD_UUID},
+            {**_FEDERATION_MEMBERSHIP, "federation_id": _BAD_UUID},
+        ),
+        # a segment's session type ids, written to a uuid column the same way
+        ("POST", "/sessions", _SESSION),
+        ("PUT", f"/sessions/{_SOME_UUID}", {"segments": _BAD_SEGMENTS}),
+        ("POST", "/sessions/templates", _TEMPLATE),
+        ("PATCH", f"/sessions/templates/{_SOME_UUID}", {"segments": _BAD_SEGMENTS}),
+        # an ad-hoc session's template_id, written to a uuid column likewise
+        (
+            "POST",
+            "/sessions",
+            {
+                **_SESSION,
+                "segments": [{**_BAD_SEGMENTS[0], "type_ids": [_SOME_UUID]}],
+                "template_id": _BAD_UUID,
+            },
         ),
     ],
 )
