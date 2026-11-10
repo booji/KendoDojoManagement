@@ -314,6 +314,9 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
 # column, so a malformed one raised an unhandled DataError: a 500, not a 422.
 # ---------------------------------------------------------------------------
 
+_SOME_UUID = "00000000-0000-0000-0000-000000000099"
+_MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
+
 
 @pytest.mark.parametrize(
     ("method", "path", "body"),
@@ -325,6 +328,14 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
         ("PATCH", f"/auth/passkeys/{_BAD_UUID}", {"label": "Laptop"}),
         ("DELETE", f"/auth/passkeys/{_BAD_UUID}", None),
         ("POST", f"/auth/admin/invites/{_BAD_UUID}/revoke", None),
+        ("GET", f"/members/{_BAD_UUID}/federations", None),
+        ("POST", f"/members/{_BAD_UUID}/federations", _MEMBERSHIP),
+        ("PUT", f"/members/{_SOME_UUID}/federations/{_BAD_UUID}", {}),
+        ("PUT", f"/members/{_BAD_UUID}/federations/{_SOME_UUID}", {}),
+        ("DELETE", f"/members/{_SOME_UUID}/federations/{_BAD_UUID}", None),
+        ("DELETE", f"/members/{_BAD_UUID}/federations/{_SOME_UUID}", None),
+        ("PUT", f"/accounts/me/federations/{_BAD_UUID}", {}),
+        ("DELETE", f"/accounts/me/federations/{_BAD_UUID}", None),
     ],
 )
 async def test_malformed_path_id_returns_422(
