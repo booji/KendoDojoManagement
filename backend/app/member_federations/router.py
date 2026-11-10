@@ -48,7 +48,7 @@ def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
     )
 
 
-async def _add_membership(
+async def _add_federation_membership(
     member_id: str,
     payload: MemberFederationCreate,
     fed_repo: AbstractFederationRepository,
@@ -101,7 +101,9 @@ async def admin_add_member_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    record = await _add_membership(str(member_id), payload, fed_repo, mf_repo)
+    record = await _add_federation_membership(
+        str(member_id), payload, fed_repo, mf_repo
+    )
     await uow.commit()
     return _to_response(record)
 
@@ -200,7 +202,7 @@ async def me_add_federation(
     uow: _UoW,
 ) -> MemberFederationResponse:
     member = await _get_member_by_user(claims.sub, member_repo)
-    record = await _add_membership(member["id"], payload, fed_repo, mf_repo)
+    record = await _add_federation_membership(member["id"], payload, fed_repo, mf_repo)
     await uow.commit()
     return _to_response(record)
 

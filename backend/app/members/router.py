@@ -232,7 +232,8 @@ async def erase_member(
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
-    record = await repo.get(str(member_id))
+    member_key = str(member_id)
+    record = await repo.get(member_key)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -253,10 +254,10 @@ async def erase_member(
         await delete_account(session, target_user_id)
 
     await session.execute(
-        delete(GradeHistory).where(GradeHistory.member_id == str(member_id))
+        delete(GradeHistory).where(GradeHistory.member_id == member_key)
     )
     await session.execute(
-        delete(MemberFederation).where(MemberFederation.member_id == str(member_id))
+        delete(MemberFederation).where(MemberFederation.member_id == member_key)
     )
 
     scrub = {
@@ -264,7 +265,7 @@ async def erase_member(
         "anonymised_at": datetime.now(UTC),
         "anonymised_by": claims.sub,
     }
-    updated = await repo.update(str(member_id), scrub)
+    updated = await repo.update(member_key, scrub)
     await uow.commit()
-    log_admin_event("member_erased", claims.sub, member_id=str(member_id))
+    log_admin_event("member_erased", claims.sub, member_id=member_key)
     return _to_response(updated)
