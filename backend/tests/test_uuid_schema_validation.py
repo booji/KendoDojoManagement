@@ -321,6 +321,7 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
         ("GET", f"/federations/{_BAD_UUID}", None),
         ("PUT", f"/federations/{_BAD_UUID}", {}),
         ("DELETE", f"/federations/{_BAD_UUID}", None),
+        ("POST", f"/members/{_BAD_UUID}/erase", None),
     ],
 )
 async def test_malformed_path_id_returns_422(

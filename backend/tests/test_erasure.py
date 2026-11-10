@@ -75,9 +75,12 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
+_MEMBER_ID = "11111111-1111-1111-1111-111111111111"
+
+
 def _member(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "id": "member-1",
+        "id": _MEMBER_ID,
         "email": "taro@dojo.test",
         "first_name": "Taro",
         "surname": "Yamada",
@@ -186,35 +189,35 @@ def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
 async def test_erase_as_non_admin_returns_403() -> None:
     from tests.auth_support import sign_in
 
-    _override_member_repo({"member-1": _member()})
+    _override_member_repo({_MEMBER_ID: _member()})
     token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/member-1/erase", cookies={"access_token": token}
+            f"/members/{_MEMBER_ID}/erase", cookies={"access_token": token}
         )
     assert response.status_code == 403
 
 
 async def test_erase_unauthenticated_returns_401() -> None:
-    _override_member_repo({"member-1": _member()})
+    _override_member_repo({_MEMBER_ID: _member()})
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 401
 
 
 async def test_erase_member_not_archived_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
-        {"member-1": _member(membership_status="active", user_id="someone-else")}
+        {_MEMBER_ID: _member(membership_status="active", user_id="someone-else")}
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 409
     assert "archived" in response.json()["detail"].lower()
 
@@ -222,12 +225,12 @@ async def test_erase_member_not_archived_returns_409() -> None:
 async def test_erase_self_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
-        {"member-1": _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
+        {_MEMBER_ID: _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 409
     detail = response.json()["detail"].lower()
     assert "self" in detail or "yourself" in detail
@@ -239,7 +242,7 @@ async def test_erase_missing_member_returns_404() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/does-not-exist/erase")
+        response = await c.post("/members/99999999-9999-9999-9999-999999999999/erase")
     assert response.status_code == 404
 
 
