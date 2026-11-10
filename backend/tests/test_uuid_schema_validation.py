@@ -322,6 +322,9 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
         ("PUT", f"/federations/{_BAD_UUID}", {}),
         ("DELETE", f"/federations/{_BAD_UUID}", None),
         ("POST", f"/members/{_BAD_UUID}/erase", None),
+        ("PATCH", f"/auth/passkeys/{_BAD_UUID}", {"label": "Laptop"}),
+        ("DELETE", f"/auth/passkeys/{_BAD_UUID}", None),
+        ("POST", f"/auth/admin/invites/{_BAD_UUID}/revoke", None),
     ],
 )
 async def test_malformed_path_id_returns_422(
