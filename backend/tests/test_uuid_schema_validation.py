@@ -336,9 +336,20 @@ _MEMBERSHIP = {"federation_id": _SOME_UUID, "member_number": "AJKF-1"}
         ("DELETE", f"/members/{_BAD_UUID}/federations/{_SOME_UUID}", None),
         ("PUT", f"/accounts/me/federations/{_BAD_UUID}", {}),
         ("DELETE", f"/accounts/me/federations/{_BAD_UUID}", None),
+        # federation_id in the body, the same hole one layer over
+        (
+            "POST",
+            f"/members/{_SOME_UUID}/federations",
+            {**_MEMBERSHIP, "federation_id": _BAD_UUID},
+        ),
+        (
+            "POST",
+            "/accounts/me/federations",
+            {**_MEMBERSHIP, "federation_id": _BAD_UUID},
+        ),
     ],
 )
-async def test_malformed_path_id_returns_422(
+async def test_malformed_id_returns_422(
     method: str, path: str, body: dict[str, Any] | None
 ) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN

@@ -9,6 +9,8 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.federations.dependencies import get_federation_repo
+from app.federations.repository import AbstractFederationRepository
 from app.member_federations.dependencies import get_member_federation_repo
 from app.member_federations.repository import (
     AbstractMemberFederationRepository,
@@ -29,6 +31,7 @@ _MfRepo = Annotated[
     AbstractMemberFederationRepository, Depends(get_member_federation_repo)
 ]
 _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
+_FedRepo = Annotated[AbstractFederationRepository, Depends(get_federation_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
@@ -43,6 +46,23 @@ def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
         renewal_date=record.renewal_date,
         renewal_status=compute_renewal_status(record.renewal_date),
     )
+
+
+async def _add_membership(
+    member_id: str,
+    payload: MemberFederationCreate,
+    fed_repo: AbstractFederationRepository,
+    mf_repo: AbstractMemberFederationRepository,
+) -> MemberFederationRecord:
+    # Checked here rather than left to the foreign key, whose violation would
+    # surface as an unmapped 500 (#586).
+    if await fed_repo.get(str(payload.federation_id)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"
+        )
+    data = payload.model_dump(mode="json")
+    data["member_id"] = member_id
+    return await mf_repo.add(data)
 
 
 # ===========================================================================
@@ -72,6 +92,7 @@ async def admin_add_member_federation(
     payload: MemberFederationCreate,
     _claims: _Admin,
     member_repo: _MemberRepo,
+    fed_repo: _FedRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
@@ -80,9 +101,7 @@ async def admin_add_member_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    data = payload.model_dump()
-    data["member_id"] = str(member_id)
-    record = await mf_repo.add(data)
+    record = await _add_membership(str(member_id), payload, fed_repo, mf_repo)
     await uow.commit()
     return _to_response(record)
 
@@ -176,13 +195,12 @@ async def me_add_federation(
     payload: MemberFederationCreate,
     claims: _Member,
     member_repo: _MemberRepo,
+    fed_repo: _FedRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
     member = await _get_member_by_user(claims.sub, member_repo)
-    data = payload.model_dump()
-    data["member_id"] = member["id"]
-    record = await mf_repo.add(data)
+    record = await _add_membership(member["id"], payload, fed_repo, mf_repo)
     await uow.commit()
     return _to_response(record)
 

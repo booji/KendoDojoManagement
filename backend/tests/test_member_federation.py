@@ -48,10 +48,14 @@ from tests.fake_repositories import InMemoryMemberRepository
 
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER_A = AccountClaims(
-    sub="aaaaaaaa-0000-0000-0000-00000000000a", email="member-a@dojo.test", role="member"
+    sub="aaaaaaaa-0000-0000-0000-00000000000a",
+    email="member-a@dojo.test",
+    role="member",
 )
 _MEMBER_B = AccountClaims(
-    sub="bbbbbbbb-0000-0000-0000-00000000000b", email="member-b@dojo.test", role="member"
+    sub="bbbbbbbb-0000-0000-0000-00000000000b",
+    email="member-b@dojo.test",
+    role="member",
 )
 
 
@@ -325,9 +329,36 @@ async def test_add_federation_membership_member_not_found_returns_404(
     ) as c:
         response = await c.post(
             f"/members/{fake_id}/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001", "member_number": "123"},
+            json={
+                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "member_number": "123",
+            },
         )
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("path", "override"),
+    [
+        ("/members/aaaaaaaa-0000-0000-0000-00000000000a/federations", REQUIRE_ADMIN),
+        ("/accounts/me/federations", REQUIRE_MEMBER),
+    ],
+)
+async def test_add_federation_membership_unknown_federation_returns_404(
+    member_repo, fed_repo, mf_repo, path, override
+) -> None:
+    """#586: an unknown federation_id is a 404, not an unmapped FK violation."""
+    app.dependency_overrides[override] = _member_a_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            path,
+            json={"federation_id": str(uuid.uuid4()), "member_number": "123"},
+        )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Federation not found"
+    assert mf_repo._store == {}
 
 
 async def test_add_federation_membership_unauthenticated_returns_401(
@@ -338,7 +369,10 @@ async def test_add_federation_membership_unauthenticated_returns_401(
     ) as c:
         response = await c.post(
             "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001", "member_number": "123"},
+            json={
+                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "member_number": "123",
+            },
         )
     assert response.status_code == 401
 
@@ -355,7 +389,10 @@ async def test_member_cannot_add_to_other_member_via_admin_endpoint(
     ) as c:
         response = await c.post(
             "/members/bbbbbbbb-0000-0000-0000-00000000000b/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001", "member_number": "123"},
+            json={
+                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "member_number": "123",
+            },
             cookies={"access_token": token},
         )
     assert response.status_code == 403
@@ -394,7 +431,10 @@ async def test_add_membership_without_renewal_date(
     ) as c:
         response = await c.post(
             "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001", "member_number": "AJKF-002"},
+            json={
+                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "member_number": "AJKF-002",
+            },
         )
     assert response.status_code == 201
     assert response.json()["renewal_date"] is None
@@ -413,7 +453,10 @@ async def test_renewal_status_none_when_no_date(member_repo, fed_repo, mf_repo) 
     ) as c:
         response = await c.post(
             "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations",
-            json={"federation_id": "fedfedfe-0000-0000-0000-000000000001", "member_number": "AJKF-003"},
+            json={
+                "federation_id": "fedfedfe-0000-0000-0000-000000000001",
+                "member_number": "AJKF-003",
+            },
         )
     assert response.status_code == 201
     assert response.json()["renewal_status"] is None
@@ -596,7 +639,9 @@ async def test_admin_can_remove_federation_membership(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{mf_id}")
+        response = await c.delete(
+            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{mf_id}"
+        )
     assert response.status_code == 204
 
 
@@ -608,7 +653,9 @@ async def test_remove_federation_membership_not_found_returns_404(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{fake_id}")
+        response = await c.delete(
+            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{fake_id}"
+        )
     assert response.status_code == 404
 
 
@@ -625,7 +672,9 @@ async def test_remove_federation_membership_unauthenticated_returns_401(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.delete(f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{membership.id}")
+        response = await c.delete(
+            f"/members/aaaaaaaa-0000-0000-0000-00000000000a/federations/{membership.id}"
+        )
     assert response.status_code == 401
 
 
@@ -657,7 +706,9 @@ async def test_admin_can_list_member_federations(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/members/aaaaaaaa-0000-0000-0000-00000000000a/federations")
+        response = await c.get(
+            "/members/aaaaaaaa-0000-0000-0000-00000000000a/federations"
+        )
     assert response.status_code == 200
     assert len(response.json()) == 2
 
