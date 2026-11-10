@@ -137,8 +137,9 @@ class AdminRecoveryToken(UUIDBase):
     user_id: Mapped[str] = mapped_column(
         UUIDType(), ForeignKey("accounts.id"), nullable=False, index=True
     )
+    # SET NULL: erasing the issuer leaves the token usable by its target (#570).
     created_by_id: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("accounts.id"), nullable=True
+        UUIDType(), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(
