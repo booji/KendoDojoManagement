@@ -60,8 +60,9 @@ async def sign_in_email(session: AsyncSession, user_id: str) -> str | None:
 async def delete_account(session: AsyncSession, account_id: str) -> None:
     """Delete an Account and everything that hangs off it.
 
-    Children first: each of these has a foreign key to accounts. Invites the
-    Account issued keep their row (`issued_by` is SET NULL), and audit columns
+    Children first: each of these has a foreign key to accounts. Invites and
+    admin recovery tokens the Account issued keep their row (`issued_by` and
+    `created_by_id` are SET NULL), and audit columns
     elsewhere are deliberately not foreign keys, so neither is touched.
     """
     for child in (PasskeyCredential, RecoveryCode, RecoveryAttempt, AdminRecoveryToken):

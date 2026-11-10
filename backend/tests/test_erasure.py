@@ -512,6 +512,66 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
     assert actor_count == 1
 
 
+async def test_erase_succeeds_when_the_members_account_issued_an_admin_recovery_token(
+    db_session: AsyncSession,
+) -> None:
+    """The token outlives its issuer, for the Account it was issued to (#570)."""
+    from app.dependencies import get_uow
+    from app.members.dependencies import get_member_repo
+    from app.members.repository import SqlMemberRepository
+
+    actor_id = await seed_account(
+        db_session, f"actor-{uuid.uuid4()}@dojo.test", role="admin"
+    )
+    issuer_email = f"issuer-{uuid.uuid4()}@dojo.test"
+    issuer_id = await seed_account(
+        db_session, issuer_email, role="admin", membership_status="archived"
+    )
+    member_id = (
+        await db_session.execute(
+            text("SELECT member_id FROM accounts WHERE id = :id"), {"id": issuer_id}
+        )
+    ).scalar_one()
+    token_id = str(uuid.uuid4())
+    await db_session.execute(
+        text(
+            "INSERT INTO admin_recovery_tokens "
+            "(id, user_id, created_by_id, token_hash, expires_at, created_at) "
+            "VALUES (:id, :user_id, :created_by_id, 'hash', "
+            "now() + interval '1 day', now())"
+        ),
+        {"id": token_id, "user_id": actor_id, "created_by_id": issuer_id},
+    )
+    await db_session.flush()
+
+    app.dependency_overrides[get_uow] = lambda: _DbSessionUnitOfWork(db_session)
+    app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=actor_id, email="actor@dojo.test", role="admin"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(f"/members/{member_id}/erase")
+
+    assert response.status_code == 200, response.text
+    token = (
+        (
+            await db_session.execute(
+                text(
+                    "SELECT user_id, created_by_id FROM admin_recovery_tokens "
+                    "WHERE id = :id"
+                ),
+                {"id": token_id},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    assert str(token["user_id"]) == actor_id
+    assert token["created_by_id"] is None
+
+
 async def test_list_search_tolerates_erased_member_with_null_email(
     db_session: AsyncSession,
 ) -> None:
