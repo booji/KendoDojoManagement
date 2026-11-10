@@ -160,6 +160,45 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
         )
 
 
+@pytest.mark.asyncio
+@pytest.mark.timing_sensitive
+async def test_login_complete_known_vs_unknown_latency_converges(
+    db_client, monkeypatch
+) -> None:
+    """A junk credential fails for a known and an unknown email after the
+    same database work (#587). Complete has no constant-time floor: an unknown
+    email used to fail before the credential lookup a known one ran."""
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    await _seed_user(db_client, "known-complete@dojo.test")
+    credential = {
+        "id": "ZmFrZQ",
+        "rawId": "ZmFrZQ",
+        "response": {},
+        "type": "public-key",
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+
+        async def timed(email: str) -> float:
+            start = time.perf_counter()
+            response = await c.post(
+                "/auth/login/passkey/complete",
+                json={"email": email, "credential": credential},
+            )
+            elapsed = time.perf_counter() - start
+            assert response.status_code == 401
+            return elapsed
+
+        await assert_latency_converges_sampled(
+            lambda: timed("known-complete@dojo.test"),
+            lambda: timed("unknown-complete@dojo.test"),
+            label_a="known email",
+            label_b="unknown email",
+        )
+
+
 # ── AC6: the floor is configurable ───────────────────────────────────────────
 
 
