@@ -239,11 +239,12 @@ erDiagram
   value — see `app/auth/invite_service.py` for why that differs).
 - **`recovery_attempts` retention** (#434). A successful attempt deletes that
   Account's earlier rows, leaving only the success. Rows that remain (an
-  Account that keeps failing) are kept — lockout counts failures since the
-  last success with no time window, so deleting by age would expire lockouts
-  — but `ip_address` is cleared to NULL once a row is 30 days old
-  (`IP_RETENTION` in `app/auth/attempt_repository.py`). The clear runs for all
-  Accounts on every app start and, under Quadlet, daily from
+  Account that keeps failing) are kept as its audit trail — lockout counts
+  only failures from the last 24 hours, and none from before the Account's
+  latest admin or CLI recovery token (#580) — but `ip_address` is cleared to
+  NULL once a row is 30 days old (`IP_RETENTION` in
+  `app/auth/attempt_repository.py`). The clear runs for all Accounts on every
+  app start and, under Quadlet, daily from
   `kendo-ip-retention.timer` (#467), so an address outlives 30 days by at most
   a day. The Compose stack has no timer: there it runs only at app start, and
   an address can outlive 30 days until the next restart.
@@ -287,6 +288,10 @@ erDiagram
   - `uq_dojo_settings_single_row` — a unique index on the constant `(true)`:
     `dojo_settings` holds one row.
   - `uq_federations_name` — UNIQUE `federations.name`.
+  - `ck_members_email_lowercase` — CHECK `email = lower(email)` on `members`
+    (#592). Sign-in looks a Member up by exact match on the lowercase form
+    `LenientEmail` produces, so this also makes the UNIQUE on `members.email`
+    case-insensitive in effect.
 - **Index policy** (#418). No indexes beyond those that keys and constraints
   create and the `index=True` lookup columns on the ORM. Add one when a query
   is measured slow — at dojo scale a sequential scan is microseconds.

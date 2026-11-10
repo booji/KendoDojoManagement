@@ -254,6 +254,20 @@ So the **local contention case is understood** (the real path approaches the
 floor, the mask stops working, a larger floor absorbs it) and the **CI case is
 not**.
 
+The same unexplained shape also shows up locally, so it is not specific to
+GitHub's runners. On 2026-11-09, `test_invite_redeem_begin_valid_vs_invalid_median_latency_converges`
+failed in a local full-suite run (Podman, `docker-compose.test.yml`, the `test`
+service) on the #593 branch. That branch does not touch the invite or
+floor-middleware code. The failure:
+
+- same-path control **0.098 ms**
+- cross-path delta **1.225 ms**, n=31, reproduced on both rounds
+- **no** `Constant-time floor exceeded` warning
+
+The same test passed in the full run before it, on the same branch, and when
+`tests/test_invites.py` was rerun alone straight afterwards. During #589 it also
+failed once and passed on two reruns.
+
 Given that, `.github/workflows/backend-tests.yml` marks the three wall-clock
 assertions `timing_sensitive` and runs them in a `continue-on-error` step. The
 numbers stay visible for anyone investigating, while unrelated PRs stop being
