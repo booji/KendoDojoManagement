@@ -307,3 +307,31 @@ async def test_get_member_attendance_bad_uuid_returns_422() -> None:
         response = await c.get(f"/members/{_BAD_UUID}/attendance")
 
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# #586 — the path ids #131 missed. Each went straight into a PostgreSQL uuid
+# column, so a malformed one raised an unhandled DataError: a 500, not a 422.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", f"/federations/{_BAD_UUID}", None),
+        ("PUT", f"/federations/{_BAD_UUID}", {}),
+        ("DELETE", f"/federations/{_BAD_UUID}", None),
+    ],
+)
+async def test_malformed_path_id_returns_422(
+    method: str, path: str, body: dict[str, Any] | None
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN
+    app.dependency_overrides[REQUIRE_MEMBER] = lambda: _ADMIN
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.request(method, path, json=body)
+
+    assert response.status_code == 422
