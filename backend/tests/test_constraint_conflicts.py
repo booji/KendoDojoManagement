@@ -70,11 +70,29 @@ async def test_joining_a_federation_twice_is_a_conflict(db_client) -> None:
     assert "federation" in body["detail"]
 
 
-async def test_any_other_integrity_error_is_still_a_server_error(db_client) -> None:
+async def test_any_other_integrity_error_is_still_a_server_error() -> None:
     # A foreign-key violation is a bug, not a conflict: the handler must not
-    # dress it up as a 409.
+    # dress it up as a 409. Called directly: the unknown federation_id that
+    # used to provoke one through the API is now refused first (#586).
     from sqlalchemy.exc import IntegrityError
 
+    from app.main import _constraint_conflict_handler
+
+    exc = IntegrityError(
+        "INSERT INTO member_federations ...",
+        {},
+        Exception(
+            'insert or update on table "member_federations" violates foreign key '
+            'constraint "member_federations_federation_id_fkey"'
+        ),
+    )
+
+    with pytest.raises(IntegrityError, match="foreign key"):
+        await _constraint_conflict_handler(None, exc)  # type: ignore[arg-type]
+
+
+async def test_joining_an_unknown_federation_is_a_404(db_client) -> None:
+    # #586: it used to reach the foreign key and come back a 500.
     from app.members.db_models import Member
 
     member = Member(
@@ -89,11 +107,13 @@ async def test_any_other_integrity_error_is_still_a_server_error(db_client) -> N
     db_client.add(member)
     await db_client.flush()
 
-    with pytest.raises(IntegrityError, match="foreign key"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test/api"
-        ) as c:
-            await c.post(
-                f"/members/{member.id}/federations",
-                json={"federation_id": str(uuid.uuid4()), "member_number": "N-1"},
-            )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            f"/members/{member.id}/federations",
+            json={"federation_id": str(uuid.uuid4()), "member_number": "N-1"},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Federation not found"
