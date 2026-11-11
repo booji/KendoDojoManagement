@@ -753,6 +753,24 @@ def test_check_passes_what_setup_just_wrote_on_a_healthy_host(tmp_path):
     assert "podman-compose up -d" in out.stdout
 
 
+def test_check_fails_until_podman_restart_brings_the_stack_back_after_a_reboot(
+    tmp_path,
+):
+    # restart: always covers a crash; after a reboot only podman-restart.service
+    # starts the containers again (#582).
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    env = host_env(
+        tmp_path,
+        systemctl='case "$*" in *is-failed*|*podman-restart*) exit 1 ;; esac',
+    )
+
+    out = check(home, env)
+
+    assert out.returncode == 1
+    assert "systemctl --user enable podman-restart.service" in out.stdout
+
+
 def test_check_before_setup_says_to_run_setup_first(tmp_path):
     home = bundle(tmp_path)
 
