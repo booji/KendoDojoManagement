@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, timedelta
 
 from pydantic import BaseModel, field_validator
@@ -26,7 +27,7 @@ def compute_renewal_status(renewal_date: date | str | None) -> str | None:
 
 
 class MemberFederationCreate(BaseModel):
-    federation_id: str
+    federation_id: uuid.UUID
     member_number: str
     renewal_date: date | None = None
 

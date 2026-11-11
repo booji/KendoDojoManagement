@@ -441,6 +441,38 @@ async def test_login_complete_errors_indistinguishable_unknown_vs_bad_credential
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential_id", ["A", "é"])
+async def test_login_complete_malformed_credential_id_same_for_known_and_unknown(
+    db_client, credential_id
+) -> None:
+    """A credential id that is not base64url used to 500 for a known email
+    and 401 for an unknown one: a one-request enumeration oracle (#587). Both
+    must get the generic 401."""
+    await _seed_user(db_client, "known-malformed@dojo.test")
+    credential = {
+        "id": credential_id,
+        "rawId": credential_id,
+        "response": {},
+        "type": "public-key",
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test/api",
+    ) as c:
+        responses = [
+            await c.post(
+                "/auth/login/passkey/complete",
+                json={"email": email, "credential": credential},
+            )
+            for email in ("known-malformed@dojo.test", "unknown-malformed@dojo.test")
+        ]
+
+    assert [r.status_code for r in responses] == [401, 401]
+    assert responses[0].json() == responses[1].json()
+
+
 # ── issue #267: allowCredentials removed as an enumeration channel ─────────
 #
 # #239/#255 masked login_passkey_begin's decoy shape and timing, but left

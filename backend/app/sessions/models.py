@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import date
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 class SessionTypeCreate(BaseModel):
@@ -56,7 +63,9 @@ class SegmentCreate(BaseModel):
     start_time: str  # "HH:MM"
     duration_minutes: int
     title: str | None = None  # public, optional
-    type_ids: list[str]
+    # uuid.UUID so a malformed id is a 422, not a DataError 500 from the uuid
+    # column (#586); dumped back to str, the form every record already holds.
+    type_ids: list[uuid.UUID]
 
     @field_validator("title")
     @classmethod
@@ -85,10 +94,14 @@ class SegmentCreate(BaseModel):
 
     @field_validator("type_ids")
     @classmethod
-    def validate_at_least_one_type(cls, v: list[str]) -> list[str]:
+    def validate_at_least_one_type(cls, v: list[uuid.UUID]) -> list[uuid.UUID]:
         if not v:
             raise ValueError("a segment must have at least one type")
         return v
+
+    @field_serializer("type_ids")
+    def serialize_type_ids(self, v: list[uuid.UUID]) -> list[str]:
+        return [str(type_id) for type_id in v]
 
 
 class SegmentRead(BaseModel):
@@ -209,7 +222,7 @@ def _validate_iso_date(v: str) -> str:
 class SessionInstanceCreate(BaseModel):
     title: str
     date: str  # "YYYY-MM-DD"
-    template_id: str | None = None
+    template_id: uuid.UUID | None = None  # a uuid column, as type_ids are (#586)
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
@@ -224,6 +237,10 @@ class SessionInstanceCreate(BaseModel):
     @classmethod
     def validate_date(cls, v: str) -> str:
         return _validate_iso_date(v)
+
+    @field_serializer("template_id")
+    def serialize_template_id(self, v: uuid.UUID | None) -> str | None:
+        return None if v is None else str(v)
 
 
 class SessionInstanceRead(BaseModel):

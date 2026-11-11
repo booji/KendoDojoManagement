@@ -30,7 +30,7 @@ from sqlalchemy.pool import NullPool
 
 from app.attendance.db_models import Attendance
 from app.auth.accounts import delete_account
-from app.auth.db_models import Account, AdminRecoveryToken
+from app.auth.db_models import Account
 from app.auth.models import AccountClaims
 from app.grades.db_models import GradeHistory
 from app.member_federations.db_models import MemberFederation
@@ -88,12 +88,6 @@ async def _remove_members(member_ids: set[str]) -> None:
                         select(Account.id).where(Account.member_id.in_(member_ids))
                     )
                 ).scalars()
-            )
-            # delete_account leaves the tokens an Account issued for others.
-            await session.execute(
-                delete(AdminRecoveryToken).where(
-                    AdminRecoveryToken.created_by_id.in_(account_ids)
-                )
             )
             for account_id in account_ids:
                 await delete_account(session, account_id)

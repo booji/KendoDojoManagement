@@ -277,29 +277,29 @@ async def list_passkeys(
 
 @router.patch("/passkeys/{passkey_id}")
 async def update_passkey_label(
-    passkey_id: str,
+    passkey_id: uuid.UUID,
     payload: _LabelUpdate,
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
-    record = await repo.get(passkey_id)
+    record = await repo.get(str(passkey_id))
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = await repo.update_label(passkey_id, claims.sub, payload.label)
+    updated = await repo.update_label(str(passkey_id), claims.sub, payload.label)
     await uow.commit()
     return _passkey_to_response(updated)  # type: ignore[arg-type]
 
 
 @router.delete("/passkeys/{passkey_id}", status_code=204)
 async def delete_passkey(
-    passkey_id: str,
+    passkey_id: uuid.UUID,
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> None:
-    record = await repo.get(passkey_id)
+    record = await repo.get(str(passkey_id))
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     count = await repo.count_for_user(claims.sub)
@@ -311,7 +311,7 @@ async def delete_passkey(
                 detail="Cannot delete your only passkey without recovery codes",
             )
     # The Auth Sessions this passkey signed in go with it (FK cascade).
-    await repo.delete(passkey_id, claims.sub)
+    await repo.delete(str(passkey_id), claims.sub)
     await uow.commit()
     log_security_event("passkey_deleted", "success", user_id=claims.sub)
 
@@ -520,15 +520,15 @@ async def list_invites_route(
 
 @router.post("/admin/invites/{invite_id}/revoke")
 async def revoke_invite_route(
-    invite_id: str,
+    invite_id: uuid.UUID,
     claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
-    existing = await repo.get(invite_id)
+    existing = await repo.get(str(invite_id))
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = await repo.mark_revoked(invite_id)
+    updated = await repo.mark_revoked(str(invite_id))
     await uow.commit()
     log_security_event("invite_revoked", "success", user_id=claims.sub)
     return {"id": updated["id"], "status": invite_status(updated)}  # type: ignore[index]

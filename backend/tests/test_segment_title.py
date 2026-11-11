@@ -119,7 +119,7 @@ def _segment_kwargs(**overrides):
     base = {
         "start_time": "19:00",
         "duration_minutes": 60,
-        "type_ids": ["t1"],
+        "type_ids": [str(uuid.uuid4())],
     }
     base.update(overrides)
     return base
