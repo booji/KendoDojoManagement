@@ -1,6 +1,6 @@
 # Day-2 operations
 
-| Task | Command (as `kendo` via `machinectl shell kendo@`) |
+| Task | Command (as `kendo` via `machinectl shell kendo@ /bin/bash`) |
 |------|----|
 | Status | `systemctl --user status kendo-app --no-pager` |
 | Logs | `podman logs -f kendo-app` |

@@ -978,8 +978,8 @@ DROPIN
   fi
 
   # Quadlet generates the systemd units from these files on reload. Without a
-  # user session (`su - kendo` rather than `machinectl shell kendo@`) this is the
-  # step that fails, and it is the one worth naming when it does.
+  # user session (`su - kendo` rather than `machinectl shell kendo@ /bin/bash`)
+  # this is the step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
   [ -n "$reload_failed" ] ||
     systemctl --user enable --now kendo-ip-retention.timer || timer_failed=1
@@ -1031,12 +1031,12 @@ echo
 if [ "$mode" = quadlet ]; then
   [ -z "$reload_failed" ] || echo "FIRST: \`systemctl --user daemon-reload\` failed, so no units have been generated
   yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer\`, from
-  a \`machinectl shell kendo@\` session — \`su - kendo\` leaves systemctl --user
+  a \`machinectl shell kendo@ /bin/bash\` session — \`su - kendo\` leaves systemctl --user
   broken — before anything below will work.
 "
   [ -z "$timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-ip-retention.timer\` failed, so
   recovery-attempt IPs are only cleared when kendo-app restarts. Run it again from
-  a \`machinectl shell kendo@\` session and read the error it gives.
+  a \`machinectl shell kendo@ /bin/bash\` session and read the error it gives.
 "
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"

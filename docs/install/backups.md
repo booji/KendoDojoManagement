@@ -78,7 +78,7 @@ Both end by re-running migrate, as the restore prints when it finishes: the app'
 
 Plaintext backups (`.dump`, `.tar`, from before a key was set) restore with the same command.
 
-For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
+For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@ /bin/bash`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
 
 The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:
 
@@ -126,7 +126,7 @@ rclone runs as `kendo`, with `kendo`'s own config. Install it and add a remote f
 
 ```bash
 sudo dnf install -y rclone   # or: sudo apt install -y rclone
-sudo machinectl shell kendo@
+sudo machinectl shell kendo@ /bin/bash
 rclone config
 ```
 

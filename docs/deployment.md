@@ -91,9 +91,13 @@ sudo loginctl enable-linger kendo
 Always use `machinectl` — it sets up a proper session bus and `XDG_RUNTIME_DIR`, so `systemctl --user` works. (`su - kendo` does **not** and will leave `systemctl --user` broken.)
 
 ```bash
-sudo machinectl shell kendo@
+sudo machinectl shell kendo@ /bin/bash
 # You are now kendo, with a working user systemd session.
 ```
+
+Name the shell: `kendo`'s login shell is `nologin`, so it can never be logged
+into directly, and without one `machinectl shell` ends at once with *This
+account is currently not available*.
 
 Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**.
 
