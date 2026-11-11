@@ -29,6 +29,32 @@ _CONSTANT_TIME_PATHS = frozenset(
 )
 
 
+# How far short of the deadline the pad's sleep stops, leaving the rest to a
+# yield loop (#596). `asyncio.sleep` can wake a whole millisecond late for some
+# durations, so a pad that only sleeps ends later on whichever path happens to
+# leave such a duration to pad. 5ms covers the sleep's worst observed lateness
+# on a single shared CPU (2.36ms) with room to spare; the price is at most this
+# long spent yielding per padded request.
+_PAD_SPIN_MARGIN_S = 0.005
+
+
+async def _sleep_until(deadline: float) -> None:
+    """Return at `deadline` (a `time.perf_counter()` value), not after it.
+
+    On Linux, asyncio's `EpollSelector` rounds a timeout up to whole
+    milliseconds as `math.ceil(t * 1e3) * 1e-3`. For some k that float lands
+    just above k/1000 (`18 * 1e-3 == 0.018000000000000002`) and CPython's
+    `epoll.poll` rounds it up again, so a timeout of 9, 13, 18, 26, ... 87 ms
+    waits a whole extra millisecond. Sleeping to just short of the deadline
+    and yielding the rest makes the wake-up independent of what was left.
+    """
+    coarse = deadline - time.perf_counter() - _PAD_SPIN_MARGIN_S
+    if coarse > 0:
+        await asyncio.sleep(coarse)
+    while time.perf_counter() < deadline:
+        await asyncio.sleep(0)
+
+
 class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
     """Hold the passkey begin endpoints to a fixed minimum response time.
 
@@ -59,10 +85,11 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         finally:
+            floor = config.AUTH_BEGIN_MIN_DURATION_MS / 1000
             elapsed = time.perf_counter() - start
-            remaining = (config.AUTH_BEGIN_MIN_DURATION_MS / 1000) - elapsed
+            remaining = floor - elapsed
             if remaining > 0:
-                await asyncio.sleep(remaining)
+                await _sleep_until(start + floor)
             else:
                 # The request already outran the floor, so there is nothing
                 # left to pad and the real-vs-decoy delta is observable again.
