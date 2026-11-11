@@ -140,7 +140,9 @@ transcription here:
   enabled — see [IP retention](#ip-retention) below.
 
 It never escalates: the host prerequisites from section 1 are detected and the
-exact `sudo` command printed for you to run.
+exact `sudo` command printed for you to run from your admin account (`kendo`
+has no sudo). Run as `kendo`, it cannot read the firewall rules either, so it
+asks you to check those yourself rather than failing.
 
 `./setup.sh check --quadlet` is the preflight, and is safe to run at any time —
 after an upgrade, after a domain change, or pasted into a bug report. It checks

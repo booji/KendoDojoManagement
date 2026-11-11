@@ -96,14 +96,19 @@ detect_prerequisites() {
     "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
     "sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
 
+  # Both firewalls answer root alone (polkit for firewalld), and check runs as
+  # `kendo`: a refused query says nothing about the rules (#576).
   if command -v firewall-cmd >/dev/null; then
-    firewall-cmd --list-services 2>/dev/null | grep -qw https || need \
-      "firewalld is not allowing http/https." \
-      "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+    if ! fw_services=$(firewall-cmd --list-services 2>/dev/null); then
+      unverified+=("firewalld reports its rules only to root — from an admin account, check that \`sudo firewall-cmd --list-services\` includes http and https.")
+    else
+      printf '%s\n' "$fw_services" | grep -qw https || need \
+        "firewalld is not allowing http/https." \
+        "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+    fi
   elif command -v ufw >/dev/null; then
-    # `ufw status` refuses anyone but root, which says nothing about the rules.
     if ! ufw_status=$(ufw status 2>/dev/null); then
-      unverified+=("ufw reports its rules only to root — check that \`sudo ufw status\` allows 80/443.")
+      unverified+=("ufw reports its rules only to root — from an admin account, check that \`sudo ufw status\` allows 80/443.")
     else
       case $ufw_status in
         *inactive*|*443*|*Https*|*https*) ;;
@@ -131,13 +136,16 @@ detect_prerequisites() {
     "sudo loginctl enable-linger $owner"
 }
 
+# `kendo` has no sudo, so every fix is run from another account.
+prerequisites_header="Host prerequisites — run these from an admin account, not as \`kendo\` (it has no sudo; this script never escalates):"
+
 report_prerequisites() {
   detect_prerequisites
   echo
   if [ $(( ${#outstanding[@]} + ${#unverified[@]} )) -eq 0 ]; then
     echo "Host prerequisites: all five satisfied."
   else
-    echo "Host prerequisites — run these yourself (this script never escalates):"
+    echo "$prerequisites_header"
     for item in "${outstanding[@]}" "${unverified[@]}"; do echo "  - $item"; done
   fi
 }
@@ -338,6 +346,7 @@ run_check() {
   fi
 
   detect_prerequisites
+  [ $(( ${#outstanding[@]} + ${#unverified[@]} )) -eq 0 ] || echo "$prerequisites_header"
   for item in "${outstanding[@]}"; do fail "$item"; done
   for item in "${unverified[@]}"; do warn "$item"; done
   [ ${#outstanding[@]} -gt 0 ] || ok "Host prerequisites satisfied."
