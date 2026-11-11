@@ -52,7 +52,11 @@ time, so the upgrade pulls first and then refreshes each copy.
 ```bash
 # Back up first: kendo-migrate runs `alembic upgrade head` against your live
 # database. This is the backup to restore if the upgrade fails — see
-# Backups § Restore.
+# Backups § Restore. A host set up before setup.sh installed the backup units
+# has none, so copy them from the bundle already in ~/src first.
+cd ~/src
+cp deploy/systemd/kendo-backup.service deploy/systemd/kendo-backup.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user start kendo-backup.service
 
 # Pull every image the units run. Without this the steps below reuse the
@@ -63,16 +67,17 @@ podman pull docker.io/library/postgres:16-alpine
 
 # Re-extract the bundle from the image just pulled — it ships inside the
 # image, so the units below match the app they start.
-cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
+podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 
 # Units: re-run the copy from Hardened deployment §2-4, then daemon-reload so Quadlet regenerates.
 cp deploy/quadlet/kendo-*.network   ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.volume    ~/.config/containers/systemd/
 cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
-cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
+cp deploy/systemd/kendo-ip-retention.timer deploy/systemd/kendo-backup.service \
+   deploy/systemd/kendo-backup.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-# Idempotent: enables the IP-retention timer if it is not already.
-systemctl --user enable --now kendo-ip-retention.timer
+# Idempotent: enables each timer that is not enabled already.
+systemctl --user enable --now kendo-ip-retention.timer kendo-backup.timer
 
 # Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.
 install -m 755 deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh ~/.local/bin/

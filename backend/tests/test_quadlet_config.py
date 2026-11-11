@@ -644,3 +644,17 @@ def test_quadlet_upgrade_pulls_every_unit_image_before_the_restart():
     for image in images:
         pull = re.search(rf"podman pull[^\n]*{re.escape(image)}", section)
         assert pull and pull.start() < restart, f"{image} is not pulled first"
+
+
+def test_quadlet_upgrade_installs_the_backup_units_it_runs():
+    """setup.sh --quadlet installs every unit in deploy/systemd (#576), so the
+    upgrade re-copies them all and enables the backup timer. A host set up
+    before it had no backup units, so they land before the backup starts."""
+    section = _quadlet_upgrade_section().replace("\\\n", " ")
+    backup = section.index("systemctl --user start kendo-backup.service")
+    for unit in (ROOT / "deploy" / "systemd").iterdir():
+        copies = [m.start() for m in re.finditer(rf"cp [^\n]*{unit.name}", section)]
+        assert copies, f"{unit.name} is never re-copied"
+        if unit.name.startswith("kendo-backup."):
+            assert copies[0] < backup, f"{unit.name} lands after the backup runs"
+    assert re.search(r"enable --now [^\n]*kendo-backup\.timer", section)
