@@ -862,7 +862,7 @@ put_secret() { # put_secret NAME VALUE
 }
 
 new_setup_token=""
-reload_failed="" timer_failed=""
+reload_failed="" timer_failed="" backup_timer_failed=""
 quadlet_install() {
   command -v podman >/dev/null || {
     echo "Podman is not installed, and the hardened deployment is nothing but podman secrets and Quadlet units. Nothing was written." >&2
@@ -946,10 +946,13 @@ quadlet_install() {
     "$units/kendo-app.container" "$units/kendo-migrate.container" \
     "$units/kendo-ip-retention.container"
   echo "  installed the Quadlet units in $units"
-  # Quadlet generates no timers: the daily IP-retention trigger (#467) is a
-  # plain user unit, enabled below once the reload has generated its service.
-  install -D -m 644 deploy/systemd/kendo-ip-retention.timer \
-    "$HOME/.config/systemd/user/kendo-ip-retention.timer"
+  # Quadlet generates no timers: the daily IP-retention trigger (#467) and the
+  # nightly backup (#576) are plain user units, enabled below once the reload
+  # has generated the services they need.
+  local f
+  for f in kendo-ip-retention.timer kendo-backup.service kendo-backup.timer; do
+    install -D -m 644 "deploy/systemd/$f" "$HOME/.config/systemd/user/$f"
+  done
 
   # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
   # operator to re-copy the units on upgrade, which would silently revert an edit made
@@ -990,8 +993,10 @@ DROPIN
   # user session (`su - kendo` rather than `machinectl shell kendo@ /bin/bash`)
   # this is the step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
-  [ -n "$reload_failed" ] ||
+  if [ -z "$reload_failed" ]; then
     systemctl --user enable --now kendo-ip-retention.timer || timer_failed=1
+    systemctl --user enable --now kendo-backup.timer || backup_timer_failed=1
+  fi
 }
 
 if [ "$mode" = compose ]; then
@@ -1039,7 +1044,8 @@ fi
 echo
 if [ "$mode" = quadlet ]; then
   [ -z "$reload_failed" ] || echo "FIRST: \`systemctl --user daemon-reload\` failed, so no units have been generated
-  yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer\`, from
+  yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer
+  kendo-backup.timer\`, from
   a \`machinectl shell kendo@ /bin/bash\` session — \`su - kendo\` leaves systemctl --user
   broken — before anything below will work.
 "
@@ -1047,13 +1053,18 @@ if [ "$mode" = quadlet ]; then
   recovery-attempt IPs are only cleared when kendo-app restarts. Run it again from
   a \`machinectl shell kendo@ /bin/bash\` session and read the error it gives.
 "
+  [ -z "$backup_timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-backup.timer\` failed, so no
+  nightly backups are taken. Run it again from a \`machinectl shell kendo@ /bin/bash\`
+  session and read the error it gives.
+"
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
   echo "      already running? systemctl --user restart kendo-traefik kendo-app   (a reload alone"
   echo "      regenerates the units; the containers keep their old config until they restart)"
   echo "      systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager"
   echo "      then open https://$domain"
-  echo "Backups are not installed — see docs/install/backups.md for the timer."
+  [ -n "$reload_failed$backup_timer_failed" ] ||
+    echo "Backups: kendo-backup.timer is enabled — nightly at 02:30 into ~/backups (docs/install/backups.md)."
   if [ -n "$new_setup_token" ]; then
     echo
     echo "Setup token — claims the first admin account, shown once (a podman secret"

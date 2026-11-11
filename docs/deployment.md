@@ -135,8 +135,9 @@ transcription here:
   Plus `~/backups` and the backup/restore scripts in `~/.local/bin`.
 - **the Quadlet units** — copied into `~/.config/containers/systemd/`, pinned
   to the tag the bundle was extracted from, then `systemctl --user
-  daemon-reload`. Plus `kendo-ip-retention.timer` in `~/.config/systemd/user/`,
-  enabled — see [IP retention](#ip-retention) below.
+  daemon-reload`. Plus `kendo-ip-retention.timer` and `kendo-backup.timer` in
+  `~/.config/systemd/user/`, enabled — see [IP retention](#ip-retention) below
+  and [Backups](install/backups.md).
 
 It never escalates: the host prerequisites from section 1 are detected and the
 exact `sudo` command printed for you to run from your admin account (`kendo`
@@ -233,12 +234,13 @@ cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
 # Quadlet generates systemd units from these files on daemon-reload.
 systemctl --user daemon-reload
 
-# Quadlet generates no timers, so the daily IP-retention trigger is a plain
-# user unit (see IP retention below).
+# Quadlet generates no timers, so the daily IP-retention trigger and the
+# nightly backup are plain user units (see IP retention below).
 mkdir -p ~/.config/systemd/user
 cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
+cp deploy/systemd/kendo-backup.service deploy/systemd/kendo-backup.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now kendo-ip-retention.timer
+systemctl --user enable --now kendo-ip-retention.timer kendo-backup.timer
 ```
 
 </details>

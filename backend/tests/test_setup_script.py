@@ -503,6 +503,22 @@ def test_quadlet_enables_the_daily_ip_retention_timer(tmp_path):
     assert f"--user enable --now {timer}" in calls[reload + 1 :], calls
 
 
+def test_quadlet_enables_the_nightly_backup_timer(tmp_path):
+    """Without it a fresh install takes no backups until the operator finds
+    the manual step (#576)."""
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    for unit in ("kendo-backup.service", "kendo-backup.timer"):
+        assert (host.home / ".config/systemd/user" / unit).read_text() == (
+            ROOT / "deploy/systemd" / unit
+        ).read_text()
+    calls = host.systemctl_log.read_text().splitlines()
+    reload = calls.index("--user daemon-reload")
+    assert "--user enable --now kendo-backup.timer" in calls[reload + 1 :], calls
+    assert "kendo-backup.timer is enabled" in out.stdout
+
+
 def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     host = Host(tmp_path)
     (tmp_path / "bin/systemctl").write_text(
