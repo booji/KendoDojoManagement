@@ -136,8 +136,13 @@ detect_prerequisites() {
     "sudo loginctl enable-linger $owner"
 }
 
-# `kendo` has no sudo, so every fix is run from another account.
-prerequisites_header="Host prerequisites — run these from an admin account, not as \`kendo\` (it has no sudo; this script never escalates):"
+# On Quadlet this runs as `kendo`, which has no sudo, so every fix is run from
+# another account. Compose runs as the operator, who may have it.
+if [ "$mode" = quadlet ]; then
+  prerequisites_header="Host prerequisites — run these from an admin account, not as \`kendo\` (it has no sudo; this script never escalates):"
+else
+  prerequisites_header="Host prerequisites — run these yourself (this script never escalates):"
+fi
 
 report_prerequisites() {
   detect_prerequisites
@@ -871,7 +876,7 @@ put_secret() { # put_secret NAME VALUE
 }
 
 new_setup_token=""
-reload_failed="" timer_failed="" backup_timer_failed=""
+reload_failed="" failed_timers=()
 quadlet_install() {
   command -v podman >/dev/null || {
     echo "Podman is not installed, and the hardened deployment is nothing but podman secrets and Quadlet units. Nothing was written." >&2
@@ -1003,8 +1008,9 @@ DROPIN
   # this is the step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
   if [ -z "$reload_failed" ]; then
-    systemctl --user enable --now kendo-ip-retention.timer || timer_failed=1
-    systemctl --user enable --now kendo-backup.timer || backup_timer_failed=1
+    for f in kendo-ip-retention.timer kendo-backup.timer; do
+      systemctl --user enable --now "$f" || failed_timers+=("$f")
+    done
   fi
 }
 
@@ -1058,13 +1064,11 @@ if [ "$mode" = quadlet ]; then
   a \`machinectl shell kendo@ /bin/bash\` session — \`su - kendo\` leaves systemctl --user
   broken — before anything below will work.
 "
-  [ -z "$timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-ip-retention.timer\` failed, so
-  recovery-attempt IPs are only cleared when kendo-app restarts. Run it again from
-  a \`machinectl shell kendo@ /bin/bash\` session and read the error it gives.
-"
-  [ -z "$backup_timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-backup.timer\` failed, so no
-  nightly backups are taken. Run it again from a \`machinectl shell kendo@ /bin/bash\`
-  session and read the error it gives.
+  [ ${#failed_timers[@]} -eq 0 ] || echo "NOTE: \`systemctl --user enable --now ${failed_timers[*]}\` failed, so
+  that work is not scheduled: without kendo-ip-retention.timer recovery-attempt IPs
+  are only cleared when kendo-app restarts, and without kendo-backup.timer no backups
+  are taken. Run it again from a \`machinectl shell kendo@ /bin/bash\` session and
+  read the error it gives.
 "
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
@@ -1072,8 +1076,8 @@ if [ "$mode" = quadlet ]; then
   echo "      regenerates the units; the containers keep their old config until they restart)"
   echo "      systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager"
   echo "      then open https://$domain"
-  [ -n "$reload_failed$backup_timer_failed" ] ||
-    echo "Backups: kendo-backup.timer is enabled — nightly at 02:30 into ~/backups (docs/install/backups.md)."
+  [ -n "$reload_failed" ] || [[ " ${failed_timers[*]} " == *" kendo-backup.timer "* ]] ||
+    echo "Backups: kendo-backup.timer is enabled — into ~/backups on its schedule (docs/install/backups.md)."
   if [ -n "$new_setup_token" ]; then
     echo
     echo "Setup token — claims the first admin account, shown once (a podman secret"

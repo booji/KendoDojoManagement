@@ -11,7 +11,7 @@ Uploaded images live on a volume, not in the database, so the dump alone does no
 
 The Quick self-host (Compose) stack has no nightly timer. It takes a backup to `~/backups` on every `./setup.sh upgrade`, and the backup key and off-site settings below apply to it too — run `./setup.sh backup-key` without `--quadlet`.
 
-`./setup.sh --quadlet` installs `kendo-backup.service` and `kendo-backup.timer` in `~/.config/systemd/user/` and enables the timer: the first backup runs at 02:30 after install. Without `setup.sh`, the same by hand:
+`./setup.sh --quadlet` installs `kendo-backup.service` and `kendo-backup.timer` in `~/.config/systemd/user/` and enables the timer: the first backup runs at the timer's next `OnCalendar=` (02:30 as shipped). Without `setup.sh`, the same by hand:
 
 ```bash
 cp deploy/systemd/kendo-backup.service ~/.config/systemd/user/

@@ -537,8 +537,10 @@ def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     )
     out = host.run("dojo.example.com", "1", "1", "admin@example.com")
 
-    assert "enable --now kendo-ip-retention.timer` failed" in out.stdout
+    note = "enable --now kendo-ip-retention.timer kendo-backup.timer` failed"
+    assert out.stdout.count(note) == 1, out.stdout
     assert "daemon-reload` failed" not in out.stdout
+    assert "kendo-backup.timer is enabled" not in out.stdout
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
@@ -1017,7 +1019,20 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     assert out.returncode == 1
     assert "FAIL  Linger is off for kendo" in out.stdout
     assert "sudo loginctl enable-linger kendo" in out.stdout
+    # Compose runs as the operator, not `kendo`, so the header names no account.
+    header = "run these yourself (this script never escalates)"
+    assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+    assert "not as `kendo`" not in out.stdout
+
+
+def test_check_quadlet_says_prerequisites_are_fixed_from_an_admin_account(tmp_path):
     # `kendo` has no sudo: the fix is run from another account (#576).
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+
+    out = check(host.src, host_env(tmp_path, loginctl="echo Linger=no"), "--quadlet")
+
+    assert out.returncode == 1
     header = "run these from an admin account, not as `kendo`"
     assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
 
