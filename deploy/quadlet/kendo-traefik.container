@@ -8,7 +8,7 @@
 # and which survives re-copying this unit on upgrade (#412).
 #
 # Binding 80/443 as a rootless user requires:
-#   net.ipv4.ip_unprivileged_port_start=80   (see deploy/sysctl — Q9 option 1)
+#   net.ipv4.ip_unprivileged_port_start=80   (docs/deployment.md §1.2)
 [Unit]
 Description=Kendo Traefik
 Requires=kendo-app.service
