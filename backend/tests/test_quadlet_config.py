@@ -615,3 +615,24 @@ def test_no_shipped_file_sets_allow_test_auth():
         f"ALLOW_TEST_AUTH is set in {offenders}. Only {list(TEST_ONLY_FILES)} "
         "may set it."
     )
+
+
+def _quadlet_upgrade_section() -> str:
+    doc = (ROOT / "docs" / "install" / "upgrading.md").read_text()
+    return doc.split("## Hardened deployment (Quadlet)", 1)[1].split("\n## ", 1)[0]
+
+
+def test_quadlet_upgrade_pulls_every_unit_image_before_the_restart():
+    """Without a pull, `podman run ...:0.1 init` and the restart both reuse the
+    cached image, so a patch release never lands on a Quadlet host (#583)."""
+    section = _quadlet_upgrade_section()
+    restart = section.index("systemctl --user restart")
+    images = {
+        image
+        for unit in load_units().values()
+        for image in unit.get("Container", {}).get("Image", [])
+    }
+    assert images
+    for image in images:
+        pull = re.search(rf"podman pull[^\n]*{re.escape(image)}", section)
+        assert pull and pull.start() < restart, f"{image} is not pulled first"
