@@ -90,6 +90,9 @@ def _matching_files(repo_root: Path) -> list[str]:
                 # living inside the repo; their contents are not this
                 # codebase and must not be scanned.
                 "worktrees",
+                # graphify's knowledge-graph output: an untracked local
+                # artefact whose reports quote the codebase's history.
+                "graphify-out",
                 ".venv",
                 "venv",
                 "__pycache__",
