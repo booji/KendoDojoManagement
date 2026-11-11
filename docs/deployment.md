@@ -49,11 +49,10 @@ podman --version             # confirm >= 4.4 (Quadlet); 5.x expected
 
 ### 1.2 Allow rootless binding of ports 80/443
 
-Rootless containers can't bind ports <1024 by default. Install the provided sysctl drop-in:
+Rootless containers can't bind ports <1024 by default. Write the one-line sysctl drop-in:
 
 ```bash
-sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf \
-  /etc/sysctl.d/99-kendo-rootless-ports.conf
+echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf
 sudo sysctl --system
 ```
 

@@ -94,7 +94,7 @@ detect_prerequisites() {
   port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
   [ "$port_start" -le 80 ] 2>/dev/null || need \
     "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
-    "sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
+    "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
 
   # Both firewalls answer root alone (polkit for firewalld), and check runs as
   # `kendo`: a refused query says nothing about the rules (#576).

@@ -615,3 +615,11 @@ def test_no_shipped_file_sets_allow_test_auth():
         f"ALLOW_TEST_AUTH is set in {offenders}. Only {list(TEST_ONLY_FILES)} "
         "may set it."
     )
+
+
+def test_host_preparation_needs_nothing_from_the_bundle():
+    """Section 1 runs from the admin account before section 2 extracts the
+    bundle into kendo's home, so no step in it can name a bundle file (#576)."""
+    doc = DEPLOYMENT_DOC.read_text()
+    section_1 = doc[doc.index("\n## 1.") : doc.index("\n## 2")]
+    assert not re.findall(r"\bdeploy/\S+", section_1)

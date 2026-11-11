@@ -41,7 +41,6 @@ def bundle(tmp_path: Path) -> Path:
     shutil.copy(ROOT / SELFHOST / "traefik.yml.example", home / SELFHOST)
     for example in (ROOT / SELFHOST / "dynamic").glob("*.example"):
         shutil.copy(example, home / SELFHOST / "dynamic")
-    (home / "deploy" / "sysctl-99-kendo-rootless-ports.conf").touch()
     # setup.sh reads backup.env through kendo-backup.sh, in every mode.
     shutil.copytree(ROOT / "deploy/bin", home / "deploy/bin")
     return home
@@ -976,6 +975,22 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     # `kendo` has no sudo: the fix is run from another account (#576).
     header = "run these from an admin account, not as `kendo`"
     assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+
+
+def test_check_prints_a_sysctl_fix_that_needs_no_bundle(tmp_path):
+    # The fix is run from an admin account, where the bundle extracted into
+    # kendo's home is not: it writes the one line rather than copying a file.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, sysctl="echo 1024"))
+
+    assert out.returncode == 1
+    assert (
+        "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee "
+        "/etc/sysctl.d/99-kendo-rootless-ports.conf" in out.stdout
+    )
+    assert "deploy/sysctl" not in out.stdout
 
 
 def test_check_only_warns_about_a_firewall_it_cannot_see(tmp_path):
