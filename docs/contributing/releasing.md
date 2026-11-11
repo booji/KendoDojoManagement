@@ -75,11 +75,12 @@ An rc tag runs the full suite (`tests.yml`) and publishes an image under its
 exact tag only, never the moving tags operators pin, and its docs publish
 nowhere.
 
-The GHCR package must be public, or every operator's anonymous pull fails
-with `unauthorized`. A package is created private on its first push, and
-GitHub has no API to change that: if the package was ever recreated, make it
-public under its **Package settings**. Check with an anonymous pull before
-rehearsing, from the clean host (never logged in to `ghcr.io`):
+The Release image's GHCR package must be public, or every operator's
+anonymous pull fails with `unauthorized`. A package is created private on its
+first push, and GitHub has no API to change that: if the package was ever
+recreated, make it public under its **Package settings**. Check with an
+anonymous pull before rehearsing, from the clean host (never logged in to
+`ghcr.io`):
 
 ```bash
 podman pull ghcr.io/booji/kendodojomanagement:$RC_TAG   # e.g. RC_TAG=X.Y.Z-rc1
