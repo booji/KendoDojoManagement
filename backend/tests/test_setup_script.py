@@ -450,6 +450,17 @@ def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
     assert not (host.state / "kendo_dns_token").exists()
 
 
+def test_compose_env_trusts_the_forwarded_for_traefik_sets(tmp_path):
+    """#581: behind Traefik every peer address is Traefik's, so an `.env` that
+    resolves TRUST_PROXY_XFF to false puts the whole dojo in one rate-limit
+    bucket. Read as docker-compose.yml's `${TRUST_PROXY_XFF:-true}` reads it:
+    unset or empty takes the default."""
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    assert (env_of(home).get("TRUST_PROXY_XFF") or "true") == "true"
+
+
 def test_quadlet_lays_down_the_config_tree_the_units_expect(tmp_path):
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "1", "admin@example.com")
