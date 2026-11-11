@@ -90,13 +90,15 @@ async def _require_known_types(
     segments: list[SegmentCreate] | None, type_repo: AbstractSessionTypeRepository
 ) -> None:
     # Checked here rather than left to the foreign key, whose violation would
-    # surface as an unmapped 500 (#586).
+    # surface as an unmapped 500 (#586). A 422, not a 404: the unknown id is a
+    # reference inside the body, not the resource the path names.
     if not segments:
         return
     known = {t["id"] for t in await type_repo.list()}
     if any(str(tid) not in known for seg in segments for tid in seg.type_ids):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Session type not found",
         )
 
 
@@ -306,13 +308,15 @@ async def create_adhoc_session(
     uow: _UoW,
 ) -> dict[str, Any]:
     await _require_known_types(payload.segments, type_repo)
-    # Same reason as the types: template_id is a foreign key (#586).
+    # Same reason, and the same 422, as the types: template_id is a foreign
+    # key named in the body (#586).
     if (
         payload.template_id is not None
         and await template_repo.get(str(payload.template_id)) is None
     ):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Template not found",
         )
     result = await repo.add(payload.model_dump())
     await uow.commit()

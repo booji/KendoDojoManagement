@@ -91,8 +91,9 @@ async def test_any_other_integrity_error_is_still_a_server_error() -> None:
         await _constraint_conflict_handler(None, exc)  # type: ignore[arg-type]
 
 
-async def test_joining_an_unknown_federation_is_a_404(db_client) -> None:
-    # #586: it used to reach the foreign key and come back a 500.
+async def test_joining_an_unknown_federation_is_a_422(db_client) -> None:
+    # #586: it used to reach the foreign key and come back a 500. The
+    # federation is named in the body, not the path, so it is a 422.
     from app.members.db_models import Member
 
     member = Member(
@@ -115,5 +116,5 @@ async def test_joining_an_unknown_federation_is_a_404(db_client) -> None:
             json={"federation_id": str(uuid.uuid4()), "member_number": "N-1"},
         )
 
-    assert response.status_code == 404
+    assert response.status_code == 422
     assert response.json()["detail"] == "Federation not found"

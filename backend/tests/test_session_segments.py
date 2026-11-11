@@ -249,11 +249,13 @@ async def test_create_session_with_segment_missing_types_returns_422(
     assert response.status_code == 422
 
 
-async def test_create_session_with_unknown_type_returns_404(
+async def test_create_session_with_unknown_type_returns_422(
     type_repo, instance_repo
 ) -> None:
-    """A well-formed type id naming no session type is a 404 before the
-    foreign key can raise an unmapped 500 (#586's federation_id, again)."""
+    """A well-formed type id naming no session type is a 422 before the
+    foreign key can raise an unmapped 500 (#586's federation_id, again).
+    It names a reference in the body, not the resource in the path, so it
+    is unprocessable content rather than a 404."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     payload = {
         "title": "Unknown Type",
@@ -270,15 +272,15 @@ async def test_create_session_with_unknown_type_returns_404(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
-    assert response.status_code == 404
+    assert response.status_code == 422
     assert response.json()["detail"] == "Session type not found"
     assert await instance_repo.list() == []
 
 
-async def test_create_session_with_unknown_template_returns_404(
+async def test_create_session_with_unknown_template_returns_422(
     type_repo, instance_repo
 ) -> None:
-    """template_id is a foreign key as well: an unknown one is a 404, not an
+    """template_id is a foreign key as well: an unknown one is a 422, not an
     unmapped 500."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     template_repo = InMemorySessionTemplateRepository()
@@ -296,12 +298,12 @@ async def test_create_session_with_unknown_template_returns_404(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post("/sessions", json=payload)
-    assert response.status_code == 404
+    assert response.status_code == 422
     assert response.json()["detail"] == "Template not found"
     assert await instance_repo.list() == []
 
 
-async def test_unknown_type_is_404_on_every_segment_write(
+async def test_unknown_type_is_422_on_every_segment_write(
     type_repo, instance_repo
 ) -> None:
     """Template create and both updates carry segments too; each rejects an
@@ -335,7 +337,7 @@ async def test_unknown_type_is_404_on_every_segment_write(
         ]
 
     for response in responses:
-        assert response.status_code == 404, response.text
+        assert response.status_code == 422, response.text
         assert response.json()["detail"] == "Session type not found"
     assert len(await template_repo.list()) == 1
     assert (await template_repo.get(template["id"]))["segments"][0]["type_ids"] == [

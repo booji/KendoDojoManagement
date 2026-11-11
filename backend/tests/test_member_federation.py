@@ -347,10 +347,10 @@ async def test_add_federation_membership_member_not_found_returns_404(
         ("/accounts/me/federations", REQUIRE_MEMBER),
     ],
 )
-async def test_add_federation_membership_unknown_federation_returns_404(
+async def test_add_federation_membership_unknown_federation_returns_422(
     member_repo, fed_repo, mf_repo, path, override
 ) -> None:
-    """#586: an unknown federation_id is a 404, not an unmapped FK violation."""
+    """#586: an unknown federation_id is a 422, not an unmapped FK violation."""
     app.dependency_overrides[override] = _member_a_override
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -359,7 +359,7 @@ async def test_add_federation_membership_unknown_federation_returns_404(
             path,
             json={"federation_id": str(uuid.uuid4()), "member_number": "123"},
         )
-    assert response.status_code == 404
+    assert response.status_code == 422
     assert response.json()["detail"] == "Federation not found"
     assert mf_repo._store == {}
 

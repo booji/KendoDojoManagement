@@ -55,10 +55,12 @@ async def _add_federation_membership(
     mf_repo: AbstractMemberFederationRepository,
 ) -> MemberFederationRecord:
     # Checked here rather than left to the foreign key, whose violation would
-    # surface as an unmapped 500 (#586).
+    # surface as an unmapped 500 (#586). A 422, not a 404: the federation is
+    # named in the body, not the path.
     if await fed_repo.get(str(payload.federation_id)) is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Federation not found",
         )
     data = payload.model_dump(mode="json")
     data["member_id"] = member_id
