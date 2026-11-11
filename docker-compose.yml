@@ -32,7 +32,7 @@ services:
   app:
     <<: *hardening
     # Back after a crash or an OOM kill at mem_limit; after a reboot, only once
-    # podman-restart.service is enabled — `./setup.sh check` looks for it (#582).
+    # podman-restart.service is enabled — `./setup.sh` enables it, check verifies (#582).
     # `always`, not `unless-stopped`: an older Podman's podman-restart.service
     # starts only `always` containers at boot. Same on proxy and db.
     restart: always
