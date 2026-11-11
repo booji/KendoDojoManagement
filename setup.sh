@@ -1018,6 +1018,13 @@ if [ "$mode" = compose ]; then
   write_static "$selfhost/traefik.yml.example" "$selfhost/traefik.yml"
   write_router "$selfhost/dynamic/kendo.yml.example" "$selfhost/dynamic/kendo.yml"
   copy_byo "$selfhost/dynamic/byo-cert.yml.example" "$selfhost/dynamic/byo-cert.yml"
+  # restart: always covers a crash; after a reboot rootless Podman has no
+  # daemon, and only podman-restart.service starts the stack again (#582).
+  # A user unit, so no sudo; enabling it twice changes nothing.
+  if command -v systemctl >/dev/null; then
+    restart_unit=enabled
+    systemctl --user enable podman-restart.service || restart_unit=failed
+  fi
 else
   quadlet_install
 fi
@@ -1085,6 +1092,12 @@ if [ "$mode" = quadlet ]; then
     echo "  $new_setup_token"
   fi
 else
+  case ${restart_unit:-} in
+    enabled) echo "Reboots: podman-restart.service is enabled — the stack comes back after a reboot." ;;
+    failed) echo "NOTE: \`systemctl --user enable podman-restart.service\` failed, so the stack
+  stays down after a reboot. Run it again and read the error it gives.
+" ;;
+  esac
   echo "Next: ./setup.sh check   (every FAIL names its fix; green means ready)"
   echo "      podman-compose up -d   (then open https://$domain)"
   echo "The SETUP_TOKEN in .env claims the first admin account — hand it over out of band."

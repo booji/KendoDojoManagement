@@ -46,13 +46,16 @@ def bundle(tmp_path: Path) -> Path:
     return home
 
 
-def run(home: Path, *answers: str) -> subprocess.CompletedProcess:
+def run(
+    home: Path, *answers: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     result = subprocess.run(
         ["bash", str(home / "setup.sh")],
         input="".join(f"{a}\n" for a in answers),
         capture_output=True,
         text=True,
         cwd=home,
+        env=env,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -797,6 +800,26 @@ def test_check_fails_until_podman_restart_brings_the_stack_back_after_a_reboot(
 
     assert out.returncode == 1
     assert "systemctl --user enable podman-restart.service" in out.stdout
+
+
+def test_compose_setup_enables_podman_restart_so_check_can_go_green(tmp_path):
+    # check fails until it is enabled, and the docs run check before starting
+    # the stack: setup enables it itself, no sudo needed (#582).
+    home = bundle(tmp_path)
+    log = tmp_path / "systemctl.log"
+    env = host_env(tmp_path, systemctl=f'echo "$*" >> {log}')
+
+    out = run(home, *ANSWERS, env=env)
+
+    assert "--user enable podman-restart.service" in log.read_text().splitlines()
+    assert "podman-restart.service is enabled" in out.stdout
+
+
+def test_compose_setup_names_a_failed_podman_restart_enable(tmp_path):
+    home = bundle(tmp_path)
+    out = run(home, *ANSWERS, env=host_env(tmp_path, systemctl="exit 1"))
+
+    assert "systemctl --user enable podman-restart.service` failed" in out.stdout
 
 
 def test_check_before_setup_says_to_run_setup_first(tmp_path):
