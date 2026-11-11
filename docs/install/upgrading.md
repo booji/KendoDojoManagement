@@ -43,14 +43,25 @@ new image under the same `:0.1` tag never starts.
 
 ## Hardened deployment (Quadlet)
 
-**When a Quadlet unit, the Traefik config or the env file changes upstream**,
-the Upgrade command above is not enough — it pulls the image but reuses the
-units already in `~/.config/containers/systemd/`, the Traefik config already in
-`~/kendo/traefik/`, and it never touches `~/kendo/kendo-app.env`. Each is a
-copy made once at install time; pulling a new image updates neither.
+`./setup.sh upgrade` is the Compose path only; on a Quadlet host, run these
+steps as `kendo`. Restarting a unit never fetches a newer image under the same
+tag, and the units in `~/.config/containers/systemd/`, the Traefik config in
+`~/kendo/traefik/` and `~/kendo/kendo-app.env` are copies made at install
+time, so the upgrade pulls first and then refreshes each copy.
 
 ```bash
-# Re-extract the bundle from the tag you are pinned to — it ships inside the
+# Back up first: kendo-migrate runs `alembic upgrade head` against your live
+# database. This is the backup to restore if the upgrade fails — see
+# Backups § Restore.
+systemctl --user start kendo-backup.service
+
+# Pull every image the units run. Without this the steps below reuse the
+# cached images and nothing changes.
+podman pull ghcr.io/booji/kendodojomanagement:0.1
+podman pull docker.io/library/traefik:v3.3
+podman pull docker.io/library/postgres:16-alpine
+
+# Re-extract the bundle from the image just pulled — it ships inside the
 # image, so the units below match the app they start.
 cd ~/src && podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 
@@ -70,8 +81,12 @@ install -m 755 deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh ~/.local/b
 # watches this directory, so no restart is needed once the file lands.
 diff deploy/traefik/dynamic/kendo.yml ~/kendo/traefik/dynamic/kendo.yml
 
-systemctl --user restart kendo-migrate kendo-app
+# Restart onto the pulled images: kendo-migrate migrates, then the app starts.
+systemctl --user restart kendo-db kendo-migrate kendo-app kendo-traefik
 ```
+
+If `kendo-migrate` fails (`systemctl --user status kendo-migrate`), restore the
+backup taken above — [Backups § Restore](backups.md#restore).
 
 The env file is per-host and needs comparing rather than copying — see
 [Refreshing the env file](#refreshing-the-env-file-after-an-upgrade).
