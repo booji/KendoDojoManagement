@@ -274,6 +274,15 @@ run_check() {
       *) fail "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the migrate service." ;;
     esac
   fi
+  # restart: always covers a crash; after a reboot rootless Podman has no
+  # daemon, and only podman-restart.service starts the stack again (#582).
+  if [ "$mode" != quadlet ] && command -v systemctl >/dev/null; then
+    if systemctl --user is-enabled --quiet podman-restart.service 2>/dev/null; then
+      ok "podman-restart.service is enabled — the stack comes back after a reboot"
+    else
+      fail "podman-restart.service is not enabled, so the stack stays down after a reboot — run: systemctl --user enable podman-restart.service"
+    fi
+  fi
 
   # The origin's host, resolved the way this box resolves it (so /etc/hosts and
   # an internal resolver count). Off-box is only a warning: behind NAT the

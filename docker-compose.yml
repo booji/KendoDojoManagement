@@ -31,6 +31,11 @@ x-hardening: &hardening
 services:
   app:
     <<: *hardening
+    # Back after a crash or an OOM kill at mem_limit; after a reboot, only once
+    # podman-restart.service is enabled — `./setup.sh check` looks for it (#582).
+    # `always`, not `unless-stopped`: an older Podman's podman-restart.service
+    # starts only `always` containers at boot. Same on proxy and db.
+    restart: always
     # Published Release image, pinned by its Release line (ADR-0004, ADR-0009):
     # `:0.1` means fixes and features but no Breaking change. Override
     # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
@@ -139,6 +144,7 @@ services:
   # create empty directories where Traefik expects its config.
   proxy:
     <<: *hardening
+    restart: always
     image: docker.io/library/traefik:v3.3
     # The one capability back: binding 80/443 inside its own namespace.
     cap_add:
@@ -163,6 +169,7 @@ services:
 
   db:
     image: postgres:16-alpine
+    restart: always
     # Backend network only: no published ports and no outbound route.
     networks:
       - backend
