@@ -268,6 +268,55 @@ The same test passed in the full run before it, on the same branch, and when
 `tests/test_invites.py` was rerun alone straight afterwards. During #589 it also
 failed once and passed on two reruns.
 
+### Explained: the pad's own wake-up (#596)
+
+[#596](https://github.com/booji/KendoDojoManagement/issues/596) found the cause.
+The delta was never in the endpoint's work or in teardown. It was in how late
+the pad's `asyncio.sleep(remaining)` woke up, and that depended on `remaining`.
+
+On Linux, asyncio's `EpollSelector` rounds a timeout up to whole milliseconds
+as `math.ceil(t * 1e3) * 1e-3`. For some k, the float `k * 1e-3` lands just
+above k/1000 (`18 * 1e-3 == 0.018000000000000002`), and CPython's
+`epoll.poll` rounds it up again. A timeout of k ms then waits k+1 ms. Up to
+200ms the affected values are 9, 13, 18, 26, 36, 52, 59, 67, 71, 72, 87, 103,
+104, 118, 119, 134, 142, 143, 144, 174 and 175.
+
+Under the invite test's 20ms floor, the decoy path had 17.x ms left to pad.
+That rounds up to 18 and waited 19ms. The real path had 16.x ms, which rounds
+up to 17 and waited 17ms. Which path lands in a bad bucket depends on how fast
+the machine runs the handler. That is why the failure came and went with load
+and runner, why its sign flipped, and why it reproduced on both rounds with a
+quiet control and no floor-exceeded warning.
+
+The earlier test that "ruled out" a residual outside the padded region was
+taken under contention: the +3.529ms row is the loaded case. It never measured
+the quiet case. In this test the residual couldn't be teardown anyway:
+`DbSessionUnitOfWork`, which DB-backed tests use, does nothing on exit.
+
+Measured with probes on the middleware, the service and each ASGI send,
+Python 3.13.18, median sleep overshoot past the pad's deadline:
+
+| run | valid | invalid | median delta | result |
+|---|---|---|---|---|
+| isolated | 0.67ms | 1.79ms | −0.98ms | pass, just under tolerance |
+| full backend suite ×2 | 0.51–0.52ms | 1.72–1.78ms | −1.20 / −1.21ms | fail on both rounds |
+| fixed, full suite ×2 | 0.002ms | 0.002ms | +0.024 / −0.015ms | pass |
+| fixed, one shared CPU ×3 | 0.003–0.004ms | 0.003–0.004ms | +0.017 / +0.101 / −0.200ms | pass |
+
+The pad now sleeps to 5ms short of its deadline and yields the rest
+(`_sleep_until` in `app/core/middleware.py`). The coarse sleep woke at most
+2.36ms late on one shared CPU, so 5ms leaves room. The cost is at most 5ms of
+yielding per padded request. `tests/test_constant_time_pad.py` pins the
+property: two handlers whose remaining time rounds up to 18 and to 17 must end
+together.
+
+This is a production fix, not only a test fix. With the 100ms floor, bucket 87
+is hit when a path's work takes 13–14ms. That would have shown about a 1ms
+real-versus-decoy difference over HTTP.
+
+The CI step below stays advisory until runs on GitHub's runners show the
+delta has gone there too.
+
 Given that, `.github/workflows/backend-tests.yml` marks the three wall-clock
 assertions `timing_sensitive` and runs them in a `continue-on-error` step. The
 numbers stay visible for anyone investigating, while unrelated PRs stop being
