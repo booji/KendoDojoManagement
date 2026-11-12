@@ -38,21 +38,37 @@ returns (see ConstantTimeAuthMiddleware's docstring).
 """
 
 import asyncio
+import base64
 import datetime as dt
+import hashlib
+import json
 import os
 import statistics
+import struct
 import time
 import uuid
 from dataclasses import dataclass
 
+import bcrypt
+import cbor2
 import pytest
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from httpx import AsyncClient
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.auth.db_models import Account, Invite, PasskeyCredential
+from app.auth.db_models import (
+    Account,
+    AdminRecoveryToken,
+    Invite,
+    PasskeyCredential,
+    RecoveryAttempt,
+    RecoveryCode,
+)
 from app.auth.invite_service import hash_invite_token
+from app.auth.recovery_service import BCRYPT_ROUNDS
 from app.members.db_models import Member
 
 pytestmark = pytest.mark.skipif(
@@ -317,9 +333,13 @@ async def _teardown() -> None:
                     )
                 ).scalars()
             )
-            await session.execute(
-                delete(PasskeyCredential).where(PasskeyCredential.user_id.in_(user_ids))
-            )
+            for table in (
+                PasskeyCredential,
+                RecoveryCode,
+                RecoveryAttempt,
+                AdminRecoveryToken,
+            ):
+                await session.execute(delete(table).where(table.user_id.in_(user_ids)))
             # Accounts before their Members: accounts.member_id is RESTRICT (#432).
             await session.execute(delete(Account).where(Account.id.in_(user_ids)))
             await session.execute(delete(Member).where(tagged))
@@ -445,5 +465,311 @@ async def test_measure_auth_begin_real_path_latency() -> None:
         # After printing, so a decoy-path mistake still shows its numbers next
         # to the explanation of why they are worthless.
         await _assert_real_paths_taken(len(emails), len(tokens))
+    finally:
+        await _teardown()
+
+
+# ── recovery/redeem and login/passkey/complete (#594) ─────────────────────────
+
+#: Redeem runs nine bcrypt comparisons at cost 12, seconds per request, so it
+#: gets fewer samples: a p99 on ~2 tail samples, read with that in mind.
+REDEEM_SAMPLES = 200
+REDEEM_WARMUP = 10
+REDEEM_SWEEP = (2, 4)
+
+#: login/passkey/complete is as cheap as the begin endpoints are.
+COMPLETE_SWEEP = (4, 8)
+
+_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
+_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5173")
+
+
+def _b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+class _SoftAuthenticator:
+    """One P-256 key standing in for every benched Account's passkey, so a
+    login completes for real: signature verified, sign count bumped, an Auth
+    Session started and committed."""
+
+    def __init__(self) -> None:
+        self._key = ec.generate_private_key(ec.SECP256R1())
+        numbers = self._key.public_key().public_numbers()
+        self.cose_public_key = cbor2.dumps(
+            {
+                1: 2,  # kty: EC2
+                3: -7,  # alg: ES256
+                -1: 1,  # crv: P-256
+                -2: numbers.x.to_bytes(32, "big"),
+                -3: numbers.y.to_bytes(32, "big"),
+            }
+        )
+
+    def assertion(self, credential_id: bytes, challenge: str) -> dict:
+        client_data = json.dumps(
+            {"type": "webauthn.get", "challenge": challenge, "origin": _ORIGIN}
+        ).encode()
+        # rpIdHash, flags UP|UV, sign count 1 (each credential is used once).
+        auth_data = (
+            hashlib.sha256(_RP_ID.encode()).digest() + b"\x05" + struct.pack(">I", 1)
+        )
+        signature = self._key.sign(
+            auth_data + hashlib.sha256(client_data).digest(), ec.ECDSA(hashes.SHA256())
+        )
+        return {
+            "id": _b64url(credential_id),
+            "rawId": _b64url(credential_id),
+            "type": "public-key",
+            "response": {
+                "clientDataJSON": _b64url(client_data),
+                "authenticatorData": _b64url(auth_data),
+                "signature": _b64url(signature),
+            },
+        }
+
+
+async def _seed_accounts(
+    count: int, *, authenticator: _SoftAuthenticator | None, secret_hashes: list[str]
+) -> list[tuple[str, bytes]]:
+    """`count` tagged Accounts, each with a passkey from `authenticator` and,
+    when `secret_hashes` is given, eight recovery codes and one admin token
+    hashed from it. Returns (email, credential id) per Account."""
+    engine = _engine()
+    emails = [f"{_TAG}-{uuid.uuid4().hex[:12]}@dojo.test" for _ in range(count)]
+    member_ids = [str(uuid.uuid4()) for _ in emails]
+    account_ids = [str(uuid.uuid4()) for _ in emails]
+    credential_ids = [uuid.uuid4().bytes for _ in emails]
+    expires = dt.datetime.now(dt.UTC) + dt.timedelta(hours=6)
+    try:
+        session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+        async with session_factory() as session:
+            await session.execute(
+                insert(Member),
+                [
+                    {
+                        "id": member_id,
+                        "email": email,
+                        "first_name": "Bench",
+                        "surname": "Member",
+                        "join_date": "2024-01-01",
+                        "membership_status": "active",
+                        "is_coach": False,
+                        "is_first_aider": False,
+                    }
+                    for member_id, email in zip(member_ids, emails, strict=True)
+                ],
+            )
+            await session.execute(
+                insert(Account),
+                [
+                    {"id": account_id, "member_id": member_id, "role": "member"}
+                    for account_id, member_id in zip(
+                        account_ids, member_ids, strict=True
+                    )
+                ],
+            )
+            if authenticator is not None:
+                await session.execute(
+                    insert(PasskeyCredential),
+                    [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "user_id": account_id,
+                            "credential_id": credential_id,
+                            "public_key": authenticator.cose_public_key,
+                            "sign_count": 0,
+                        }
+                        for account_id, credential_id in zip(
+                            account_ids, credential_ids, strict=True
+                        )
+                    ],
+                )
+            if secret_hashes:
+                set_id = str(uuid.uuid4())
+                await session.execute(
+                    insert(RecoveryCode),
+                    [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "user_id": account_id,
+                            "code_hash": code_hash,
+                            "set_id": set_id,
+                        }
+                        for account_id in account_ids
+                        for code_hash in secret_hashes[:8]
+                    ],
+                )
+                await session.execute(
+                    insert(AdminRecoveryToken),
+                    [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "user_id": account_id,
+                            "token_hash": secret_hashes[8],
+                            "expires_at": expires,
+                        }
+                        for account_id in account_ids
+                    ],
+                )
+            await session.commit()
+    finally:
+        await engine.dispose()
+    return list(zip(emails, credential_ids, strict=True))
+
+
+async def _post_timed(
+    client: AsyncClient, path: str, payload: dict, expected: int
+) -> float:
+    start = time.perf_counter()
+    response = await client.post(path, json=payload)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    assert response.status_code == expected, (path, response.status_code, response.text)
+    return elapsed_ms
+
+
+async def _sweep(measure, items: list, warmup: int, concurrency: int) -> list[float]:
+    """`measure(client, item)` for every item, `concurrency` at a time, the
+    first `warmup` items' timings dropped (see `_run_concurrent`)."""
+
+    async def drain(batch: list, keep: bool) -> list[float]:
+        queue: asyncio.Queue = asyncio.Queue()
+        for item in batch:
+            queue.put_nowait(item)
+        collected: list[float] = []
+
+        async def worker() -> None:
+            async with AsyncClient(base_url=API_URL, timeout=120.0) as client:
+                while True:
+                    try:
+                        item = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        return
+                    elapsed = await measure(client, item)
+                    if keep:
+                        collected.append(elapsed)
+
+        await asyncio.gather(*(worker() for _ in range(concurrency)))
+        return collected
+
+    await drain(items[:warmup], keep=False)
+    return await drain(items[warmup:], keep=True)
+
+
+@pytest.mark.asyncio
+async def test_measure_redeem_and_login_complete_latency() -> None:
+    """Percentiles for the work a recovery redeem and a successful passkey
+    login do, to calibrate their floors (#594). Asserts nothing about them,
+    for the reason `test_measure_auth_begin_real_path_latency` gives.
+
+    Redeem is measured on its slowest path: a known email sending a wrong
+    code, so all nine hashes are compared and a failed attempt is written.
+    Each Account is used once, so none reaches the lockout.
+    """
+    secret_hashes = [
+        bcrypt.hashpw(
+            f"bench-secret-{i}".encode(), bcrypt.gensalt(BCRYPT_ROUNDS)
+        ).decode()
+        for i in range(9)
+    ]
+    redeem_runs = 1 + len(REDEEM_SWEEP)
+    redeem_per_run = REDEEM_SAMPLES + REDEEM_WARMUP
+    complete_runs = 1 + len(COMPLETE_SWEEP)
+    authenticator = _SoftAuthenticator()
+    try:
+        redeem_accounts = await _seed_accounts(
+            redeem_per_run * redeem_runs,
+            authenticator=None,
+            secret_hashes=secret_hashes,
+        )
+        complete_accounts = await _seed_accounts(
+            _PER_RUN * complete_runs, authenticator=authenticator, secret_hashes=[]
+        )
+
+        async def redeem(client: AsyncClient, account: tuple[str, bytes]) -> float:
+            email, _ = account
+            return await _post_timed(
+                client,
+                "/auth/recovery/redeem",
+                {"email": email, "code": "wrong-code-zzzz"},
+                401,
+            )
+
+        async def unknown_redeem(client: AsyncClient, _: object) -> float:
+            return await _post_timed(
+                client,
+                "/auth/recovery/redeem",
+                {"email": f"{_TAG}-nobody@dojo.test", "code": "wrong-code-zzzz"},
+                401,
+            )
+
+        async def complete(client: AsyncClient, account: tuple[str, bytes]) -> float:
+            email, credential_id = account
+            begun = await client.post(
+                "/auth/login/passkey/begin", json={"email": email}
+            )
+            challenge = begun.json()["publicKey"]["challenge"]
+            return await _post_timed(
+                client,
+                "/auth/login/passkey/complete",
+                {
+                    "email": email,
+                    "credential": authenticator.assertion(credential_id, challenge),
+                },
+                200,
+            )
+
+        def chunk(items: list, index: int, size: int) -> list:
+            return items[index * size : (index + 1) * size]
+
+        results = [
+            percentiles(
+                "recovery/redeem  known, wrong code  seq",
+                await _sweep(
+                    redeem, chunk(redeem_accounts, 0, redeem_per_run), REDEEM_WARMUP, 1
+                ),
+            ),
+            percentiles(
+                "recovery/redeem  unknown email  seq",
+                await _sweep(unknown_redeem, [None] * redeem_per_run, REDEEM_WARMUP, 1),
+            ),
+        ]
+        for run, level in enumerate(REDEEM_SWEEP, start=1):
+            results.append(
+                percentiles(
+                    f"recovery/redeem  known, wrong code  c={level}",
+                    await _sweep(
+                        redeem,
+                        chunk(redeem_accounts, run, redeem_per_run),
+                        REDEEM_WARMUP,
+                        level,
+                    ),
+                )
+            )
+        results.append(
+            percentiles(
+                "login/passkey/complete  success  seq",
+                await _sweep(
+                    complete, chunk(complete_accounts, 0, _PER_RUN), WARMUP, 1
+                ),
+            )
+        )
+        for run, level in enumerate(COMPLETE_SWEEP, start=1):
+            results.append(
+                percentiles(
+                    f"login/passkey/complete  success  c={level}",
+                    await _sweep(
+                        complete, chunk(complete_accounts, run, _PER_RUN), WARMUP, level
+                    ),
+                )
+            )
+
+        print("\n\n=== REDEEM / COMPLETE LATENCY (client-observed, milliseconds) ===")
+        for result in results:
+            print(result.render())
+        print(
+            "\nServer-side elapsed for redeem is in the 'Constant-time floor "
+            "exceeded' warnings above.\n"
+        )
     finally:
         await _teardown()

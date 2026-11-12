@@ -18,6 +18,11 @@ for a fixed minimum wall-clock time:
 - `POST /auth/login/passkey/begin`
 - `POST /auth/invites/redeem/begin`
 
+Two heavier endpoints have floors of their own, calibrated in
+[Login complete and recovery redeem](#login-complete-and-recovery-redeem-594):
+`LOGIN_COMPLETE_MIN_DURATION_MS` for `POST /auth/login/passkey/complete` and
+`RECOVERY_REDEEM_MIN_DURATION_MS` for `POST /auth/recovery/redeem`.
+
 **The masking only works while the real path finishes under the floor.** Once a
 real request overruns it there is nothing left to pad, and the delta is
 observable again. So the floor has to sit above the real path's p99 — which is
@@ -155,6 +160,76 @@ saturation:
   `RATE_LIMIT_PER_IP` — not a larger `AUTH_BEGIN_MIN_DURATION_MS`. Reaching 4+
   simultaneous begin requests requires many distinct source addresses, given the
   20/min per-IP limit, which is itself the signal worth acting on.
+
+## Login complete and recovery redeem (#594)
+
+[#594](https://github.com/booji/KendoDojoManagement/issues/594) put two more
+endpoints behind the middleware, each with its own floor:
+
+- **`login/passkey/complete`.** #587 made a known and an unknown email do the
+  same work before a credential matches. That left no margin: its timing test
+  failed on the pre-fix code by only 0.03ms. A floor gives a margin that does
+  not depend on the machine.
+- **`recovery/redeem`.** #588 padded the bcrypt work, but a known email still
+  did database work an unknown one skipped, about 12ms: the lockout lookup,
+  reading its codes and tokens, and writing a failed attempt.
+
+The harness is `test_measure_redeem_and_login_complete_latency`, in the same
+file and behind the same flag:
+
+```bash
+podman-compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_auth_begin_calibration.py \
+  -e "PYTEST_ARGS=-k redeem_and_login_complete" \
+  -e AUTH_BEGIN_BENCH=1 \
+  -e AUTH_BEGIN_MIN_DURATION_MS=1 \
+  -e LOGIN_COMPLETE_MIN_DURATION_MS=1 \
+  -e RECOVERY_REDEEM_MIN_DURATION_MS=1 \
+  -e RATE_LIMIT_PER_IP=1000000/minute \
+  -e PYTEST_ADDOPTS=-s \
+  test-backend > /tmp/bench.log 2>&1
+```
+
+The warning about the overrides above applies here too.
+
+- **Login complete** is measured on a successful login, its heaviest path:
+  signature check, sign count, a new Auth Session, a commit. The harness signs
+  real assertions with a P-256 key.
+- **Redeem** is measured on its slowest path: a known email with a full code
+  set and an admin token, sending a wrong code. All nine hashes are compared at
+  cost 12, and a failed attempt is written. Each Account is used once, so none
+  reaches the lockout.
+
+Same environment class as above, 2026-11-12. Milliseconds, after warmups.
+
+| endpoint | n | p50 | p90 | p95 | **p99** | max |
+|---|---|---|---|---|---|---|
+| `login/passkey/complete`, success, seq | 1000 | 19.1 | 22.0 | 22.9 | **26.1** | 105.2 |
+| `login/passkey/complete`, success, c=4 | 1000 | 49.0 | 58.5 | 61.6 | **70.6** | 203.2 |
+| `login/passkey/complete`, success, c=8 | 1000 | 96.9 | 113.9 | 119.4 | **163.6** | 250.2 |
+| `recovery/redeem`, known, seq | 200 | 1902.9 | 1949.0 | 1970.7 | **2018.8** | 2148.5 |
+| `recovery/redeem`, unknown, seq | 200 | 1906.0 | 2193.5 | 2237.0 | **2337.0** | 2521.2 |
+| `recovery/redeem`, known, c=2 | 200 | 2333.8 | 2448.3 | 2494.9 | **2568.8** | 2619.1 |
+| `recovery/redeem`, known, c=4 | 200 | 2346.5 | 2452.9 | 2635.9 | **3016.9** | 3061.1 |
+
+The redeem rows are server-side, from the middleware's warnings. The login
+complete rows are client-observed, because the endpoint had no floor yet to
+log one. Over loopback, that adds well under a millisecond. Redeem takes
+seconds per request, so its rows have 200 samples, and each p99 rests on two.
+
+**`LOGIN_COMPLETE_MIN_DURATION_MS` defaults to 250ms.** Its worst single
+request one at a time, 105ms, already passes the begin endpoints' 100ms floor,
+so complete needs a floor of its own. 250ms is 2.4 times that worst case. It
+also clears every request at 4 in flight, and the p99 at 8.
+
+**`RECOVERY_REDEEM_MIN_DURATION_MS` defaults to 5000ms.** That is 2.5 times
+the sequential p99 and 1.6 times the worst request at 4 in flight. bcrypt is
+CPU-bound, so a slower VPS core scales the whole figure, not only the commit.
+Recovery is rare and deliberate, so a 5-second answer costs a user little.
+
+The [Conclusions](#conclusions) above hold for both floors. A "Constant-time
+floor exceeded" warning names the endpoint and its setting, and it is a
+capacity signal, not a reason to keep raising the floor.
 
 ## The convergence assertion's own false-failure rate
 

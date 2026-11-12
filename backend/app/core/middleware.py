@@ -20,13 +20,19 @@ from app.core.security_logger import request_ip
 # latency alone, without reading a single response body.
 _log = logging.getLogger(__name__)
 
-_CONSTANT_TIME_PATHS = frozenset(
-    config.API_PREFIX + path
-    for path in (
-        "/auth/login/passkey/begin",
-        "/auth/invites/redeem/begin",
+# Each padded path and the config setting that holds its floor. Login
+# complete and recovery redeem have their own: their work is heavier than
+# begin's, and an unknown email would otherwise skip work a known one does
+# (#587, #594).
+_CONSTANT_TIME_FLOORS = {
+    config.API_PREFIX + path: setting
+    for path, setting in (
+        ("/auth/login/passkey/begin", "AUTH_BEGIN_MIN_DURATION_MS"),
+        ("/auth/invites/redeem/begin", "AUTH_BEGIN_MIN_DURATION_MS"),
+        ("/auth/login/passkey/complete", "LOGIN_COMPLETE_MIN_DURATION_MS"),
+        ("/auth/recovery/redeem", "RECOVERY_REDEEM_MIN_DURATION_MS"),
     )
-)
+}
 
 
 # How far short of the deadline the pad's sleep stops, leaving the rest to a
@@ -56,7 +62,8 @@ async def _sleep_until(deadline: float) -> None:
 
 
 class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
-    """Hold the passkey begin endpoints to a fixed minimum response time.
+    """Hold the passkey login and invite begin endpoints, login complete and
+    recovery redeem to a fixed minimum response time.
 
     This lives in middleware rather than inside the service functions on
     purpose. An earlier revision padded inside `login_passkey_begin` /
@@ -78,14 +85,16 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if request.url.path not in _CONSTANT_TIME_PATHS:
+        setting = _CONSTANT_TIME_FLOORS.get(request.url.path)
+        if setting is None:
             return await call_next(request)
 
         start = time.perf_counter()
         try:
             return await call_next(request)
         finally:
-            floor = config.AUTH_BEGIN_MIN_DURATION_MS / 1000
+            floor_ms = getattr(config, setting)
+            floor = floor_ms / 1000
             elapsed = time.perf_counter() - start
             remaining = floor - elapsed
             if remaining > 0:
@@ -100,11 +109,12 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
                 _log.warning(
                     "Constant-time floor exceeded on %s: %.1fms elapsed vs "
                     "%dms floor. Timing side channel is no longer masked; "
-                    "raise AUTH_BEGIN_MIN_DURATION_MS above the real path's "
-                    "p99 or investigate the slowdown.",
+                    "raise %s above the real path's p99 or investigate the "
+                    "slowdown.",
                     request.url.path,
                     elapsed * 1000,
-                    config.AUTH_BEGIN_MIN_DURATION_MS,
+                    floor_ms,
+                    setting,
                 )
 
 
