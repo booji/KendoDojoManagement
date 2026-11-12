@@ -651,6 +651,26 @@ def test_prod_traefik_health_checks_the_app(path: Path):
 
 
 # ---------------------------------------------------------------------------
+# docker-compose.yml — the stack comes back after a crash, OOM or reboot (#582)
+# ---------------------------------------------------------------------------
+
+
+def test_compose_long_running_services_come_back_on_their_own():
+    """Every service declares a restart policy: `always` unless it is a
+    one-shot job that says `"no"`. `always`, not `unless-stopped`: an older
+    Podman's podman-restart.service starts only `always` containers at boot."""
+    services = load_compose()["services"]
+    policies = {name: svc.get("restart") for name, svc in services.items()}
+    long_running = {name for name, policy in policies.items() if policy != "no"}
+    assert long_running >= {"app", "proxy", "db"}, policies
+    for name in long_running:
+        assert policies[name] == "always", (
+            f"{name} must set `restart: always`, or the dojo stays offline "
+            "after an OOM kill or a reboot (#582)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # docker-compose.yml — migrations run before the app, not inside it (#391)
 # ---------------------------------------------------------------------------
 

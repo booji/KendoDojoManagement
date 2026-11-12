@@ -615,3 +615,46 @@ def test_no_shipped_file_sets_allow_test_auth():
         f"ALLOW_TEST_AUTH is set in {offenders}. Only {list(TEST_ONLY_FILES)} "
         "may set it."
     )
+
+
+def test_host_preparation_needs_nothing_from_the_bundle():
+    """Section 1 runs from the admin account before section 2 extracts the
+    bundle into kendo's home, so no step in it can name a bundle file (#576)."""
+    doc = DEPLOYMENT_DOC.read_text()
+    section_1 = doc[doc.index("\n## 1.") : doc.index("\n## 2")]
+    assert not re.findall(r"\bdeploy/\S+", section_1)
+
+
+def _quadlet_upgrade_section() -> str:
+    doc = (ROOT / "docs" / "install" / "upgrading.md").read_text()
+    return doc.split("## Hardened deployment (Quadlet)", 1)[1].split("\n## ", 1)[0]
+
+
+def test_quadlet_upgrade_pulls_every_unit_image_before_the_restart():
+    """Without a pull, `podman run ...:0.1 init` and the restart both reuse the
+    cached image, so a patch release never lands on a Quadlet host (#583)."""
+    section = _quadlet_upgrade_section()
+    restart = section.index("systemctl --user restart")
+    images = {
+        image
+        for unit in load_units().values()
+        for image in unit.get("Container", {}).get("Image", [])
+    }
+    assert images
+    for image in images:
+        pull = re.search(rf"podman pull[^\n]*{re.escape(image)}", section)
+        assert pull and pull.start() < restart, f"{image} is not pulled first"
+
+
+def test_quadlet_upgrade_installs_the_backup_units_it_runs():
+    """setup.sh --quadlet installs every unit in deploy/systemd (#576), so the
+    upgrade re-copies them all and enables the backup timer. A host set up
+    before it had no backup units, so they land before the backup starts."""
+    section = _quadlet_upgrade_section().replace("\\\n", " ")
+    backup = section.index("systemctl --user start kendo-backup.service")
+    for unit in (ROOT / "deploy" / "systemd").iterdir():
+        copies = [m.start() for m in re.finditer(rf"cp [^\n]*{unit.name}", section)]
+        assert copies, f"{unit.name} is never re-copied"
+        if unit.name.startswith("kendo-backup."):
+            assert copies[0] < backup, f"{unit.name} lands after the backup runs"
+    assert re.search(r"enable --now [^\n]*kendo-backup\.timer", section)

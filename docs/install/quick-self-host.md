@@ -63,6 +63,14 @@ escalates itself; you run those.
 podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:0.1
 ```
 
+`app`, `proxy` and `db` are `restart: always`, so a crash or an OOM kill brings
+them straight back. A reboot does not: rootless Podman has no daemon, and only
+`podman-restart.service` (with linger on) starts them again at boot. `setup.sh`
+enables it for you (`systemctl --user enable podman-restart.service`, no sudo),
+and `check` fails while it is disabled. It starts every `restart: always`
+container, stopped or not, so `podman-compose stop` does not survive a reboot:
+use `podman-compose down` to keep the stack stopped.
+
 `check` looks at what the app cannot see from inside its container, the things
 that otherwise surface as a browser error or a certificate that never arrives:
 placeholder domains, emails or secrets left in `.env` or the Traefik files, a

@@ -94,16 +94,21 @@ detect_prerequisites() {
   port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
   [ "$port_start" -le 80 ] 2>/dev/null || need \
     "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
-    "sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
+    "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
 
+  # Both firewalls answer root alone (polkit for firewalld), and check runs as
+  # `kendo`: a refused query says nothing about the rules (#576).
   if command -v firewall-cmd >/dev/null; then
-    firewall-cmd --list-services 2>/dev/null | grep -qw https || need \
-      "firewalld is not allowing http/https." \
-      "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+    if ! fw_services=$(firewall-cmd --list-services 2>/dev/null); then
+      unverified+=("firewalld reports its rules only to root — from an admin account, check that \`sudo firewall-cmd --list-services\` includes http and https.")
+    else
+      printf '%s\n' "$fw_services" | grep -qw https || need \
+        "firewalld is not allowing http/https." \
+        "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+    fi
   elif command -v ufw >/dev/null; then
-    # `ufw status` refuses anyone but root, which says nothing about the rules.
     if ! ufw_status=$(ufw status 2>/dev/null); then
-      unverified+=("ufw reports its rules only to root — check that \`sudo ufw status\` allows 80/443.")
+      unverified+=("ufw reports its rules only to root — from an admin account, check that \`sudo ufw status\` allows 80/443.")
     else
       case $ufw_status in
         *inactive*|*443*|*Https*|*https*) ;;
@@ -131,13 +136,21 @@ detect_prerequisites() {
     "sudo loginctl enable-linger $owner"
 }
 
+# On Quadlet this runs as `kendo`, which has no sudo, so every fix is run from
+# another account. Compose runs as the operator, who may have it.
+if [ "$mode" = quadlet ]; then
+  prerequisites_header="Host prerequisites — run these from an admin account, not as \`kendo\` (it has no sudo; this script never escalates):"
+else
+  prerequisites_header="Host prerequisites — run these yourself (this script never escalates):"
+fi
+
 report_prerequisites() {
   detect_prerequisites
   echo
   if [ $(( ${#outstanding[@]} + ${#unverified[@]} )) -eq 0 ]; then
     echo "Host prerequisites: all five satisfied."
   else
-    echo "Host prerequisites — run these yourself (this script never escalates):"
+    echo "$prerequisites_header"
     for item in "${outstanding[@]}" "${unverified[@]}"; do echo "  - $item"; done
   fi
 }
@@ -266,6 +279,15 @@ run_check() {
       *) fail "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the migrate service." ;;
     esac
   fi
+  # restart: always covers a crash; after a reboot rootless Podman has no
+  # daemon, and only podman-restart.service starts the stack again (#582).
+  if [ "$mode" != quadlet ] && command -v systemctl >/dev/null; then
+    if systemctl --user is-enabled --quiet podman-restart.service 2>/dev/null; then
+      ok "podman-restart.service is enabled — the stack comes back after a reboot"
+    else
+      fail "podman-restart.service is not enabled, so the stack stays down after a reboot — run: systemctl --user enable podman-restart.service"
+    fi
+  fi
 
   # The origin's host, resolved the way this box resolves it (so /etc/hosts and
   # an internal resolver count). Off-box is only a warning: behind NAT the
@@ -338,6 +360,7 @@ run_check() {
   fi
 
   detect_prerequisites
+  [ $(( ${#outstanding[@]} + ${#unverified[@]} )) -eq 0 ] || echo "$prerequisites_header"
   for item in "${outstanding[@]}"; do fail "$item"; done
   for item in "${unverified[@]}"; do warn "$item"; done
   [ ${#outstanding[@]} -gt 0 ] || ok "Host prerequisites satisfied."
@@ -853,7 +876,7 @@ put_secret() { # put_secret NAME VALUE
 }
 
 new_setup_token=""
-reload_failed="" timer_failed=""
+reload_failed="" failed_timers=()
 quadlet_install() {
   command -v podman >/dev/null || {
     echo "Podman is not installed, and the hardened deployment is nothing but podman secrets and Quadlet units. Nothing was written." >&2
@@ -937,10 +960,13 @@ quadlet_install() {
     "$units/kendo-app.container" "$units/kendo-migrate.container" \
     "$units/kendo-ip-retention.container"
   echo "  installed the Quadlet units in $units"
-  # Quadlet generates no timers: the daily IP-retention trigger (#467) is a
-  # plain user unit, enabled below once the reload has generated its service.
-  install -D -m 644 deploy/systemd/kendo-ip-retention.timer \
-    "$HOME/.config/systemd/user/kendo-ip-retention.timer"
+  # Quadlet generates no timers: the daily IP-retention trigger (#467) and the
+  # nightly backup (#576) are plain user units, enabled below once the reload
+  # has generated the services they need.
+  local f
+  for f in kendo-ip-retention.timer kendo-backup.service kendo-backup.timer; do
+    install -D -m 644 "deploy/systemd/$f" "$HOME/.config/systemd/user/$f"
+  done
 
   # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
   # operator to re-copy the units on upgrade, which would silently revert an edit made
@@ -978,17 +1004,27 @@ DROPIN
   fi
 
   # Quadlet generates the systemd units from these files on reload. Without a
-  # user session (`su - kendo` rather than `machinectl shell kendo@`) this is the
-  # step that fails, and it is the one worth naming when it does.
+  # user session (`su - kendo` rather than `machinectl shell kendo@ /bin/bash`)
+  # this is the step that fails, and it is the one worth naming when it does.
   systemctl --user daemon-reload || reload_failed=1
-  [ -n "$reload_failed" ] ||
-    systemctl --user enable --now kendo-ip-retention.timer || timer_failed=1
+  if [ -z "$reload_failed" ]; then
+    for f in kendo-ip-retention.timer kendo-backup.timer; do
+      systemctl --user enable --now "$f" || failed_timers+=("$f")
+    done
+  fi
 }
 
 if [ "$mode" = compose ]; then
   write_static "$selfhost/traefik.yml.example" "$selfhost/traefik.yml"
   write_router "$selfhost/dynamic/kendo.yml.example" "$selfhost/dynamic/kendo.yml"
   copy_byo "$selfhost/dynamic/byo-cert.yml.example" "$selfhost/dynamic/byo-cert.yml"
+  # restart: always covers a crash; after a reboot rootless Podman has no
+  # daemon, and only podman-restart.service starts the stack again (#582).
+  # A user unit, so no sudo; enabling it twice changes nothing.
+  if command -v systemctl >/dev/null; then
+    restart_unit=enabled
+    systemctl --user enable podman-restart.service || restart_unit=failed
+  fi
 else
   quadlet_install
 fi
@@ -1030,13 +1066,16 @@ fi
 echo
 if [ "$mode" = quadlet ]; then
   [ -z "$reload_failed" ] || echo "FIRST: \`systemctl --user daemon-reload\` failed, so no units have been generated
-  yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer\`, from
-  a \`machinectl shell kendo@\` session — \`su - kendo\` leaves systemctl --user
+  yet. Run it, then \`systemctl --user enable --now kendo-ip-retention.timer
+  kendo-backup.timer\`, from
+  a \`machinectl shell kendo@ /bin/bash\` session — \`su - kendo\` leaves systemctl --user
   broken — before anything below will work.
 "
-  [ -z "$timer_failed" ] || echo "NOTE: \`systemctl --user enable --now kendo-ip-retention.timer\` failed, so
-  recovery-attempt IPs are only cleared when kendo-app restarts. Run it again from
-  a \`machinectl shell kendo@\` session and read the error it gives.
+  [ ${#failed_timers[@]} -eq 0 ] || echo "NOTE: \`systemctl --user enable --now ${failed_timers[*]}\` failed, so
+  that work is not scheduled: without kendo-ip-retention.timer recovery-attempt IPs
+  are only cleared when kendo-app restarts, and without kendo-backup.timer no backups
+  are taken. Run it again from a \`machinectl shell kendo@ /bin/bash\` session and
+  read the error it gives.
 "
   echo "Next: ./setup.sh check --quadlet   (every FAIL names its fix; green means ready)"
   echo "      systemctl --user start kendo-traefik.service   (Requires= pulls in app -> migrate -> db)"
@@ -1044,7 +1083,8 @@ if [ "$mode" = quadlet ]; then
   echo "      regenerates the units; the containers keep their old config until they restart)"
   echo "      systemctl --user status kendo-db kendo-migrate kendo-app kendo-traefik --no-pager"
   echo "      then open https://$domain"
-  echo "Backups are not installed — see docs/install/backups.md for the timer."
+  [ -n "$reload_failed" ] || [[ " ${failed_timers[*]} " == *" kendo-backup.timer "* ]] ||
+    echo "Backups: kendo-backup.timer is enabled — into ~/backups on its schedule (docs/install/backups.md)."
   if [ -n "$new_setup_token" ]; then
     echo
     echo "Setup token — claims the first admin account, shown once (a podman secret"
@@ -1052,6 +1092,12 @@ if [ "$mode" = quadlet ]; then
     echo "  $new_setup_token"
   fi
 else
+  case ${restart_unit:-} in
+    enabled) echo "Reboots: podman-restart.service is enabled — the stack comes back after a reboot." ;;
+    failed) echo "NOTE: \`systemctl --user enable podman-restart.service\` failed, so the stack
+  stays down after a reboot. Run it again and read the error it gives.
+" ;;
+  esac
   echo "Next: ./setup.sh check   (every FAIL names its fix; green means ready)"
   echo "      podman-compose up -d   (then open https://$domain)"
   echo "The SETUP_TOKEN in .env claims the first admin account — hand it over out of band."

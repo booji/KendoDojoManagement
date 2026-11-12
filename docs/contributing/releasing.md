@@ -73,7 +73,20 @@ git push origin vX.Y.Z-rc1
 
 An rc tag runs the full suite (`tests.yml`) and publishes an image under its
 exact tag only, never the moving tags operators pin, and its docs publish
-nowhere. Rehearse on a clean host: install from the rc image with
+nowhere.
+
+The Release image's GHCR package must be public, or every operator's
+anonymous pull fails with `unauthorized`. A package is created private on its
+first push, and GitHub has no API to change that: if the package was ever
+recreated, make it public under its **Package settings**. Check with an
+anonymous pull before rehearsing, from the clean host (never logged in to
+`ghcr.io`):
+
+```bash
+podman pull ghcr.io/booji/kendodojomanagement:$RC_TAG   # e.g. RC_TAG=X.Y.Z-rc1
+```
+
+Rehearse on a clean host: install from the rc image with
 [Quick self-host](../install/quick-self-host.md), and upgrade a host running the
 previous release to it by following your own upgrading notes. A fix found
 here goes on the release branch, and the next rc is `-rc2`.

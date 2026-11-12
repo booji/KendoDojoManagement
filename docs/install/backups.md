@@ -11,13 +11,18 @@ Uploaded images live on a volume, not in the database, so the dump alone does no
 
 The Quick self-host (Compose) stack has no nightly timer. It takes a backup to `~/backups` on every `./setup.sh upgrade`, and the backup key and off-site settings below apply to it too — run `./setup.sh backup-key` without `--quadlet`.
 
+`./setup.sh --quadlet` installs `kendo-backup.service` and `kendo-backup.timer` in `~/.config/systemd/user/` and enables the timer: the first backup runs at the timer's next `OnCalendar=` (02:30 as shipped). Without `setup.sh`, the same by hand:
+
 ```bash
 cp deploy/systemd/kendo-backup.service ~/.config/systemd/user/
 cp deploy/systemd/kendo-backup.timer   ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now kendo-backup.timer
+```
 
-# Verify schedule + run once now
+Either way, check the schedule and take one now:
+
+```bash
 systemctl --user list-timers kendo-backup.timer --no-pager
 systemctl --user start kendo-backup.service
 ls -lh ~/backups
@@ -78,7 +83,7 @@ Both end by re-running migrate, as the restore prints when it finishes: the app'
 
 Plaintext backups (`.dump`, `.tar`, from before a key was set) restore with the same command.
 
-For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
+For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@ /bin/bash`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
 
 The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:
 
@@ -126,7 +131,7 @@ rclone runs as `kendo`, with `kendo`'s own config. Install it and add a remote f
 
 ```bash
 sudo dnf install -y rclone   # or: sudo apt install -y rclone
-sudo machinectl shell kendo@
+sudo machinectl shell kendo@ /bin/bash
 rclone config
 ```
 

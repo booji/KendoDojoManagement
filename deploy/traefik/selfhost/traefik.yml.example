@@ -6,8 +6,9 @@
 # certificates over the HTTP challenge, so the quick path needs an inbound port
 # 80 and nothing else, rather than a DNS-provider API token.
 #
-# Binding 80/443 rootless needs net.ipv4.ip_unprivileged_port_start=80 — see
-# deploy/sysctl-99-kendo-rootless-ports.conf.
+# Binding 80/443 rootless needs net.ipv4.ip_unprivileged_port_start=80 (the fix
+# `./setup.sh check` prints), or the firewalld redirect from 8080/8443 — see
+# docs/deployment.md §1.2.
 entryPoints:
   web:
     address: ":80"

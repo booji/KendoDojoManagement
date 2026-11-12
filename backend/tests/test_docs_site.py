@@ -123,3 +123,18 @@ def test_operator_docs_name_only_the_current_pin():
     }
     assert pins
     assert {pin for _, pin in pins} == {RELEASE_PIN}, sorted(pins)
+
+
+def test_every_machinectl_shell_names_the_shell_to_run():
+    """`kendo` logs in to /usr/sbin/nologin, on purpose, and `machinectl shell`
+    starts the login shell unless told otherwise: a bare `machinectl shell
+    kendo@` ends at once with "This account is currently not available" (#576).
+    """
+    sources = [ROOT / "README.md", ROOT / "setup.sh", *(ROOT / "docs").rglob("*.md")]
+    bare = [
+        (src.relative_to(ROOT).as_posix(), line.strip())
+        for src in sources
+        for line in src.read_text().splitlines()
+        if re.search(r"machinectl shell kendo@(?! /bin/bash)", line)
+    ]
+    assert not bare, bare

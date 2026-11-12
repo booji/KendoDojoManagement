@@ -41,19 +41,21 @@ def bundle(tmp_path: Path) -> Path:
     shutil.copy(ROOT / SELFHOST / "traefik.yml.example", home / SELFHOST)
     for example in (ROOT / SELFHOST / "dynamic").glob("*.example"):
         shutil.copy(example, home / SELFHOST / "dynamic")
-    (home / "deploy" / "sysctl-99-kendo-rootless-ports.conf").touch()
     # setup.sh reads backup.env through kendo-backup.sh, in every mode.
     shutil.copytree(ROOT / "deploy/bin", home / "deploy/bin")
     return home
 
 
-def run(home: Path, *answers: str) -> subprocess.CompletedProcess:
+def run(
+    home: Path, *answers: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     result = subprocess.run(
         ["bash", str(home / "setup.sh")],
         input="".join(f"{a}\n" for a in answers),
         capture_output=True,
         text=True,
         cwd=home,
+        env=env,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -450,6 +452,17 @@ def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
     assert not (host.state / "kendo_dns_token").exists()
 
 
+def test_compose_env_trusts_the_forwarded_for_traefik_sets(tmp_path):
+    """#581: behind Traefik every peer address is Traefik's, so an `.env` that
+    resolves TRUST_PROXY_XFF to false puts the whole dojo in one rate-limit
+    bucket. Read as docker-compose.yml's `${TRUST_PROXY_XFF:-true}` reads it:
+    unset or empty takes the default."""
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    assert (env_of(home).get("TRUST_PROXY_XFF") or "true") == "true"
+
+
 def test_quadlet_lays_down_the_config_tree_the_units_expect(tmp_path):
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "1", "admin@example.com")
@@ -504,6 +517,22 @@ def test_quadlet_enables_the_daily_ip_retention_timer(tmp_path):
     assert f"--user enable --now {timer}" in calls[reload + 1 :], calls
 
 
+def test_quadlet_enables_the_nightly_backup_timer(tmp_path):
+    """Without it a fresh install takes no backups until the operator finds
+    the manual step (#576)."""
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    for unit in ("kendo-backup.service", "kendo-backup.timer"):
+        assert (host.home / ".config/systemd/user" / unit).read_text() == (
+            ROOT / "deploy/systemd" / unit
+        ).read_text()
+    calls = host.systemctl_log.read_text().splitlines()
+    reload = calls.index("--user daemon-reload")
+    assert "--user enable --now kendo-backup.timer" in calls[reload + 1 :], calls
+    assert "kendo-backup.timer is enabled" in out.stdout
+
+
 def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     host = Host(tmp_path)
     (tmp_path / "bin/systemctl").write_text(
@@ -511,8 +540,10 @@ def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     )
     out = host.run("dojo.example.com", "1", "1", "admin@example.com")
 
-    assert "enable --now kendo-ip-retention.timer` failed" in out.stdout
+    note = "enable --now kendo-ip-retention.timer kendo-backup.timer` failed"
+    assert out.stdout.count(note) == 1, out.stdout
     assert "daemon-reload` failed" not in out.stdout
+    assert "kendo-backup.timer is enabled" not in out.stdout
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
@@ -753,6 +784,44 @@ def test_check_passes_what_setup_just_wrote_on_a_healthy_host(tmp_path):
     assert "podman-compose up -d" in out.stdout
 
 
+def test_check_fails_until_podman_restart_brings_the_stack_back_after_a_reboot(
+    tmp_path,
+):
+    # restart: always covers a crash; after a reboot only podman-restart.service
+    # starts the containers again (#582).
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    env = host_env(
+        tmp_path,
+        systemctl='case "$*" in *is-failed*|*podman-restart*) exit 1 ;; esac',
+    )
+
+    out = check(home, env)
+
+    assert out.returncode == 1
+    assert "systemctl --user enable podman-restart.service" in out.stdout
+
+
+def test_compose_setup_enables_podman_restart_so_check_can_go_green(tmp_path):
+    # check fails until it is enabled, and the docs run check before starting
+    # the stack: setup enables it itself, no sudo needed (#582).
+    home = bundle(tmp_path)
+    log = tmp_path / "systemctl.log"
+    env = host_env(tmp_path, systemctl=f'echo "$*" >> {log}')
+
+    out = run(home, *ANSWERS, env=env)
+
+    assert "--user enable podman-restart.service" in log.read_text().splitlines()
+    assert "podman-restart.service is enabled" in out.stdout
+
+
+def test_compose_setup_names_a_failed_podman_restart_enable(tmp_path):
+    home = bundle(tmp_path)
+    out = run(home, *ANSWERS, env=host_env(tmp_path, systemctl="exit 1"))
+
+    assert "systemctl --user enable podman-restart.service` failed" in out.stdout
+
+
 def test_check_before_setup_says_to_run_setup_first(tmp_path):
     home = bundle(tmp_path)
 
@@ -973,6 +1042,38 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     assert out.returncode == 1
     assert "FAIL  Linger is off for kendo" in out.stdout
     assert "sudo loginctl enable-linger kendo" in out.stdout
+    # Compose runs as the operator, not `kendo`, so the header names no account.
+    header = "run these yourself (this script never escalates)"
+    assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+    assert "not as `kendo`" not in out.stdout
+
+
+def test_check_quadlet_says_prerequisites_are_fixed_from_an_admin_account(tmp_path):
+    # `kendo` has no sudo: the fix is run from another account (#576).
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+
+    out = check(host.src, host_env(tmp_path, loginctl="echo Linger=no"), "--quadlet")
+
+    assert out.returncode == 1
+    header = "run these from an admin account, not as `kendo`"
+    assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+
+
+def test_check_prints_a_sysctl_fix_that_needs_no_bundle(tmp_path):
+    # The fix is run from an admin account, where the bundle extracted into
+    # kendo's home is not: it writes the one line rather than copying a file.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, sysctl="echo 1024"))
+
+    assert out.returncode == 1
+    assert (
+        "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee "
+        "/etc/sysctl.d/99-kendo-rootless-ports.conf" in out.stdout
+    )
+    assert "deploy/sysctl" not in out.stdout
 
 
 def test_check_only_warns_about_a_firewall_it_cannot_see(tmp_path):
@@ -1026,7 +1127,28 @@ def test_check_only_warns_when_ufw_will_not_report_without_root(tmp_path):
     )
 
     assert out.returncode == 0, out.stdout
-    assert "sudo ufw status" in out.stdout
+    assert "from an admin account, check that `sudo ufw status`" in out.stdout
+
+
+def test_check_only_warns_when_firewalld_will_not_report_without_root(tmp_path):
+    # polkit answers `firewall-cmd --list-services` for root alone, and check
+    # runs as `kendo`: the refusal says nothing about the rules (#576).
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(
+        home,
+        host_env(
+            tmp_path,
+            firewall_cmd='echo "Authorization failed." >&2; exit 253',
+        ),
+    )
+
+    assert out.returncode == 0, out.stdout
+    assert "FAIL  firewalld" not in out.stdout
+    assert "from an admin account, check that `sudo firewall-cmd --list-services`" in (
+        out.stdout
+    )
 
 
 # ---------------------------------------------------------------- upgrade ---
