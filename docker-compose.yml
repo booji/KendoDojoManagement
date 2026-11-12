@@ -153,7 +153,8 @@ services:
     networks:
       - edge
     # Rootless Podman needs net.ipv4.ip_unprivileged_port_start=80 to bind
-    # these: `./setup.sh check` prints the one-liner (docs/deployment.md §1.2).
+    # these: `./setup.sh check` prints the one-liner. Or publish 8080/8443 and
+    # add the firewalld redirect (docs/deployment.md §1.2).
     ports:
       - "80:80"
       - "443:443"
