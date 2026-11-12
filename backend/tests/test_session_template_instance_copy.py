@@ -138,7 +138,9 @@ def test_generate_instances_deep_copies_segments() -> None:
     assert len(instances[1]["segments"]) == 2
 
 
-def test_generated_instances_carry_the_templates_location_info_and_coach_notes() -> None:
+def test_generated_instances_carry_the_templates_location_info_and_coach_notes() -> (
+    None
+):
     """#577: a recurring Session's location, info and coach notes reach every
     Session it generates, not just the template."""
     template = {

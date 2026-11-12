@@ -5,6 +5,8 @@ from datetime import date, timedelta
 
 from pydantic import BaseModel, field_validator
 
+from app.core.partial_update import PartialUpdate
+
 
 def compute_renewal_status(renewal_date: date | str | None) -> str | None:
     """Pure function — computes renewal status from a date value.
@@ -39,7 +41,9 @@ class MemberFederationCreate(BaseModel):
         return v
 
 
-class MemberFederationUpdate(BaseModel):
+class MemberFederationUpdate(PartialUpdate):
+    not_null = frozenset({"member_number"})
+
     member_number: str | None = None
     renewal_date: date | None = None
 

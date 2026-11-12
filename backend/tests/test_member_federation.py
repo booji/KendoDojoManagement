@@ -605,6 +605,30 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
     assert response.json()["renewal_date"] == new_date
 
 
+async def test_admin_can_clear_renewal_date(member_repo, fed_repo, mf_repo) -> None:
+    """#585: a mistyped renewal date can be removed, not just replaced."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    membership = await mf_repo.add(
+        {
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
+            "member_number": "AJKF-011",
+            "renewal_date": date(2001, 1, 1),
+        }
+    )
+    url = f"/members/{_MEMBER_A_ID}/federations/{membership.id}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(url, json={"renewal_date": None})
+        refused = await c.put(url, json={"member_number": None})
+    assert response.status_code == 200
+    assert response.json()["renewal_date"] is None
+    assert response.json()["member_number"] == "AJKF-011"
+    assert refused.status_code == 422
+
+
 async def test_edit_federation_membership_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:

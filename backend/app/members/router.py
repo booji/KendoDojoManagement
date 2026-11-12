@@ -40,17 +40,10 @@ _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AdminDirectory = Annotated[AbstractAdminDirectory, Depends(get_admin_directory)]
 _GradeRepo = Annotated[AbstractGradeRepository, Depends(get_grade_repo)]
 
+
 # Member fields an admin may clear by sending an explicit null. Every other
 # field on UpdateMemberRequest is required-by-domain, so a null there means
 # "leave alone" rather than "wipe".
-_CLEARABLE_FIELDS = (
-    "display_name",
-    "dob",
-    "emergency_contact_name",
-    "emergency_contact_phone",
-)
-
-
 def _stringify(value: Any) -> str | None:
     if value is None:
         return None
@@ -172,15 +165,7 @@ async def update_member(
     uow: _UoW,
     directory: _AdminDirectory,
 ) -> MemberResponse:
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    # The optional PII fields are nullable-by-design: an explicitly provided
-    # None clears the stored value, so it must survive the generic not-None
-    # filter above (which otherwise treats missing and None alike — the
-    # correct reading for the required-by-domain fields in this payload).
-    explicitly_set = payload.model_dump(exclude_unset=True)
-    for key in _CLEARABLE_FIELDS:
-        if key in explicitly_set:
-            data[key] = explicitly_set[key]
+    data = payload.changes()
     before = await repo.get(str(member_id))
     if before is None:
         raise HTTPException(
