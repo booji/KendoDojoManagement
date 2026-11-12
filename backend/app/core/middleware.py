@@ -24,14 +24,25 @@ _log = logging.getLogger(__name__)
 # complete and recovery redeem have their own: their work is heavier than
 # begin's, and an unknown email would otherwise skip work a known one does
 # (#587, #594).
-_CONSTANT_TIME_FLOORS = {
-    config.API_PREFIX + path: setting
-    for path, setting in (
-        ("/auth/login/passkey/begin", "AUTH_BEGIN_MIN_DURATION_MS"),
-        ("/auth/invites/redeem/begin", "AUTH_BEGIN_MIN_DURATION_MS"),
-        ("/auth/login/passkey/complete", "LOGIN_COMPLETE_MIN_DURATION_MS"),
-        ("/auth/recovery/redeem", "RECOVERY_REDEEM_MIN_DURATION_MS"),
-    )
+# Each floor is read per request, not bound here, so it can be tuned or
+# overridden in tests.
+_CONSTANT_TIME_FLOORS: dict[str, tuple[str, Callable[[], int]]] = {
+    config.API_PREFIX + "/auth/login/passkey/begin": (
+        "AUTH_BEGIN_MIN_DURATION_MS",
+        lambda: config.AUTH_BEGIN_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/invites/redeem/begin": (
+        "AUTH_BEGIN_MIN_DURATION_MS",
+        lambda: config.AUTH_BEGIN_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/login/passkey/complete": (
+        "LOGIN_COMPLETE_MIN_DURATION_MS",
+        lambda: config.LOGIN_COMPLETE_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/recovery/redeem": (
+        "RECOVERY_REDEEM_MIN_DURATION_MS",
+        lambda: config.RECOVERY_REDEEM_MIN_DURATION_MS,
+    ),
 }
 
 
@@ -85,15 +96,16 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        setting = _CONSTANT_TIME_FLOORS.get(request.url.path)
-        if setting is None:
+        padded = _CONSTANT_TIME_FLOORS.get(request.url.path)
+        if padded is None:
             return await call_next(request)
+        setting, read_floor = padded
 
         start = time.perf_counter()
         try:
             return await call_next(request)
         finally:
-            floor_ms = getattr(config, setting)
+            floor_ms = read_floor()
             floor = floor_ms / 1000
             elapsed = time.perf_counter() - start
             remaining = floor - elapsed

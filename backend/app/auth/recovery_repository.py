@@ -147,7 +147,7 @@ class AbstractAdminTokenRepository(Protocol):
         expires_at: datetime,
     ) -> dict[str, Any]: ...
 
-    async def get_live_admin_tokens_for_user(
+    async def get_live_admin_tokens_for_account(
         self, user_id: str
     ) -> list[dict[str, Any]]: ...
 
@@ -186,7 +186,7 @@ class SqlAdminTokenRepository:
         await self._session.flush()
         return _admin_token_to_dict(obj)
 
-    async def get_live_admin_tokens_for_user(
+    async def get_live_admin_tokens_for_account(
         self, user_id: str
     ) -> list[dict[str, Any]]:
         result = await self._session.execute(

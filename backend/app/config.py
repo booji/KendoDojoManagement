@@ -90,6 +90,27 @@ ALLOW_TEST_AUTH: bool = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 TIMEZONE: str = os.getenv("TZ", "UTC")
 
 
+def _floor_ms(name: str, default: int) -> int:
+    """A constant-time floor from the environment, or `default` if it is unset,
+    not an integer, or not positive."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "%s is not an integer; falling back to %dms", name, default
+        )
+        return default
+    if value <= 0:
+        logging.getLogger(__name__).warning(
+            "%s must be positive; falling back to %dms. A non-positive floor "
+            "disables timing-side-channel protection.",
+            name,
+            default,
+        )
+        return default
+    return value
+
+
 # Minimum wall-clock duration (ms) the passkey begin endpoints must take,
 # regardless of whether the email is known/authorized (real path) or
 # unknown/unauthorized (decoy path). Closes a timing side channel: the real
@@ -114,27 +135,6 @@ TIMEZONE: str = os.getenv("TZ", "UTC")
 # A non-positive value would make the pad never fire and silently restore the
 # leak, so a typo or a well-meaning "disable this in dev" is treated as
 # misconfiguration rather than honoured. Same for a non-integer.
-def _floor_ms(name: str, default: int) -> int:
-    """A constant-time floor from the environment, or `default` if it is unset,
-    not an integer, or not positive."""
-    try:
-        value = int(os.getenv(name, str(default)))
-    except ValueError:
-        logging.getLogger(__name__).warning(
-            "%s is not an integer; falling back to %dms", name, default
-        )
-        return default
-    if value <= 0:
-        logging.getLogger(__name__).warning(
-            "%s must be positive; falling back to %dms. A non-positive floor "
-            "disables timing-side-channel protection.",
-            name,
-            default,
-        )
-        return default
-    return value
-
-
 AUTH_BEGIN_MIN_DURATION_MS: int = _floor_ms("AUTH_BEGIN_MIN_DURATION_MS", 100)
 
 # The same floor for POST /auth/login/passkey/complete (#594). A successful
@@ -146,7 +146,7 @@ LOGIN_COMPLETE_MIN_DURATION_MS: int = _floor_ms("LOGIN_COMPLETE_MIN_DURATION_MS"
 # And for POST /auth/recovery/redeem (#594), whose work is bcrypt, not a
 # commit: nine comparisons at cost 12 for any email, known or not. The
 # database work only a known email does -- the lockout lookup, its codes and
-# tokens, the failed attempt it writes -- runs inside it. p99 2.0s one at a
+# tokens, the failed attempt it writes -- runs inside it. p99 2.3s one at a
 # time, 3.0s at 4 in flight; bcrypt is CPU-bound, so a slower VPS core scales
 # it directly. Both floors are calibrated in docs/auth-timing-calibration.md,
 # and the same rules hold: above the p99, and a capacity signal rather than a

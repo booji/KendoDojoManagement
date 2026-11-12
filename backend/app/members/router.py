@@ -41,9 +41,6 @@ _AdminDirectory = Annotated[AbstractAdminDirectory, Depends(get_admin_directory)
 _GradeRepo = Annotated[AbstractGradeRepository, Depends(get_grade_repo)]
 
 
-# Member fields an admin may clear by sending an explicit null. Every other
-# field on UpdateMemberRequest is required-by-domain, so a null there means
-# "leave alone" rather than "wipe".
 def _stringify(value: Any) -> str | None:
     if value is None:
         return None

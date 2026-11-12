@@ -968,24 +968,25 @@ async def test_the_padding_costs_what_a_real_code_does(
 
 @pytest.mark.asyncio
 @pytest.mark.timing_sensitive
-async def test_a_known_email_answers_as_fast_as_an_unknown_one(
-    db_client, cheap_bcrypt, monkeypatch
+@pytest.mark.parametrize("other", ["unknown email", "Account with no tokens"])
+async def test_an_account_holding_admin_tokens_answers_as_fast_as(
+    db_client, cheap_bcrypt, monkeypatch, other
 ) -> None:
-    """The redeem floor hides the database work only a known email does --
-    its lockout lookup, its codes and tokens, the failed attempt it writes --
-    and the extra comparisons of tokens seeded past the one-live-token rule
-    (#594)."""
+    """The redeem floor hides what only some emails cost (#594). Against an
+    unknown email: the lockout lookup, the codes and tokens read, the failed
+    attempt written. Against an Account with none: the comparisons of tokens
+    seeded past the one-live-token rule."""
     monkeypatch.setattr(app.state.limiter, "enabled", False)
     monkeypatch.setattr(config, "RECOVERY_REDEEM_MIN_DURATION_MS", 150)
-    user_id = str(uuid.uuid4())
-    await _seed_user(db_client, "musashi@dojo.test", user_id)
-    await _seed_code_set(db_client, user_id)
+    holder_id, other_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", holder_id)
+    await _seed_code_set(db_client, holder_id)
     async with db_client.begin() as conn:
         for _ in range(3):
             await conn.execute(
                 insert(AdminRecoveryToken).values(
                     id=str(uuid.uuid4()),
-                    user_id=user_id,
+                    user_id=holder_id,
                     token_hash=bcrypt.hashpw(
                         b"admin-token", bcrypt.gensalt(4)
                     ).decode(),
@@ -993,16 +994,23 @@ async def test_a_known_email_answers_as_fast_as_an_unknown_one(
                     created_at=datetime.now(UTC),
                 )
             )
+    other_email = "nobody@dojo.test"
+    if other == "Account with no tokens":
+        other_email = "kojiro@dojo.test"
+        await _seed_user(db_client, other_email, other_id)
+        await _seed_code_set(db_client, other_id)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
 
         async def timed(email: str) -> float:
-            # Outside the timing: clear failures so the Account is not locked out.
+            # Outside the timing: clear failures so neither is locked out.
             async with db_client.begin() as conn:
                 await conn.execute(
-                    delete(RecoveryAttempt).where(RecoveryAttempt.user_id == user_id)
+                    delete(RecoveryAttempt).where(
+                        RecoveryAttempt.user_id.in_([holder_id, other_id])
+                    )
                 )
             start = time.perf_counter()
             response = await c.post(
@@ -1013,9 +1021,12 @@ async def test_a_known_email_answers_as_fast_as_an_unknown_one(
             assert response.status_code == 401
             return elapsed
 
-        await assert_latency_converges_sampled(
-            lambda: timed("musashi@dojo.test"),
-            lambda: timed("nobody@dojo.test"),
-            label_a="known email",
-            label_b="unknown email",
-        )
+        try:
+            await assert_latency_converges_sampled(
+                lambda: timed("musashi@dojo.test"),
+                lambda: timed(other_email),
+                label_a="Account holding admin tokens",
+                label_b=other,
+            )
+        finally:
+            await _wipe_test_email(db_client, "kojiro@dojo.test")

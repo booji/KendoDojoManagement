@@ -222,8 +222,9 @@ request one at a time, 105ms, already passes the begin endpoints' 100ms floor,
 so complete needs a floor of its own. 250ms is 2.4 times that worst case. It
 also clears every request at 4 in flight, and the p99 at 8.
 
-**`RECOVERY_REDEEM_MIN_DURATION_MS` defaults to 5000ms.** That is 2.5 times
-the sequential p99 and 1.6 times the worst request at 4 in flight. bcrypt is
+**`RECOVERY_REDEEM_MIN_DURATION_MS` defaults to 5000ms.** That is 2.1 times
+the worst sequential p99, the unknown email's 2337ms, and 1.6 times the worst
+request at 4 in flight. bcrypt is
 CPU-bound, so a slower VPS core scales the whole figure, not only the commit.
 Recovery is rare and deliberate, so a 5-second answer costs a user little.
 

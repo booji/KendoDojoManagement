@@ -301,12 +301,16 @@ async def test_patch_template_clears_a_field_sent_as_null(
     """#585: the template PATCH follows the same rule as the Session PUT."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     tmpl = await _seed_template(template_repo)
+    await template_repo.update(
+        tmpl["id"], {"info": "Bring a bokken", "coach_notes": "Watch the kote"}
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.patch(
-            f"/sessions/templates/{tmpl['id']}", json={"location": None}
+            f"/sessions/templates/{tmpl['id']}",
+            json={"location": None, "info": None, "coach_notes": None},
         )
         refused = await c.patch(
             f"/sessions/templates/{tmpl['id']}", json={"title": None}
@@ -315,6 +319,8 @@ async def test_patch_template_clears_a_field_sent_as_null(
     stored = await template_repo.get(tmpl["id"])
     assert stored is not None
     assert stored["location"] is None
+    assert stored["info"] is None
+    assert stored["coach_notes"] is None
     assert stored["title"] == "Weekly Keiko"
     assert refused.status_code == 422
 
