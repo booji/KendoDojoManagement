@@ -341,7 +341,9 @@ class InMemorySessionInstanceRepository:
     async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
         return self._set_cancelled(instance_id, False)
 
-    def _set_cancelled(self, instance_id: str, cancelled: bool) -> dict[str, Any] | None:
+    def _set_cancelled(
+        self, instance_id: str, cancelled: bool
+    ) -> dict[str, Any] | None:
         row = self._store.get(instance_id)
         if row is None:
             return None
