@@ -205,3 +205,23 @@ async def test_a_recurrence_change_keeps_a_future_session_with_attendance(
         sessions = await _sessions(c, template_id)
 
     assert sessions[_NEXT_MONDAY]["id"] == attended["id"]
+
+
+async def test_a_cancelled_series_cannot_be_extended(db_client) -> None:
+    """C6 of the audit: extend ignored is_active, generating live Sessions for
+    a series the Admin had cancelled."""
+    async with _client() as c:
+        template_id = await _series(c)
+        response = await c.delete(f"/sessions/templates/{template_id}")
+        assert response.status_code == 200, response.text
+        before = await _sessions(c, template_id)
+
+        response = await c.post(
+            f"/sessions/templates/{template_id}/extend",
+            json={"end_date": (_END + timedelta(weeks=4)).isoformat()},
+        )
+        after = await _sessions(c, template_id)
+
+    assert response.status_code == 422, response.text
+    assert "cancelled" in response.json()["detail"]
+    assert after == before

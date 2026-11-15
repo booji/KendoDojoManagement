@@ -148,7 +148,8 @@ async def extend(
 ) -> dict[str, Any] | None:
     """Move a template's end date later and generate the newly-covered dates.
 
-    Raises ValueError if the new end date moves backwards, or reaches beyond
+    Raises ValueError if the series is cancelled, the new end date moves
+    backwards, or it reaches beyond
     the horizon cap — a recurring template must stay bounded, and the cap
     applies from today rather than from the template's start, so repeated
     extensions cannot walk it indefinitely into the future.
@@ -157,6 +158,8 @@ async def extend(
     if template is None:
         return None
 
+    if not template["is_active"]:
+        raise ValueError("a cancelled series cannot be extended")
     current_end = date.fromisoformat(template["end_date"])
     if new_end < current_end:
         raise ValueError(
