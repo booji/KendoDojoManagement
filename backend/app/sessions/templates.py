@@ -149,10 +149,10 @@ async def extend(
     """Move a template's end date later and generate the newly-covered dates.
 
     Raises ValueError if the series is cancelled, the new end date moves
-    backwards, or it reaches beyond
-    the horizon cap — a recurring template must stay bounded, and the cap
-    applies from today rather than from the template's start, so repeated
-    extensions cannot walk it indefinitely into the future.
+    backwards, or it reaches beyond the horizon cap — a recurring template
+    must stay bounded, and the cap applies from today rather than from the
+    template's start, so repeated extensions cannot walk it indefinitely into
+    the future.
     """
     template = await template_repo.get(template_id)
     if template is None:
