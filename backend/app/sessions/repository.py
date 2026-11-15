@@ -4,10 +4,11 @@ import json
 from datetime import date
 from typing import Any, Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance.db_models import Attendance
 from app.sessions.db_models import (
     SessionInstance,
     SessionInstanceSegment,
@@ -68,21 +69,27 @@ class AbstractSessionInstanceRepository(Protocol):
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]: ...
 
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
+    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        """Cancel a Session. A state change, not an edit: it leaves `edited`
+        alone, so a reconcile may still drop the Session's slot (#579)."""
+        ...
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        """Undo a Cancellation. Like cancel, not an edit."""
+        ...
 
     async def update(
         self, instance_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None: ...
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None: ...
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        """Delete a Session unless it has Attendance. None if it is missing or
+        attended: Attendance records training that happened (#578)."""
+        ...
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
     ) -> list[dict[str, Any]]: ...
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int: ...
 
 
 def _type_to_dict(obj: SessionType) -> dict[str, Any]:
@@ -153,6 +160,8 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "duration_minutes": duration_minutes,
         "location": obj.location,
         "template_id": obj.template_id,
+        "original_date": obj.original_date,
+        "edited": obj.edited,
         "status": "cancelled" if obj.cancelled else "scheduled",
         # Keep raw fields for internal / admin use
         "date": obj.date,
@@ -437,6 +446,14 @@ class SqlSessionInstanceRepository:
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        return await self._set_cancelled(instance_id, True)
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        return await self._set_cancelled(instance_id, False)
+
+    async def _set_cancelled(
+        self, instance_id: str, cancelled: bool
+    ) -> dict[str, Any] | None:
         result = await self._session.execute(
             select(SessionInstance)
             .where(SessionInstance.id == instance_id)
@@ -449,7 +466,7 @@ class SqlSessionInstanceRepository:
         obj = result.scalar_one_or_none()
         if obj is None:
             return None
-        obj.cancelled = True
+        obj.cancelled = cancelled
         await self._session.flush()
         return _instance_to_dict(obj)
 
@@ -474,6 +491,7 @@ class SqlSessionInstanceRepository:
             setattr(obj, key, value)
         if segments_data is not None:
             obj.segments = _build_instance_segments(segments_data)
+        obj.edited = True
         await self._session.flush()
         # Re-fetch with segments AND their nested type_links eagerly loaded.
         # refresh(["segments"]) reloads segments but not type_links, so
@@ -483,7 +501,11 @@ class SqlSessionInstanceRepository:
         assert refreshed is not None
         return refreshed
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        if await self._session.scalar(
+            select(exists().where(Attendance.session_id == instance_id))
+        ):
+            return None
         result = await self._session.execute(
             select(SessionInstance)
             .where(SessionInstance.id == instance_id)
@@ -522,19 +544,3 @@ class SqlSessionInstanceRepository:
             obj.cancelled = True
         await self._session.flush()
         return [_instance_to_dict(obj) for obj in rows]
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        result = await self._session.execute(
-            select(SessionInstance).where(
-                SessionInstance.template_id == template_id,
-                SessionInstance.date >= as_of_date,
-            )
-        )
-        rows = result.scalars().all()
-        count = len(rows)
-        for obj in rows:
-            await self._session.delete(obj)
-        await self._session.flush()
-        return count

@@ -279,12 +279,17 @@ async def generate_session_instances(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> list[dict[str, Any]]:
-    created = await templates.generate_to_horizon(
-        str(template_id),
-        date.fromisoformat(payload.horizon),
-        template_repo,
-        instance_repo,
-    )
+    try:
+        created = await templates.generate_to_horizon(
+            str(template_id),
+            date.fromisoformat(payload.horizon),
+            template_repo,
+            instance_repo,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if created is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
@@ -331,6 +336,25 @@ async def cancel_session_instance(
     uow: _UoW,
 ) -> dict[str, Any]:
     record = await repo.cancel(str(instance_id))
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    await uow.commit()
+    return _normalize_instance(record)
+
+
+@router.post("/sessions/{instance_id}/reinstate")
+async def reinstate_session_instance(
+    instance_id: uuid.UUID,
+    _claims: _Admin,
+    repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    """Undo a Cancellation (#579). A cancelled series stays cancelled: this
+    puts back only the one Session."""
+    record = await repo.reinstate(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -441,9 +465,14 @@ async def update_session_template(
     uow: _UoW,
 ) -> dict[str, Any]:
     await _require_known_types(payload.segments, type_repo)
-    template = await templates.reschedule(
-        str(template_id), payload.changes(), template_repo, instance_repo
-    )
+    try:
+        template = await templates.reschedule(
+            str(template_id), payload.changes(), template_repo, instance_repo
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"

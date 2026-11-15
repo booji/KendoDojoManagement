@@ -75,8 +75,13 @@ export const cancelSession = async (id: string): Promise<SessionInstance> => {
   return request<SessionInstance>(`/api/sessions/${id}/cancel`, { method: "POST", errorMessage: "Failed to cancel session" })
 }
 
-export const deleteTemplate = async (templateId: string): Promise<void> => {
-  return request<void>(`/api/sessions/templates/${templateId}`, { method: "DELETE", errorMessage: "Failed to delete template" })
+export const reinstateSession = async (id: string): Promise<SessionInstance> => {
+  return request<SessionInstance>(`/api/sessions/${id}/reinstate`, { method: "POST", errorMessage: "Failed to reinstate session" })
+}
+
+/** Cancel a series: answers with the template, now inactive. */
+export const deleteTemplate = async (templateId: string): Promise<SessionTemplate> => {
+  return request<SessionTemplate>(`/api/sessions/templates/${templateId}`, { method: "DELETE", errorMessage: "Failed to delete template" })
 }
 
 export type SessionInstanceCreate = {
@@ -118,6 +123,7 @@ export type SessionTemplate = {
   location: string | null
   info: string | null
   coach_notes: string | null
+  is_active: boolean // false once the series is cancelled
   segments: Segment[]
 }
 

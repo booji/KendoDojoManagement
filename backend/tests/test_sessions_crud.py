@@ -466,6 +466,8 @@ async def test_delete_template_deactivates_template(
     ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200
+    # The response says so: the page hides Extend Series on it (#578).
+    assert response.json()["is_active"] is False
 
     # Template must now be inactive
     tmpl_after = await template_repo.get(tmpl["id"])

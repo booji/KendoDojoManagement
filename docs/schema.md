@@ -155,6 +155,8 @@ erDiagram
         string title
         date date
         string template_id FK
+        date original_date
+        bool edited
         bool cancelled
         string location
         text info
@@ -288,6 +290,11 @@ erDiagram
   - `uq_dojo_settings_single_row` — a unique index on the constant `(true)`:
     `dojo_settings` holds one row.
   - `uq_federations_name` — UNIQUE `federations.name`.
+  - `uq_session_instances_template_slot` — UNIQUE
+    `(template_id, original_date)` on `session_instances` (#578): one Session
+    per slot of a series. `original_date` is the date the template generated
+    the Session for and survives a move, so reconciling a series matches on it
+    rather than on `date`. Ad-hoc Sessions have neither, so stay unconstrained.
   - `ck_members_email_lowercase` — CHECK `email = lower(email)` on `members`
     (#592). Sign-in looks a Member up by exact match on the lowercase form
     `LenientEmail` produces, so this also makes the UNIQUE on `members.email`
