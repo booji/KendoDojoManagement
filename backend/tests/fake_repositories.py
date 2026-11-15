@@ -336,10 +336,16 @@ class InMemorySessionInstanceRepository:
         ]
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, True)
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, False)
+
+    def _set_cancelled(self, instance_id: str, cancelled: bool) -> dict[str, Any] | None:
         row = self._store.get(instance_id)
         if row is None:
             return None
-        row["cancelled"] = True
+        row["cancelled"] = cancelled
         return _instance_record(row)
 
     async def update(

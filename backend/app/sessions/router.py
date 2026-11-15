@@ -349,7 +349,7 @@ async def reinstate_session_instance(
 ) -> dict[str, Any]:
     """Undo a Cancellation (#579). A cancelled series stays cancelled: this
     puts back only the one Session."""
-    record = await repo.update(str(instance_id), {"cancelled": False})
+    record = await repo.reinstate(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

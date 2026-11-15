@@ -70,6 +70,10 @@ async def _apply_recurrence_delta(
     records training that happened, so it is never deleted, and the past is
     never backfilled with Sessions that did not take place. Nor is a Session
     an Admin has edited, or one with Attendance, ever deleted.
+
+    Cancelling or reinstating a Session is not an edit (#579): a future,
+    unattended Session that was only cancelled, or cancelled and reinstated,
+    is deleted with a slot the recurrence no longer covers.
     """
     today = date.today().isoformat()
     existing = await _slots_for(template_id, instance_repo)
