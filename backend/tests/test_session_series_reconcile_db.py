@@ -146,6 +146,8 @@ async def test_extend_keeps_a_moved_future_session(db_client) -> None:
 
     assert sessions[tuesday]["id"] == moved["id"]
     assert _NEXT_MONDAY not in sessions, "the moved Monday must not come back"
+    # The slot and the edit mark are reconcile's bookkeeping, not the API's.
+    assert not {"original_date", "edited"} & set(sessions[tuesday])
 
 
 async def test_a_recurrence_change_keeps_the_past_sessions(db_client) -> None:
