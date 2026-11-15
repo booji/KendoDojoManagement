@@ -91,10 +91,6 @@ class AbstractSessionInstanceRepository(Protocol):
         self, template_id: str, as_of_date: date
     ) -> list[dict[str, Any]]: ...
 
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int: ...
-
 
 def _type_to_dict(obj: SessionType) -> dict[str, Any]:
     return {"id": obj.id, "name": obj.name, "colour": obj.colour}
@@ -548,19 +544,3 @@ class SqlSessionInstanceRepository:
             obj.cancelled = True
         await self._session.flush()
         return [_instance_to_dict(obj) for obj in rows]
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        result = await self._session.execute(
-            select(SessionInstance).where(
-                SessionInstance.template_id == template_id,
-                SessionInstance.date >= as_of_date,
-            )
-        )
-        rows = result.scalars().all()
-        count = len(rows)
-        for obj in rows:
-            await self._session.delete(obj)
-        await self._session.flush()
-        return count

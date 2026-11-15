@@ -382,19 +382,6 @@ class InMemorySessionInstanceRepository:
                 cancelled.append(_instance_record(row))
         return cancelled
 
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        as_of = as_of_date.isoformat()
-        doomed = [
-            row_id
-            for row_id, row in self._store.items()
-            if row["template_id"] == template_id and row["date"] >= as_of
-        ]
-        for row_id in doomed:
-            del self._store[row_id]
-        return len(doomed)
-
 
 def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
     """Mirror of ``_instance_to_dict`` in app/sessions/repository.py.
