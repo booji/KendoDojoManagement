@@ -65,9 +65,11 @@ async def _apply_recurrence_delta(
     untouched, so an individually edited or cancelled instance on a
     still-covered date is never overwritten or deleted (#258 AC3).
 
-    Only today onwards is reconciled (#578): a past Session records training
-    that happened, so it is never deleted, and the past is never backfilled
-    with Sessions that did not take place.
+    Instances are matched to the recurrence by the slot they cover, so a moved
+    one keeps its slot (#578). Only today onwards is reconciled: a past Session
+    records training that happened, so it is never deleted, and the past is
+    never backfilled with Sessions that did not take place. Nor is a Session
+    an Admin has edited, or one with Attendance, ever deleted.
     """
     today = date.today().isoformat()
     existing = await _slots_for(template_id, instance_repo)
@@ -84,7 +86,7 @@ async def _apply_recurrence_delta(
             and record["date"] >= today
             and not record["edited"]
         ):
-            await instance_repo.delete(record["id"])
+            await instance_repo.delete_unattended(record["id"])
 
 
 async def create(

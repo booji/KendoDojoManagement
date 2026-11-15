@@ -188,3 +188,20 @@ async def test_a_recurrence_change_keeps_a_future_session_an_admin_edited(
         sessions = await _sessions(c, template_id)
 
     assert sessions[_NEXT_MONDAY]["info"] == "Grading prep"
+
+
+async def test_a_recurrence_change_keeps_a_future_session_with_attendance(
+    db_client,
+) -> None:
+    async with _client() as c:
+        template_id = await _series(c)
+        attended = (await _sessions(c, template_id))[_NEXT_MONDAY]
+        await _check_in(db_client, attended["id"])
+
+        response = await c.patch(
+            f"/sessions/templates/{template_id}", json={"recurrence_days": [2]}
+        )
+        assert response.status_code == 200, response.text
+        sessions = await _sessions(c, template_id)
+
+    assert sessions[_NEXT_MONDAY]["id"] == attended["id"]

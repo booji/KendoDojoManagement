@@ -354,7 +354,8 @@ class InMemorySessionInstanceRepository:
         row["edited"] = True
         return _instance_record(row)
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        # No Attendance lives here: the in-memory attendance fake is separate.
         row = self._store.pop(instance_id, None)
         return _instance_record(row) if row else None
 

@@ -384,9 +384,9 @@ class _CountingInstanceRepo(InMemorySessionInstanceRepository):
         self.update_calls += 1
         return await super().update(instance_id, data)
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
         self.delete_calls += 1
-        return await super().delete(instance_id)
+        return await super().delete_unattended(instance_id)
 
 
 async def test_get_sessions_performs_no_writes(type_repo) -> None:
