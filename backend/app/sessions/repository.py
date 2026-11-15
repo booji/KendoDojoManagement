@@ -4,10 +4,11 @@ import json
 from datetime import date
 from typing import Any, Protocol, runtime_checkable
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.attendance.db_models import Attendance
 from app.sessions.db_models import (
     SessionInstance,
     SessionInstanceSegment,
@@ -74,7 +75,10 @@ class AbstractSessionInstanceRepository(Protocol):
         self, instance_id: str, data: dict[str, Any]
     ) -> dict[str, Any] | None: ...
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None: ...
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        """Delete a Session unless it has Attendance. None if it is missing or
+        attended: Attendance records training that happened (#578)."""
+        ...
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
@@ -153,6 +157,8 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "duration_minutes": duration_minutes,
         "location": obj.location,
         "template_id": obj.template_id,
+        "original_date": obj.original_date,
+        "edited": obj.edited,
         "status": "cancelled" if obj.cancelled else "scheduled",
         # Keep raw fields for internal / admin use
         "date": obj.date,
@@ -474,6 +480,7 @@ class SqlSessionInstanceRepository:
             setattr(obj, key, value)
         if segments_data is not None:
             obj.segments = _build_instance_segments(segments_data)
+        obj.edited = True
         await self._session.flush()
         # Re-fetch with segments AND their nested type_links eagerly loaded.
         # refresh(["segments"]) reloads segments but not type_links, so
@@ -483,7 +490,11 @@ class SqlSessionInstanceRepository:
         assert refreshed is not None
         return refreshed
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        if await self._session.scalar(
+            select(exists().where(Attendance.session_id == instance_id))
+        ):
+            return None
         result = await self._session.execute(
             select(SessionInstance)
             .where(SessionInstance.id == instance_id)

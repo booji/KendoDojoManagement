@@ -39,14 +39,18 @@ from app.sessions.service import (
 )
 
 
-async def _instances_for(
+async def _slots_for(
     template_id: str, instance_repo: AbstractSessionInstanceRepository
-) -> list[dict[str, Any]]:
-    return [
-        record
+) -> dict[str, dict[str, Any]]:
+    """The template's Sessions, keyed by the slot each covers: the date it was
+    generated for, wherever it has since been moved (#578). A Session with no
+    slot (ad-hoc, or a pre-#578 duplicate) covers none and is never
+    reconciled."""
+    return {
+        record["original_date"]: record
         for record in await instance_repo.list()
-        if record.get("template_id") == template_id
-    ]
+        if record.get("template_id") == template_id and record.get("original_date")
+    }
 
 
 async def _apply_recurrence_delta(
@@ -60,20 +64,29 @@ async def _apply_recurrence_delta(
     recurrence no longer covers. Dates that remain covered are left completely
     untouched, so an individually edited or cancelled instance on a
     still-covered date is never overwritten or deleted (#258 AC3).
+
+    Instances are matched to the recurrence by the slot they cover, so a moved
+    one keeps its slot (#578). Only today onwards is reconciled: a past Session
+    records training that happened, so it is never deleted, and the past is
+    never backfilled with Sessions that did not take place. Nor is a Session
+    an Admin has edited, or one with Attendance, ever deleted.
     """
-    existing_by_date = {
-        record["date"]: record
-        for record in await _instances_for(template_id, instance_repo)
-    }
-    wanted_dates = covered_dates(template)
+    today = date.today().isoformat()
+    existing = await _slots_for(template_id, instance_repo)
+    wanted_slots = covered_dates(template)
 
     horizon = date.fromisoformat(template["end_date"])
-    for data in generate_instances(template, horizon, set(existing_by_date)):
-        await instance_repo.add(data)
+    for data in generate_instances(template, horizon, set(existing)):
+        if data["date"] >= today:
+            await instance_repo.add(data)
 
-    for iso_date, record in existing_by_date.items():
-        if iso_date not in wanted_dates:
-            await instance_repo.delete(record["id"])
+    for slot, record in existing.items():
+        if (
+            slot not in wanted_slots
+            and record["date"] >= today
+            and not record["edited"]
+        ):
+            await instance_repo.delete_unattended(record["id"])
 
 
 async def create(
@@ -99,19 +112,17 @@ async def generate_to_horizon(
 
     Returns the instances created — empty when the horizon adds none — or None
     if the template does not exist. Idempotent by construction: the dates
-    already persisted for this template are excluded, so repeating the call
-    never produces a second instance on a date that already has one.
+    already covered for this template are excluded, so repeating the call
+    never produces a second instance for a date that already has one.
     """
     template = await template_repo.get(template_id)
     if template is None:
         return None
 
-    existing_dates = {
-        record["date"] for record in await _instances_for(template_id, instance_repo)
-    }
+    existing_slots = set(await _slots_for(template_id, instance_repo))
     return [
         await instance_repo.add(data)
-        for data in generate_instances(template, horizon, existing_dates)
+        for data in generate_instances(template, horizon, existing_slots)
     ]
 
 
@@ -137,15 +148,18 @@ async def extend(
 ) -> dict[str, Any] | None:
     """Move a template's end date later and generate the newly-covered dates.
 
-    Raises ValueError if the new end date moves backwards, or reaches beyond
-    the horizon cap — a recurring template must stay bounded, and the cap
-    applies from today rather than from the template's start, so repeated
-    extensions cannot walk it indefinitely into the future.
+    Raises ValueError if the series is cancelled, the new end date moves
+    backwards, or it reaches beyond the horizon cap — a recurring template
+    must stay bounded, and the cap applies from today rather than from the
+    template's start, so repeated extensions cannot walk it indefinitely into
+    the future.
     """
     template = await template_repo.get(template_id)
     if template is None:
         return None
 
+    if not template["is_active"]:
+        raise ValueError("a cancelled series cannot be extended")
     current_end = date.fromisoformat(template["end_date"])
     if new_end < current_end:
         raise ValueError(
