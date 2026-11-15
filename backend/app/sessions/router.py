@@ -340,6 +340,25 @@ async def cancel_session_instance(
     return _normalize_instance(record)
 
 
+@router.post("/sessions/{instance_id}/reinstate")
+async def reinstate_session_instance(
+    instance_id: uuid.UUID,
+    _claims: _Admin,
+    repo: _InstRepo,
+    uow: _UoW,
+) -> dict[str, Any]:
+    """Undo a Cancellation (#579). A cancelled series stays cancelled: this
+    puts back only the one Session."""
+    record = await repo.update(str(instance_id), {"cancelled": False})
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session instance not found",
+        )
+    await uow.commit()
+    return _normalize_instance(record)
+
+
 def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Strip the session-level coach_notes — admin-only, must never reach a
     # non-admin member.
