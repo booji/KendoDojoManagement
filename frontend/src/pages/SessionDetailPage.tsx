@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -7,6 +7,7 @@ import {
   getSession,
   updateSession,
   cancelSession,
+  reinstateSession,
   deleteTemplate,
   getSessionTypes,
   getSessionTemplate,
@@ -15,6 +16,7 @@ import {
 import type { SessionInstance, SessionInstanceUpdate, SessionType, SegmentInput, SessionTemplate } from "@/api/sessions"
 import { getDojoSettings } from "@/api/settings"
 import type { DojoSettings } from "@/api/settings"
+import { errorMessage } from "@/api/client"
 import CopyButton from "@/components/CopyButton"
 import SegmentEditor from "@/components/SegmentEditor"
 import { getMe } from "@/api/auth"
@@ -25,6 +27,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ChevronDown, ChevronRight } from "lucide-react"
@@ -386,6 +396,40 @@ const EditForm = ({ session, sessionTypes, onSave, onCancel }: EditFormProps) =>
   )
 }
 
+// ── Cancel confirm dialog ─────────────────────────────────────────────────────
+
+type ConfirmCancelDialogProps = {
+  open: boolean
+  title: string
+  description: string
+  actionLabel: string
+  onConfirm: () => void
+  onClose: () => void
+}
+
+/** `Cancel` | `<action>`, Cancel focused so Enter on open never confirms. */
+const ConfirmCancelDialog = ({ open, title, description, actionLabel, onConfirm, onClose }: ConfirmCancelDialogProps) => {
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent initialFocus={cancelRef}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button ref={cancelRef} variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            {actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── SessionDetailPage ─────────────────────────────────────────────────────────
 
 type PageState =
@@ -408,6 +452,7 @@ const SessionDetailPage = () => {
   const [checkinState, setCheckinState] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [checkinError, setCheckinError] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<"session" | "series" | null>(null)
   const [attendanceOpen, setAttendanceOpen] = useState(false)
 
   useEffect(() => {
@@ -457,33 +502,34 @@ const SessionDetailPage = () => {
     }
   }
 
-  const handleCancelInstance = async () => {
-    if (!id || state.kind !== "loaded") return
+  /** Run a cancel/reinstate call and show the Session as the server now has it. */
+  const changeCancellation = async (action: () => Promise<SessionInstance>, fallback: string) => {
+    if (state.kind !== "loaded") return
     setCancelError(null)
     try {
-      const updated = await cancelSession(id)
+      const updated = await action()
       setState({ ...state, session: updated })
     } catch (err) {
-      setCancelError(
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "Failed to cancel session",
-      )
+      setCancelError(errorMessage(err, fallback))
+    } finally {
+      setConfirming(null)
     }
   }
 
-  const handleCancelSeries = async () => {
-    if (state.kind !== "loaded" || state.session.template_id === null) return
-    setCancelError(null)
-    try {
-      await deleteTemplate(state.session.template_id)
-    } catch (err) {
-      setCancelError(
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "Failed to cancel series",
-      )
-    }
+  const handleCancelInstance = () => {
+    if (!id) return
+    void changeCancellation(() => cancelSession(id), "Failed to cancel session")
+  }
+
+  const handleCancelSeries = () => {
+    if (!id || state.kind !== "loaded" || state.session.template_id === null) return
+    const templateId = state.session.template_id
+    // The series cancel answers with the template; refetch to show what it did
+    // to this Session (a past one is left alone).
+    void changeCancellation(async () => {
+      await deleteTemplate(templateId)
+      return getSession(id)
+    }, "Failed to cancel series")
   }
 
   if (state.kind === "loading") {
@@ -685,22 +731,32 @@ const SessionDetailPage = () => {
       {isAdmin && (
         <>
           <div className="flex flex-wrap justify-end gap-2">
-            {showSeriesCancel && (
+            {showSeriesCancel && !session.cancelled && (
               <Button
                 variant="destructive"
-                onClick={() => void handleCancelSeries()}
+                onClick={() => setConfirming("series")}
                 className="min-h-[44px]"
               >
                 Cancel Series
               </Button>
             )}
-            <Button
-              variant="destructive"
-              onClick={() => void handleCancelInstance()}
-              className="min-h-[44px]"
-            >
-              Cancel Session
-            </Button>
+            {session.cancelled ? (
+              <Button
+                variant="outline"
+                onClick={() => void changeCancellation(() => reinstateSession(session.id), "Failed to reinstate session")}
+                className="min-h-[44px]"
+              >
+                Reinstate Session
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                onClick={() => setConfirming("session")}
+                className="min-h-[44px]"
+              >
+                Cancel Session
+              </Button>
+            )}
             {template !== null && (
               <ExtendSeriesControl
                 templateId={template.id}
@@ -715,6 +771,23 @@ const SessionDetailPage = () => {
           {cancelError !== null && (
             <p className="text-sm text-destructive" role="alert">{cancelError}</p>
           )}
+
+          <ConfirmCancelDialog
+            open={confirming === "session"}
+            title="Cancel this session?"
+            description="Members will no longer see it or be able to check in. You can reinstate it afterwards."
+            actionLabel="Cancel session"
+            onConfirm={handleCancelInstance}
+            onClose={() => setConfirming(null)}
+          />
+          <ConfirmCancelDialog
+            open={confirming === "series"}
+            title="Cancel this series?"
+            description="Every future session in the series is cancelled and no more are scheduled. Each session can be reinstated on its own afterwards."
+            actionLabel="Cancel series"
+            onConfirm={handleCancelSeries}
+            onClose={() => setConfirming(null)}
+          />
 
           <Collapsible open={attendanceOpen} onOpenChange={setAttendanceOpen}>
             <CollapsibleTrigger

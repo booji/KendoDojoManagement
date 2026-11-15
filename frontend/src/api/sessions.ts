@@ -75,7 +75,11 @@ export const cancelSession = async (id: string): Promise<SessionInstance> => {
   return request<SessionInstance>(`/api/sessions/${id}/cancel`, { method: "POST", errorMessage: "Failed to cancel session" })
 }
 
-export const deleteTemplate = async (templateId: string): Promise<void> => {
+export const reinstateSession = async (id: string): Promise<SessionInstance> => {
+  return request<SessionInstance>(`/api/sessions/${id}/reinstate`, { method: "POST", errorMessage: "Failed to reinstate session" })
+}
+
+export const deleteTemplate =async (templateId: string): Promise<void> => {
   return request<void>(`/api/sessions/templates/${templateId}`, { method: "DELETE", errorMessage: "Failed to delete template" })
 }
 
