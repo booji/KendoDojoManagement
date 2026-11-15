@@ -14,7 +14,7 @@ Ad-hoc Sessions have none.
 `edited` records that an Admin has changed the Session (PUT /sessions/{id}).
 Reconciliation never deletes an edited Session, even from a slot the
 recurrence has dropped: the edit is Admin work the template does not know
-about. Existing rows start unedited, since no record says otherwise.
+about. Cancelling and reinstating are not edits.
 
 Existing generated Sessions are backfilled with their current date: a Session
 moved before this revision has lost its original date, and its current one is
@@ -23,6 +23,15 @@ one is backfilled (lowest id) and the other is left without a slot, which
 reconciliation never deletes. That keeps the backfill clear of the new
 UNIQUE (template_id, original_date), audit C12: generation was
 check-then-insert, which two concurrent extends could both pass.
+
+A generated Session whose date the template's recurrence does not cover (its
+weekday, its week of the interval, or outside start_date..end_date) can only
+have been moved there by an Admin, so it is backfilled as edited. Its slot is
+its current date, which the recurrence never covers, so the next reconcile
+would otherwise delete it. Every other existing row starts unedited, since no
+record says otherwise. The covered-date test mirrors
+`app.sessions.service.generate_instances`: `recurrence_days` is a JSON list of
+Python weekdays (Monday 0), falling back to `day_of_week` when empty.
 
 Revision ID: a7b8c9d0e1f3
 Revises: e3f4a5b6c7d9
@@ -64,6 +73,18 @@ def upgrade() -> None:
     op.add_column(
         "session_instances",
         sa.Column("edited", sa.Boolean(), nullable=False, server_default=sa.false()),
+    )
+    op.execute(
+        "UPDATE session_instances si SET edited = true "
+        "FROM session_templates t "
+        "WHERE si.template_id = t.id AND NOT ("
+        "  si.date BETWEEN t.start_date AND t.end_date"
+        "  AND (si.date - t.start_date) / 7 % greatest(t.interval_weeks, 1) = 0"
+        "  AND (CASE WHEN coalesce(t.recurrence_days, '') IN ('', '[]')"
+        "    THEN jsonb_build_array(t.day_of_week)"
+        "    ELSE t.recurrence_days::jsonb END)"
+        "    @> to_jsonb(extract(isodow FROM si.date)::int - 1)"
+        ")"
     )
 
 
