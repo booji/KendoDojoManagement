@@ -56,6 +56,7 @@ def generate_instances(
                     {
                         "title": template["title"],
                         "date": iso,
+                        "original_date": iso,
                         "template_id": template["id"],
                         "location": template.get("location"),
                         "info": template.get("info"),

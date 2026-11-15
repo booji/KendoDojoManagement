@@ -153,6 +153,8 @@ def _instance_to_dict(obj: SessionInstance) -> dict[str, Any]:
         "duration_minutes": duration_minutes,
         "location": obj.location,
         "template_id": obj.template_id,
+        "original_date": obj.original_date,
+        "edited": obj.edited,
         "status": "cancelled" if obj.cancelled else "scheduled",
         # Keep raw fields for internal / admin use
         "date": obj.date,
@@ -474,6 +476,7 @@ class SqlSessionInstanceRepository:
             setattr(obj, key, value)
         if segments_data is not None:
             obj.segments = _build_instance_segments(segments_data)
+        obj.edited = True
         await self._session.flush()
         # Re-fetch with segments AND their nested type_links eagerly loaded.
         # refresh(["segments"]) reloads segments but not type_links, so

@@ -249,7 +249,8 @@ async def test_update_template_delta_add_remove_preserve(
     type_repo, template_repo, instance_repo
 ) -> None:
     type_id = (await type_repo.list())[0]["id"]
-    start = date(2026, 2, 2)  # Monday
+    # Next Monday: only today onwards is reconciled (#578).
+    start = date.today() + timedelta(days=7 - date.today().weekday())
     end = start + timedelta(weeks=4)
     create_payload = {
         "title": "Weekly Keiko",

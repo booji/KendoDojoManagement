@@ -274,6 +274,8 @@ class InMemorySessionInstanceRepository:
         "title": "Session",
         "date": None,
         "template_id": None,
+        "original_date": None,
+        "edited": False,
         "cancelled": False,
         "location": None,
         "info": None,
@@ -349,6 +351,7 @@ class InMemorySessionInstanceRepository:
         updates = _row(self._DEFAULTS, data) if data else {}
         for key, value in data.items():
             row[key] = _segments(value) if key == "segments" else updates[key]
+        row["edited"] = True
         return _instance_record(row)
 
     async def delete(self, instance_id: str) -> dict[str, Any] | None:
@@ -406,6 +409,8 @@ def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
         "duration_minutes": _minutes_between(start_time, end_time) if segments else 0,
         "location": row["location"],
         "template_id": row["template_id"],
+        "original_date": row["original_date"],
+        "edited": row["edited"],
         "status": "cancelled" if row["cancelled"] else "scheduled",
         "date": row["date"],
         "cancelled": row["cancelled"],
