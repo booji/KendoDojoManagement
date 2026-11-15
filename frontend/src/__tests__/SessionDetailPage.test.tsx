@@ -493,16 +493,40 @@ describe("AC7 — edit form", () => {
 
 // ── AC8 — cancel instance / cancel series, behind confirm dialogs (#579) ─────
 
-/** A fake admin backend that remembers the session's Cancellation. */
-function mockAdminServer(initial = ADMIN_SESSION) {
+const TEMPLATE = {
+  id: TEMPLATE_ID,
+  title: "Evening Practice",
+  start_date: "2026-04-06",
+  end_date: "2026-09-28",
+  start_time: "19:00",
+  duration_minutes: 90,
+  recurrence_days: [0],
+  interval_weeks: 1,
+  location: "Main dojo",
+  info: null,
+  coach_notes: null,
+  is_active: true,
+  segments: [],
+}
+
+/**
+ * A fake admin backend that remembers the session's Cancellation and the
+ * series' state. `refetchFails` fails every session GET after a series cancel.
+ */
+function mockAdminServer(initial = ADMIN_SESSION, { refetchFails = false } = {}) {
   const calls: string[] = []
   let session = { ...initial }
+  let template = { ...TEMPLATE }
   const json = (body: unknown) =>
     new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })
   vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : (input as Request).url
     const method = init?.method ?? "GET"
     if (method !== "GET") calls.push(`${method} ${url}`)
+    if (url.includes(`/sessions/templates/${TEMPLATE_ID}`) && method === "GET") return json(template)
+    if (refetchFails && !template.is_active && url.endsWith(`/sessions/${SESSION_ID}`)) {
+      return new Response(JSON.stringify({ detail: "Server error" }), { status: 500 })
+    }
     if (url.includes(`/sessions/${SESSION_ID}/cancel`)) {
       session = { ...session, cancelled: true }
       return json(session)
@@ -513,7 +537,8 @@ function mockAdminServer(initial = ADMIN_SESSION) {
     }
     if (url.includes(`/sessions/templates/${TEMPLATE_ID}`) && method === "DELETE") {
       session = { ...session, cancelled: true }
-      return json({ id: TEMPLATE_ID })
+      template = { ...template, is_active: false }
+      return json(template)
     }
     if (url.includes(`/sessions/${SESSION_ID}/attendance`)) return json([])
     if (url.includes(`/sessions/${SESSION_ID}`)) return json(session)
@@ -572,6 +597,36 @@ describe("AC8 — cancel controls", () => {
     expect(calls).toEqual([`DELETE /api/sessions/templates/${TEMPLATE_ID}`])
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Cancel Series" })).not.toBeInTheDocument()
+  })
+})
+
+describe("After Cancel Series (#578)", () => {
+  async function cancelSeries(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Cancel Series" }))
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel series" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+  }
+
+  it("hides Extend Series once the series is cancelled", async () => {
+    const user = userEvent.setup()
+    mockAdminServer()
+    renderDetailPage()
+    expect(await screen.findByRole("button", { name: "Extend Series" })).toBeInTheDocument()
+
+    await cancelSeries(user)
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Extend Series" })).not.toBeInTheDocument())
+  })
+
+  it("does not report a failed cancel when only the refetch fails", async () => {
+    const user = userEvent.setup()
+    mockAdminServer(ADMIN_SESSION, { refetchFails: true })
+    renderDetailPage()
+
+    await cancelSeries(user)
+
+    expect(await screen.findByRole("alert")).not.toHaveTextContent("Failed to cancel series")
+    expect(screen.queryByRole("button", { name: "Extend Series" })).not.toBeInTheDocument()
   })
 })
 

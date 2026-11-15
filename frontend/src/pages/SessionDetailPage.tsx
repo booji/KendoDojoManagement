@@ -521,15 +521,29 @@ const SessionDetailPage = () => {
     void changeCancellation(() => cancelSession(id), "Failed to cancel session")
   }
 
-  const handleCancelSeries = () => {
+  const handleCancelSeries = async () => {
     if (!id || state.kind !== "loaded" || state.session.template_id === null) return
-    const templateId = state.session.template_id
+    setCancelError(null)
+    try {
+      setTemplate(await deleteTemplate(state.session.template_id))
+    } catch (err) {
+      setCancelError(errorMessage(err, "Failed to cancel series"))
+      return
+    } finally {
+      setConfirming(null)
+    }
     // The series cancel answers with the template; refetch to show what it did
-    // to this Session (a past one is left alone).
-    void changeCancellation(async () => {
-      await deleteTemplate(templateId)
-      return getSession(id)
-    }, "Failed to cancel series")
+    // to this Session (a past one is left alone). The cancel itself succeeded.
+    try {
+      setState({ ...state, session: await getSession(id) })
+    } catch {
+      setCancelError("Series cancelled. Reload the page to see this session.")
+    }
+  }
+
+  const handleReinstate = () => {
+    if (!id) return
+    void changeCancellation(() => reinstateSession(id), "Failed to reinstate session")
   }
 
   if (state.kind === "loading") {
@@ -743,7 +757,7 @@ const SessionDetailPage = () => {
             {session.cancelled ? (
               <Button
                 variant="outline"
-                onClick={() => void changeCancellation(() => reinstateSession(session.id), "Failed to reinstate session")}
+                onClick={handleReinstate}
                 className="min-h-[44px]"
               >
                 Reinstate Session
@@ -757,7 +771,7 @@ const SessionDetailPage = () => {
                 Cancel Session
               </Button>
             )}
-            {template !== null && (
+            {template !== null && template.is_active && (
               <ExtendSeriesControl
                 templateId={template.id}
                 currentEndDate={template.end_date}
@@ -785,7 +799,7 @@ const SessionDetailPage = () => {
             title="Cancel this series?"
             description="Every future session in the series is cancelled and no more are scheduled. Each session can be reinstated on its own afterwards."
             actionLabel="Cancel series"
-            onConfirm={handleCancelSeries}
+            onConfirm={() => void handleCancelSeries()}
             onClose={() => setConfirming(null)}
           />
 
