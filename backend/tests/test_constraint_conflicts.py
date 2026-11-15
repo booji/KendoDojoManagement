@@ -118,3 +118,28 @@ async def test_joining_an_unknown_federation_is_a_422(db_client) -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Federation not found"
+
+
+async def test_a_slot_two_concurrent_extends_both_generate_is_a_conflict() -> None:
+    # #578: two extends of one series can both pass the check-then-insert;
+    # the slot constraint refuses the second, and that must be a 409. Called
+    # directly: a single request cannot lose the race.
+    import json
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.main import _constraint_conflict_handler
+
+    exc = IntegrityError(
+        "INSERT INTO session_instances ...",
+        {},
+        Exception(
+            "duplicate key value violates unique constraint "
+            '"uq_session_instances_template_slot"'
+        ),
+    )
+
+    response = await _constraint_conflict_handler(None, exc)  # type: ignore[arg-type]
+
+    assert response.status_code == 409
+    assert "series" in json.loads(response.body)["detail"]

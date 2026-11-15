@@ -62,6 +62,10 @@ _CONSTRAINT_CONFLICTS = {
         "This member already belongs to that federation"
     ),
     "uq_federations_name": "A federation with that name already exists",
+    # Two concurrent extends of one series both generating a slot (#578).
+    "uq_session_instances_template_slot": (
+        "The series was changed at the same time; try again"
+    ),
 }
 
 
