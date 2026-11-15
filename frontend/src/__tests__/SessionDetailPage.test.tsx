@@ -10,11 +10,13 @@
  *   AC6 — admin view shows coach_notes, attendance list, edit controls, cancel controls
  *   AC7 — edit form pre-populates with current values and calls PUT /sessions/{id}
  *   AC8 — cancel instance calls POST /sessions/{id}/cancel;
- *          cancel series calls DELETE /sessions/templates/{template_id}
+ *          cancel series calls DELETE /sessions/templates/{template_id};
+ *          both only after a confirm dialog (#579)
+ *   #579 — a cancelled Session can be reinstated
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 
@@ -489,110 +491,101 @@ describe("AC7 — edit form", () => {
   })
 })
 
-// ── AC8 — cancel instance / cancel series ─────────────────────────────────────
+// ── AC8 — cancel instance / cancel series, behind confirm dialogs (#579) ─────
+
+/** A fake admin backend that remembers the session's Cancellation. */
+function mockAdminServer(initial = ADMIN_SESSION) {
+  const calls: string[] = []
+  let session = { ...initial }
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })
+  vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+    const url = typeof input === "string" ? input : (input as Request).url
+    const method = init?.method ?? "GET"
+    if (method !== "GET") calls.push(`${method} ${url}`)
+    if (url.includes(`/sessions/${SESSION_ID}/cancel`)) {
+      session = { ...session, cancelled: true }
+      return json(session)
+    }
+    if (url.includes(`/sessions/${SESSION_ID}/reinstate`)) {
+      session = { ...session, cancelled: false }
+      return json(session)
+    }
+    if (url.includes(`/sessions/templates/${TEMPLATE_ID}`) && method === "DELETE") {
+      session = { ...session, cancelled: true }
+      return json({ id: TEMPLATE_ID })
+    }
+    if (url.includes(`/sessions/${SESSION_ID}/attendance`)) return json([])
+    if (url.includes(`/sessions/${SESSION_ID}`)) return json(session)
+    if (url.includes("/auth/me")) return json({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" })
+    if (url.includes("/session-types")) return json(SESSION_TYPES)
+    return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
+  })
+  return calls
+}
 
 describe("AC8 — cancel controls", () => {
-  it("calls POST /sessions/{id}/cancel when cancelling the instance", async () => {
+  it("asks for confirmation before cancelling the session, focusing Cancel", async () => {
     const user = userEvent.setup()
-    let cancelInstanceCalled = false
-
-    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
-      const url = typeof input === "string" ? input : (input as Request).url
-      // The api layer calls fetch(path, init), so the method lives in init.
-      // (It used to build a Request object; both shapes are read here.)
-      const method =
-        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
-
-      if (url.includes(`/sessions/${SESSION_ID}/cancel`) && method === "POST") {
-        cancelInstanceCalled = true
-        return new Response(JSON.stringify({ ...ADMIN_SESSION, cancelled: true }), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      if (url.includes(`/sessions/${SESSION_ID}/attendance`)) {
-        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      if (url.includes(`/sessions/${SESSION_ID}`)) {
-        return new Response(JSON.stringify(ADMIN_SESSION), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      if (url.includes("/auth/me")) {
-        return new Response(
-          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
-      }
-      if (url.includes("/session-types")) {
-        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
-    })
-
+    const calls = mockAdminServer()
     renderDetailPage()
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /cancel.*session|cancel.*instance/i })).toBeInTheDocument()
-    })
+    await user.click(await screen.findByRole("button", { name: "Cancel Session" }))
 
-    await user.click(screen.getByRole("button", { name: /cancel.*session|cancel.*instance/i }))
+    const dialog = await screen.findByRole("dialog")
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus())
+    expect(calls).toEqual([])
 
-    // May show a confirmation dialog — confirm if present
-    const confirmBtn = screen.queryByRole("button", { name: /confirm/i })
-    if (confirmBtn) {
-      await user.click(confirmBtn)
-    }
-
-    await waitFor(() => {
-      expect(cancelInstanceCalled).toBe(true)
-    })
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    expect(calls).toEqual([])
   })
 
-  it("calls DELETE /sessions/templates/{template_id} when cancelling the series", async () => {
+  it("cancels the session on confirm and hides the cancel actions", async () => {
     const user = userEvent.setup()
-    let cancelSeriesCalled = false
-
-    vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
-      const url = typeof input === "string" ? input : (input as Request).url
-      // The api layer calls fetch(path, init), so the method lives in init.
-      // (It used to build a Request object; both shapes are read here.)
-      const method =
-        init?.method ?? (typeof input === "string" ? "GET" : (input as Request).method)
-
-      if (url.includes(`/sessions/templates/${TEMPLATE_ID}`) && method === "DELETE") {
-        cancelSeriesCalled = true
-        return new Response(null, { status: 204 })
-      }
-      if (url.includes(`/sessions/${SESSION_ID}/attendance`)) {
-        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      if (url.includes(`/sessions/${SESSION_ID}`)) {
-        return new Response(JSON.stringify(ADMIN_SESSION), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      if (url.includes("/auth/me")) {
-        return new Response(
-          JSON.stringify({ role: "admin", sub: "a1", email: "a@t.com", theme: "system" }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
-      }
-      if (url.includes("/session-types")) {
-        return new Response(JSON.stringify(SESSION_TYPES), { status: 200, headers: { "Content-Type": "application/json" } })
-      }
-      return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 })
-    })
-
+    const calls = mockAdminServer()
     renderDetailPage()
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /cancel.*series|cancel.*template/i })).toBeInTheDocument()
-    })
+    await user.click(await screen.findByRole("button", { name: "Cancel Session" }))
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel session" }))
 
-    await user.click(screen.getByRole("button", { name: /cancel.*series|cancel.*template/i }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    expect(calls).toEqual([`POST /api/sessions/${SESSION_ID}/cancel`])
+    expect(screen.getByText("Cancelled")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cancel Session" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cancel Series" })).not.toBeInTheDocument()
+  })
 
-    // May show a confirmation dialog — confirm if present
-    const confirmBtn = screen.queryByRole("button", { name: /confirm/i })
-    if (confirmBtn) {
-      await user.click(confirmBtn)
-    }
+  it("cancels the series only on confirm, then shows the refetched Session", async () => {
+    const user = userEvent.setup()
+    const calls = mockAdminServer()
+    renderDetailPage()
 
-    await waitFor(() => {
-      expect(cancelSeriesCalled).toBe(true)
-    })
+    await user.click(await screen.findByRole("button", { name: "Cancel Series" }))
+    const dialog = await screen.findByRole("dialog")
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus())
+    expect(calls).toEqual([])
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel series" }))
+
+    await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument())
+    expect(calls).toEqual([`DELETE /api/sessions/templates/${TEMPLATE_ID}`])
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cancel Series" })).not.toBeInTheDocument()
+  })
+})
+
+describe("Reinstate (#579)", () => {
+  it("reinstates a cancelled Session and brings the cancel actions back", async () => {
+    const user = userEvent.setup()
+    const calls = mockAdminServer({ ...ADMIN_SESSION, cancelled: true })
+    renderDetailPage()
+
+    await user.click(await screen.findByRole("button", { name: "Reinstate Session" }))
+
+    expect(await screen.findByRole("button", { name: "Cancel Session" })).toBeInTheDocument()
+    expect(calls).toEqual([`POST /api/sessions/${SESSION_ID}/reinstate`])
+    expect(screen.queryByText("Cancelled")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Reinstate Session" })).not.toBeInTheDocument()
   })
 })
