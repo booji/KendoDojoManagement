@@ -130,8 +130,7 @@ async def admin_update_member_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await mf_repo.update(str(mf_id), data)
+    record = await mf_repo.update(str(mf_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
@@ -224,8 +223,7 @@ async def me_update_federation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await mf_repo.update(str(mf_id), data)
+    record = await mf_repo.update(str(mf_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"

@@ -114,7 +114,7 @@ class StubRecoveryRepo:
 
 
 class StubAdminTokenRepo:
-    async def get_unused_admin_tokens_for_user(self, user_id: str) -> list:
+    async def get_live_admin_tokens_for_account(self, user_id: str) -> list:
         return []
 
     async def mark_admin_token_used(self, token_id: str) -> None:

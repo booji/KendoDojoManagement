@@ -255,6 +255,76 @@ async def test_put_session_instance_moves_it_to_a_new_date(instance_repo) -> Non
     assert stored["date"] == "2099-06-05"
 
 
+async def test_put_session_instance_clears_a_field_sent_as_null(
+    instance_repo,
+) -> None:
+    """#585: an explicit null clears an optional field; a missing key leaves
+    it alone."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo, coach_notes="Watch the kote")
+    await instance_repo.update(target["id"], {"info": "Bring a bokken"})
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(
+            f"/sessions/{target['id']}",
+            json={"location": None, "info": None, "coach_notes": None},
+        )
+    assert response.status_code == 200
+    stored = await instance_repo.get(target["id"])
+    assert stored is not None
+    assert stored["location"] is None
+    assert stored["info"] is None
+    assert stored["coach_notes"] is None
+    assert stored["title"] == "Weekly Keiko"
+
+
+@pytest.mark.parametrize("field", ["title", "date", "segments"])
+async def test_put_session_instance_refuses_null_for_a_required_field(
+    instance_repo, field
+) -> None:
+    """#585: a field every Session must have answers null with 422."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(f"/sessions/{target['id']}", json={field: None})
+    assert response.status_code == 422
+
+
+async def test_patch_template_clears_a_field_sent_as_null(
+    template_repo, instance_repo
+) -> None:
+    """#585: the template PATCH follows the same rule as the Session PUT."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    tmpl = await _seed_template(template_repo)
+    await template_repo.update(
+        tmpl["id"], {"info": "Bring a bokken", "coach_notes": "Watch the kote"}
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.patch(
+            f"/sessions/templates/{tmpl['id']}",
+            json={"location": None, "info": None, "coach_notes": None},
+        )
+        refused = await c.patch(
+            f"/sessions/templates/{tmpl['id']}", json={"title": None}
+        )
+    assert response.status_code == 200
+    stored = await template_repo.get(tmpl["id"])
+    assert stored is not None
+    assert stored["location"] is None
+    assert stored["info"] is None
+    assert stored["coach_notes"] is None
+    assert stored["title"] == "Weekly Keiko"
+    assert refused.status_code == 422
+
+
 @pytest.mark.parametrize("bad", ["2026-02-31", "not-a-date", "20990605"])
 async def test_put_session_instance_rejects_a_date_that_is_not_real(
     instance_repo, bad

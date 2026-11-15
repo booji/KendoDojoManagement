@@ -1019,11 +1019,13 @@ export const AdminFederationCatalogue = () => {
     try {
       const body: FederationCreateRequest = {
         name: catForm.name.trim(),
-        abbreviation: catForm.abbreviation.trim() || undefined,
-        iso_code: catForm.iso_code.trim() || undefined,
-        website: catForm.website.trim() || undefined,
-        continental_grouping: catForm.continental_grouping || undefined,
-        type: catForm.type || undefined,
+        // null, not undefined: on edit, a field emptied in the form must clear
+        // the stored value, and JSON drops an undefined key (#585).
+        abbreviation: catForm.abbreviation.trim() || null,
+        iso_code: catForm.iso_code.trim() || null,
+        website: catForm.website.trim() || null,
+        continental_grouping: catForm.continental_grouping || null,
+        type: catForm.type || null,
         is_pinned: catForm.is_pinned,
         is_active: catForm.is_active,
       }

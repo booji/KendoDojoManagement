@@ -409,6 +409,22 @@ async def test_put_dojo_settings_persists_login_show_name_toggle(
     assert response.json()["login_show_name"] is False
 
 
+@pytest.mark.parametrize("field", ["dojo_name", "primary_colour", "login_show_name"])
+async def test_put_dojo_settings_refuses_null_for_a_required_field(
+    settings_repo: StubDojoSettingsRepository, field: str
+) -> None:
+    """#585 (C18): a setting the dojo cannot be without answers null with 422,
+    not a 500 from the database."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put("/settings/dojo", json={field: None})
+
+    assert response.status_code == 422
+
+
 async def test_put_dojo_settings_persists_login_show_logo_toggle(
     settings_repo: StubDojoSettingsRepository,
 ) -> None:

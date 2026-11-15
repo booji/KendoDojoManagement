@@ -550,9 +550,9 @@ async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time
     unknown one, and remains listed in the constant-time middleware's
     protected path set. (The email-addressed register begin is gone, #472.)"""
     from app.config import API_PREFIX
-    from app.core.middleware import _CONSTANT_TIME_PATHS
+    from app.core.middleware import _CONSTANT_TIME_FLOORS
 
-    assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_FLOORS
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"

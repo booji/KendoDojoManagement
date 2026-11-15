@@ -401,10 +401,8 @@ async def redeem_recovery_code(
     codes: list[dict[str, Any]] = []
     admin_tokens: list[dict[str, Any]] = []
     if user is not None:
-        admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
-    if locked:
-        admin_tokens = [t for t in admin_tokens if is_admin_token_valid(t)]
-    elif user is not None:
+        admin_tokens = await admin_token_repo.get_live_admin_tokens_for_account(user.id)
+    if user is not None and not locked:
         codes = await recovery_repo.get_unused_codes_with_hash(user.id)
     match = await match_secret(payload.code, codes, admin_tokens)
 

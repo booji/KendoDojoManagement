@@ -89,6 +89,28 @@ ALLOW_TEST_AUTH: bool = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 # DST) instead of emitting floating time. Defaults to UTC.
 TIMEZONE: str = os.getenv("TZ", "UTC")
 
+
+def _floor_ms(name: str, default: int) -> int:
+    """A constant-time floor from the environment, or `default` if it is unset,
+    not an integer, or not positive."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "%s is not an integer; falling back to %dms", name, default
+        )
+        return default
+    if value <= 0:
+        logging.getLogger(__name__).warning(
+            "%s must be positive; falling back to %dms. A non-positive floor "
+            "disables timing-side-channel protection.",
+            name,
+            default,
+        )
+        return default
+    return value
+
+
 # Minimum wall-clock duration (ms) the passkey begin endpoints must take,
 # regardless of whether the email is known/authorized (real path) or
 # unknown/unauthorized (decoy path). Closes a timing side channel: the real
@@ -113,25 +135,25 @@ TIMEZONE: str = os.getenv("TZ", "UTC")
 # A non-positive value would make the pad never fire and silently restore the
 # leak, so a typo or a well-meaning "disable this in dev" is treated as
 # misconfiguration rather than honoured. Same for a non-integer.
-_AUTH_BEGIN_MIN_DURATION_DEFAULT = 100
-try:
-    AUTH_BEGIN_MIN_DURATION_MS: int = int(
-        os.getenv("AUTH_BEGIN_MIN_DURATION_MS", str(_AUTH_BEGIN_MIN_DURATION_DEFAULT))
-    )
-except ValueError:
-    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
-    logging.getLogger(__name__).warning(
-        "AUTH_BEGIN_MIN_DURATION_MS is not an integer; falling back to %dms",
-        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
-    )
-if AUTH_BEGIN_MIN_DURATION_MS <= 0:
-    logging.getLogger(__name__).warning(
-        "AUTH_BEGIN_MIN_DURATION_MS must be positive; falling back to %dms. "
-        "A non-positive floor disables timing-side-channel protection on the "
-        "passkey begin endpoints.",
-        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
-    )
-    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
+AUTH_BEGIN_MIN_DURATION_MS: int = _floor_ms("AUTH_BEGIN_MIN_DURATION_MS", 100)
+
+# The same floor for POST /auth/login/passkey/complete (#594). A successful
+# login does more than begin -- signature check, sign count, a new Auth
+# Session, a commit -- and its worst request measured 105ms, past begin's
+# 100ms floor. p99 26ms one at a time, 71ms at 4 in flight.
+LOGIN_COMPLETE_MIN_DURATION_MS: int = _floor_ms("LOGIN_COMPLETE_MIN_DURATION_MS", 250)
+
+# And for POST /auth/recovery/redeem (#594), whose work is bcrypt, not a
+# commit: nine comparisons at cost 12 for any email, known or not. The
+# database work only a known email does -- the lockout lookup, its codes and
+# tokens, the failed attempt it writes -- runs inside it. p99 2.3s one at a
+# time, 3.0s at 4 in flight; bcrypt is CPU-bound, so a slower VPS core scales
+# it directly. Both floors are calibrated in docs/auth-timing-calibration.md,
+# and the same rules hold: above the p99, and a capacity signal rather than a
+# dial when the middleware warns.
+RECOVERY_REDEEM_MIN_DURATION_MS: int = _floor_ms(
+    "RECOVERY_REDEEM_MIN_DURATION_MS", 5000
+)
 
 
 def _strip_origin_whitespace_and_trailing_slash(origin: str) -> str:

@@ -242,6 +242,32 @@ async def test_admin_can_edit_federation_metadata(fed_repo) -> None:
     assert response.json()["name"] == "New Name"
 
 
+async def test_edit_federation_clears_a_field_sent_as_null(fed_repo) -> None:
+    """#585: a federation's abbreviation or website can be removed."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    optional = {
+        "abbreviation": "AJ",
+        "iso_code": "JP",
+        "website": "https://ajkf.example",
+        "continental_grouping": "Asia",
+        "type": "national",
+    }
+    record = await fed_repo.add({"name": "AJKF", **optional})
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(
+            f"/federations/{record['id']}", json=dict.fromkeys(optional)
+        )
+        refused = await c.put(f"/federations/{record['id']}", json={"name": None})
+    assert response.status_code == 200
+    for field in optional:
+        assert response.json()[field] is None, field
+    assert response.json()["name"] == "AJKF"
+    assert refused.status_code == 422
+
+
 async def test_edit_federation_not_found_returns_404(fed_repo) -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     fake_id = str(uuid.uuid4())

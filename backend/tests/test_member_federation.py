@@ -605,6 +605,30 @@ async def test_admin_can_update_renewal_date(member_repo, fed_repo, mf_repo) -> 
     assert response.json()["renewal_date"] == new_date
 
 
+async def test_admin_can_clear_renewal_date(member_repo, fed_repo, mf_repo) -> None:
+    """#585: a mistyped renewal date can be removed, not just replaced."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    membership = await mf_repo.add(
+        {
+            "member_id": _MEMBER_A_ID,
+            "federation_id": _FED_ID,
+            "member_number": "AJKF-011",
+            "renewal_date": date(2001, 1, 1),
+        }
+    )
+    url = f"/members/{_MEMBER_A_ID}/federations/{membership.id}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(url, json={"renewal_date": None})
+        refused = await c.put(url, json={"member_number": None})
+    assert response.status_code == 200
+    assert response.json()["renewal_date"] is None
+    assert response.json()["member_number"] == "AJKF-011"
+    assert refused.status_code == 422
+
+
 async def test_edit_federation_membership_not_found_returns_404(
     member_repo, fed_repo, mf_repo
 ) -> None:
@@ -791,6 +815,30 @@ async def test_member_can_edit_own_federation_membership(
         )
     assert response.status_code == 200
     assert response.json()["member_number"] == "AFTER"
+
+
+async def test_member_can_clear_own_renewal_date(
+    member_repo, fed_repo, mf_repo
+) -> None:
+    """#585: the self-service route clears a renewal date sent as null."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_a_override
+    membership = await mf_repo.add(
+        {
+            "member_id": _MEMBER_A.sub,
+            "federation_id": _FED_ID,
+            "member_number": "OWN-001",
+            "renewal_date": date(2001, 1, 1),
+        }
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(
+            f"/accounts/me/federations/{membership.id}",
+            json={"renewal_date": None},
+        )
+    assert response.status_code == 200
+    assert response.json()["renewal_date"] is None
 
 
 async def test_member_can_remove_own_federation_membership(

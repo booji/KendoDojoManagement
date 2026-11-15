@@ -32,8 +32,15 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app import config
 from app.auth.attempt_repository import SqlAttemptRepository
-from app.auth.db_models import Account, AuthSession, RecoveryAttempt, RecoveryCode
+from app.auth.db_models import (
+    Account,
+    AdminRecoveryToken,
+    AuthSession,
+    RecoveryAttempt,
+    RecoveryCode,
+)
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
@@ -75,6 +82,11 @@ async def _wipe_test_email(engine, email: str = _TEST_EMAIL) -> None:
         if user_ids:
             await session.execute(
                 delete(RecoveryAttempt).where(RecoveryAttempt.user_id.in_(user_ids))
+            )
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id.in_(user_ids)
+                )
             )
             await session.execute(
                 delete(RecoveryCode).where(RecoveryCode.user_id.in_(user_ids))
@@ -949,6 +961,72 @@ async def test_the_padding_costs_what_a_real_code_does(
                 lambda: timed("kojiro@dojo.test"),
                 label_a="full code set",
                 label_b="no codes",
+            )
+        finally:
+            await _wipe_test_email(db_client, "kojiro@dojo.test")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timing_sensitive
+@pytest.mark.parametrize("other", ["unknown email", "Account with no tokens"])
+async def test_an_account_holding_admin_tokens_answers_as_fast_as(
+    db_client, cheap_bcrypt, monkeypatch, other
+) -> None:
+    """The redeem floor hides what only some emails cost (#594). Against an
+    unknown email: the lockout lookup, the codes and tokens read, the failed
+    attempt written. Against an Account with none: the comparisons of tokens
+    seeded past the one-live-token rule."""
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    monkeypatch.setattr(config, "RECOVERY_REDEEM_MIN_DURATION_MS", 150)
+    holder_id, other_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", holder_id)
+    await _seed_code_set(db_client, holder_id)
+    async with db_client.begin() as conn:
+        for _ in range(3):
+            await conn.execute(
+                insert(AdminRecoveryToken).values(
+                    id=str(uuid.uuid4()),
+                    user_id=holder_id,
+                    token_hash=bcrypt.hashpw(
+                        b"admin-token", bcrypt.gensalt(4)
+                    ).decode(),
+                    expires_at=datetime.now(UTC) + timedelta(minutes=60),
+                    created_at=datetime.now(UTC),
+                )
+            )
+    other_email = "nobody@dojo.test"
+    if other == "Account with no tokens":
+        other_email = "kojiro@dojo.test"
+        await _seed_user(db_client, other_email, other_id)
+        await _seed_code_set(db_client, other_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+
+        async def timed(email: str) -> float:
+            # Outside the timing: clear failures so neither is locked out.
+            async with db_client.begin() as conn:
+                await conn.execute(
+                    delete(RecoveryAttempt).where(
+                        RecoveryAttempt.user_id.in_([holder_id, other_id])
+                    )
+                )
+            start = time.perf_counter()
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": email, "code": "wrong-code-yyyy"},
+            )
+            elapsed = time.perf_counter() - start
+            assert response.status_code == 401
+            return elapsed
+
+        try:
+            await assert_latency_converges_sampled(
+                lambda: timed("musashi@dojo.test"),
+                lambda: timed(other_email),
+                label_a="Account holding admin tokens",
+                label_b=other,
             )
         finally:
             await _wipe_test_email(db_client, "kojiro@dojo.test")

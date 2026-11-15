@@ -138,6 +138,32 @@ def test_generate_instances_deep_copies_segments() -> None:
     assert len(instances[1]["segments"]) == 2
 
 
+def test_generated_instances_carry_the_templates_location_info_and_coach_notes() -> (
+    None
+):
+    """#577: a recurring Session's location, info and coach notes reach every
+    Session it generates, not just the template."""
+    template = {
+        "id": str(uuid.uuid4()),
+        "title": "Tuesday Keiko",
+        "start_date": "2025-03-04",  # Tuesday
+        "recurrence_days": [1],
+        "interval_weeks": 1,
+        "location": "Main Hall",
+        "info": "Bring a bokken",
+        "coach_notes": "Focus on kote",
+        "segments": [],
+    }
+
+    instances = generate_instances(template, date(2025, 3, 11))
+
+    assert len(instances) == 2
+    for instance in instances:
+        assert instance["location"] == "Main Hall"
+        assert instance["info"] == "Bring a bokken"
+        assert instance["coach_notes"] == "Focus on kote"
+
+
 # ---------------------------------------------------------------------------
 # AC1 — a multi-segment template generates instances that faithfully copy
 #       every segment

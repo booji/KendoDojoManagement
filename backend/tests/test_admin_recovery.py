@@ -478,6 +478,37 @@ async def test_admin_token_malformed_member_id_returns_422(db_client) -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_a_new_admin_token_retires_the_accounts_older_one(db_client) -> None:
+    """At most one admin token per Account is live, so a redeem never runs
+    more bcrypt comparisons than the padded floor (#594)."""
+    admin_id, target_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    target_email = await _seed_user(db_client, target_id)
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+    member_id = await _member_of(db_client, target_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        older = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": member_id}
+        )
+        newer = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": member_id}
+        )
+
+        async def redeem(token: str) -> int:
+            response = await c.post(
+                "/auth/recovery/redeem", json={"email": target_email, "code": token}
+            )
+            return response.status_code
+
+        assert await redeem(older.json()["token"]) == 401
+        assert await redeem(newer.json()["token"]) == 200
+
+
 # ── AC3 — POST /auth/recovery/redeem accepts admin tokens ─────────────────────
 
 

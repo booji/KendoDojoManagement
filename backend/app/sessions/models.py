@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.partial_update import PartialUpdate
+
 
 class SessionTypeCreate(BaseModel):
     name: str
@@ -179,7 +181,9 @@ class SessionTemplateRead(BaseModel):
     segments: list[SegmentRead] = []
 
 
-class SessionTemplateUpdate(BaseModel):
+class SessionTemplateUpdate(PartialUpdate):
+    not_null = frozenset({"title", "recurrence_days", "interval_weeks", "segments"})
+
     location: str | None = None
     info: str | None = None
     coach_notes: str | None = None
@@ -283,7 +287,9 @@ def _validate_checkin_window_minutes(v: int | None) -> int | None:
     return v
 
 
-class SessionInstanceUpdate(BaseModel):
+class SessionInstanceUpdate(PartialUpdate):
+    not_null = frozenset({"title", "date", "segments"})
+
     title: str | None = None
     date: str | None = None  # "YYYY-MM-DD"
     location: str | None = None

@@ -90,8 +90,7 @@ async def update_federation(
     repo: _Repo,
     uow: _UoW,
 ) -> FederationResponse:
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await repo.update(str(federation_id), data)
+    record = await repo.update(str(federation_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"
