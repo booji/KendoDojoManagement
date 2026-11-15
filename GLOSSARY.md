@@ -113,6 +113,13 @@ _Avoid_: Class, training, practice
 A recurring rule that generates **Sessions** on a fixed schedule.
 _Avoid_: Recurring session, schedule
 
+**Series**:
+The **Sessions** one **Session Template** generates, taken together. A Series is extended or cancelled as a whole, through its template.
+_Avoid_: Recurring sessions
+
+**Slot**:
+The date a **Session Template** generated a **Session** for. A Session keeps its Slot when it is moved to another date, so its **Series** still counts that date as covered.
+
 **Ad-hoc Session**:
 A one-off **Session** created directly, not from a **Session Template**.
 _Avoid_: Extra session, special session
@@ -127,6 +134,10 @@ _Avoid_: Session category, class type
 
 **Cancellation**:
 Marking a specific **Session** as not taking place.
+
+**Reinstatement**:
+Undoing a **Cancellation**, so the **Session** takes place again. Reinstating one **Session** of a cancelled **Series** leaves the rest cancelled.
+_Avoid_: Uncancel, restore
 
 **Calendar Feed**:
 The subscription of upcoming **Sessions**, without **Cancellations**, that anyone with its link can add to their own calendar app. Calendar apps show it under the dojo's name.
@@ -224,6 +235,7 @@ _Avoid_: Major change, incompatible change
 - A **Member** holds exactly one current **Grade** and accumulates a **Grade History** over time.
 - **Grades** progress in strict order: Mukyū, 6-kyū to 1-kyū, then 1-dan to 8-dan.
 - A **Session** is either generated from a **Session Template** or created as an **Ad-hoc Session**.
+- A generated **Session** covers one **Slot** of its **Series**, and no two Sessions cover the same Slot.
 - A **Session** has one or more **Segments**, and each **Segment** carries one or more **Session Types**, so one evening's keiko can be both Kihon and Keiko.
 - **Attendance** at a **Session** is a collection of **Check-ins** by **Members** and named **Visitors**.
 - A **Session** has exactly one **Check-in Link**, and it never changes.

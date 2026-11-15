@@ -146,6 +146,8 @@ async def test_extend_keeps_a_moved_future_session(db_client) -> None:
 
     assert sessions[tuesday]["id"] == moved["id"]
     assert _NEXT_MONDAY not in sessions, "the moved Monday must not come back"
+    # The slot and the edit mark are reconcile's bookkeeping, not the API's.
+    assert not {"original_date", "edited"} & set(sessions[tuesday])
 
 
 async def test_a_recurrence_change_keeps_the_past_sessions(db_client) -> None:
@@ -210,6 +212,33 @@ async def test_a_recurrence_change_keeps_a_future_session_with_attendance(
     assert sessions[_NEXT_MONDAY]["id"] == attended["id"]
 
 
+async def test_a_recurrence_change_drops_a_cancelled_or_reinstated_session(
+    db_client,
+) -> None:
+    """Cancellation and Reinstatement change a Session's state; they are not
+    the Admin edits a reconcile keeps (#579). A future Session that was only
+    cancelled, or cancelled and reinstated, goes with the slot it covered."""
+    following = (_THIS_MONDAY + timedelta(weeks=2)).isoformat()
+    async with _client() as c:
+        template_id = await _series(c)
+        sessions = await _sessions(c, template_id)
+        cancelled, reinstated = sessions[_NEXT_MONDAY]["id"], sessions[following]["id"]
+        for session_id in (cancelled, reinstated):
+            response = await c.post(f"/sessions/{session_id}/cancel")
+            assert response.status_code == 200, response.text
+        response = await c.post(f"/sessions/{reinstated}/reinstate")
+        assert response.status_code == 200, response.text
+
+        response = await c.patch(
+            f"/sessions/templates/{template_id}", json={"recurrence_days": [2]}
+        )
+        assert response.status_code == 200, response.text
+        sessions = await _sessions(c, template_id)
+
+    assert _NEXT_MONDAY not in sessions
+    assert following not in sessions
+
+
 async def test_a_cancelled_series_cannot_be_extended(db_client) -> None:
     """C6 of the audit: extend ignored is_active, generating live Sessions for
     a series the Admin had cancelled."""
@@ -222,6 +251,43 @@ async def test_a_cancelled_series_cannot_be_extended(db_client) -> None:
         response = await c.post(
             f"/sessions/templates/{template_id}/extend",
             json={"end_date": (_END + timedelta(weeks=4)).isoformat()},
+        )
+        after = await _sessions(c, template_id)
+
+    assert response.status_code == 422, response.text
+    assert "cancelled" in response.json()["detail"]
+    assert after == before
+
+
+async def test_a_cancelled_series_cannot_be_rescheduled(db_client) -> None:
+    """C6, as for extend: a recurrence change would generate live Sessions."""
+    async with _client() as c:
+        template_id = await _series(c)
+        response = await c.delete(f"/sessions/templates/{template_id}")
+        assert response.status_code == 200, response.text
+        before = await _sessions(c, template_id)
+
+        response = await c.patch(
+            f"/sessions/templates/{template_id}", json={"recurrence_days": [2]}
+        )
+        after = await _sessions(c, template_id)
+
+    assert response.status_code == 422, response.text
+    assert "cancelled" in response.json()["detail"]
+    assert after == before
+
+
+async def test_a_cancelled_series_cannot_be_generated(db_client) -> None:
+    """C6, as for extend."""
+    async with _client() as c:
+        template_id = await _series(c)
+        response = await c.delete(f"/sessions/templates/{template_id}")
+        assert response.status_code == 200, response.text
+        before = await _sessions(c, template_id)
+
+        response = await c.post(
+            f"/sessions/templates/{template_id}/generate",
+            json={"horizon": (_END + timedelta(weeks=4)).isoformat()},
         )
         after = await _sessions(c, template_id)
 

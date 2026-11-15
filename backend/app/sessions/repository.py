@@ -69,7 +69,14 @@ class AbstractSessionInstanceRepository(Protocol):
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]: ...
 
-    async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
+    async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        """Cancel a Session. A state change, not an edit: it leaves `edited`
+        alone, so a reconcile may still drop the Session's slot (#579)."""
+        ...
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        """Undo a Cancellation. Like cancel, not an edit."""
+        ...
 
     async def update(
         self, instance_id: str, data: dict[str, Any]
@@ -443,6 +450,14 @@ class SqlSessionInstanceRepository:
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        return await self._set_cancelled(instance_id, True)
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        return await self._set_cancelled(instance_id, False)
+
+    async def _set_cancelled(
+        self, instance_id: str, cancelled: bool
+    ) -> dict[str, Any] | None:
         result = await self._session.execute(
             select(SessionInstance)
             .where(SessionInstance.id == instance_id)
@@ -455,7 +470,7 @@ class SqlSessionInstanceRepository:
         obj = result.scalar_one_or_none()
         if obj is None:
             return None
-        obj.cancelled = True
+        obj.cancelled = cancelled
         await self._session.flush()
         return _instance_to_dict(obj)
 

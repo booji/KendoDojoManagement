@@ -178,6 +178,8 @@ class SessionTemplateRead(BaseModel):
     interval_weeks: int = 1
     info: str | None = None
     coach_notes: str | None = None
+    # False once the series is cancelled (DELETE): it cannot be extended.
+    is_active: bool = True
     segments: list[SegmentRead] = []
 
 
