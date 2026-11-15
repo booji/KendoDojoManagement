@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import IsoDate, IsoTime, UUIDBase, UUIDType
@@ -76,6 +76,13 @@ class SessionTemplateSegmentType(UUIDBase):
 
 class SessionInstance(UUIDBase):
     __tablename__ = "session_instances"
+    __table_args__ = (
+        # One Session per slot of a series (#578). NULLs are distinct, so
+        # ad-hoc Sessions (no template, no slot) stay unconstrained.
+        UniqueConstraint(
+            "template_id", "original_date", name="uq_session_instances_template_slot"
+        ),
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     date: Mapped[str] = mapped_column(IsoDate(), nullable=False)

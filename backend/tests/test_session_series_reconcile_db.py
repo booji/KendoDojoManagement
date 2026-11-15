@@ -16,14 +16,15 @@ from datetime import date, timedelta
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert
+from sqlalchemy.exc import IntegrityError
 
 from app.attendance.db_models import Attendance
-
 from app.attendance.dependencies import get_attendance_repo
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
 from app.members.dependencies import get_current_member_id
+from app.sessions.repository import SqlSessionInstanceRepository
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="a@dojo.test", role="admin")
 
@@ -178,7 +179,9 @@ async def test_a_recurrence_change_keeps_a_future_session_an_admin_edited(
     async with _client() as c:
         template_id = await _series(c)
         edited = (await _sessions(c, template_id))[_NEXT_MONDAY]
-        response = await c.put(f"/sessions/{edited['id']}", json={"info": "Grading prep"})
+        response = await c.put(
+            f"/sessions/{edited['id']}", json={"info": "Grading prep"}
+        )
         assert response.status_code == 200, response.text
 
         response = await c.patch(
@@ -225,3 +228,19 @@ async def test_a_cancelled_series_cannot_be_extended(db_client) -> None:
     assert response.status_code == 422, response.text
     assert "cancelled" in response.json()["detail"]
     assert after == before
+
+
+async def test_two_sessions_cannot_cover_one_slot_of_a_series(db_client) -> None:
+    """C12 of the audit: only check-then-insert kept a slot single, which two
+    concurrent extends can both pass. The database now refuses the second."""
+    async with _client() as c:
+        template_id = await _series(c)
+    taken = {
+        "title": "Weekly Keiko",
+        "date": _day_after(_NEXT_MONDAY),
+        "original_date": _NEXT_MONDAY,
+        "template_id": template_id,
+    }
+
+    with pytest.raises(IntegrityError, match="uq_session_instances_template_slot"):
+        await SqlSessionInstanceRepository(db_client).add(taken)

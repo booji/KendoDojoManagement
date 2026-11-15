@@ -20,7 +20,9 @@ Existing generated Sessions are backfilled with their current date: a Session
 moved before this revision has lost its original date, and its current one is
 the best record left. Should two Sessions of one template share a date, only
 one is backfilled (lowest id) and the other is left without a slot, which
-reconciliation never deletes.
+reconciliation never deletes. That keeps the backfill clear of the new
+UNIQUE (template_id, original_date), audit C12: generation was
+check-then-insert, which two concurrent extends could both pass.
 
 Revision ID: a7b8c9d0e1f3
 Revises: e3f4a5b6c7d9
@@ -54,6 +56,11 @@ def upgrade() -> None:
         ") ranked "
         "WHERE si.id = ranked.id AND ranked.rn = 1"
     )
+    op.create_unique_constraint(
+        "uq_session_instances_template_slot",
+        "session_instances",
+        ["template_id", "original_date"],
+    )
     op.add_column(
         "session_instances",
         sa.Column("edited", sa.Boolean(), nullable=False, server_default=sa.false()),
@@ -61,5 +68,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "uq_session_instances_template_slot", "session_instances", type_="unique"
+    )
     op.drop_column("session_instances", "edited")
     op.drop_column("session_instances", "original_date")
