@@ -53,6 +53,18 @@ async def _slots_for(
     }
 
 
+async def _active_template(
+    template_id: str, template_repo: AbstractSessionTemplateRepository
+) -> dict[str, Any] | None:
+    """The template, None if missing. Raises ValueError if its series is
+    cancelled: generating for it would bring back live Sessions the Admin
+    cancelled (audit C6)."""
+    template = await template_repo.get(template_id)
+    if template is not None and not template["is_active"]:
+        raise ValueError("a cancelled series cannot be changed")
+    return template
+
+
 async def _apply_recurrence_delta(
     template: dict[str, Any],
     template_id: str,
@@ -118,8 +130,9 @@ async def generate_to_horizon(
     if the template does not exist. Idempotent by construction: the dates
     already covered for this template are excluded, so repeating the call
     never produces a second instance for a date that already has one.
+    Raises ValueError if the series is cancelled.
     """
-    template = await template_repo.get(template_id)
+    template = await _active_template(template_id, template_repo)
     if template is None:
         return None
 
@@ -136,7 +149,12 @@ async def reschedule(
     template_repo: AbstractSessionTemplateRepository,
     instance_repo: AbstractSessionInstanceRepository,
 ) -> dict[str, Any] | None:
-    """Apply changes to a template and reconcile its instances."""
+    """Apply changes to a template and reconcile its instances.
+
+    Raises ValueError if the series is cancelled.
+    """
+    if await _active_template(template_id, template_repo) is None:
+        return None
     template = await template_repo.update(template_id, data)
     if template is None:
         return None
@@ -158,12 +176,10 @@ async def extend(
     template's start, so repeated extensions cannot walk it indefinitely into
     the future.
     """
-    template = await template_repo.get(template_id)
+    template = await _active_template(template_id, template_repo)
     if template is None:
         return None
 
-    if not template["is_active"]:
-        raise ValueError("a cancelled series cannot be extended")
     current_end = date.fromisoformat(template["end_date"])
     if new_end < current_end:
         raise ValueError(

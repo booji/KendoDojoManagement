@@ -279,12 +279,17 @@ async def generate_session_instances(
     instance_repo: _InstRepo,
     uow: _UoW,
 ) -> list[dict[str, Any]]:
-    created = await templates.generate_to_horizon(
-        str(template_id),
-        date.fromisoformat(payload.horizon),
-        template_repo,
-        instance_repo,
-    )
+    try:
+        created = await templates.generate_to_horizon(
+            str(template_id),
+            date.fromisoformat(payload.horizon),
+            template_repo,
+            instance_repo,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if created is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
@@ -460,9 +465,14 @@ async def update_session_template(
     uow: _UoW,
 ) -> dict[str, Any]:
     await _require_known_types(payload.segments, type_repo)
-    template = await templates.reschedule(
-        str(template_id), payload.changes(), template_repo, instance_repo
-    )
+    try:
+        template = await templates.reschedule(
+            str(template_id), payload.changes(), template_repo, instance_repo
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"

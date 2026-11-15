@@ -257,6 +257,43 @@ async def test_a_cancelled_series_cannot_be_extended(db_client) -> None:
     assert after == before
 
 
+async def test_a_cancelled_series_cannot_be_rescheduled(db_client) -> None:
+    """C6, as for extend: a recurrence change would generate live Sessions."""
+    async with _client() as c:
+        template_id = await _series(c)
+        response = await c.delete(f"/sessions/templates/{template_id}")
+        assert response.status_code == 200, response.text
+        before = await _sessions(c, template_id)
+
+        response = await c.patch(
+            f"/sessions/templates/{template_id}", json={"recurrence_days": [2]}
+        )
+        after = await _sessions(c, template_id)
+
+    assert response.status_code == 422, response.text
+    assert "cancelled" in response.json()["detail"]
+    assert after == before
+
+
+async def test_a_cancelled_series_cannot_be_generated(db_client) -> None:
+    """C6, as for extend."""
+    async with _client() as c:
+        template_id = await _series(c)
+        response = await c.delete(f"/sessions/templates/{template_id}")
+        assert response.status_code == 200, response.text
+        before = await _sessions(c, template_id)
+
+        response = await c.post(
+            f"/sessions/templates/{template_id}/generate",
+            json={"horizon": (_END + timedelta(weeks=4)).isoformat()},
+        )
+        after = await _sessions(c, template_id)
+
+    assert response.status_code == 422, response.text
+    assert "cancelled" in response.json()["detail"]
+    assert after == before
+
+
 async def test_two_sessions_cannot_cover_one_slot_of_a_series(db_client) -> None:
     """C12 of the audit: only check-then-insert kept a slot single, which two
     concurrent extends can both pass. The database now refuses the second."""
