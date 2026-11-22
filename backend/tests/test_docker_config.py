@@ -183,6 +183,16 @@ def test_compose_db_service_env_includes(var_name: str):
     assert var_name in keys, f"db service environment must include {var_name}"
 
 
+def test_compose_db_timezone_defaults_to_the_apps():
+    """An .env without TZ must not leave the db on another zone than the app,
+    whose TZ comes from the shared example (Europe/London, as in Quadlet)."""
+    db_tz = str(load_compose()["services"]["db"]["environment"]["TZ"])
+    default = _re.fullmatch(r"\$\{TZ:-([^}]*)\}", db_tz)
+    assert default, db_tz
+    app_tz = read_env_file(ROOT / GENERATED_ENV_FILES["kendo-app.env"])["TZ"]
+    assert default.group(1) == app_tz == read_env_file(ENV_EXAMPLE)["TZ"]
+
+
 # ---------------------------------------------------------------------------
 # .env.example — all required variable names present
 # ---------------------------------------------------------------------------
