@@ -170,3 +170,39 @@ Each one gets its own section here, headed "Upgrading to 0.Y", with the
 operator action its release notes list. Read it before you change the pin.
 
 None yet: 0.1 is the first Release line.
+
+## From a release candidate: splitting `.env` once
+
+Quick self-host only, and only for a host set up with `v0.1.0-rc1` or
+`v0.1.0-rc2`. Those kept every app setting in `.env`. From `v0.1.0-rc3` the
+app reads its settings from `kendo-app.env` next to `docker-compose.yml`
+instead, written from `deploy/env/kendo-app.env.example`, the file the
+hardened deployment uses too (#603). `.env` keeps only the image pin, the db
+settings and the secrets. `./setup.sh upgrade` stops, before it backs up or
+changes anything, while `kendo-app.env` is missing.
+
+Create it once, in the directory that holds `.env`:
+
+```bash
+cp deploy/env/kendo-app.env.example kendo-app.env
+```
+
+Then copy your own values from `.env` into `kendo-app.env`, key for key:
+`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS` and `TZ` always, and any
+other app setting you changed from its default (`JWT_EXPIRE_MINUTES`,
+`SESSION_MAX_MINUTES`, the `*_MIN_DURATION_MS` floors and so on). A wrong
+`WEBAUTHN_*` value here makes every passkey ceremony fail, so check those
+three against your domain. Leave the secrets in `.env`: `DATABASE_URL`,
+`MIGRATION_DATABASE_URL`, `JWT_SECRET`, `SETUP_TOKEN` and `POSTGRES_*` never
+go in `kendo-app.env`, because the app reads that file whole and must never
+see the superuser login (ADR-0007).
+
+The app settings left in `.env` are ignored from now on. Delete them, so that
+nobody tunes a value there that never reaches the app. Keep `KENDO_IMAGE`,
+`TZ` (the db's), `POSTGRES_*`, `MIGRATION_DATABASE_URL`, `DATABASE_URL`,
+`JWT_SECRET` and `SETUP_TOKEN`. Then upgrade as usual:
+
+```bash
+./setup.sh upgrade
+./setup.sh check
+```

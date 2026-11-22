@@ -14,9 +14,12 @@ import yaml
 
 from tests.deploy_contract import (
     CAPABILITIES_ADDED_BACK,
+    GENERATED_ENV_FILES,
     PUBLISHED_IMAGE,
     RELEASE_PIN,
     SECRETS,
+    container_env,
+    read_env_file,
 )
 
 # ---------------------------------------------------------------------------
@@ -122,14 +125,40 @@ REQUIRED_APP_ENV_VARS = [
 
 @pytest.mark.parametrize("var_name", REQUIRED_APP_ENV_VARS)
 def test_compose_app_service_env_includes(var_name: str):
-    compose = load_compose()
-    app_env: dict = compose["services"]["app"].get("environment", {})
-    # environment can be a dict or a list of "KEY=VALUE" strings
-    if isinstance(app_env, list):
-        keys = [entry.split("=")[0] for entry in app_env]
-    else:
-        keys = list(app_env.keys())
-    assert var_name in keys, f"app service environment must include {var_name}"
+    app_env = _container_env(load_compose()["services"]["app"])
+    assert var_name in app_env, f"app service environment must include {var_name}"
+
+
+@pytest.mark.parametrize("service", ["app", "migrate"])
+def test_compose_app_image_reads_the_app_settings_quadlet_reads(service: str):
+    """#603: the one example both deployments write their app settings from.
+    Every key in it reaches the container, so a new one needs no compose
+    change. The upload paths are pinned over it in the compose file."""
+    spec = load_compose()["services"][service]
+    assert spec.get("env_file") == "kendo-app.env", spec
+    example = read_env_file(ROOT / GENERATED_ENV_FILES["kendo-app.env"])
+    env = _container_env(spec)
+    assert example.keys() <= env.keys(), example.keys() - env.keys()
+
+
+# What the compose file interpolates, and the secrets setup.sh turns into
+# mounted files. Anything else in .env would be an app setting no container
+# reads (#603): those live in kendo-app.env.
+COMPOSE_ENV_KEYS = {
+    "KENDO_IMAGE",
+    "TZ",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_DB",
+    "MIGRATION_DATABASE_URL",
+    "DATABASE_URL",
+    "JWT_SECRET",
+    "SETUP_TOKEN",
+}
+
+
+def test_env_example_holds_only_what_compose_interpolates_and_the_secrets():
+    assert read_env_file(ENV_EXAMPLE).keys() == COMPOSE_ENV_KEYS
 
 
 # ---------------------------------------------------------------------------
@@ -162,8 +191,6 @@ REQUIRED_ENV_EXAMPLE_VARS = [
     "DATABASE_URL",
     "JWT_SECRET",
     "SETUP_TOKEN",
-    "JWT_EXPIRE_MINUTES",
-    "COOKIE_SECURE",
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "POSTGRES_DB",
@@ -425,17 +452,6 @@ DEV_HOST = "dojo.localhost"
 DEV_ORIGIN = "https://dojo.localhost:8443"
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        values[key.strip()] = value.strip()
-    return values
-
-
 def test_dev_compose_has_a_proxy_on_the_edge_network_only():
     proxy = load_dev_compose()["services"].get("proxy")
     assert proxy, "docker-compose.dev.yml must define a 'proxy' service (Traefik)"
@@ -531,7 +547,7 @@ DEV_ENV_EXPECTATIONS = {
 
 @pytest.mark.parametrize("key,expected", sorted(DEV_ENV_EXPECTATIONS.items()))
 def test_env_dev_matches_the_proxied_origin(key: str, expected: str):
-    assert _read_env_file(ENV_DEV).get(key) == expected
+    assert read_env_file(ENV_DEV).get(key) == expected
 
 
 def test_dev_backend_and_frontend_keep_their_direct_ports():
@@ -550,7 +566,7 @@ def test_selfhost_app_publishes_no_port_and_trusts_the_forwarded_header():
         "the quick self-host's app must not publish a port once the proxy fronts "
         f"it — an unproxied route makes TRUST_PROXY_XFF spoofable. Got: {app.get('ports')}"
     )
-    assert app["environment"]["TRUST_PROXY_XFF"] == "${TRUST_PROXY_XFF:-true}"
+    assert _container_env(app)["TRUST_PROXY_XFF"] == "true"
 
 
 def test_selfhost_has_a_proxy_on_the_edge_network_only():
@@ -914,19 +930,7 @@ def test_release_never_pushes_a_moving_zero_tag():
 
 
 def _container_env(service: dict) -> dict[str, str]:
-    """What the container actually sees: its env_file entries, overridden by
-    its environment: block — the env_file half is what #483 slipped through."""
-    env_files = service.get("env_file", [])
-    if isinstance(env_files, str):
-        env_files = [env_files]
-    merged: dict[str, str] = {}
-    for entry in env_files:
-        path = entry["path"] if isinstance(entry, dict) else entry
-        merged |= _read_env_file(ROOT / path)
-    env = service.get("environment", {})
-    if isinstance(env, list):
-        return merged | dict(entry.split("=", 1) for entry in env)
-    return merged | {k: str(v) for k, v in env.items()}
+    return container_env(service, ROOT, GENERATED_ENV_FILES)
 
 
 @pytest.mark.parametrize(
@@ -955,7 +959,7 @@ def test_dev_backend_still_gets_every_app_setting_from_env_dev():
     env = _container_env(load_dev_compose()["services"]["backend"])
     wanted = {
         key
-        for key in _read_env_file(ENV_DEV)
+        for key in read_env_file(ENV_DEV)
         if not key.startswith("POSTGRES_") and key != "MIGRATION_DATABASE_URL"
     }
     assert wanted <= env.keys(), wanted - env.keys()
@@ -995,13 +999,11 @@ def test_dev_backend_waits_for_migrate():
     assert deps.get("migrate", {}).get("condition") == "service_completed_successfully"
 
 
-@pytest.mark.parametrize(
-    "env_file", [".env.example", ".env.prod.example", ".env.dev", ".env.test"]
-)
+@pytest.mark.parametrize("env_file", [".env.example", ".env.dev", ".env.test"])
 def test_env_files_split_the_app_and_migration_logins(env_file: str):
     from sqlalchemy.engine.url import make_url
 
-    values = _read_env_file(ROOT / env_file)
+    values = read_env_file(ROOT / env_file)
     assert make_url(values["DATABASE_URL"]).username == "kendo_app"
     migration = make_url(values["MIGRATION_DATABASE_URL"])
     assert migration.username == values["POSTGRES_USER"]

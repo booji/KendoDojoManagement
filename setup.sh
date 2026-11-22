@@ -44,8 +44,8 @@ if [ "$mode" = quadlet ]; then
             deploy/quadlet/kendo-db-data.volume
             deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh)
 else
-  required=(.env.example "$selfhost/traefik.yml.example" "$selfhost/dynamic/kendo.yml.example"
-            deploy/bin/kendo-backup.sh)
+  required=(.env.example deploy/env/kendo-app.env.example "$selfhost/traefik.yml.example"
+            "$selfhost/dynamic/kendo.yml.example" deploy/bin/kendo-backup.sh)
 fi
 # Every action reads backup.env through kendo-backup.sh (backup_setting).
 [ "$action" = setup ] || required=(deploy/bin/kendo-backup.sh)
@@ -198,23 +198,25 @@ write_compose_secrets() {
 }
 
 run_check() {
-  local env_file traefik_dir certs rerun
+  # env_file holds the app settings on both paths; compose_env is the Compose
+  # stack's .env, its secrets and database logins (#603).
+  local env_file compose_env="" traefik_dir certs rerun
   if [ "$mode" = quadlet ]; then
     env_file=$kendo/kendo-app.env traefik_dir=$kendo/traefik certs=$kendo/traefik/certs
     rerun="./setup.sh --quadlet"
   else
-    env_file=.env traefik_dir=$selfhost certs=deploy/certs rerun=./setup.sh
+    env_file=kendo-app.env compose_env=.env traefik_dir=$selfhost certs=deploy/certs rerun=./setup.sh
   fi
   local static=$traefik_dir/traefik.yml router=$traefik_dir/dynamic/kendo.yml
   echo "KendoDojoManagement — check ($([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host"))"
   echo
 
   local f p configured=1
-  for f in "$env_file" "$static" "$router"; do
+  for f in $compose_env "$env_file" "$static" "$router"; do
     [ -f "$f" ] || { fail "$f is missing — run $rerun first"; configured=""; }
   done
   if [ -n "$configured" ]; then
-    for f in "$env_file" "$router"; do
+    for f in $compose_env "$env_file" "$router"; do
       p=$(placeholders "$f")
       if [ -z "$p" ]; then ok "$f has no placeholders"; else fail "$f still has placeholders: ${p% }"; fi
     done
@@ -268,14 +270,14 @@ run_check() {
     elif command -v systemctl >/dev/null && ! systemctl --user is-enabled --quiet "$timer" 2>/dev/null; then
       fail "$timer is not enabled — run: systemctl --user enable --now $timer"
     else ok "$timer is installed and enabled"; fi
-  elif [ -f "$env_file" ]; then
+  elif [ -f "$compose_env" ]; then
     for s in POSTGRES_PASSWORD JWT_SECRET SETUP_TOKEN; do
-      [ -n "$(env_value "$env_file" "$s")" ] || absent+=" $s"
+      [ -n "$(env_value "$compose_env" "$s")" ] || absent+=" $s"
     done
     if [ -z "$absent" ]; then ok "POSTGRES_PASSWORD, JWT_SECRET and SETUP_TOKEN are set"
-    else for s in $absent; do fail "$s is blank in $env_file"; done; fi
-    case $(env_value "$env_file" MIGRATION_DATABASE_URL) in
-      *":$(env_value "$env_file" POSTGRES_PASSWORD)@"*) ok "MIGRATION_DATABASE_URL embeds POSTGRES_PASSWORD" ;;
+    else for s in $absent; do fail "$s is blank in $compose_env"; done; fi
+    case $(env_value "$compose_env" MIGRATION_DATABASE_URL) in
+      *":$(env_value "$compose_env" POSTGRES_PASSWORD)@"*) ok "MIGRATION_DATABASE_URL embeds POSTGRES_PASSWORD" ;;
       *) fail "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the migrate service." ;;
     esac
   fi
@@ -473,6 +475,15 @@ run_backup() {
 
 run_upgrade() {
   [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
+  # A host set up by an rc keeps its app settings in .env, and the compose file
+  # this upgrade brings reads them from kendo-app.env (#603): going on would
+  # recreate the app without them.
+  [ -f kendo-app.env ] || {
+    echo "No kendo-app.env here: the app's settings now live in it, not in .env." >&2
+    echo "Split .env once as docs/install/upgrading.md says (\"From a release candidate\")," >&2
+    echo "then re-run ./setup.sh upgrade. Nothing was changed." >&2
+    exit 1
+  }
   command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
 
   [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ] ||
@@ -757,6 +768,20 @@ esac
 # secrets — those must not be carried forward or the app refuses to start.
 # --quadlet never carries: its secrets live in podman, and a .env left behind by
 # a Compose run in the same directory is plaintext this path deliberately avoids.
+# The app settings, from the one example both paths share (#603). No umask 077
+# like .env gets: every secret is a mounted file instead. Compose and the
+# Quadlet unit alike pass this whole file, so a key the example gains reaches
+# the app without a compose or unit change.
+write_app_env() { # write_app_env DST
+  backup "$1"
+  sed \
+    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
+    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
+    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
+    deploy/env/kendo-app.env.example > "$1"
+  echo "  wrote $1"
+}
+
 carry() { [ "$mode" = compose ] && [ -f .env ] || return 0; sed -n "s/^$1=\([^<].*\)$/\1/p" .env | head -1; }
 
 db_password=$(carry POSTGRES_PASSWORD); [ -n "$db_password" ] || db_password=$(rand 24)
@@ -785,9 +810,6 @@ if [ "$mode" = compose ]; then
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$db_password|" \
     -e "s|^JWT_SECRET=.*|JWT_SECRET=$jwt_secret|" \
     -e "s|^SETUP_TOKEN=.*|SETUP_TOKEN=$setup_token|" \
-    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
-    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
-    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
     ${image:+-e "s|^KENDO_IMAGE=.*|KENDO_IMAGE=$image|"} \
     .env.example > .env
   )
@@ -795,6 +817,7 @@ if [ "$mode" = compose ]; then
   echo "  wrote .env (mode 600)"
   write_compose_secrets
   echo "  wrote secrets/ from it (mode 700)"
+  write_app_env kendo-app.env
 fi
 
 # The one provider table. dns_var is the single environment variable lego reads,
@@ -933,16 +956,9 @@ quadlet_install() {
     fi
   fi
 
-  # Non-sensitive app config — no umask 077 like .env gets, because every secret
-  # here is a podman secret instead. The unit passes this file and nothing else,
-  # so a key missing here is a key missing from the app's environment.
-  backup "$kendo/kendo-app.env"
-  sed \
-    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
-    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
-    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
-    deploy/env/kendo-app.env.example > "$kendo/kendo-app.env"
-  echo "  wrote $kendo/kendo-app.env"
+  # The unit passes this file and nothing else, so a key missing here is a key
+  # missing from the app's environment.
+  write_app_env "$kendo/kendo-app.env"
 
   write_static "$hardened/traefik.yml" "$kendo/traefik/traefik.yml"
   write_router "$hardened/dynamic/kendo.yml" "$kendo/traefik/dynamic/kendo.yml"
