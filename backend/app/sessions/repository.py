@@ -118,7 +118,7 @@ def _template_to_dict(obj: SessionTemplate) -> dict[str, Any]:
         except json.JSONDecodeError:
             recurrence_days = []
     else:
-        recurrence_days = raw_days  # type: ignore[assignment]
+        recurrence_days = raw_days
     segments = [_segment_to_dict(s) for s in obj.segments]
     start_time, end_time = _segments_envelope(segments)
     duration_minutes = _minutes_between(start_time, end_time) if segments else 0

@@ -347,7 +347,7 @@ class SqlReportRepository(AbstractReportRepository):
             names[member_id] = member_name(display_name, first_name, surname)
             attended[member_id].append(date.fromisoformat(day))
 
-        streaks = [
+        streaks: list[dict[str, Any]] = [
             {
                 "member_id": member_id,
                 "display_name": names[member_id],

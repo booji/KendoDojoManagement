@@ -88,7 +88,7 @@ class SqlMemberDirectory:
                 select(Member.membership_status).where(Member.email == email)
             )
         ).scalar_one_or_none()
-        return status if status in BARRED_FROM_SIGN_IN else None  # type: ignore[return-value]
+        return status if status in BARRED_FROM_SIGN_IN else None
 
 
 def member_directory_for(uow: AbstractUnitOfWork) -> MemberDirectory:

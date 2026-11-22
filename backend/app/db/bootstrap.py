@@ -133,7 +133,8 @@ def _app_login(migration_url: str, app_url: str) -> tuple[str, str]:
     security boundary for that.
     """
     app = make_url(app_url)
-    validate_identifier(app.username or "")
+    username = app.username or ""
+    validate_identifier(username)
     if app.username == make_url(migration_url).username:
         raise RuntimeError(
             f"DATABASE_URL and MIGRATION_DATABASE_URL both log in as "
@@ -144,7 +145,7 @@ def _app_login(migration_url: str, app_url: str) -> tuple[str, str]:
         raise RuntimeError(
             f"DATABASE_URL has no password for the app user {app.username!r}."
         )
-    return app.username, app.password
+    return username, app.password
 
 
 async def _ensure_app_user(migration_url: str, user: str, password: str) -> None:
