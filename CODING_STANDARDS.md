@@ -97,6 +97,9 @@ personal data being audited. Other security-relevant events go through
 Routes, repositories and the unit of work are `async`. Python 3.13. Ruff
 (`E`, `F`, `I`, `UP`, line length 88) must pass both `ruff check` and
 `ruff format --check`; CI enforces both.
+ty is the type checker: `uv run ty check app` must exit 0, and CI enforces it
+(#618). Suppress with `# ty: ignore[rule]` only where ty is wrong, with a
+one-line reason.
 
 ### Docstrings and Comments
 A docstring or comment says why, not what: the constraint, the trade-off, or
