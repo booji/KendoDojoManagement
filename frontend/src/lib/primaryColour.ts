@@ -164,23 +164,18 @@ export const deriveThemePrimaries = (
 }
 
 /**
- * Install the derived brand shades as a stylesheet so the `.dark` class cascade
- * selects the correct shade per theme. An inline `documentElement.style` write
- * cannot do this: it beats the `.dark` selector and can only carry one shade.
+ * Publish both themes' brand shades as custom properties on `<html>`;
+ * index.css picks `--brand-primary-light` under `:root` and
+ * `--brand-primary-dark` under `.dark`, so the class cascade still chooses the
+ * shade. Writing `--primary` itself would beat `.dark` and carry one shade, and
+ * an injected `<style>` element is dropped by the CSP; CSSOM writes are not
+ * (#607).
  */
 export const applyPrimaryColour = (brandHex: string): void => {
   const { light, dark } = deriveThemePrimaries(brandHex)
-  const css =
-    `:root { --primary: ${light.primary}; ` +
-    `--primary-foreground: ${light.primaryForeground}; }\n` +
-    `.dark { --primary: ${dark.primary}; ` +
-    `--primary-foreground: ${dark.primaryForeground}; }`
-
-  let style = document.getElementById("brand-primary") as HTMLStyleElement | null
-  if (style === null) {
-    style = document.createElement("style")
-    style.id = "brand-primary"
-    document.head.appendChild(style)
-  }
-  style.textContent = css
+  const style = document.documentElement.style
+  style.setProperty("--brand-primary-light", light.primary)
+  style.setProperty("--brand-primary-foreground-light", light.primaryForeground)
+  style.setProperty("--brand-primary-dark", dark.primary)
+  style.setProperty("--brand-primary-foreground-dark", dark.primaryForeground)
 }

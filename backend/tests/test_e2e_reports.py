@@ -51,8 +51,14 @@ def test_reports_page_renders_attendance_report(page: Page) -> None:
     # The page heading is visible
     expect(page.get_by_role("heading", name="Reports")).to_be_visible()
 
-    # The Attendance tab is the default active tab
-    expect(page.get_by_role("tab", name="Attendance")).to_be_visible()
+    # Reports opens on Charts, the first tab (#607)
+    tabs = page.get_by_role("tab")
+    expect(tabs.first).to_have_text("Charts")
+    expect(page.get_by_role("tab", name="Charts")).to_have_attribute(
+        "aria-selected", "true"
+    )
+
+    page.get_by_role("tab", name="Attendance").click()
 
     # The Generate button is visible on the attendance tab
     expect(
@@ -69,6 +75,7 @@ def test_reports_page_has_csv_download_buttons(page: Page) -> None:
     _inject_cookie(page, _make_token("admin"))
 
     page.goto(f"{BASE_URL}/reports")
+    page.get_by_role("tab", name="Attendance").click()
 
     # Attendance tab: Download CSV button is present (disabled until report generated)
     expect(page.get_by_role("button", name="Download attendance CSV")).to_be_visible()
