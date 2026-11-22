@@ -622,3 +622,35 @@ async def test_migrating_in_process_leaves_the_app_loggers_enabled(
 
     for name in ("security_events", "app.core.middleware"):
         assert logging.getLogger(name).disabled is False, name
+
+
+async def test_a_schema_at_several_heads_logs_every_one(
+    _bootstrap_db: str, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    """Merged branches leave alembic_version one row per head: the log names
+    them all, in a stable order, and "already at head" compares them as a set
+    (#606). The upgrade itself is stubbed: no shipped chain branches."""
+    import logging
+
+    from app.db import bootstrap
+
+    engine = create_async_engine(_bootstrap_db, poolclass=NullPool)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE alembic_version (version_num varchar(32) PRIMARY KEY)"
+                )
+            )
+            await conn.execute(
+                text("INSERT INTO alembic_version VALUES ('bbbb'), ('aaaa')")
+            )
+    finally:
+        await engine.dispose()
+    monkeypatch.setattr(bootstrap, "_run_alembic_upgrade", lambda url: None)
+
+    with caplog.at_level(logging.INFO, logger="app.db.bootstrap"):
+        await bootstrap._upgrade_head(_bootstrap_db)
+
+    assert "Schema at revision aaaa, bbbb, upgrading to head" in caplog.text
+    assert "Schema already at head aaaa, bbbb" in caplog.text

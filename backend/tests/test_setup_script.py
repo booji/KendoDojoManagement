@@ -180,6 +180,37 @@ def test_rerunning_changes_the_domain_without_clobbering_the_secrets(tmp_path):
     assert (home / "kendo-app.env.bak").exists()
 
 
+def test_rerunning_keeps_every_app_setting_the_operator_set(tmp_path):
+    """A re-run rewrites kendo-app.env from the example: every key already set
+    carries over, and only the domain answer and keys the example gained are
+    new. It once reset tuned timeouts and TZ to the shipped defaults."""
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+    app_env = home / "kendo-app.env"
+    app_env.write_text(
+        app_env.read_text()
+        .replace("SESSION_MAX_MINUTES=10080", "SESSION_MAX_MINUTES=60")
+        .replace("TZ=Europe/London", "TZ=Asia/Tokyo")
+        + "KENDO_OPERATOR_SETTING=own\n"
+    )
+    dot_env = home / ".env"
+    dot_env.write_text(dot_env.read_text().replace("TZ=Europe/London", "TZ=Asia/Tokyo"))
+    example = home / "deploy/env/kendo-app.env.example"
+    example.write_text(example.read_text() + "KENDO_NEW_SETTING=42\n")
+
+    run(home, "shinkendo.example.org", "1", "1", "admin@example.com")
+
+    env = env_of(home, "kendo-app.env")
+    assert env["SESSION_MAX_MINUTES"] == "60"
+    assert env["TZ"] == "Asia/Tokyo"
+    assert env["KENDO_OPERATOR_SETTING"] == "own"
+    assert env["KENDO_NEW_SETTING"] == "42"
+    assert env["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
+    assert env["CORS_ORIGINS"] == "https://shinkendo.example.org"
+    # The db's zone is .env's TZ: it stays with the app's.
+    assert env_of(home)["TZ"] == "Asia/Tokyo"
+
+
 def test_rerunning_moves_a_pre_453_env_onto_the_app_user(tmp_path):
     # The documented upgrade (#453): an .env whose DATABASE_URL is still the
     # superuser's gets an app-user login, and the database password is kept.
@@ -1001,6 +1032,31 @@ def test_check_quadlet_fails_until_the_ip_retention_timer_is_enabled(tmp_path):
     missing = check(host.src, host_env(tmp_path), "--quadlet")
     assert missing.returncode == 1
     assert "kendo-ip-retention.timer is not installed" in missing.stdout
+
+
+def test_check_quadlet_warns_when_the_release_units_pin_different_images(tmp_path):
+    """A pin edited in one unit only (an rc rehearsal, a rollback) would
+    migrate with one image and serve with another."""
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    unit = host.units() / "kendo-migrate.container"
+    unit.write_text(
+        re.sub(
+            r"^Image=.*$",
+            "Image=ghcr.io/booji/kendodojomanagement:0.1.0-rc2",
+            unit.read_text(),
+            flags=re.M,
+        )
+    )
+
+    out = check(host.src, host_env(tmp_path), "--quadlet")
+
+    assert out.returncode == 0, out.stdout
+    assert (
+        "warn  The Release units pin different images: "
+        "ghcr.io/booji/kendodojomanagement:0.1, "
+        "ghcr.io/booji/kendodojomanagement:0.1.0-rc2"
+    ) in out.stdout
 
 
 def test_check_fails_a_domain_that_does_not_resolve(tmp_path):

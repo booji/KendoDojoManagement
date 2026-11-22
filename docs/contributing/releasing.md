@@ -71,7 +71,7 @@ that has one, breaking or not. Then check that every commit touching a
 deployment file came with one:
 
 ```bash
-git log --oneline origin/main..HEAD -- deploy docker-compose.yml .env.example
+git log --oneline origin/main..HEAD -- deploy docker-compose.yml .env.example setup.sh
 ```
 
 A PR missing its section gets one written now, from its diff. Keep the

@@ -91,14 +91,16 @@ def _run_alembic_upgrade(database_url: str) -> None:
     command.upgrade(_alembic_config(database_url), "head")
 
 
-async def _schema_revision(database_url: str) -> str | None:
-    """The revision alembic_version records, or None on an empty database."""
+async def _schema_revisions(database_url: str) -> list[str]:
+    """The revisions alembic_version records, sorted: one per head, none on an
+    empty database."""
     base_url, db_name = url_parts(database_url)
     conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
     try:
         if not await conn.fetchval("SELECT to_regclass('alembic_version')"):
-            return None
-        return await conn.fetchval("SELECT version_num FROM alembic_version")
+            return []
+        rows = await conn.fetch("SELECT version_num FROM alembic_version")
+        return sorted(row["version_num"] for row in rows)
     finally:
         await conn.close()
 
@@ -107,14 +109,14 @@ async def _upgrade_head(database_url: str) -> None:
     """Run all pending alembic migrations up to head, logging where the schema
     started and ended; alembic logs each revision it applies in between.
     """
-    before = await _schema_revision(database_url)
-    _log.info("Schema at revision %s, upgrading to head", before or "none")
+    before = await _schema_revisions(database_url)
+    _log.info("Schema at revision %s, upgrading to head", ", ".join(before) or "none")
     await asyncio.to_thread(_run_alembic_upgrade, database_url)
-    after = await _schema_revision(database_url)
-    if after == before:
-        _log.info("Schema already at head %s", after)
+    after = await _schema_revisions(database_url)
+    if after == before:  # both sorted, so equal as sets
+        _log.info("Schema already at head %s", ", ".join(after))
     else:
-        _log.info("Schema now at head %s", after)
+        _log.info("Schema now at head %s", ", ".join(after))
 
 
 async def _wait_for_connection(

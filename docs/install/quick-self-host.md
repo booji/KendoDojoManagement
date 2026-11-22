@@ -50,8 +50,9 @@ The secrets reach the containers as files in `secrets/`, which `setup.sh`
 writes from `.env` and Compose mounts as `<NAME>_FILE`, rather than as
 environment variables; after changing one in `.env`, re-run `./setup.sh` so
 they match. Re-running also rewrites `kendo-app.env` from its example (the
-previous copy is kept as `kendo-app.env.bak`), so copy any setting you tuned
-back across. One domain answer reaches all three passkey-bound settings
+previous copy is kept as `kendo-app.env.bak`), keeping every setting you
+already set: only the domain answer and any key a release added to the
+example are new. One domain answer reaches all three passkey-bound settings
 (`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS`) and the Traefik `Host()`
 rule — an `RP_ID` typo is the whole "passkeys silently don't work" failure
 class, so it is worth not typing four times.

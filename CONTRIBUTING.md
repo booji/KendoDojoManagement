@@ -47,8 +47,8 @@ overwrites them: the routine upgrade is back up, pull, restart
 host only if the operator makes it.
 
 So a pull request that changes any of `deploy/quadlet`, `deploy/systemd`,
-`deploy/bin`, `docker-compose.yml`, `deploy/env`, `.env.example` or
-`deploy/traefik` writes an **Operator action** section in its body, breaking
+`deploy/bin`, `docker-compose.yml`, `deploy/env`, `.env.example`,
+`deploy/traefik` or `setup.sh` writes an **Operator action** section in its body, breaking
 or not. Put it under a Compose heading, a Quadlet heading, or both, as each
 applies. Say which file changed, what to change in the operator's copy, and
 what happens if they do not. When the old file keeps working, say so: then

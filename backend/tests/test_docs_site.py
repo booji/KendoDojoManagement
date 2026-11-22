@@ -165,6 +165,21 @@ def test_releasing_collects_operator_actions_for_every_release():
     assert "--label breaking" in text  # the version bump still reads it
 
 
+def test_releasing_lists_the_prs_that_changed_any_deployment_file():
+    """The `git log -- <paths>` that finds the PRs owing an Operator action
+    covers every deployment file, or one slips out of the notes (#604)."""
+    text = (ROOT / "docs/contributing/releasing.md").read_text()
+    log = re.search(r"git log --oneline origin/main\.\.HEAD -- ([^\n]*)", text)
+    assert log, "no git log over the deployment files"
+    paths = log.group(1).split()
+    missed = [
+        f
+        for f in DEPLOYMENT_FILES
+        if not any(f == p or f.startswith(f"{p}/") for p in paths)
+    ]
+    assert not missed, missed
+
+
 def test_an_rc_is_rehearsed_by_editing_the_image_pin():
     """An rc image publishes only its exact tag, never :0.1 (#604), so the
     rehearsal pins it where an operator would, and rolls back the same way."""

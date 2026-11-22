@@ -262,6 +262,13 @@ run_check() {
       if [ -z "$absent" ]; then ok "Every podman secret the units name exists"
       else fail "podman secret missing:$absent — re-run $rerun, or create it for your own drop-in"; fi
     fi
+    # A pin edited in one unit only would migrate with one image and serve
+    # with another (#604).
+    local pins
+    pins=$(sed -n 's/^Image=//p' "$units"/kendo-app.container "$units"/kendo-migrate.container \
+           "$units"/kendo-ip-retention.container 2>/dev/null | sort -u || true)
+    [ "$(printf '%s\n' "$pins" | grep -c .)" -le 1 ] ||
+      warn "The Release units pin different images: $(printf '%s\n' "$pins" | paste -sd, - | sed 's/,/, /g') — pin all three alike (docs/install/upgrading.md)"
     # Without the daily timer, recovery-attempt IPs are cleared only when
     # kendo-app restarts, and can outlive their 30 days (#467).
     local timer=kendo-ip-retention.timer
@@ -693,6 +700,35 @@ MENU
     ;;
 esac
 
+# ------------------------------------------------------- kendo-app.env --------
+# The app settings, from the one example both paths share (#603). No umask 077
+# like .env gets: every secret is a mounted file instead. Compose and the
+# Quadlet unit alike pass this whole file, so a key the example gains reaches
+# the app without a compose or unit change.
+# A re-run keeps the operator's settings (#603): every key the previous file
+# sets carries over, its own keys included, and only the domain answer and
+# keys the example gained are new.
+write_app_env() { # write_app_env DST
+  local prev=/dev/null
+  [ ! -e "$1" ] || prev="$1.bak"
+  backup "$1"
+  sed \
+    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
+    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
+    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
+    deploy/env/kendo-app.env.example |
+  awk -F= -v answered="WEBAUTHN_RP_ID WEBAUTHN_ORIGIN CORS_ORIGINS" '
+    BEGIN { split(answered, a, " "); for (i in a) skip[a[i]] = 1 }
+    { key = $1; sub(/^[ \t]+/, "", key); sub(/[ \t]+$/, "", key) }
+    /^[ \t]*#/ || !index($0, "=") || key in skip { if (FILENAME == ARGV[1]) next; print; next }
+    FILENAME == ARGV[1] { if (!(key in kept)) order[++n] = key; kept[key] = $0; next }
+    key in kept { print kept[key]; done[key] = 1; next }
+    { print }
+    END { for (i = 1; i <= n; i++) if (!(order[i] in done)) print kept[order[i]] }
+  ' "$prev" - > "$1"
+  echo "  wrote $1"
+}
+
 # ---------------------------------------------------------------- .env --------
 # Re-running must never silently clobber secrets: existing values are carried
 # forward rather than regenerated.
@@ -700,20 +736,6 @@ esac
 # secrets — those must not be carried forward or the app refuses to start.
 # --quadlet never carries: its secrets live in podman, and a .env left behind by
 # a Compose run in the same directory is plaintext this path deliberately avoids.
-# The app settings, from the one example both paths share (#603). No umask 077
-# like .env gets: every secret is a mounted file instead. Compose and the
-# Quadlet unit alike pass this whole file, so a key the example gains reaches
-# the app without a compose or unit change.
-write_app_env() { # write_app_env DST
-  backup "$1"
-  sed \
-    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
-    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
-    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
-    deploy/env/kendo-app.env.example > "$1"
-  echo "  wrote $1"
-}
-
 carry() { [ "$mode" = compose ] && [ -f .env ] || return 0; sed -n "s/^$1=\([^<].*\)$/\1/p" .env | head -1; }
 
 db_password=$(carry POSTGRES_PASSWORD); [ -n "$db_password" ] || db_password=$(rand 24)
@@ -731,6 +753,8 @@ app_db_password=$(carry DATABASE_URL | sed -n 's|^postgresql+asyncpg://kendo_app
 # must not have a re-run revert them to the published default.
 image=$(cat .image-tag 2>/dev/null || true)
 [ -n "$image" ] || image=$(carry KENDO_IMAGE)
+# The db's zone, kept like the app's TZ in kendo-app.env so the two stay alike.
+tz=$(carry TZ)
 
 echo
 if [ "$mode" = compose ]; then
@@ -743,6 +767,7 @@ if [ "$mode" = compose ]; then
     -e "s|^JWT_SECRET=.*|JWT_SECRET=$jwt_secret|" \
     -e "s|^SETUP_TOKEN=.*|SETUP_TOKEN=$setup_token|" \
     ${image:+-e "s|^KENDO_IMAGE=.*|KENDO_IMAGE=$image|"} \
+    ${tz:+-e "s|^TZ=.*|TZ=$tz|"} \
     .env.example > .env
   )
   chmod 600 .env

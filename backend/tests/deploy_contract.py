@@ -49,7 +49,9 @@ COMPOSE_IMAGE_PIN = "KENDO_IMAGE"
 # The deployment files an operator owns once installed (#604). No upgrade
 # step overwrites one: a pull request that changes one writes an Operator
 # action for the release notes. deploy/bin is here too: the backup timer runs
-# an installed copy, so a changed script reaches no host by itself.
+# an installed copy, so a changed script reaches no host by itself. So is
+# setup.sh: it runs from the bundle the operator extracted, and a change to
+# what it writes reaches a host only when the operator re-runs it.
 DEPLOYMENT_FILES = [
     "deploy/quadlet",
     "deploy/systemd",
@@ -58,6 +60,7 @@ DEPLOYMENT_FILES = [
     "deploy/env",
     ".env.example",
     "deploy/traefik",
+    "setup.sh",
 ]
 
 
