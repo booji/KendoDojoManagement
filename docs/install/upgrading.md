@@ -90,8 +90,15 @@ diff deploy/traefik/dynamic/kendo.yml ~/kendo/traefik/dynamic/kendo.yml
 systemctl --user restart kendo-db kendo-migrate kendo-app kendo-traefik
 ```
 
-If `kendo-migrate` fails (`systemctl --user status kendo-migrate`), restore the
-backup taken above — [Backups § Restore](backups.md#restore).
+If `kendo-migrate` fails (`systemctl --user status kendo-migrate`, as `kendo`),
+read why from your admin account — `kendo` cannot read the journal itself
+([Deployment § Logs](../deployment.md#9-logs)):
+
+```bash
+sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-migrate.service --since "1 hour ago" --no-pager
+```
+
+Then restore the backup taken above — [Backups § Restore](backups.md#restore).
 
 The env file is per-host and needs comparing rather than copying — see
 [Refreshing the env file](#refreshing-the-env-file-after-an-upgrade).

@@ -124,7 +124,7 @@ KENDO_BACKUP_REMOTE_KEEP_DAYS=90
 
 - Encrypted (`.age`) files from the last 7 days that the remote does not have yet are copied, so a copy that failed one night goes up with the next. **Plaintext never leaves the host:** with no backup key, the copy is skipped and the log says why, and plaintext backups from before the key are never copied.
 - `KENDO_BACKUP_REMOTE_KEEP_DAYS` deletes `kendo-*.age` files older than that many days, in that folder only. About 90 is a good value: it also limits how long an erased Member's data survives in backups. Leave it unset if the credential cannot delete (see below).
-- If the copy fails, the local backup is kept, the run shows as failed in `systemctl --user status kendo-backup`, and `./setup.sh upgrade` carries on regardless.
+- If the copy fails, the local backup is kept, the run shows as failed in `systemctl --user status kendo-backup` (as `kendo`), and `./setup.sh upgrade` carries on regardless. The reason is in the unit's log, read from your admin account: `sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-backup.service --no-pager` ([Deployment § Logs](../deployment.md#9-logs)).
 - Each rclone call is stopped after an hour, so a stalled upload cannot block the next night's backup. On a slow link, raise it with `KENDO_BACKUP_REMOTE_TIMEOUT=2h` (or `30m`, `90s`).
 
 rclone runs as `kendo`, with `kendo`'s own config. Install it and add a remote from a `machinectl` shell:
