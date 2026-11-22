@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth.guards import REQUIRE_ADMIN
+from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
 from app.sessions.dependencies import get_session_type_repo
@@ -92,6 +92,7 @@ async def _seed_type(
 
 async def test_list_session_types_includes_colour_field_when_none(type_repo) -> None:
     """GET /session-types must include colour: null for a type with no colour set."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await _seed_type(type_repo, name="Keiko")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -112,6 +113,7 @@ async def test_list_session_types_returns_colour_when_set(type_repo) -> None:
     PUT /session-types/{id} and the colour field on SessionTypeRead exist.
     """
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     st = await _seed_type(type_repo, name="Jodo")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -150,6 +152,7 @@ async def test_put_session_type_colour_succeeds_for_admin(type_repo) -> None:
 async def test_put_session_type_colour_persisted_on_get(type_repo) -> None:
     """After PUT /session-types/{id}, GET /session-types must reflect the new colour."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     st = await _seed_type(type_repo, name="Naginata")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
