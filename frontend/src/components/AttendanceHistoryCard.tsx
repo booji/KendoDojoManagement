@@ -16,6 +16,8 @@ type AttendanceHistoryCardProps = {
   collapsible?: boolean
 }
 
+const sessionCount = (n: number): string => `${n} ${n === 1 ? "session" : "sessions"}`
+
 const AttendanceHistoryCard = ({ memberId, collapsible = false }: AttendanceHistoryCardProps) => {
   const [records, setRecords] = useState<MemberAttendanceRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +37,7 @@ const AttendanceHistoryCard = ({ memberId, collapsible = false }: AttendanceHist
         <CardTitle>
           Attendance History
           {!collapsible && records !== null && records.length > 0 &&
-            ` · ${records.length} ${records.length === 1 ? "session" : "sessions"}`}
+            ` · ${sessionCount(records.length)}`}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -63,7 +65,7 @@ const AttendanceHistoryCard = ({ memberId, collapsible = false }: AttendanceHist
                 ) : (
                   <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
                 )}
-                {open ? "Hide" : "Show"} attendance ({records.length} sessions)
+                {open ? "Hide" : "Show"} attendance ({sessionCount(records.length)})
               </button>
             )}
 

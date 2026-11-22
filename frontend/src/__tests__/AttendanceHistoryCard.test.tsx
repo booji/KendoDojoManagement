@@ -43,6 +43,14 @@ describe("AttendanceHistoryCard", () => {
     expect(screen.queryByText("Thursday keiko")).not.toBeInTheDocument()
   })
 
+  it("counts a single session in the singular on the toggle", async () => {
+    render(<AttendanceHistoryCard memberId={MEMBER_ID} collapsible />)
+
+    expect(
+      await screen.findByRole("button", { name: "Show attendance (1 session)" }),
+    ).toBeInTheDocument()
+  })
+
   it("draws the list with no toggle when not collapsible", async () => {
     render(<AttendanceHistoryCard memberId={MEMBER_ID} />)
 
