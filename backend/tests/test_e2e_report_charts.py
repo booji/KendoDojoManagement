@@ -8,6 +8,7 @@ conftest.py (#568) removes the Admin and their Member afterwards, so they do
 not leak into other tests' counts.
 """
 
+import re
 import uuid
 
 import pytest
@@ -15,10 +16,9 @@ import requests
 from playwright.sync_api import Page, Route, expect
 
 from app.auth.models import AccountClaims
-from tests.e2e_support import complete_onboarding, login_as
+from tests.e2e_support import API_URL, complete_onboarding, login_as
 
 BASE_URL = "http://localhost:5173"
-BACKEND_URL = "http://localhost:8000"
 
 
 @pytest.fixture
@@ -90,7 +90,8 @@ def test_chart_bars_keep_their_colour_under_the_production_csp(
     # itself injects carries no nonce, and is blocked as in production.
     nonce = uuid.uuid4().hex
     csp = (
-        requests.get(f"{BACKEND_URL}/health").headers["Content-Security-Policy"]
+        # Every backend response carries the CSP header, a 404 included.
+        requests.get(API_URL).headers["Content-Security-Policy"]
         + f"; script-src 'self' 'nonce-{nonce}'; style-src 'self' 'nonce-{nonce}'"
     )
 
@@ -125,11 +126,42 @@ def test_chart_bars_keep_their_colour_under_the_production_csp(
         [{"name": "access_token", "value": token, "url": BASE_URL}]
     )
 
+    page.emulate_media(color_scheme="light")
     page.goto(f"{BASE_URL}/reports")
 
-    bar = page.locator(".recharts-bar-rectangle path").first
+    # The Grade distribution bars are drawn in --chart-4. Resolve that the way
+    # the browser does, on a probe beside the bar, so both serialise alike.
+    bar = (
+        page.locator(
+            "section", has=page.get_by_role("heading", name="Grade distribution")
+        )
+        .locator(".recharts-bar-rectangle path")
+        .first
+    )
     expect(bar).to_be_visible()
-    fill = bar.evaluate("el => getComputedStyle(el).fill")
-    assert fill not in ("rgb(0, 0, 0)", "none", ""), fill
+
+    def fill_and_expected() -> tuple[str, str]:
+        return bar.evaluate(
+            """el => {
+              const probe = document.createElementNS(el.namespaceURI, "rect");
+              probe.style.fill = "var(--chart-4)";
+              el.parentNode.appendChild(probe);
+              const expected = getComputedStyle(probe).fill;
+              probe.remove();
+              return [getComputedStyle(el).fill, expected];
+            }"""
+        )
+
+    light_fill, light_expected = fill_and_expected()
+    assert light_fill == light_expected, (light_fill, light_expected)
+
+    # The Admin's saved theme is "system", so the OS scheme decides the mode.
+    page.emulate_media(color_scheme="dark")
+    expect(page.locator("html")).to_have_class(re.compile(r"\bdark\b"))
+    dark_fill, dark_expected = fill_and_expected()
+    assert dark_fill == dark_expected, (dark_fill, dark_expected)
+    # Guards the probe: were --chart-4 unset, both would resolve to black.
+    assert light_expected != dark_expected, light_expected
+
     violations = page.evaluate("window.__cspViolations")
     assert violations == [], "\n".join(violations)
