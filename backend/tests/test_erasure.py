@@ -40,7 +40,7 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
 from tests.account_support import seed_account
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryMemberRepository, RecordingUnitOfWork
 
 # ---------------------------------------------------------------------------
 # Lazy import of the not-yet-existing erasure module.
@@ -241,6 +241,33 @@ async def test_erase_missing_member_returns_404() -> None:
     ) as c:
         response = await c.post("/members/does-not-exist/erase")
     assert response.status_code == 404
+
+
+class _VanishingMemberRepository(InMemoryMemberRepository):
+    """The member is found, then deleted by someone else before the scrub."""
+
+    async def update(
+        self, member_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        return None
+
+
+async def test_erase_of_a_member_gone_before_the_scrub_returns_404() -> None:
+    from app.dependencies import get_uow
+    from app.members.dependencies import get_member_repo
+
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
+    repo = _VanishingMemberRepository([_member(user_id=None)])
+    app.dependency_overrides[get_member_repo] = lambda: repo
+    uow = RecordingUnitOfWork()
+    app.dependency_overrides[get_uow] = lambda: uow
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post("/members/member-1/erase")
+    assert response.status_code == 404
+    # No commit: the grade and federation deletes before the scrub roll back.
+    assert uow.commits == 0
 
 
 # ===========================================================================
