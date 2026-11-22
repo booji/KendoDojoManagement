@@ -1,6 +1,7 @@
 /**
- * The Attendance history card (#572): collapsed by default, as on the Member
- * page; My Attendance opens it with defaultOpen.
+ * The Attendance history card: collapsible on the Member page, where it
+ * starts collapsed (#572); drawn directly, with no toggle, on My Attendance
+ * (#608).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -33,8 +34,8 @@ beforeEach(() => {
 })
 
 describe("AttendanceHistoryCard", () => {
-  it("starts collapsed", async () => {
-    render(<AttendanceHistoryCard memberId={MEMBER_ID} />)
+  it("starts collapsed when collapsible", async () => {
+    render(<AttendanceHistoryCard memberId={MEMBER_ID} collapsible />)
 
     expect(
       await screen.findByRole("button", { name: /show attendance/i }),
@@ -42,9 +43,18 @@ describe("AttendanceHistoryCard", () => {
     expect(screen.queryByText("Thursday keiko")).not.toBeInTheDocument()
   })
 
-  it("starts open with defaultOpen", async () => {
-    render(<AttendanceHistoryCard memberId={MEMBER_ID} defaultOpen />)
+  it("draws the list with no toggle when not collapsible", async () => {
+    render(<AttendanceHistoryCard memberId={MEMBER_ID} />)
 
     expect(await screen.findByText("Thursday keiko")).toBeInTheDocument()
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+  })
+
+  it("puts the session count in the header when not collapsible", async () => {
+    render(<AttendanceHistoryCard memberId={MEMBER_ID} />)
+
+    expect(
+      await screen.findByText("Attendance History · 1 session"),
+    ).toBeInTheDocument()
   })
 })
