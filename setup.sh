@@ -352,7 +352,7 @@ run_check() {
     # night (an expired rclone token, say) shows only as a failed unit.
     if command -v systemctl >/dev/null && systemctl --user is-failed --quiet kendo-backup.service 2>/dev/null; then
       if [ "$(systemctl --user show -P ExecMainStatus kendo-backup.service 2>/dev/null)" = 75 ]; then
-        warn "The last backup could not be copied off-site — check: journalctl --user -u kendo-backup"
+        warn "The last backup could not be copied off-site — check, from your admin account: sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-backup.service"
       else
         warn "The last backup run failed — check: systemctl --user status kendo-backup"
       fi
