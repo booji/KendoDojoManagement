@@ -571,8 +571,8 @@ def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
-    # A drop-in, not an edit to the unit: docs/install/upgrading.md tells an
-    # operator to re-copy the units on upgrade, which would revert an edit made here.
+    # A drop-in, not an edit to the unit: an Operator action that replaces the
+    # unit (docs/install/upgrading.md) would revert an edit made here.
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "3", "hetzner", "admin@example.com", "tok-123")
 
@@ -1177,10 +1177,10 @@ def test_check_only_warns_when_firewalld_will_not_report_without_root(tmp_path):
 
 
 # ---------------------------------------------------------------- upgrade ---
-# `./setup.sh upgrade` (#414): back up, refresh the bundle from the image about
-# to run, pull, recreate — and on failure, the exact restore for the backup just
-# taken. podman and podman-compose are stubbed; what is asserted is the order
-# the script asks them for things in and what it leaves on disk.
+# `./setup.sh upgrade` (#414): back up, pull, recreate — and on failure, the
+# exact restore for the backup just taken. podman and podman-compose are
+# stubbed; what is asserted is the order the script asks them for things in and
+# what it leaves on disk.
 
 UPGRADE_PODMAN_STUB = r"""#!/bin/sh
 echo "podman $*" >> "$CALLS"
@@ -1190,30 +1190,24 @@ case "$1" in
   exec) [ -z "$BACKUP_FAILS" ] || exit 1; echo PGDMP ;;
   volume) echo uploads ;;
   image) echo "ghcr.io/booji/kendodojomanagement@sha256:0ld" ;;
-  run) if [ -f "$PULLED" ]; then tar -C "$NEW_BUNDLE" -c .; else tar -C "$PREV_BUNDLE" -c .; fi ;;
   wait) case "$*" in *--condition*) ;; *) echo "${MIGRATE_EXIT:-0}" ;; esac ;;
 esac
 """
 
 UPGRADE_COMPOSE_STUB = """#!/bin/sh
 echo "podman-compose $*" >> "$CALLS"
-[ "$1" != pull ] || touch "$PULLED"
 """
 
 
 class Upgrade:
-    """A configured quick self-host, the bundle the running image carries, and
-    the one the next image carries — identical until a test edits one."""
+    """A configured quick self-host, with the compose file and units a bundle
+    carries."""
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
         run(self.src, *ANSWERS)
-        self.prev = bundle(tmp_path / "prev")
-        self.new = bundle(tmp_path / "next")
-        for home in (self.src, self.prev, self.new):
-            for sub in ("quadlet",):
-                shutil.copytree(ROOT / "deploy" / sub, home / "deploy" / sub)
-            shutil.copy(ROOT / "docker-compose.yml", home)
+        shutil.copytree(ROOT / "deploy/quadlet", self.src / "deploy/quadlet")
+        shutil.copy(ROOT / "docker-compose.yml", self.src)
         stubs = tmp_path / "upgrade-bin"
         stubs.mkdir()
         for name, body in (
@@ -1230,9 +1224,6 @@ class Upgrade:
             "HOME": str(self.home),
             "PATH": f"{stubs}:{os.environ['PATH']}",
             "CALLS": str(self.log),
-            "PREV_BUNDLE": str(self.prev),
-            "NEW_BUNDLE": str(self.new),
-            "PULLED": str(tmp_path / "pulled"),
         }
 
     def run(self, **env: str) -> subprocess.CompletedProcess:
@@ -1302,37 +1293,23 @@ def test_upgrade_never_pulls_without_the_backup_it_just_took(tmp_path):
     assert not any(c.startswith("podman-compose pull") for c in up.calls())
 
 
-def test_upgrade_takes_the_bundle_from_the_image_about_to_run(tmp_path):
-    # Config and image on one version axis: a stale compose file must not drive
-    # a new app. The operator's own files are never in play.
+def test_upgrade_overwrites_no_deployment_file(tmp_path):
+    # #604: once installed, the compose file, the units and the config are the
+    # operator's. A release that changes one says so as an Operator action in
+    # its notes; the upgrade only backs up, pulls and recreates. An edit of the
+    # operator's (a BYO certificate mount) survives, and the stack is recreated.
     up = Upgrade(tmp_path)
-    old_compose = (up.src / "docker-compose.yml").read_text()
-    (up.new / "docker-compose.yml").write_text(old_compose + "# next release\n")
-    unit = up.new / "deploy/quadlet/kendo-app.container"
-    unit.write_text(unit.read_text() + "# next release\n")
-    # What a contributor's own build could carry: filled-in files.
-    (up.new / ".env").write_text("JWT_SECRET=from-the-image\n")
-    (up.new / SELFHOST / "traefik.yml").write_text("from: the-image\n")
-    ours = {
-        f: (up.src / f).read_text() for f in (".env", str(SELFHOST / "traefik.yml"))
-    }
+    compose = up.src / "docker-compose.yml"
+    compose.write_text(with_byo_mount(compose.read_text()))
+    before = {p: p.read_bytes() for p in up.src.rglob("*") if p.is_file()}
 
     out = up.run()
 
     assert out.returncode == 0, out.stdout + out.stderr
-    pulled = up.first("podman-compose pull")
-    recreated = up.first("podman-compose up -d --force-recreate")
-    assert (
-        "podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init"
-        in (up.calls()[pulled:recreated])
-    )
-    assert "# next release" in (up.src / "docker-compose.yml").read_text()
-    assert (up.src / "docker-compose.yml.bak").read_text() == old_compose
-    assert "docker-compose.yml" in out.stdout
-    assert "deploy/quadlet/kendo-app.container" in out.stdout
-    assert "setup.sh" not in out.stdout.replace("./setup.sh", "")
-    for f, text in ours.items():
-        assert (up.src / f).read_text() == text, f
+    after = {p: p.read_bytes() for p in up.src.rglob("*") if p.is_file()}
+    assert after == before
+    assert not any(" init" in c for c in up.calls()), up.calls()
+    assert "podman-compose up -d --force-recreate" in up.calls()
 
 
 def test_a_failed_migration_prints_the_exact_restore_for_the_backup_just_taken(
@@ -1387,48 +1364,6 @@ def with_byo_mount(compose: str) -> str:
     return compose.replace(
         "      - traefik_acme:/acme\n", "      - traefik_acme:/acme\n" + BYO_MOUNT
     )
-
-
-def test_upgrade_stops_before_recreating_over_an_edited_compose_file(tmp_path):
-    # The BYO certificate mount is the operator's own edit to
-    # docker-compose.yml; replacing the file and recreating would bring the
-    # proxy back on Traefik's self-signed default.
-    up = Upgrade(tmp_path)
-    compose = up.src / "docker-compose.yml"
-    compose.write_text(with_byo_mount(compose.read_text()))
-    shipped = (up.new / "docker-compose.yml").read_text() + "# next release\n"
-    (up.new / "docker-compose.yml").write_text(shipped)
-    edited = compose.read_text()
-
-    out = up.run()
-
-    assert out.returncode == 1
-    assert compose.read_text() == edited
-    assert (up.src / "docker-compose.yml.new").read_text() == shipped
-    assert "docker-compose.yml.new" in out.stderr
-    assert not any("--force-recreate" in c for c in up.calls())
-
-    # Merged by hand; the re-run takes it as read and carries on.
-    compose.write_text(with_byo_mount(shipped))
-    again = up.run()
-
-    assert again.returncode == 0, again.stdout + again.stderr
-    assert compose.read_text() == with_byo_mount(shipped)
-    assert not (up.src / "docker-compose.yml.new").exists()
-    assert "podman-compose up -d --force-recreate" in up.calls()
-
-
-def test_upgrade_keeps_an_edited_file_the_release_did_not_change(tmp_path):
-    up = Upgrade(tmp_path)
-    compose = up.src / "docker-compose.yml"
-    compose.write_text(with_byo_mount(compose.read_text()))
-    edited = compose.read_text()
-
-    out = up.run()
-
-    assert out.returncode == 0, out.stdout + out.stderr
-    assert compose.read_text() == edited
-    assert "Deployment bundle unchanged" in out.stdout
 
 
 # ------------------------------------------------------------- backup-key ---

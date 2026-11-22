@@ -384,6 +384,8 @@ run_check() {
 # the live database unprompted, so this puts a backup in front of it and the
 # exact restore behind it. It never refuses to go ahead without a backup of its
 # own making: that would block the first upgrade and train people into --force.
+# It never touches a deployment file either (#604): once installed they are the
+# operator's, and a release that changes one lists it as an Operator action.
 #
 # The stack is the Compose project `kendodojo` (docker-compose.yml's `name:`);
 # both podman-compose and docker compose label its containers with it.
@@ -391,62 +393,6 @@ project=kendodojo
 compose_container() { # compose_container SERVICE — its container's name
   podman ps -a --filter "label=com.docker.compose.project=$project" \
     --filter "label=com.docker.compose.service=$1" --format '{{.Names}}' | head -1
-}
-
-# Take the bundle out of the image about to run, so config and image stay on
-# one version axis (ADR-0004): a stale compose file must not drive a new app.
-# PREV is the bundle the pinned image carried before the pull, which is what
-# tells a file this release changed from an edit of the operator's (a BYO
-# certificate's mount in docker-compose.yml, say). An edited file the release
-# also changed is never overwritten: its new version lands next to it as .new
-# and the upgrade stops before anything is recreated. The bundle carries only
-# shipped files — never .env or the filled-in Traefik config — but a
-# contributor's own build could, so those are skipped by name.
-refresh_bundle() { # refresh_bundle PREV NEXT
-  local prev=$1 next=$2 f changed="" merge=""
-  while IFS= read -r f; do
-    case $f in .env|"$selfhost"/traefik.yml|"$selfhost"/dynamic/*.yml) continue ;; esac
-    if cmp -s "$next/$f" "$f"; then
-      rm -f -- "$f.new"                     # current, or merged into exactly this
-    elif [ ! -e "$f" ] || cmp -s "$prev/$f" "$f"; then
-      [ ! -e "$f" ] || mv -- "$f" "$f.bak"  # untouched since the last release
-      mkdir -p "$(dirname "$f")"
-      # A rename, not a copy: setup.sh replaces itself here, and bash reads a
-      # script as it runs — this run carries on reading setup.sh.bak.
-      mv -- "$next/$f" "$f"
-      changed+="  $f"$'\n'
-    elif cmp -s "$f.new" "$next/$f"; then
-      # Merged by hand after the last run stopped. Checked first: that run's
-      # pull already moved the tag, so PREV is this release by now.
-      rm -f -- "$f.new"
-    elif cmp -s "$prev/$f" "$next/$f"; then
-      :                                     # edited, and the release left it alone
-    else
-      mv -- "$next/$f" "$f.new"
-      merge+="  $f.new"$'\n'
-    fi
-  done < <(cd "$next" && find . -type f | sed 's|^\./||' | sort)
-
-  if [ -n "$changed" ]; then
-    echo "Deployment bundle files that changed in this release (previous copies kept as .bak):"
-    printf '%s' "$changed"
-    case $changed in *"  .env.example"$'\n'*)
-      echo "  .env.example changed: compare it with your .env for new settings." ;;
-    esac
-  elif [ -z "$merge" ]; then
-    echo "Deployment bundle unchanged in this release."
-  fi
-  if [ -n "$merge" ]; then
-    {
-      echo
-      echo "These carry edits of yours and also changed in this release; its version is"
-      echo "next to each as .new:"
-      printf '%s' "$merge"
-      echo "Merge each into yours (or take it whole), then re-run ./setup.sh upgrade."
-      echo "Nothing has been recreated: the stack still runs the previous image."
-    } >&2
-    exit 1
-  fi
 }
 
 # Run kendo-backup.sh against this stack and print what it wrote. Its output is
@@ -505,22 +451,8 @@ run_upgrade() {
   image=${image:-ghcr.io/booji/kendodojomanagement:0.1}
   previous=$(podman image inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true)
 
-  # Global, not local: the EXIT trap runs after this function has returned.
-  # Inside this directory so refresh_bundle's `mv`s are renames.
-  tmp=$(mktemp -d .upgrade.XXXXXX)
-  trap 'rm -rf -- "$tmp"' EXIT
-  mkdir "$tmp/prev" "$tmp/next"
-  # Before the pull moves the tag. Missing (an image removed by hand) only
-  # makes refresh_bundle treat every differing file as edited: it stops, never
-  # overwrites.
-  podman run --rm "$image" init 2>/dev/null | tar -x -C "$tmp/prev" 2>/dev/null || true
-
   podman-compose pull || { echo "Pull failed — nothing past the backup was changed." >&2; exit 1; }
-  podman run --rm "$image" init | tar -x -C "$tmp/next" ||
-    { echo "Could not extract the bundle from $image — nothing past the backup was changed." >&2; exit 1; }
-  refresh_bundle "$tmp/prev" "$tmp/next"
-  # A stack set up before #462 has no secrets/ yet, and the compose file it
-  # just took mounts them; re-deriving also picks up a hand edit of .env.
+  # Derived from .env, not installed config: re-deriving picks up a hand edit.
   write_compose_secrets
 
   # --force-recreate: podman-compose recreates a container only when the YAML
@@ -984,9 +916,9 @@ quadlet_install() {
     install -D -m 644 "deploy/systemd/$f" "$HOME/.config/systemd/user/$f"
   done
 
-  # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
-  # operator to re-copy the units on upgrade, which would silently revert an edit made
-  # here and leave Traefik asking for a secret or a mount that is not there.
+  # Drop-ins rather than edits to the units: an Operator action that hands over a
+  # new unit (docs/install/upgrading.md) would otherwise drop an edit made here
+  # and leave Traefik asking for a secret or a mount that is not there.
   local dropin=$units/kendo-traefik.container.d
   mkdir -p "$dropin"
   rm -f "$dropin/20-byo-cert.conf"
@@ -1072,7 +1004,7 @@ DNS-01 needs credentials in the proxy container's environment. For $dns_provider
 DNS
 [ "$mode" = quadlet ] && cat <<DROPIN
 Put them in $units/kendo-traefik.container.d/10-dns-01.conf as a podman secret
-each (a drop-in, so re-copying the units on upgrade does not revert it):
+each (a drop-in, so taking a new unit from a release does not revert it):
   [Container]
   Environment=<VAR>_FILE=/run/secrets/<target>
   Secret=<secret-name>,type=mount,target=<target>

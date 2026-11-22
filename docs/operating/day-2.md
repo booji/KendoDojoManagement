@@ -6,7 +6,7 @@
 | Logs | `podman logs -f kendo-app` |
 | A unit's journal (why it failed) | From your **admin account**, not `kendo`, which cannot read the journal: `sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service --no-pager`; swap in any unit. See [Deployment § Logs](../deployment.md#9-logs) |
 | Restart app | `systemctl --user restart kendo-app` |
-| **Upgrade** | Follow [Upgrading § Hardened deployment](../install/upgrading.md#hardened-deployment-quadlet): it backs up, pulls every image and refreshes the bundle's copies — a pull and restart alone is not a patch |
+| **Upgrade** | Follow [Upgrading § Hardened deployment](../install/upgrading.md#hardened-deployment-quadlet): back up, pull the pinned image, restart — a restart without the pull is not a patch. Apply the release notes' Operator actions first |
 | Stop all | `systemctl --user stop kendo-ip-retention.timer kendo-backup.timer kendo-traefik kendo-app kendo-migrate kendo-db` — the timers first, or their next run starts `kendo-db` again |
 | Back up now | `systemctl --user start kendo-backup.service` |
 | New backup key — see [Backups](../install/backups.md#lost-or-leaked-key) | `./setup.sh backup-key --quadlet` (from the deployment bundle) |

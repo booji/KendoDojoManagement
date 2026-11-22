@@ -36,6 +36,30 @@ CAPABILITIES_ADDED_BACK = {
 PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
 RELEASE_PIN = f"{PUBLISHED_IMAGE}:0.1"
 
+# Where an operator pins a Version (#604): the Quadlet units that run the
+# Release image, and Compose's .env key. Editing these is how an rc is
+# rehearsed and how an upgrade is rolled back; nothing else names the image.
+IMAGE_PIN_UNITS = [
+    "kendo-app.container",
+    "kendo-migrate.container",
+    "kendo-ip-retention.container",
+]
+COMPOSE_IMAGE_PIN = "KENDO_IMAGE"
+
+# The deployment files an operator owns once installed (#604). No upgrade
+# step overwrites one: a pull request that changes one writes an Operator
+# action for the release notes. deploy/bin is here too: the backup timer runs
+# an installed copy, so a changed script reaches no host by itself.
+DEPLOYMENT_FILES = [
+    "deploy/quadlet",
+    "deploy/systemd",
+    "deploy/bin",
+    "docker-compose.yml",
+    "deploy/env",
+    ".env.example",
+    "deploy/traefik",
+]
+
 
 # The env files a Compose service reads that setup.sh generates on the host,
 # each from the shipped example it is written from (#603). A checkout has only

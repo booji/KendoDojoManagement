@@ -301,7 +301,7 @@ what it writes, for a deployment configured by hand or changed later.
 
 - **HTTP-01 (default).** Needs inbound port 80. Nothing beyond the `httpChallenge` block already in `traefik.yml`.
 - **TLS-ALPN-01.** Inbound 443 only — the answer when an ISP blocks 80. Replace the `httpChallenge` block with `tlsChallenge: {}`.
-- **DNS-01.** No inbound ports at all (e.g. UAT on a local network). Replace the `httpChallenge` block with a `dnsChallenge` naming your [lego provider](https://go-acme.github.io/lego/dns/), and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives re-copying the unit on upgrade:
+- **DNS-01.** No inbound ports at all (e.g. UAT on a local network). Replace the `httpChallenge` block with a `dnsChallenge` naming your [lego provider](https://go-acme.github.io/lego/dns/), and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives taking a new unit from a release:
 
   ```bash
   printf '%s' 'REPLACE-with-provider-token' | podman secret create kendo_dns_token -
@@ -331,7 +331,7 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 
 `kendo-app`, `kendo-migrate`, `kendo-ip-retention` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
 
-The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:
+The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives taking a new unit from a release:
 
 ```bash
 d=~/.config/containers/systemd/kendo-app.container.d && mkdir -p "$d"
