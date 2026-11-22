@@ -38,8 +38,7 @@ class _LazyAsyncEngine:
         return getattr(self._get_real(), name)
 
 
-# The proxy forwards every attribute to a real AsyncEngine (see docstring), so
-# it is one in all but nominal type.
+# The proxy forwards every attribute to a real AsyncEngine: one in all but name.
 engine: AsyncEngine = _LazyAsyncEngine(DATABASE_URL)  # ty: ignore[invalid-assignment]
 
 session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
