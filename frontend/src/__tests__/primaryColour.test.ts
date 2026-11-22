@@ -102,23 +102,23 @@ describe("deriveThemePrimaries", () => {
 
 describe("applyPrimaryColour", () => {
   beforeEach(() => {
-    document.getElementById("brand-primary")?.remove()
+    document.documentElement.removeAttribute("style")
   })
 
-  it("injects a #brand-primary stylesheet with both :root and .dark rules", () => {
+  // The CSP drops an injected <style> element, so the shades travel as custom
+  // properties on <html>, which index.css reads per theme (#607).
+  it("sets both themes' shades on <html> without injecting a stylesheet", () => {
     applyPrimaryColour("#1a1a2e")
-    const el = document.getElementById("brand-primary")
-    expect(el).not.toBeNull()
-    const css = el?.textContent ?? ""
-    expect(css).toContain(":root")
-    expect(css).toContain(".dark")
-    expect(css).toContain("--primary")
-    expect(css).toContain("--primary-foreground")
-  })
-
-  it("reuses the same style element on repeated calls", () => {
-    applyPrimaryColour("#1a1a2e")
-    applyPrimaryColour("#ffd700")
-    expect(document.querySelectorAll("#brand-primary")).toHaveLength(1)
+    const { light, dark } = deriveThemePrimaries("#1a1a2e")
+    const style = document.documentElement.style
+    expect(style.getPropertyValue("--brand-primary-light")).toBe(light.primary)
+    expect(style.getPropertyValue("--brand-primary-foreground-light")).toBe(
+      light.primaryForeground,
+    )
+    expect(style.getPropertyValue("--brand-primary-dark")).toBe(dark.primary)
+    expect(style.getPropertyValue("--brand-primary-foreground-dark")).toBe(
+      dark.primaryForeground,
+    )
+    expect(document.querySelectorAll("style")).toHaveLength(0)
   })
 })
