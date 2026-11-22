@@ -1014,7 +1014,7 @@ const MemberDetailPage = () => {
             <FederationMembershipsCard store={federationStore} />
           )}
 
-          <AttendanceHistoryCard memberId={member.id} />
+          <AttendanceHistoryCard memberId={member.id} collapsible />
 
           {isAdmin && (
             <RecoveryTokenCard memberId={member.id} memberName={formatMemberName(member)} />
