@@ -31,6 +31,7 @@ against the same empty volume would need an advisory lock here first.
 import asyncio
 import logging
 import os
+import sys
 
 import asyncpg
 from sqlalchemy.engine.url import make_url
@@ -39,7 +40,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from app.config import DATABASE_URL, MIGRATION_DATABASE_URL
 from app.db.scratch import asyncpg_dsn, url_parts, validate_identifier
 
-_log = logging.getLogger(__name__)
+# Named, not __name__: run as `python -m`, __name__ is "__main__" (#606).
+_log = logging.getLogger("app.db.bootstrap")
 
 _BACKEND_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -89,9 +91,30 @@ def _run_alembic_upgrade(database_url: str) -> None:
     command.upgrade(_alembic_config(database_url), "head")
 
 
+async def _schema_revision(database_url: str) -> str | None:
+    """The revision alembic_version records, or None on an empty database."""
+    base_url, db_name = url_parts(database_url)
+    conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
+    try:
+        if not await conn.fetchval("SELECT to_regclass('alembic_version')"):
+            return None
+        return await conn.fetchval("SELECT version_num FROM alembic_version")
+    finally:
+        await conn.close()
+
+
 async def _upgrade_head(database_url: str) -> None:
-    """Run all pending alembic migrations up to head."""
+    """Run all pending alembic migrations up to head, logging where the schema
+    started and ended; alembic logs each revision it applies in between.
+    """
+    before = await _schema_revision(database_url)
+    _log.info("Schema at revision %s, upgrading to head", before or "none")
     await asyncio.to_thread(_run_alembic_upgrade, database_url)
+    after = await _schema_revision(database_url)
+    if after == before:
+        _log.info("Schema already at head %s", after)
+    else:
+        _log.info("Schema now at head %s", after)
 
 
 async def _wait_for_connection(
@@ -245,4 +268,14 @@ async def prepare_database(
 
 
 if __name__ == "__main__":
+    # The unit's stdout is the journal. A root handler at INFO carries this
+    # module's lines and alembic's "Running upgrade" lines (#606); unlike the
+    # fileConfig this module avoids, it disables no existing logger.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    # One "setup plugin" line per autogenerate plugin: noise to an operator.
+    logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
     asyncio.run(prepare_database())
