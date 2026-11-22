@@ -7,6 +7,7 @@ service functions never see the ORM model directly.
 
 from __future__ import annotations
 
+import builtins
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -39,7 +40,7 @@ class AbstractInviteRepository(Protocol):
 
     async def get_by_token_hash(self, token_hash: str) -> dict[str, Any] | None: ...
 
-    async def list(self) -> list[dict[str, Any]]: ...
+    async def list(self) -> builtins.list[dict[str, Any]]: ...
 
     async def mark_revoked(self, invite_id: str) -> dict[str, Any] | None: ...
 
@@ -70,7 +71,7 @@ class SqlInviteRepository:
         obj = result.scalar_one_or_none()
         return _to_dict(obj) if obj else None
 
-    async def list(self) -> list[dict[str, Any]]:
+    async def list(self) -> builtins.list[dict[str, Any]]:
         result = await self._session.execute(select(Invite))
         return [_to_dict(obj) for obj in result.scalars().all()]
 

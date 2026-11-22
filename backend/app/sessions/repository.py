@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 from datetime import date
 from typing import Any, Protocol, runtime_checkable
@@ -28,7 +29,7 @@ class AbstractSessionTypeRepository(Protocol):
 
     async def get(self, type_id: str) -> dict[str, Any] | None: ...
 
-    async def list(self) -> list[dict[str, Any]]: ...
+    async def list(self) -> builtins.list[dict[str, Any]]: ...
 
     async def update(
         self, type_id: str, colour: str | None
@@ -43,7 +44,7 @@ class AbstractSessionTemplateRepository(Protocol):
 
     async def get(self, template_id: str) -> dict[str, Any] | None: ...
 
-    async def list(self) -> list[dict[str, Any]]: ...
+    async def list(self) -> builtins.list[dict[str, Any]]: ...
 
     async def update(
         self, template_id: str, data: dict[str, Any]
@@ -58,15 +59,15 @@ class AbstractSessionInstanceRepository(Protocol):
 
     async def get(self, instance_id: str) -> dict[str, Any] | None: ...
 
-    async def list(self) -> list[dict[str, Any]]: ...
+    async def list(self) -> builtins.list[dict[str, Any]]: ...
 
     async def list_upcoming(
         self, as_of: date | None = None
-    ) -> list[dict[str, Any]]: ...
+    ) -> builtins.list[dict[str, Any]]: ...
 
     async def list_in_range(
         self, from_date: date, to_date: date
-    ) -> list[dict[str, Any]]: ...
+    ) -> builtins.list[dict[str, Any]]: ...
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None: ...
 
@@ -78,7 +79,7 @@ class AbstractSessionInstanceRepository(Protocol):
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
-    ) -> list[dict[str, Any]]: ...
+    ) -> builtins.list[dict[str, Any]]: ...
 
     async def delete_future_for_template(
         self, template_id: str, as_of_date: date
@@ -236,7 +237,7 @@ class SqlSessionTypeRepository:
         obj = result.scalar_one_or_none()
         return _type_to_dict(obj) if obj else None
 
-    async def list(self) -> list[dict[str, Any]]:
+    async def list(self) -> builtins.list[dict[str, Any]]:
         result = await self._session.execute(select(SessionType))
         return [_type_to_dict(row) for row in result.scalars().all()]
 
@@ -300,7 +301,7 @@ class SqlSessionTemplateRepository:
         obj = result.scalar_one_or_none()
         return _template_to_dict(obj) if obj else None
 
-    async def list(self) -> list[dict[str, Any]]:
+    async def list(self) -> builtins.list[dict[str, Any]]:
         result = await self._session.execute(
             select(SessionTemplate).options(
                 selectinload(SessionTemplate.segments).selectinload(
@@ -392,7 +393,7 @@ class SqlSessionInstanceRepository:
         obj = result.scalar_one_or_none()
         return _instance_to_dict(obj) if obj else None
 
-    async def list(self) -> list[dict[str, Any]]:
+    async def list(self) -> builtins.list[dict[str, Any]]:
         result = await self._session.execute(
             select(SessionInstance).options(
                 selectinload(SessionInstance.segments).selectinload(
@@ -402,7 +403,9 @@ class SqlSessionInstanceRepository:
         )
         return [_instance_to_dict(row) for row in result.scalars().all()]
 
-    async def list_upcoming(self, as_of: date | None = None) -> list[dict[str, Any]]:
+    async def list_upcoming(
+        self, as_of: date | None = None
+    ) -> builtins.list[dict[str, Any]]:
         today = as_of or date.today()
         result = await self._session.execute(
             select(SessionInstance)
@@ -420,7 +423,7 @@ class SqlSessionInstanceRepository:
 
     async def list_in_range(
         self, from_date: date, to_date: date
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         # Dates, not ISO strings: the column is a real `date` (#433, #449).
         result = await self._session.execute(
             select(SessionInstance)
@@ -503,7 +506,7 @@ class SqlSessionInstanceRepository:
 
     async def cancel_future_for_template(
         self, template_id: str, as_of_date: date
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         result = await self._session.execute(
             select(SessionInstance)
             .where(
