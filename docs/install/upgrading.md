@@ -57,9 +57,11 @@ steps as `kendo`:
 # Backups § Restore.
 systemctl --user start kendo-backup.service
 
-# Pull the image your units pin. Restarting a unit never fetches a newer
-# image under the same tag, so without this nothing changes.
-podman pull "$(sed -n 's/^Image=//p' ~/.config/containers/systemd/kendo-app.container)"
+# Pull every image the three Release units pin. Restarting a unit never
+# fetches a newer image under the same tag, so without this nothing changes.
+u=~/.config/containers/systemd
+sed -n 's/^Image=//p' "$u"/kendo-app.container "$u"/kendo-migrate.container \
+  "$u"/kendo-ip-retention.container | sort -u | xargs -n1 podman pull
 
 # Restart onto it: kendo-migrate migrates, then the app starts.
 systemctl --user restart kendo-migrate kendo-app

@@ -1034,6 +1034,31 @@ def test_check_quadlet_fails_until_the_ip_retention_timer_is_enabled(tmp_path):
     assert "kendo-ip-retention.timer is not installed" in missing.stdout
 
 
+def test_check_quadlet_warns_when_the_release_units_pin_different_images(tmp_path):
+    """A pin edited in one unit only (an rc rehearsal, a rollback) would
+    migrate with one image and serve with another."""
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    unit = host.units() / "kendo-migrate.container"
+    unit.write_text(
+        re.sub(
+            r"^Image=.*$",
+            "Image=ghcr.io/booji/kendodojomanagement:0.1.0-rc2",
+            unit.read_text(),
+            flags=re.M,
+        )
+    )
+
+    out = check(host.src, host_env(tmp_path), "--quadlet")
+
+    assert out.returncode == 0, out.stdout
+    assert (
+        "warn  The Release units pin different images: "
+        "ghcr.io/booji/kendodojomanagement:0.1, "
+        "ghcr.io/booji/kendodojomanagement:0.1.0-rc2"
+    ) in out.stdout
+
+
 def test_check_fails_a_domain_that_does_not_resolve(tmp_path):
     home = bundle(tmp_path)
     run(home, *ANSWERS)

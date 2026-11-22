@@ -262,6 +262,13 @@ run_check() {
       if [ -z "$absent" ]; then ok "Every podman secret the units name exists"
       else fail "podman secret missing:$absent — re-run $rerun, or create it for your own drop-in"; fi
     fi
+    # A pin edited in one unit only would migrate with one image and serve
+    # with another (#604).
+    local pins
+    pins=$(sed -n 's/^Image=//p' "$units"/kendo-app.container "$units"/kendo-migrate.container \
+           "$units"/kendo-ip-retention.container 2>/dev/null | sort -u || true)
+    [ "$(printf '%s\n' "$pins" | grep -c .)" -le 1 ] ||
+      warn "The Release units pin different images: $(printf '%s\n' "$pins" | paste -sd, - | sed 's/,/, /g') — pin all three alike (docs/install/upgrading.md)"
     # Without the daily timer, recovery-attempt IPs are cleared only when
     # kendo-app restarts, and can outlive their 30 days (#467).
     local timer=kendo-ip-retention.timer

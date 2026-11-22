@@ -637,8 +637,8 @@ def _quadlet_upgrade_section() -> str:
 
 
 def test_the_pinned_units_run_one_image():
-    """The routine upgrade pulls the image kendo-app.container names and
-    restarts onto it, so every unit running the Release image must name the
+    """The routine upgrade pulls the images these units name and restarts
+    onto them, so every unit running the Release image must name the
     same one: a pin edited in one unit only would migrate with another."""
     units = load_units()
     pinned = {
@@ -657,15 +657,16 @@ def test_quadlet_upgrade_pulls_the_pinned_image_before_the_restart():
     """Restarting a unit never fetches a newer image under the same tag, so a
     patch release lands only after a pull (#583). The pull reads the pin from
     the installed unit, so a host pinned to an exact Version (an rc rehearsal,
-    a rollback) pulls what it runs, not :0.1 (#604)."""
-    section = _quadlet_upgrade_section()
+    a rollback) pulls what it runs, not :0.1 (#604). It reads every unit that
+    pins one: a unit edited alone must not restart onto a stale image."""
+    # One command over several lines.
+    section = _quadlet_upgrade_section().replace("\\\n", " ")
     restart = re.search(r"systemctl --user restart ([^\n]*)", section)
     assert restart and restart.group(1).split() == ["kendo-migrate", "kendo-app"]
-    pull = re.search(
-        r"podman pull [^\n]*Image=[^\n]*~/\.config/containers/systemd/kendo-app\.container",
-        section,
-    )
+    pull = re.search(r"^[^#\n]*Image=[^\n]*podman pull[^\n]*$", section, re.M)
     assert pull and pull.start() < restart.start()
+    missing = [u for u in IMAGE_PIN_UNITS if u not in pull.group(0)]
+    assert not missing, missing
 
 
 # A command that writes over an installed file. The pull reads a unit with
