@@ -28,6 +28,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
+from app.dependencies import get_uow
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
@@ -39,6 +40,7 @@ from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
     InMemorySessionTypeRepository,
+    RecordingUnitOfWork,
 )
 
 # ---------------------------------------------------------------------------
@@ -252,6 +254,32 @@ async def test_delete_nonexistent_session_type_returns_404(
     assert response.status_code == 404, (
         f"Expected 404 for non-existent type, got {response.status_code}"
     )
+
+
+class _VanishingSessionTypeRepository(InMemorySessionTypeRepository):
+    """The type is found, then deleted by someone else before this delete."""
+
+    async def delete(self, type_id: str) -> dict[str, Any] | None:
+        return None
+
+
+async def test_delete_session_type_gone_before_the_delete_returns_404(
+    template_repo, instance_repo
+) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    repo = _VanishingSessionTypeRepository()
+    st = await _seed_type(repo)
+    app.dependency_overrides[get_session_type_repo] = lambda: repo
+    uow = RecordingUnitOfWork()
+    app.dependency_overrides[get_uow] = lambda: uow
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.delete(f"/session-types/{st['id']}")
+
+    assert response.status_code == 404
+    assert uow.commits == 0
 
 
 # ---------------------------------------------------------------------------

@@ -98,8 +98,7 @@ class SqlInviteRepository:
             .values(redeemed_at=datetime.now(UTC))
         )
         await self._session.flush()
-        # An UPDATE returns a CursorResult at runtime; AsyncSession.execute's
-        # overloads only promise the Result base class.
+        # UPDATE yields a CursorResult at runtime; execute()'s stubs say Result.
         if result.rowcount == 0:  # ty: ignore[missing-attribute]
             return None
         return await self.get(invite_id)

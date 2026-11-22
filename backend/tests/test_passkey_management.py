@@ -26,6 +26,7 @@ from httpx import ASGITransport, AsyncClient
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.main import app
+from tests.fake_repositories import RecordingUnitOfWork
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -369,6 +370,35 @@ async def test_patch_passkey_returns_404_for_unknown_id(passkey_repo) -> None:
         response = await c.patch(f"/auth/passkeys/{random_id}", json={"label": "Ghost"})
 
     assert response.status_code == 404
+
+
+class _VanishingPasskeyRepo(StubPasskeyRepo):
+    """The passkey is found, then deleted by someone else before the rename."""
+
+    async def update_label(
+        self, passkey_id: str, user_id: str, label: str
+    ) -> dict[str, Any] | None:
+        return None
+
+
+async def test_patch_passkey_gone_before_the_rename_returns_404() -> None:
+    from app.auth.dependencies import get_passkey_repo
+    from app.dependencies import get_uow
+
+    app.dependency_overrides[REQUIRE_MEMBER] = _user_a_override
+    repo = _VanishingPasskeyRepo()
+    pk_id = repo._seed(_USER_A.sub)["id"]
+    app.dependency_overrides[get_passkey_repo] = lambda: repo
+    uow = RecordingUnitOfWork()
+    app.dependency_overrides[get_uow] = lambda: uow
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.patch(f"/auth/passkeys/{pk_id}", json={"label": "New"})
+
+    assert response.status_code == 404
+    assert uow.commits == 0
 
 
 async def test_patch_passkey_requires_authentication() -> None:
