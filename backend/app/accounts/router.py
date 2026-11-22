@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
 from app.accounts.dependencies import get_account_prefs_repo
-from app.accounts.preferences_repository import AbstractAccountPrefsRepo
+from app.accounts.preferences_repository import AbstractAccountPrefsRepo, Theme
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.auth.session_cookie import set_theme_cookie
@@ -26,11 +26,11 @@ _PrefsRepo = Annotated[AbstractAccountPrefsRepo, Depends(get_account_prefs_repo)
 
 
 class _PreferencesResponse(BaseModel):
-    theme: Literal["light", "dark", "system"]
+    theme: Theme
 
 
 class _PreferencesUpdate(BaseModel):
-    theme: Literal["light", "dark", "system"]
+    theme: Theme
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +78,13 @@ async def put_my_member(
         )
 
     record = await repo.update(record["id"], data)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No member record linked to this account",
+        )
     await uow.commit()
-    return _to_response(record)  # type: ignore[arg-type]
+    return _to_response(record)
 
 
 # ---------------------------------------------------------------------------

@@ -248,6 +248,11 @@ async def erase_member(
         "anonymised_by": claims.sub,
     }
     updated = await repo.update(member_key, scrub)
+    if updated is None:
+        # Deleted under us: raising before commit rolls back the partial erase.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
     await uow.commit()
     log_admin_event("member_erased", claims.sub, member_id=member_key)
     return _to_response(updated)

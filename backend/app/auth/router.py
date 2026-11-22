@@ -287,8 +287,10 @@ async def update_passkey_label(
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = await repo.update_label(str(passkey_id), claims.sub, payload.label)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await uow.commit()
-    return _passkey_to_response(updated)  # type: ignore[arg-type]
+    return _passkey_to_response(updated)
 
 
 @router.delete("/passkeys/{passkey_id}", status_code=204)
@@ -409,7 +411,8 @@ async def redeem_recovery_code(
     if user is None or (locked and match is None):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    kind, record = match or (None, None)
+    # No match: kind None falls through to the failure branch, never reading record.
+    kind, record = match or (None, {})
     if kind == "code":
         await recovery_repo.mark_used(record["id"])
     elif kind == "admin_token" and is_admin_token_valid(record):
@@ -527,9 +530,11 @@ async def revoke_invite_route(
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = await repo.mark_revoked(str(invite_id))
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await uow.commit()
     log_security_event("invite_revoked", "success", user_id=claims.sub)
-    return {"id": updated["id"], "status": invite_status(updated)}  # type: ignore[index]
+    return {"id": updated["id"], "status": invite_status(updated)}
 
 
 @router.post("/invites/redeem/begin")

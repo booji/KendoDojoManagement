@@ -469,7 +469,8 @@ def validate_startup_config() -> None:
         _reject_template_placeholder("WEBAUTHN_ORIGIN", origin)
 
         origin = _validate_production_origin(origin)
-        origin_host = urlsplit(origin).hostname
+        # Never empty: _validate_production_origin refuses an origin with no host.
+        origin_host = urlsplit(origin).hostname or ""
         _validate_production_rp_id(rp_id)
 
         if rp_id != origin_host and not origin_host.endswith("." + rp_id):

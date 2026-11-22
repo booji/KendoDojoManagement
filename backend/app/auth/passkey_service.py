@@ -220,7 +220,7 @@ async def add_passkey_complete(
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
         email=email,
-        role=user.role,  # type: ignore[arg-type]
+        role=user.role,
         show_nudge=show_nudge,
     )
 
