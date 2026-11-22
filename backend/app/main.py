@@ -134,8 +134,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_exception_handler(IntegrityError, _constraint_conflict_handler)
+# Starlette calls each handler only with its registered class: narrowing is safe.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty: ignore[invalid-argument-type]
+app.add_exception_handler(IntegrityError, _constraint_conflict_handler)  # ty: ignore[invalid-argument-type]
 app.add_middleware(ClientIPMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)

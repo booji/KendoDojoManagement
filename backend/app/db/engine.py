@@ -38,7 +38,8 @@ class _LazyAsyncEngine:
         return getattr(self._get_real(), name)
 
 
-engine: AsyncEngine = _LazyAsyncEngine(DATABASE_URL)  # type: ignore[assignment]
+# The proxy forwards every attribute to a real AsyncEngine: one in all but name.
+engine: AsyncEngine = _LazyAsyncEngine(DATABASE_URL)  # ty: ignore[invalid-assignment]
 
 session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine, expire_on_commit=False

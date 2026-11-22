@@ -282,6 +282,6 @@ async def invite_redeem_complete(
     return PasskeyRegisterCompleteResponse(
         sub=user.id,
         email=record["email"],
-        role=user.role,  # type: ignore[arg-type]
+        role=user.role,
         show_nudge=True,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import select
@@ -27,7 +28,7 @@ class AbstractMemberRepository(Protocol):
         self,
         status: str | None = None,
         search: str | None = None,
-    ) -> list[dict[str, Any]]: ...
+    ) -> builtins.list[dict[str, Any]]: ...
 
 
 def _with_account():
@@ -115,7 +116,7 @@ class SqlMemberRepository:
         self,
         status: str | None = None,
         search: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         stmt = _with_account()
         if status is not None:
             stmt = stmt.where(Member.membership_status == status)

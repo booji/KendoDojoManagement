@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import asc, select
@@ -26,7 +27,7 @@ class AbstractFederationRepository(Protocol):
         continental_grouping: str | None = None,
         search: str | None = None,
         include_inactive: bool = False,
-    ) -> list[dict[str, Any]]: ...
+    ) -> builtins.list[dict[str, Any]]: ...
 
 
 def _to_dict(obj: Federation) -> dict[str, Any]:
@@ -92,7 +93,7 @@ class SqlFederationRepository:
         continental_grouping: str | None = None,
         search: str | None = None,
         include_inactive: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         stmt = select(Federation)
         if not include_inactive:
             stmt = stmt.where(Federation.is_active.is_(True))

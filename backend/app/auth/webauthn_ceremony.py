@@ -85,15 +85,15 @@ from app.auth.models import PasskeyCredentialResponse
 # (`require_user_verification=True`); a merely-preferred level lets a
 # conforming authenticator skip UV and then be rejected at verification,
 # which would look like a broken login.
+#
+# Named separately for the authentication ceremony, which has no
+# AuthenticatorSelectionCriteria to carry it, so the two uses are visibly the
+# same decision.
+_USER_VERIFICATION = UserVerificationRequirement.REQUIRED
 _DISCOVERABLE_CREDENTIAL = AuthenticatorSelectionCriteria(
     resident_key=ResidentKeyRequirement.REQUIRED,
-    user_verification=UserVerificationRequirement.REQUIRED,
+    user_verification=_USER_VERIFICATION,
 )
-
-# Rule 2 again for the authentication ceremony, which has no
-# AuthenticatorSelectionCriteria to carry it. Named so the two uses are
-# visibly the same decision.
-_USER_VERIFICATION = _DISCOVERABLE_CREDENTIAL.user_verification
 
 
 def decode_challenge(challenge_str: str) -> bytes:

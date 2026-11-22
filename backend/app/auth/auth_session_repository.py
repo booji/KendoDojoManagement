@@ -79,7 +79,8 @@ class SqlAuthSessionRepository:
         result = await self._session.execute(
             delete(AuthSession).where(AuthSession.token_hash == token_hash)
         )
-        return result.rowcount > 0
+        # DELETE yields a CursorResult at runtime; execute()'s stubs say Result.
+        return result.rowcount > 0  # ty: ignore[missing-attribute]
 
     async def delete_for_account(self, account_id: str) -> None:
         await self._session.execute(
