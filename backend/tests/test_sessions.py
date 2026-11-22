@@ -102,7 +102,17 @@ def instance_repo() -> InMemorySessionInstanceRepository:
 # ---------------------------------------------------------------------------
 
 
+async def test_get_session_types_requires_sign_in(type_repo) -> None:
+    # Unguarded since #4 with no stated reason (#620).
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/session-types")
+    assert response.status_code == 401
+
+
 async def test_get_session_types_returns_general_training_by_default(type_repo) -> None:
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
