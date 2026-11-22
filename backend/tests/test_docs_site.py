@@ -138,3 +138,21 @@ def test_every_machinectl_shell_names_the_shell_to_run():
         if re.search(r"machinectl shell kendo@(?! /bin/bash)", line)
     ]
     assert not bare, bare
+
+
+def test_no_step_reads_the_journal_as_kendo():
+    """`kendo` cannot read its own journal on a default AlmaLinux/RHEL host:
+    without persistent storage there is no per-user journal file, and the
+    system journal is readable only by root and the `systemd-journal`/`adm`/
+    `wheel` groups. `journalctl --user ...` as `kendo` prints "No journal files
+    were opened due to insufficient permissions" (#605). Read it from the
+    admin account, by `kendo`'s UID: `--user-unit` under sudo would match
+    root's UID instead."""
+    sources = [ROOT / "README.md", ROOT / "setup.sh", *(ROOT / "docs").rglob("*.md")]
+    as_kendo = [
+        (src.relative_to(ROOT).as_posix(), line.strip())
+        for src in sources
+        for line in src.read_text().splitlines()
+        if re.search(r"journalctl\b(?![^`\"]*_UID=)[^`\"]*--user", line)
+    ]
+    assert not as_kendo, as_kendo
