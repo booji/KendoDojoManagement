@@ -16,7 +16,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, QUADLET_UNITS, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    IMAGE_PIN_UNITS,
+    PUBLISHED_IMAGE,
+    QUADLET_UNITS,
+    SECRETS,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -630,31 +636,62 @@ def _quadlet_upgrade_section() -> str:
     return doc.split("## Hardened deployment (Quadlet)", 1)[1].split("\n## ", 1)[0]
 
 
-def test_quadlet_upgrade_pulls_every_unit_image_before_the_restart():
-    """Without a pull, `podman run ...:0.1 init` and the restart both reuse the
-    cached image, so a patch release never lands on a Quadlet host (#583)."""
-    section = _quadlet_upgrade_section()
-    restart = section.index("systemctl --user restart")
-    images = {
-        image
-        for unit in load_units().values()
-        for image in unit.get("Container", {}).get("Image", [])
+def test_the_pinned_units_run_one_image():
+    """The routine upgrade pulls the image kendo-app.container names and
+    restarts onto it, so every unit running the Release image must name the
+    same one: a pin edited in one unit only would migrate with another."""
+    units = load_units()
+    pinned = {
+        name: unit["Container"]["Image"]
+        for name, unit in units.items()
+        if any(
+            i.startswith(PUBLISHED_IMAGE)
+            for i in unit.get("Container", {}).get("Image", [])
+        )
     }
-    assert images
-    for image in images:
-        pull = re.search(rf"podman pull[^\n]*{re.escape(image)}", section)
-        assert pull and pull.start() < restart, f"{image} is not pulled first"
+    assert sorted(pinned) == sorted(IMAGE_PIN_UNITS)
+    assert len({tuple(images) for images in pinned.values()}) == 1, pinned
 
 
-def test_quadlet_upgrade_installs_the_backup_units_it_runs():
-    """setup.sh --quadlet installs every unit in deploy/systemd (#576), so the
-    upgrade re-copies them all and enables the backup timer. A host set up
-    before it had no backup units, so they land before the backup starts."""
-    section = _quadlet_upgrade_section().replace("\\\n", " ")
-    backup = section.index("systemctl --user start kendo-backup.service")
-    for unit in (ROOT / "deploy" / "systemd").iterdir():
-        copies = [m.start() for m in re.finditer(rf"cp [^\n]*{unit.name}", section)]
-        assert copies, f"{unit.name} is never re-copied"
-        if unit.name.startswith("kendo-backup."):
-            assert copies[0] < backup, f"{unit.name} lands after the backup runs"
-    assert re.search(r"enable --now [^\n]*kendo-backup\.timer", section)
+def test_quadlet_upgrade_pulls_the_pinned_image_before_the_restart():
+    """Restarting a unit never fetches a newer image under the same tag, so a
+    patch release lands only after a pull (#583). The pull reads the pin from
+    the installed unit, so a host pinned to an exact Version (an rc rehearsal,
+    a rollback) pulls what it runs, not :0.1 (#604)."""
+    section = _quadlet_upgrade_section()
+    restart = re.search(r"systemctl --user restart ([^\n]*)", section)
+    assert restart and restart.group(1).split() == ["kendo-migrate", "kendo-app"]
+    pull = re.search(
+        r"podman pull [^\n]*Image=[^\n]*~/\.config/containers/systemd/kendo-app\.container",
+        section,
+    )
+    assert pull and pull.start() < restart.start()
+
+
+# A command that writes over an installed file. The pull reads a unit with
+# `sed -n`, which is not one.
+_WRITES = re.compile(
+    r"^\s*(cp|install|mv|tee|tar|rsync)\b|\binit\s*\||sed -i|setup\.sh --quadlet"
+)
+
+
+def _commands(markdown: str) -> list[str]:
+    blocks = re.findall(r"```bash\n(.*?)```", markdown, re.DOTALL)
+    return [
+        line
+        for block in blocks
+        for line in block.replace("\\\n", " ").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def test_no_routine_upgrade_step_overwrites_an_installed_file():
+    """Once installed, units, timers, scripts and config are the operator's: a
+    re-copy reverted the Traefik unit's firewalld ports (Deployment § 1.2) and
+    crash-looped it (#604). A release that changes one lists an Operator
+    action instead."""
+    doc = (ROOT / "docs" / "install" / "upgrading.md").read_text()
+    compose = doc.split("## Quick self-host (Compose)", 1)[1].split("\n## ", 1)[0]
+    commands = _commands(compose) + _commands(_quadlet_upgrade_section())
+    assert any("podman pull" in c for c in commands)
+    assert [c for c in commands if _WRITES.search(c)] == []
