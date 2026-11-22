@@ -51,6 +51,7 @@ dev = [
     "ruff==0.17.3",
     "greenlet>=3.5.6",
     "playwright>=1.64.1",
+    "ty==0.0.107",
 ]
 # The docs site (mkdocs.yml, .github/workflows/docs.yml). Pinned like the
 # backend: a theme release must not change the site unreviewed.
