@@ -20,8 +20,10 @@ import subprocess
 import time
 from pathlib import Path
 
+import yaml
+
 from tests.backup_support import decrypt, keypair, no_file_holds
-from tests.deploy_contract import ALL_SECRETS
+from tests.deploy_contract import ALL_SECRETS, container_env
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -43,6 +45,8 @@ def bundle(tmp_path: Path) -> Path:
         shutil.copy(example, home / SELFHOST / "dynamic")
     # setup.sh reads backup.env through kendo-backup.sh, in every mode.
     shutil.copytree(ROOT / "deploy/bin", home / "deploy/bin")
+    # The app settings, for Compose and Quadlet alike (#603).
+    shutil.copytree(ROOT / "deploy/env", home / "deploy/env")
     return home
 
 
@@ -74,7 +78,7 @@ def test_one_domain_answer_reaches_every_passkey_bound_setting(tmp_path):
     home = bundle(tmp_path)
     run(home, "DOJO.Example.com", "1", "1", "admin@example.com")
 
-    env = env_of(home)
+    env = env_of(home, "kendo-app.env")
     # Lowercased: WebAuthn matches RP_ID against the browser's lowercased host.
     assert env["WEBAUTHN_RP_ID"] == "dojo.example.com"
     assert env["WEBAUTHN_ORIGIN"] == "https://dojo.example.com"
@@ -121,6 +125,25 @@ def test_writes_the_secret_files_compose_mounts(tmp_path):
     assert secrets.stat().st_mode & 0o777 == 0o700
 
 
+def test_a_key_added_to_the_app_env_example_reaches_compose_with_no_compose_change(
+    tmp_path,
+):
+    # #603: an app setting listed only in .env.example and not in the compose
+    # file's environment: mapping silently never reached the app (#594's floors).
+    # The shipped docker-compose.yml is taken as is: no edit lets the key in.
+    home = bundle(tmp_path)
+    shutil.copy(ROOT / "docker-compose.yml", home)
+    example = home / "deploy/env/kendo-app.env.example"
+    example.write_text(example.read_text() + "KENDO_NEW_SETTING=42\n")
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    services = yaml.safe_load((home / "docker-compose.yml").read_text())["services"]
+    for service in ("app", "migrate"):
+        env = container_env(services[service], home)
+        assert env.get("KENDO_NEW_SETTING") == "42", service
+        assert env.get("WEBAUTHN_RP_ID") == "dojo.example.com", service
+
+
 def test_a_hand_quoted_value_in_env_reaches_its_secret_file_unquoted(tmp_path):
     # Compose's own .env parser strips one pair of quotes; the secret files
     # must hold what Compose would have passed, or the app gets `'...'`.
@@ -152,8 +175,9 @@ def test_rerunning_changes_the_domain_without_clobbering_the_secrets(tmp_path):
 
     for key in ("POSTGRES_PASSWORD", "DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"):
         assert second[key] == first[key]
-    assert second["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
     assert (home / ".env.bak").exists()
+    assert (home / "kendo-app.env.bak").exists()
 
 
 def test_rerunning_moves_a_pre_453_env_onto_the_app_user(tmp_path):
@@ -274,7 +298,7 @@ def test_skipping_tls_still_writes_everything_else_and_says_what_is_left(tmp_pat
     home = bundle(tmp_path)
     out = run(home, "dojo.example.com", "4")
 
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
     assert (home / SELFHOST / "traefik.yml").exists()
     assert "certResolver" not in (home / SELFHOST / "dynamic/kendo.yml").read_text()
     assert not (home / SELFHOST / "dynamic/byo-cert.yml").exists()
@@ -298,7 +322,7 @@ def test_a_domain_that_would_break_passkeys_is_rejected_before_anything_is_writt
 
     assert out.stdout.count("Bare hostname only") == 2
     assert "cannot bind to a bare label" in out.stdout
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
 
 
 def test_a_hostname_with_an_empty_or_hyphen_edged_label_is_rejected(tmp_path):
@@ -308,7 +332,7 @@ def test_a_hostname_with_an_empty_or_hyphen_edged_label_is_rejected(tmp_path):
     out = run(home, "dojo.example.com.", "-dojo.example.com", "dojo.example.com", "4")
 
     assert out.stdout.count("Every label must be non-empty") == 2
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
 
 
 def test_an_unrecognised_tls_answer_re_asks_instead_of_silently_skipping_tls(tmp_path):
@@ -382,7 +406,7 @@ class Host:
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
-        for sub in ("quadlet", "env", "systemd"):
+        for sub in ("quadlet", "systemd"):
             shutil.copytree(ROOT / "deploy" / sub, self.src / "deploy" / sub)
         (self.src / "deploy/traefik/dynamic").mkdir()
         shutil.copy(ROOT / "deploy/traefik/traefik.yml", self.src / "deploy/traefik")
@@ -834,6 +858,7 @@ def test_check_before_setup_says_to_run_setup_first(tmp_path):
 def test_check_names_every_placeholder_a_hand_copied_config_still_has(tmp_path):
     home = bundle(tmp_path)
     shutil.copy(home / ".env.example", home / ".env")
+    shutil.copy(home / "deploy/env/kendo-app.env.example", home / "kendo-app.env")
     shutil.copy(
         home / SELFHOST / "traefik.yml.example", home / SELFHOST / "traefik.yml"
     )
@@ -846,7 +871,7 @@ def test_check_names_every_placeholder_a_hand_copied_config_still_has(tmp_path):
 
     assert out.returncode == 1
     for placeholder in (
-        "<your-domain.com>",
+        "<your-db-password>",
         "<your-jwt-secret>",
         "dojo.example.com",
         "you@example.com",
@@ -902,11 +927,11 @@ def test_check_warns_that_a_staging_certificate_is_untrusted(tmp_path):
 
 
 def test_check_catches_a_domain_changed_in_only_one_place(tmp_path):
-    # A hand edit of .env after a domain change, the router left behind.
+    # A hand edit of kendo-app.env after a domain change, the router left behind.
     home = bundle(tmp_path)
     run(home, *ANSWERS)
-    env = (home / ".env").read_text().replace(DOMAIN, "kendo.shinbukan.org")
-    (home / ".env").write_text(env)
+    app_env = home / "kendo-app.env"
+    app_env.write_text(app_env.read_text().replace(DOMAIN, "kendo.shinbukan.org"))
 
     out = check(home, host_env(tmp_path))
 
@@ -1248,6 +1273,23 @@ def test_upgrade_backs_up_the_database_and_uploads_before_it_pulls(tmp_path):
     [uploads] = (up.home / "backups").glob("kendo-uploads-*.tar")
     assert str(dump) in out.stdout
     assert str(uploads) in out.stdout
+
+
+def test_an_rc_host_without_kendo_app_env_is_stopped_before_anything_changes(
+    tmp_path,
+):
+    # #603: a host set up by an rc keeps every app setting in .env, and the
+    # compose file this upgrade brings reads them from kendo-app.env instead.
+    # Going on would recreate the stack without them, then print a restore.
+    up = Upgrade(tmp_path)
+    (up.src / "kendo-app.env").unlink()
+
+    out = up.run()
+
+    assert out.returncode == 1
+    assert "kendo-app.env" in out.stderr
+    assert "docs/install/upgrading.md" in out.stderr
+    assert up.calls() == []
 
 
 def test_upgrade_never_pulls_without_the_backup_it_just_took(tmp_path):

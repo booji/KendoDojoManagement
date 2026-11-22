@@ -456,10 +456,10 @@ def validate_startup_config() -> None:
         rp_id = (globals().get("WEBAUTHN_RP_ID") or "").strip().lower()
         origin = (globals().get("WEBAUTHN_ORIGIN") or "").strip()
 
-        # Both secrets ship as angle-bracket placeholders in .env.example /
-        # .env.prod.example, and a non-blank placeholder clears the
-        # required-vars check above. A production deploy that copies the
-        # template and misses one would otherwise boot with a value published
+        # Both secrets ship as angle-bracket placeholders in .env.example, and a
+        # non-blank placeholder clears the required-vars check above. A
+        # production deploy that copies the template and misses one would
+        # otherwise boot with a value published
         # in this repo — for SETUP_TOKEN that is the claim gate handed to
         # anyone who reads it (ADR-0003).
         _reject_template_placeholder("JWT_SECRET", globals().get("JWT_SECRET") or "")
