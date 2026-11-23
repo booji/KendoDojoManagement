@@ -20,3 +20,15 @@
   border-color: var(--border);
   text-shadow: none;
 }
+/* driver.css's own :hover/:focus-visible rule outranks the one above and
+   paints a light background under light dark-mode text. */
+.driver-popover-footer-btn:hover,
+.driver-popover-footer-btn:focus-visible {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+/* driver.css paints the arrow #fff: colour only the side each placement shows. */
+.driver-popover-arrow-side-left { border-left-color: var(--popover); }
+.driver-popover-arrow-side-right { border-right-color: var(--popover); }
+.driver-popover-arrow-side-top { border-top-color: var(--popover); }
+.driver-popover-arrow-side-bottom { border-bottom-color: var(--popover); }
