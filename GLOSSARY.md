@@ -58,7 +58,7 @@ Setting a **Member's** **Membership Status** to inactive. The **Member** is kept
 _Avoid_: Delete, remove, archive
 
 **Federation Number**:
-A **Member's** identifier with a national kendo federation.
+A **Member's** identifier with a kendo federation: a national one, or a continental body such as the EKF, which numbers every European dan grade holder alongside their national federation.
 _Avoid_: Licence number, membership number
 
 **Federation Membership**:
