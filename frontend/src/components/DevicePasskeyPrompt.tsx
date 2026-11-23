@@ -17,7 +17,7 @@ import {
 } from "@/lib/devicePasskeyOffer"
 
 // Offers a passkey for this device after a sign-in from a phone (#612).
-const DevicePasskeyPrompt = () => {
+const DevicePasskeyPrompt = ({ onClose }: { onClose: () => void }) => {
   const [open, setOpen] = useState(isDevicePasskeyOffered)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +25,7 @@ const DevicePasskeyPrompt = () => {
   const dismiss = () => {
     dismissDevicePasskeyOffer()
     setOpen(false)
+    onClose()
   }
 
   const add = async () => {
@@ -34,6 +35,7 @@ const DevicePasskeyPrompt = () => {
       await performPasskeyAdd()
       closeDevicePasskeyOffer()
       setOpen(false)
+      onClose()
     } catch (err) {
       setError(errorMessage(err, "Failed to register passkey"))
     } finally {

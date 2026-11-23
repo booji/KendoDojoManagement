@@ -88,6 +88,7 @@ const AppShell = ({ role, children }: AppShellProps) => {
                             <Link
                               to={item.href}
                               aria-label={item.label}
+                              data-tour={`nav-${item.href}`}
                               aria-current={active ? "page" : undefined}
                               className={cn(
                                 "focus-visible:ring-2 focus-visible:ring-sidebar-ring"

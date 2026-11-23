@@ -28,32 +28,32 @@ beforeEach(() => {
 describe("DevicePasskeyPrompt", () => {
   it("appears after a cross-platform sign-in", async () => {
     noteSignInAttachment("cross-platform")
-    render(<DevicePasskeyPrompt />)
+    render(<DevicePasskeyPrompt onClose={() => {}} />)
     await waitFor(() => expect(prompt()).toBeInTheDocument())
   })
 
   it.each([["platform" as const], [null]])("does not appear after a %s sign-in", (attachment) => {
     noteSignInAttachment(attachment)
-    render(<DevicePasskeyPrompt />)
+    render(<DevicePasskeyPrompt onClose={() => {}} />)
     expect(prompt()).not.toBeInTheDocument()
   })
 
   it("stays away on this device once dismissed", async () => {
     noteSignInAttachment("cross-platform")
-    const { unmount } = render(<DevicePasskeyPrompt />)
+    const { unmount } = render(<DevicePasskeyPrompt onClose={() => {}} />)
     await userEvent.click(await screen.findByRole("button", { name: "Not now" }))
     await waitFor(() => expect(prompt()).not.toBeInTheDocument())
     unmount()
 
     noteSignInAttachment("cross-platform")
-    render(<DevicePasskeyPrompt />)
+    render(<DevicePasskeyPrompt onClose={() => {}} />)
     expect(prompt()).not.toBeInTheDocument()
   })
 
   it("adds a passkey through the Add passkey flow", async () => {
     performPasskeyAddMock.mockResolvedValue({ sub: "acc-1", show_nudge: false })
     noteSignInAttachment("cross-platform")
-    render(<DevicePasskeyPrompt />)
+    render(<DevicePasskeyPrompt onClose={() => {}} />)
 
     await userEvent.click(await screen.findByRole("button", { name: "Add passkey" }))
 
@@ -64,7 +64,7 @@ describe("DevicePasskeyPrompt", () => {
   it("keeps the prompt open with the error when adding fails", async () => {
     performPasskeyAddMock.mockRejectedValue({ status: 0, message: "Passkey registration failed" })
     noteSignInAttachment("cross-platform")
-    render(<DevicePasskeyPrompt />)
+    render(<DevicePasskeyPrompt onClose={() => {}} />)
 
     await userEvent.click(await screen.findByRole("button", { name: "Add passkey" }))
 

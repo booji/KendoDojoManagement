@@ -9,6 +9,8 @@ import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
 import DevicePasskeyPrompt from "@/components/DevicePasskeyPrompt"
+import GuidedTour from "@/components/GuidedTour"
+import { isDevicePasskeyOffered } from "@/lib/devicePasskeyOffer"
 import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
@@ -41,6 +43,8 @@ const AuthenticatedLayout = () => {
   const { refresh } = useDojoSettings()
   const navigate = useNavigate()
   const [user, setUser] = useState<AccountClaims | null>(null)
+  // The tour waits for the device passkey offer (#612) to close.
+  const [offerOpen, setOfferOpen] = useState(isDevicePasskeyOffered)
 
   useEffect(() => {
     getMe()
@@ -70,7 +74,8 @@ const AuthenticatedLayout = () => {
   return (
     <AppShell role={user.role}>
       <Outlet context={{ user } satisfies LayoutContext} />
-      <DevicePasskeyPrompt />
+      <DevicePasskeyPrompt onClose={() => setOfferOpen(false)} />
+      <GuidedTour role={user.role} paused={offerOpen} />
     </AppShell>
   )
 }
