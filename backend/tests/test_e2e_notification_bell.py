@@ -69,3 +69,16 @@ def test_member_sees_no_bell(page: Page) -> None:
     expect(
         page.get_by_role("button", name=re.compile(r"^Notifications"))
     ).to_have_count(0)
+
+
+def test_admin_bell_item_opens_grade_management(page: Page) -> None:
+    name = f"Bell {uuid.uuid4().hex[:6]}"
+    admin_token, _member_id, _entry_id = _setup_pending_grade(f"{name} Member")
+
+    _inject_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/")
+    page.get_by_role("button", name=BELL).click()
+    page.get_by_role("link", name=re.compile(name)).click()
+
+    expect(page).to_have_url(f"{BASE_URL}/admin/settings/grades")
+    expect(page.get_by_role("heading", name="Grade management")).to_be_visible()

@@ -21,6 +21,9 @@ import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
+import AdminGeneralSettingsPage from "@/pages/AdminGeneralSettingsPage"
+import AdminSessionTypesPage from "@/pages/AdminSessionTypesPage"
+import AdminFederationsPage from "@/pages/AdminFederationsPage"
 import AdminInvitesPage from "@/pages/AdminInvitesPage"
 import InviteLandingPage from "@/pages/InviteLandingPage"
 import SessionCheckinPage from "@/pages/SessionCheckinPage"
@@ -124,10 +127,6 @@ const App = () => (
             {/* Onboarding: authenticated but NOT profile-gated */}
             <Route path="/onboarding" element={<OnboardingPage />} />
 
-            {/* Invite management: authenticated but not profile-gated — checks
-                admin role itself and renders a forbidden state for members */}
-            <Route path="/settings/invites" element={<AdminInvitesPage />} />
-
             {/* Profile-required routes */}
             <Route element={<RequireProfile />}>
               <Route path="/" element={<HomePage />} />
@@ -142,9 +141,15 @@ const App = () => (
               <Route element={<RequireAdmin />}>
                 <Route path="/members" element={<MembersPage />} />
                 <Route path="/members/:id" element={<MemberDetailPage />} />
-                <Route path="/grades" element={<GradesPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                <Route path="/admin/settings" element={<AdminSettingsPage />}>
+                  <Route index element={<Navigate to="general" replace />} />
+                  <Route path="general" element={<AdminGeneralSettingsPage />} />
+                  <Route path="session-types" element={<AdminSessionTypesPage />} />
+                  <Route path="federations" element={<AdminFederationsPage />} />
+                  <Route path="invites" element={<AdminInvitesPage />} />
+                  <Route path="grades" element={<GradesPage />} />
+                </Route>
               </Route>
             </Route>
           </Route>
