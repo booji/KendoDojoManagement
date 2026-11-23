@@ -105,7 +105,7 @@ def test_admin_can_delete_unreferenced_session_type(page: Page) -> None:
     _create_session_type(page, admin_token, name)
 
     _set_cookie(page, admin_token)
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/session-types")
 
     row_label = page.get_by_text(name, exact=True)
     expect(row_label).to_be_visible(timeout=10_000)
@@ -137,7 +137,7 @@ def test_delete_session_type_shows_error_when_referenced_by_segment(page: Page) 
     _create_session_referencing_type(page, admin_token, created["id"], f"Uses {name}")
 
     _set_cookie(page, admin_token)
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/session-types")
 
     expect(page.get_by_text(name, exact=True)).to_be_visible(timeout=10_000)
 
@@ -166,7 +166,7 @@ def test_referenced_session_type_remains_after_failed_delete(page: Page) -> None
     _create_session_referencing_type(page, admin_token, created["id"], f"Uses {name}")
 
     _set_cookie(page, admin_token)
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/session-types")
 
     expect(page.get_by_text(name, exact=True)).to_be_visible(timeout=10_000)
 

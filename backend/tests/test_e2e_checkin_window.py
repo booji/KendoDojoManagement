@@ -164,7 +164,7 @@ def test_admin_settings_shows_checkin_window_card_with_two_inputs(page: Page) ->
     admin_token = _make_user_with_complete_profile("admin")
     _set_cookie(page, admin_token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     expect(page.get_by_role("heading", name="Check-in Window")).to_be_visible(
         timeout=8000
@@ -187,7 +187,7 @@ def test_admin_settings_checkin_window_rejects_invalid_minutes(page: Page) -> No
     admin_token = _make_user_with_complete_profile("admin")
     _set_cookie(page, admin_token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     before_input = page.get_by_label("Check-in window opens before session, in minutes")
     expect(before_input).to_be_visible(timeout=8000)

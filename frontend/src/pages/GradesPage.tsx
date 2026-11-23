@@ -17,7 +17,7 @@ import {
   rejectGrade,
 } from "@/api/grades"
 import { formatMemberDate } from "@/lib/date"
-import { PageHeader } from "@/components/ui/page-header"
+import { Section } from "@/components/ui/section"
 
 const formatDate = (value: string | null): string => {
   if (!value) return "Not provided"
@@ -109,8 +109,7 @@ const GradesPage = () => {
   }
 
   return (
-    <div className="px-4 py-6 space-y-6">
-      <PageHeader title="Grade management" />
+    <Section heading="Grade management">
 
       <Card>
         <CardHeader>
@@ -182,7 +181,7 @@ const GradesPage = () => {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Section>
   )
 }
 

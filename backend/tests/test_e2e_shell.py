@@ -124,9 +124,10 @@ def test_member_nav_has_no_restricted_links(member_page: Page) -> None:
         expect(sidebar.get_by_role("link", name=label)).not_to_be_attached()
 
 
-def test_admin_nav_contains_all_seven_sections(admin_page: Page) -> None:
-    """AC5: Admin nav contains all 7 sections:
-    Dashboard, Members, Sessions, My Attendance, Grades, Reports, Settings.
+def test_admin_nav_contains_all_six_sections(admin_page: Page) -> None:
+    """AC5: Admin nav contains all 6 sections:
+    Dashboard, Members, Sessions, My Attendance, Reports, Settings.
+    (Grades moved under Admin Settings in #610.)
     """
     admin_page.set_viewport_size({"width": 1280, "height": 800})
     sidebar = admin_page.locator("[data-slot='sidebar']")
@@ -137,7 +138,6 @@ def test_admin_nav_contains_all_seven_sections(admin_page: Page) -> None:
         "Members",
         "Sessions",
         "My Attendance",
-        "Grades",
         "Reports",
         "Settings",
     ]
@@ -280,7 +280,7 @@ def test_member_nav_opens_my_attendance(member_page: Page) -> None:
 
 def test_admin_nav_contains_all_sections(admin_page: Page) -> None:
     """Issue #12: Admin nav contains Dashboard, Members, Sessions, My Attendance,
-    Grades, Reports, Settings."""
+    Reports, Settings. (Grades moved under Admin Settings in #610.)"""
     admin_page.set_viewport_size({"width": 1280, "height": 800})
     sidebar = admin_page.locator("[data-slot='sidebar']")
     expect(sidebar).to_be_visible()
@@ -290,7 +290,6 @@ def test_admin_nav_contains_all_sections(admin_page: Page) -> None:
         "Members",
         "Sessions",
         "My Attendance",
-        "Grades",
         "Reports",
         "Settings",
     ]:

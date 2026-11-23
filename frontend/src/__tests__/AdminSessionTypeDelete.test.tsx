@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-import { SessionTypesSection } from "@/pages/AdminSettingsPage"
+import { SessionTypesSection } from "@/pages/AdminSessionTypesPage"
 
 // We render the Session Types section in isolation — the full page also mounts
 // branding + federation sections that depend on the DojoSettings context.
