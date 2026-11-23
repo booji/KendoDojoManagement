@@ -63,6 +63,9 @@ systemctl --user stop kendo-app
   ~/backups/kendo-YYYYmmdd-HHMMSS.dump.age \
   ~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
 systemctl --user restart kendo-migrate kendo-app
+# Stopping kendo-app stopped Traefik too, which needs it (Requires=); restarting
+# the app does not bring it back, so start it (#628).
+systemctl --user start kendo-traefik
 ```
 
 On the Compose stack, from the install directory. Its database container and uploads volume are project-scoped, so name them (a failed `setup.sh upgrade` prints this command with them filled in):

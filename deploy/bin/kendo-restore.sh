@@ -102,4 +102,5 @@ fi
 
 echo "Next: the app's database user has no grants until migrate re-runs:"
 echo "  systemctl --user restart kendo-migrate kendo-app"
+echo "  systemctl --user start kendo-traefik   # stopped with kendo-app (#628)"
 echo "  (Compose: podman-compose up -d --force-recreate)"
