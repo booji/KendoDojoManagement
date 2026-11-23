@@ -68,7 +68,7 @@ def _api_headers(token: str) -> dict:
 def test_default_session_types_exist_by_default(page: Page) -> None:
     """GET /session-types returns the seeded default spread with hex colours.
 
-    On a fresh database the 13 defaults from app.sessions.seed are present and
+    On a fresh database the five defaults from app.sessions.seed are present and
     each carries a distinct, valid hex colour.
     """
     from app.sessions.seed import DEFAULT_SESSION_TYPES
