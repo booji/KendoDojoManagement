@@ -163,7 +163,7 @@ async def test_settings_edit_logs_only_the_names_of_fields_that_changed(
             response = await c.put(
                 "/settings/dojo",
                 json=default_dojo_settings(
-                    dojo_name="Renshinkan", login_show_logo=True
+                    dojo_name="Renshinkan", login_show_logo=False
                 ),
             )
 

@@ -33,9 +33,7 @@ class DojoSettings(UUIDBase):
     login_show_background: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    login_show_logo: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    login_show_logo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     login_show_name: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
