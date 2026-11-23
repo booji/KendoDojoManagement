@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.partial_update import PartialUpdate
+
 
 def _validate_url(v: str | None) -> str | None:
     if v is None:
@@ -30,7 +32,9 @@ class FederationCreate(BaseModel):
         return _validate_url(v)
 
 
-class FederationUpdate(BaseModel):
+class FederationUpdate(PartialUpdate):
+    not_null = frozenset({"name", "is_pinned", "is_active"})
+
     name: str | None = Field(default=None, max_length=255)
     abbreviation: str | None = Field(default=None, max_length=50)
     iso_code: str | None = Field(default=None, max_length=10)

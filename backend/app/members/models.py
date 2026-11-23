@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.auth.models import LenientEmail
+from app.core.partial_update import PartialUpdate
 
 MembershipStatus = Literal["active", "inactive", "suspended", "archived"]
 
@@ -36,7 +37,19 @@ class CreateMemberRequest(BaseModel):
     emergency_contact_phone: str | None = None
 
 
-class UpdateMemberRequest(BaseModel):
+class UpdateMemberRequest(PartialUpdate):
+    not_null = frozenset(
+        {
+            "email",
+            "first_name",
+            "surname",
+            "join_date",
+            "membership_status",
+            "is_coach",
+            "is_first_aider",
+        }
+    )
+
     email: LenientEmail | None = None
     first_name: str | None = None
     surname: str | None = None
@@ -50,8 +63,10 @@ class UpdateMemberRequest(BaseModel):
     emergency_contact_phone: str | None = None
 
 
-class SelfUpdateMemberRequest(BaseModel):
+class SelfUpdateMemberRequest(PartialUpdate):
     """Fields a member may update on their own profile (no admin-only fields)."""
+
+    not_null = frozenset({"first_name", "surname"})
 
     first_name: str | None = None
     surname: str | None = None

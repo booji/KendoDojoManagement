@@ -160,6 +160,69 @@ async def test_login_begin_known_vs_unknown_median_latency_converges(
         )
 
 
+@pytest.mark.asyncio
+@pytest.mark.timing_sensitive
+async def test_login_complete_known_vs_unknown_latency_converges(
+    db_client, monkeypatch
+) -> None:
+    """A junk credential fails for a known and an unknown email after the
+    same database work (#587). Complete has no constant-time floor: an unknown
+    email used to fail before the credential lookup a known one ran."""
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    await _seed_user(db_client, "known-complete@dojo.test")
+    credential = {
+        "id": "ZmFrZQ",
+        "rawId": "ZmFrZQ",
+        "response": {},
+        "type": "public-key",
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+
+        async def timed(email: str) -> float:
+            start = time.perf_counter()
+            response = await c.post(
+                "/auth/login/passkey/complete",
+                json={"email": email, "credential": credential},
+            )
+            elapsed = time.perf_counter() - start
+            assert response.status_code == 401
+            return elapsed
+
+        await assert_latency_converges_sampled(
+            lambda: timed("known-complete@dojo.test"),
+            lambda: timed("unknown-complete@dojo.test"),
+            label_a="known email",
+            label_b="unknown email",
+        )
+
+
+@pytest.mark.asyncio
+async def test_login_complete_is_held_to_its_own_floor(db_client, monkeypatch) -> None:
+    """A successful login does more work than begin -- signature check, sign
+    count, a new Auth Session, a commit -- so complete has its own floor
+    (#594), and a failed complete is held to it too."""
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    monkeypatch.setattr(config, "LOGIN_COMPLETE_MIN_DURATION_MS", 60)
+    await _seed_user(db_client, "floor-complete@dojo.test")
+    junk = {"id": "ZmFrZQ", "rawId": "ZmFrZQ", "response": {}, "type": "public-key"}
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        start = time.perf_counter()
+        response = await c.post(
+            "/auth/login/passkey/complete",
+            json={"email": "floor-complete@dojo.test", "credential": junk},
+        )
+        elapsed = time.perf_counter() - start
+
+    assert response.status_code == 401
+    assert elapsed >= 0.060
+
+
 # ── AC6: the floor is configurable ───────────────────────────────────────────
 
 
@@ -195,6 +258,29 @@ async def test_login_begin_floor_is_configurable(db_client, monkeypatch) -> None
 
 
 # ── Misconfiguration must not silently disable the floor ────────────────────
+
+
+@pytest.mark.parametrize(
+    ("setting", "calibrated"),
+    [
+        ("LOGIN_COMPLETE_MIN_DURATION_MS", 250),
+        ("RECOVERY_REDEEM_MIN_DURATION_MS", 5000),
+    ],
+)
+def test_the_heavier_floors_fall_back_to_their_calibrated_defaults(
+    setting, calibrated, monkeypatch
+) -> None:
+    """The measured defaults (#594, docs/auth-timing-calibration.md), spelled
+    out for the reason the begin floor's test gives below."""
+    import importlib
+
+    monkeypatch.setenv(setting, "0")
+    reloaded = importlib.reload(config)
+    try:
+        assert getattr(reloaded, setting) == calibrated
+    finally:
+        monkeypatch.delenv(setting, raising=False)
+        importlib.reload(config)
 
 
 @pytest.mark.parametrize("bad_value", ["0", "-1", "not-a-number", ""])

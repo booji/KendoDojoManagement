@@ -1,7 +1,7 @@
-"""Tests for default session-type seeding (issue #173).
+"""Tests for default session-type seeding (issues #173, #614).
 
 Acceptance criteria:
-  1. On a fresh database, all 13 default types exist after first boot.
+  1. On a fresh database, all 5 default types (#614) exist after first boot.
   2. Each default type has a distinct, valid hex colour.
   3. Seeding does NOT run when any session type already exists.
   4. Types remain manageable exclusively in Admin Settings (no inline creation).
@@ -18,30 +18,22 @@ from app.sessions.seed import DEFAULT_SESSION_TYPES, seed_session_types
 
 _HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
-_EXPECTED_NAMES = {
-    "General Keiko",
-    "Kihon",
-    "Kihon-Keiko-Ho",
-    "Kata",
-    "Beginners",
-    "Kids",
-    "Mudansha",
-    "Yudansha",
-    "Jigeiko",
-    "Shiai",
-    "Shiai Practice",
-    "Bogu Practice",
-    "Non Bogu Practice",
-}
+# Issue #614: five defaults, colours kept from the original #173 seed.
+_EXPECTED_DEFAULTS = [
+    ("General Keiko", "#1E88E5"),
+    ("Beginners", "#FDD835"),
+    ("Kata", "#F4511E"),
+    ("Jigeiko", "#C0CA33"),
+    ("Shiai Practice", "#D81B60"),
+]
+_EXPECTED_NAMES = {name for name, _ in _EXPECTED_DEFAULTS}
 
 
 # --- AC1 / AC2: the default set itself --------------------------------------
 
 
-def test_thirteen_defaults_with_expected_names() -> None:
-    names = {name for name, _ in DEFAULT_SESSION_TYPES}
-    assert len(DEFAULT_SESSION_TYPES) == 13
-    assert names == _EXPECTED_NAMES
+def test_exactly_the_five_defaults() -> None:
+    assert DEFAULT_SESSION_TYPES == _EXPECTED_DEFAULTS
 
 
 def test_every_default_has_a_valid_hex_colour() -> None:
@@ -89,7 +81,7 @@ class _FakeConn:
 async def test_seed_inserts_all_defaults_on_empty_table() -> None:
     conn = _FakeConn(existing_row=None)
     inserted = await seed_session_types(conn)
-    assert inserted == 13
+    assert inserted == 5
     seeded_names = {row["name"] for row in conn.inserted}
     assert seeded_names == _EXPECTED_NAMES
     for row in conn.inserted:

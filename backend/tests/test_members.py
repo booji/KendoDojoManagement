@@ -259,6 +259,22 @@ async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
     assert response.status_code == 409
 
 
+async def test_emails_differing_only_by_case_are_duplicates(member_repo) -> None:
+    # #592: the part before the @ is case-folded too, not just the domain.
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        first = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "Taro@Dojo.test"}
+        )
+        second = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "taro@dojo.test"}
+        )
+    assert first.json()["email"] == "taro@dojo.test"
+    assert second.status_code == 409
+
+
 # ---------------------------------------------------------------------------
 # AC4 — GET /members/{id}
 # ---------------------------------------------------------------------------
@@ -578,8 +594,8 @@ async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
 
 
 async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> None:
-    """first_name is required-by-domain: an explicit null must be ignored,
-    preserving the existing behaviour for required fields."""
+    """first_name is required-by-domain: an explicit null is refused with 422
+    (#585) and the stored value stays."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
         _valid_member_payload(email="keep-first-name@dojo.test", first_name="Taro")
@@ -592,15 +608,14 @@ async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> No
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"first_name": None})
 
-    assert response.status_code == 200
-    assert response.json()["first_name"] == "Taro"
-    assert "first_name" not in calls[-1]
+    assert response.status_code == 422
+    assert calls == []
 
 
 async def test_put_null_membership_status_does_not_wipe_stored_value(
     member_repo,
 ) -> None:
-    """membership_status is required-by-domain: explicit null must be ignored."""
+    """membership_status is required-by-domain: explicit null is refused (#585)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
         _valid_member_payload(email="keep-status@dojo.test", membership_status="active")
@@ -615,9 +630,8 @@ async def test_put_null_membership_status_does_not_wipe_stored_value(
             f"/members/{member_id}", json={"membership_status": None}
         )
 
-    assert response.status_code == 200
-    assert response.json()["membership_status"] == "active"
-    assert "membership_status" not in calls[-1]
+    assert response.status_code == 422
+    assert calls == []
 
 
 async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None:

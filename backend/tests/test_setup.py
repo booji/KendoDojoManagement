@@ -8,8 +8,8 @@ Acceptance criteria:
    are reachable from the setup context.
 5. After successful registration via setup, user is admin and a cookie is set.
 6. Unit test: GET /setup returns 404 after the first user is created via passkey.
-7. _has_registered_user returns False for a phantom user (no PasskeyCredential row),
-   and True only once a PasskeyCredential row exists (AC12 of issue #155).
+7. A phantom user (abandoned ceremony, a member with no passkey) does not claim
+   the instance (AC12 of issue #155); an Admin Account does, passkey or not (#589).
 """
 
 import uuid
@@ -85,7 +85,7 @@ async def test_get_setup_returns_404_when_passkey_credential_exists(db_client) -
     assert response.json().get("detail") == "Setup already completed"
 
 
-# ── AC12 of issue #155: _has_registered_user checks PasskeyCredential only ────
+# ── AC12 of issue #155: a phantom user does not claim the instance ───────────
 
 
 @pytest.mark.asyncio
@@ -105,31 +105,6 @@ async def test_get_setup_returns_200_for_phantom_user_without_credential(
         role="member",
         pending_challenge="dGVzdC1jaGFsbGVuZ2U",
         challenge_issued_at=datetime.now(UTC),
-    )
-    await session.flush()
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.get("/setup")
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_get_setup_returns_200_for_user_without_credential(
-    db_client,
-) -> None:
-    """GET /setup returns 200 when a user row exists but has no PasskeyCredential.
-
-    _has_registered_user checks only PasskeyCredential rows (AC12 issue #155).
-    A user with no credential is a phantom/abandoned ceremony and must not block setup.
-    """
-    session = db_client
-    await seed_account(
-        session,
-        "no-cred@dojo.test",
-        user_id=str(uuid.uuid4()),
-        role="admin",
     )
     await session.flush()
 
@@ -516,20 +491,34 @@ async def test_claimed_instance_404s_whatever_token_is_presented(
     assert response.json().get("detail") == "Setup already completed"
 
 
-# ── A claim cannot take an Account somebody holds ─────────────────────────────
+# ── #589: the claim stays closed once an Admin Account exists ─────────────────
 
 
 @pytest.mark.asyncio
-async def test_a_claim_cannot_take_an_account_that_holds_recovery_codes(
+async def test_setup_stays_claimed_after_the_only_admin_deletes_their_only_passkey(
     db_client,
 ) -> None:
-    """Setup reopens once the last passkey on the instance is gone. An Admin
-    who deleted their only passkey while holding recovery codes still owns
-    their Account, so a claim under their address must not enrol on it."""
+    """The only Admin may delete their only passkey while holding recovery
+    codes (to re-enrol). That leaves no passkey on the instance, but the
+    instance is still claimed: a leaked SETUP_TOKEN must not make it claimable
+    (ADR-0003, #589)."""
     from app.auth.db_models import RecoveryCode
+    from app.auth.models import AccountClaims
+    from tests.auth_support import sign_in
 
     session = db_client
     user_id = await seed_account(session, "sensei@dojo.test", role="admin")
+    passkey_id = str(uuid.uuid4())
+    await session.execute(
+        insert(PasskeyCredential).values(
+            id=passkey_id,
+            user_id=user_id,
+            credential_id=b"only-cred",
+            public_key=b"only-key",
+            sign_count=0,
+            created_at=datetime.now(UTC),
+        )
+    )
     await session.execute(
         insert(RecoveryCode).values(
             id=str(uuid.uuid4()),
@@ -539,6 +528,51 @@ async def test_a_claim_cannot_take_an_account_that_holds_recovery_codes(
             created_at=datetime.now(UTC),
         )
     )
+    await session.flush()
+    cookie = sign_in(AccountClaims(sub=user_id, email="sensei@dojo.test", role="admin"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test/api",
+        cookies={"access_token": cookie},
+    ) as c:
+        assert (await c.delete(f"/auth/passkeys/{passkey_id}")).status_code == 204
+        assert (await c.get("/setup")).status_code == 404
+
+    begun = await _post(
+        "/setup/passkey/begin",
+        {"email": "intruder@dojo.test", "first_name": "Ai", "surname": "Sato"},
+        SETUP_HEADERS,
+    )
+    assert begun.status_code == 404
+    completed = await _post(
+        "/setup/passkey/complete",
+        {**_CREDENTIAL_PAYLOAD, "email": "intruder@dojo.test"},
+        SETUP_HEADERS,
+    )
+    assert completed.status_code == 404
+
+
+@pytest.mark.parametrize("holds", ["passkey", "recovery codes"])
+@pytest.mark.asyncio
+async def test_a_claim_cannot_take_an_account_somebody_holds(db_client, holds) -> None:
+    """A claim stores its passkey, then grants admin in a second commit. If
+    that grant never lands, the instance is unclaimed but the claimant holds
+    a member Account; a later claim under their address must not enrol on it."""
+    from app.auth.db_models import RecoveryCode
+
+    session = db_client
+    user_id = await seed_account(session, "sensei@dojo.test", role="member")
+    if holds == "passkey":
+        held = PasskeyCredential(
+            user_id=user_id,
+            credential_id=b"held-cred",
+            public_key=b"held-key",
+            sign_count=0,
+        )
+    else:
+        held = RecoveryCode(user_id=user_id, code_hash="hash", set_id=str(uuid.uuid4()))
+    session.add(held)
     await session.flush()
 
     begun = await _post(
@@ -561,10 +595,12 @@ async def test_a_claim_cannot_take_an_account_that_holds_recovery_codes(
         )
 
     assert completed.status_code == 401
-    stored = await session.execute(
-        select(PasskeyCredential).where(PasskeyCredential.user_id == user_id)
+    claimed = await session.execute(
+        select(PasskeyCredential).where(
+            PasskeyCredential.credential_id == b"claim-cred"
+        )
     )
-    assert stored.first() is None
+    assert claimed.scalars().all() == []
 
 
 @pytest.mark.parametrize("membership_status", ["archived", "suspended"])

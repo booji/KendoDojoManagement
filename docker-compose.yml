@@ -1,6 +1,7 @@
-# Production stack (app + PostgreSQL). Config comes from a .env file next to
-# this one, and secrets from the files in ./secrets — run ./setup.sh, which
-# writes both, before `up`. For the Podman/Quadlet + Traefik deployment
+# Production stack (app + PostgreSQL). App settings come from kendo-app.env
+# next to this one; .env holds only what this file interpolates (the image pin,
+# the db's settings) and the secrets, which reach the containers as the files in
+# ./secrets — run ./setup.sh, which writes all three, before `up` (#603). For the Podman/Quadlet + Traefik deployment
 # instead, see deploy/ and docs/deployment.md.
 # Explicit project name so the prod, dev and test stacks never share
 # containers, networks or volumes. Without it Compose falls back to the
@@ -31,6 +32,11 @@ x-hardening: &hardening
 services:
   app:
     <<: *hardening
+    # Back after a crash or an OOM kill at mem_limit; after a reboot, only once
+    # podman-restart.service is enabled — `./setup.sh` enables it, check verifies (#582).
+    # `always`, not `unless-stopped`: an older Podman's podman-restart.service
+    # starts only `always` containers at boot. Same on proxy and db.
+    restart: always
     # Published Release image, pinned by its Release line (ADR-0004, ADR-0009):
     # `:0.1` means fixes and features but no Breaking change. Override
     # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
@@ -39,14 +45,13 @@ services:
     networks:
       - edge
       - backend
+    # Every app setting comes from kendo-app.env, which ./setup.sh writes from
+    # deploy/env/kendo-app.env.example, the file the Quadlet unit reads too
+    # (#603). A key added there reaches the app with no change here. It holds
+    # no secret and no superuser login: those stay in .env, which only this
+    # file reads, so .env as a whole never reaches the app (ADR-0007).
+    env_file: kendo-app.env
     environment:
-      TZ: ${TZ:-UTC}
-      # This is the production stack, so production is the default rather than
-      # something an operator has to remember to opt into. It switches on the
-      # startup checks that refuse to boot with the localhost WEBAUTHN_*
-      # defaults still in place — a misconfiguration that otherwise produces a
-      # healthy-looking deploy that rejects every passkey ceremony.
-      APP_ENV: ${APP_ENV:-production}
       # Secrets are files mounted from ./secrets (see `secrets:` below), named
       # here by <NAME>_FILE — never values in the environment (#462).
       # DATABASE_URL is the restricted app user's login (ADR-0007), never the
@@ -57,35 +62,10 @@ services:
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       SETUP_TOKEN_FILE: /run/secrets/setup_token
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
-      SESSION_MAX_MINUTES: ${SESSION_MAX_MINUTES:-10080}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      # Passkeys are bound to the public domain: WEBAUTHN_RP_ID is the bare
-      # host, WEBAUTHN_ORIGIN the full scheme+host the browser sees. Wrong
-      # values mean registration and login ceremonies are rejected.
-      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID}
-      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN}
-      WEBAUTHN_CHALLENGE_TTL_SECONDS: ${WEBAUTHN_CHALLENGE_TTL_SECONDS:-300}
-      # Keep pinned to the single canonical origin — never "*" (auth is
-      # cookie-based). Defaults to WEBAUTHN_ORIGIN inside the app if empty.
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      # Minimum wall-clock time (ms) the passkey begin endpoints take,
-      # regardless of whether the email is known or not — closes a timing
-      # side channel that would otherwise enumerate registered emails. Only
-      # masks it while the real path finishes underneath it. 100ms is measured
-      # against PostgreSQL (real-path p99 16.8ms, worst observed 27.9ms) plus
-      # headroom for slower storage — see docs/auth-timing-calibration.md.
-      AUTH_BEGIN_MIN_DURATION_MS: ${AUTH_BEGIN_MIN_DURATION_MS:-100}
-      # Safe by construction, and only because `app` publishes no host port:
-      # every request reaches it through the proxy below, and Traefik overwrites
-      # X-Forwarded-For with the address it observed rather than passing a
-      # client-supplied value through. Re-publishing the app's port and leaving
-      # this true would let a client spoof its IP past rate limiting and lockout
-      # — the two changes are one unit.
-      TRUST_PROXY_XFF: ${TRUST_PROXY_XFF:-true}
-      # Upload targets, backed by the static_uploads volume below. Deliberately
-      # not configurable via .env: the paths must match the volume mount, and
-      # they live outside /app/static so they cannot shadow the built SPA.
+      # Upload targets, backed by the static_uploads volume below. Set here,
+      # over kendo-app.env, so an edit there cannot move them: the paths must
+      # match the volume mount, and they live outside /app/static so they
+      # cannot shadow the built SPA.
       STATIC_DIR: /app/uploads/logos
       STATIC_BACKGROUNDS_DIR: /app/uploads/backgrounds
     secrets:
@@ -119,8 +99,10 @@ services:
     image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:0.1}
     networks:
       - backend
+    # The app's settings too, as kendo-migrate.container has them: one image,
+    # one configuration.
+    env_file: kendo-app.env
     environment:
-      TZ: ${TZ:-UTC}
       DATABASE_URL_FILE: /run/secrets/database_url
       MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
     secrets:
@@ -139,6 +121,7 @@ services:
   # create empty directories where Traefik expects its config.
   proxy:
     <<: *hardening
+    restart: always
     image: docker.io/library/traefik:v3.3
     # The one capability back: binding 80/443 inside its own namespace.
     cap_add:
@@ -147,7 +130,8 @@ services:
     networks:
       - edge
     # Rootless Podman needs net.ipv4.ip_unprivileged_port_start=80 to bind
-    # these; see deploy/sysctl-99-kendo-rootless-ports.conf.
+    # these: `./setup.sh check` prints the one-liner. Or publish 8080/8443 and
+    # add the firewalld redirect (docs/deployment.md §1.2).
     ports:
       - "80:80"
       - "443:443"
@@ -163,11 +147,12 @@ services:
 
   db:
     image: postgres:16-alpine
+    restart: always
     # Backend network only: no published ports and no outbound route.
     networks:
       - backend
     environment:
-      TZ: ${TZ:-UTC}
+      TZ: ${TZ:-Europe/London}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}

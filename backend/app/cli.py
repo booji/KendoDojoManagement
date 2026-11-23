@@ -5,17 +5,18 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import uuid
 from collections.abc import Coroutine
 from typing import Any
 
 import typer
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import SqlAttemptRepository
-from app.auth.db_models import AdminRecoveryToken
 from app.auth.member_directory import SqlMemberDirectory
+from app.auth.models import LenientEmail
+from app.auth.recovery_repository import SqlAdminTokenRepository
 from app.auth.recovery_service import (
     admin_token_expiry,
     generate_admin_token_plaintext,
@@ -61,6 +62,12 @@ def _run(coro: Coroutine[Any, Any, None]) -> None:
 @app.command()
 def create_recovery_token(email: str) -> None:
     """Generate a break-glass admin recovery token for the user with EMAIL."""
+    # Stored addresses are LenientEmail-normalised; fold this one the same way.
+    try:
+        email = TypeAdapter(LenientEmail).validate_python(email)
+    except ValidationError:
+        typer.echo(f"Error: '{email}' is not a valid email address", err=True)
+        raise typer.Exit(code=1) from None
     url = _database_url()
 
     async def _create() -> None:
@@ -84,19 +91,16 @@ def create_recovery_token(email: str) -> None:
             raise typer.Exit(code=1)
 
         plaintext = generate_admin_token_plaintext()
-        token_hash = hash_admin_token(plaintext)
+        token_hash = await hash_admin_token(plaintext)
         expires_at = admin_token_expiry()
 
-        obj = AdminRecoveryToken(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            created_by_id=None,
-            token_hash=token_hash,
-            expires_at=expires_at,
-        )
-
         async with factory() as session:
-            session.add(obj)
+            await SqlAdminTokenRepository(session).create_admin_token(
+                user_id=user.id,
+                created_by_id=None,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
             await session.commit()
 
         typer.echo(plaintext)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
@@ -18,17 +18,6 @@ from app.members.repository import AbstractMemberRepository
 from app.members.router import _to_response
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
-
-# Self-service fields a member may clear on their own record by sending an
-# explicit null. first_name and surname are required-by-domain on this route,
-# so a null there means "leave alone" rather than "wipe" — mirrors
-# app.members.router._CLEARABLE_FIELDS for the admin-facing update route.
-_CLEARABLE_FIELDS = (
-    "display_name",
-    "dob",
-    "emergency_contact_name",
-    "emergency_contact_phone",
-)
 
 _Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
@@ -75,9 +64,7 @@ async def put_my_member(
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
-    data: dict[str, Any] = {
-        k: v for k, v in payload.model_dump().items() if v is not None
-    }
+    data = payload.changes()
 
     record = await repo.get_by_user_id(claims.sub)
 
@@ -90,14 +77,6 @@ async def put_my_member(
             detail="No member record linked to this account",
         )
 
-    # The optional PII fields are nullable-by-design: an explicitly provided
-    # None clears the stored value, so it must survive the generic not-None
-    # filter above (which otherwise treats missing and None alike — the
-    # correct reading for first_name/surname, required-by-domain here).
-    explicitly_set = payload.model_dump(exclude_unset=True)
-    for key in _CLEARABLE_FIELDS:
-        if key in explicitly_set:
-            data[key] = explicitly_set[key]
     record = await repo.update(record["id"], data)
     if record is None:
         raise HTTPException(

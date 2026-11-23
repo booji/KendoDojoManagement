@@ -39,6 +39,22 @@ meet it when they change their pin on purpose. A renamed or removed setting
 must make the upgrade stop with an error naming the old one, never run on
 without it.
 
+## Deployment files
+
+Once installed, the deployment files are the operator's, and no upgrade step
+overwrites them: the routine upgrade is back up, pull, restart
+([Upgrading](docs/install/upgrading.md)). A change to one therefore reaches a
+host only if the operator makes it.
+
+So a pull request that changes any of `deploy/quadlet`, `deploy/systemd`,
+`deploy/bin`, `docker-compose.yml`, `deploy/env`, `.env.example`,
+`deploy/traefik` or `setup.sh` writes an **Operator action** section in its body, breaking
+or not. Put it under a Compose heading, a Quadlet heading, or both, as each
+applies. Say which file changed, what to change in the operator's copy, and
+what happens if they do not. When the old file keeps working, say so: then
+the change is not breaking. A new setting with a safe default in
+`app/config.py` needs no action.
+
 ## Before you open the pull request
 
 Run the full suite, not only the backend tests; see

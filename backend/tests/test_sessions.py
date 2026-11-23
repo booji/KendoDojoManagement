@@ -517,6 +517,64 @@ async def test_member_cannot_cancel_session_instance(type_repo, instance_repo) -
 
 
 # ---------------------------------------------------------------------------
+# POST /sessions/{id}/reinstate — undoes a Cancellation (#579)
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_can_reinstate_cancelled_session(type_repo, instance_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    type_id = (await type_repo.list())[0]["id"]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        created = await c.post(
+            "/sessions",
+            json={
+                "title": "Mis-tapped",
+                "date": "2099-07-01",
+                "segments": [_one_segment(type_id)],
+            },
+        )
+        instance_id = created.json()["id"]
+        await c.post(f"/sessions/{instance_id}/cancel")
+
+        response = await c.post(f"/sessions/{instance_id}/reinstate")
+        listed = await c.get("/sessions")
+
+    assert response.status_code == 200
+    assert response.json()["cancelled"] is False
+    # A member sees it in their list again.
+    assert [s["id"] for s in listed.json()] == [instance_id]
+
+
+async def test_reinstate_nonexistent_instance_returns_404(instance_repo) -> None:
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(f"/sessions/{uuid.uuid4()}/reinstate")
+    assert response.status_code == 404
+
+
+async def test_member_cannot_reinstate_session(instance_repo) -> None:
+    from tests.auth_support import sign_in
+
+    record = await instance_repo.add({"title": "Cancelled", "date": "2099-07-01"})
+    await instance_repo.cancel(record["id"])
+    token = sign_in(_MEMBER)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            f"/sessions/{record['id']}/reinstate",
+            cookies={"access_token": token},
+        )
+    assert response.status_code == 403
+    assert (await instance_repo.get(record["id"]))["cancelled"] is True
+
+
+# ---------------------------------------------------------------------------
 # AC7 — GET /sessions returns upcoming sessions for authenticated users
 # ---------------------------------------------------------------------------
 

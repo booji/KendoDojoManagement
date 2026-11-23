@@ -28,10 +28,12 @@ from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
     get_session_template_repo,
+    get_session_type_repo,
 )
 from tests.fake_repositories import (
     InMemorySessionInstanceRepository,
     InMemorySessionTemplateRepository,
+    InMemorySessionTypeRepository,
 )
 
 # ---------------------------------------------------------------------------
@@ -40,6 +42,7 @@ from tests.fake_repositories import (
 
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")
+_TYPE_ID = str(uuid.uuid4())
 
 
 def _admin_override():
@@ -59,6 +62,14 @@ def _member_override():
 def clear_overrides():
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def type_repo() -> InMemorySessionTypeRepository:
+    """Segment writes check their types exist, so the one _segment uses does."""
+    repo = InMemorySessionTypeRepository([{"id": _TYPE_ID, "name": "Keiko"}])
+    app.dependency_overrides[get_session_type_repo] = lambda: repo
+    return repo
 
 
 @pytest.fixture()
@@ -88,7 +99,7 @@ def _segment(
     return {
         "start_time": start_time,
         "duration_minutes": duration_minutes,
-        "type_ids": [str(uuid.uuid4())],
+        "type_ids": [_TYPE_ID],
     }
 
 
@@ -244,6 +255,76 @@ async def test_put_session_instance_moves_it_to_a_new_date(instance_repo) -> Non
     assert stored["date"] == "2099-06-05"
 
 
+async def test_put_session_instance_clears_a_field_sent_as_null(
+    instance_repo,
+) -> None:
+    """#585: an explicit null clears an optional field; a missing key leaves
+    it alone."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo, coach_notes="Watch the kote")
+    await instance_repo.update(target["id"], {"info": "Bring a bokken"})
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(
+            f"/sessions/{target['id']}",
+            json={"location": None, "info": None, "coach_notes": None},
+        )
+    assert response.status_code == 200
+    stored = await instance_repo.get(target["id"])
+    assert stored is not None
+    assert stored["location"] is None
+    assert stored["info"] is None
+    assert stored["coach_notes"] is None
+    assert stored["title"] == "Weekly Keiko"
+
+
+@pytest.mark.parametrize("field", ["title", "date", "segments"])
+async def test_put_session_instance_refuses_null_for_a_required_field(
+    instance_repo, field
+) -> None:
+    """#585: a field every Session must have answers null with 422."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    target = await _seed_instance(instance_repo)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put(f"/sessions/{target['id']}", json={field: None})
+    assert response.status_code == 422
+
+
+async def test_patch_template_clears_a_field_sent_as_null(
+    template_repo, instance_repo
+) -> None:
+    """#585: the template PATCH follows the same rule as the Session PUT."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    tmpl = await _seed_template(template_repo)
+    await template_repo.update(
+        tmpl["id"], {"info": "Bring a bokken", "coach_notes": "Watch the kote"}
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.patch(
+            f"/sessions/templates/{tmpl['id']}",
+            json={"location": None, "info": None, "coach_notes": None},
+        )
+        refused = await c.patch(
+            f"/sessions/templates/{tmpl['id']}", json={"title": None}
+        )
+    assert response.status_code == 200
+    stored = await template_repo.get(tmpl["id"])
+    assert stored is not None
+    assert stored["location"] is None
+    assert stored["info"] is None
+    assert stored["coach_notes"] is None
+    assert stored["title"] == "Weekly Keiko"
+    assert refused.status_code == 422
+
+
 @pytest.mark.parametrize("bad", ["2026-02-31", "not-a-date", "20990605"])
 async def test_put_session_instance_rejects_a_date_that_is_not_real(
     instance_repo, bad
@@ -385,6 +466,8 @@ async def test_delete_template_deactivates_template(
     ) as c:
         response = await c.delete(f"/sessions/templates/{tmpl['id']}")
     assert response.status_code == 200
+    # The response says so: the page hides Extend Series on it (#578).
+    assert response.json()["is_active"] is False
 
     # Template must now be inactive
     tmpl_after = await template_repo.get(tmpl["id"])

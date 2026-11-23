@@ -70,6 +70,9 @@ markers = [
     # reports them without gating on them -- see .github/workflows/backend-tests.yml
     # and docs/auth-timing-calibration.md.
     "timing_sensitive: asserts on measured wall-clock latency",
+    # e2e tests that exercise the guided tour (#609); every other browser test
+    # starts with it marked as seen (conftest.py).
+    "tour: lets the guided tour start on first sign-in",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

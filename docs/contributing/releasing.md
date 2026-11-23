@@ -62,9 +62,43 @@ upgrading section.
 
 Commit those to the release branch and push it.
 
+## Collect the Operator actions
+
+Every release, patch or not. No upgrade step overwrites a deployment file
+(#604), so a change to one reaches an operator only through the release
+notes. Collect the **Operator action** section of every PR in the release
+that has one, breaking or not. Then check that every commit touching a
+deployment file came with one:
+
+```bash
+git log --oneline origin/main..HEAD -- deploy docker-compose.yml .env.example setup.sh
+```
+
+A PR missing its section gets one written now, from its diff. Keep the
+collected actions for the release notes ([Release](#release), step 3), under
+a Compose heading and a Quadlet heading.
+
 ## Rehearse a release candidate
 
-Tag the release branch and push the tag:
+First refresh the bundled FIK affiliate list, which every instance syncs into
+its Federation catalogue on upgrade. From `backend/` on the release branch:
+
+```bash
+uv run python -m scripts.update_fik_affiliates
+```
+
+It rewrites `backend/app/federations/fik_affiliates.json` from
+<https://www.kendo-fik.org/organization/affiliate>, or fails without writing
+if the page's layout has changed. Review the diff and land any change through
+a PR like any other fix; a new country heading fails the run until it is added
+to the script's ISO table.
+
+An affiliate that drops off the list is deactivated on upgrade, not deleted.
+One that later returns to the list stays inactive until an Admin re-activates
+it in Admin Settings: the Admin owns `is_active`, so the sync never turns it
+back on.
+
+Then tag the release branch and push the tag:
 
 ```bash
 git tag -a vX.Y.Z-rc1 -m vX.Y.Z-rc1
@@ -73,10 +107,32 @@ git push origin vX.Y.Z-rc1
 
 An rc tag runs the full suite (`tests.yml`) and publishes an image under its
 exact tag only, never the moving tags operators pin, and its docs publish
-nowhere. Rehearse on a clean host: install from the rc image with
-[Quick self-host](../install/quick-self-host.md), and upgrade a host running the
-previous release to it by following your own upgrading notes. A fix found
-here goes on the release branch, and the next rc is `-rc2`.
+nowhere.
+
+The Release image's GHCR package must be public, or every operator's
+anonymous pull fails with `unauthorized`. A package is created private on its
+first push, and GitHub has no API to change that: if the package was ever
+recreated, make it public under its **Package settings**. Check with an
+anonymous pull before rehearsing, from the clean host (never logged in to
+`ghcr.io`):
+
+```bash
+podman pull ghcr.io/booji/kendodojomanagement:$RC_TAG   # e.g. RC_TAG=X.Y.Z-rc1
+```
+
+Rehearse on a clean host: install from the rc image with
+[Quick self-host](../install/quick-self-host.md). Then upgrade a host running
+the previous release to it, the way an operator pins a Version
+([Upgrading § Pinning a Version](../install/upgrading.md#pinning-a-version-and-rolling-back)):
+apply the collected Operator actions, edit the pin to the rc tag, and run the
+routine upgrade. The pin is `Image=` in `kendo-app.container`,
+`kendo-migrate.container` and `kendo-ip-retention.container` on Quadlet, and
+`KENDO_IMAGE` in `.env` on Compose. Do not retag the rc image as `:0.1`: the
+rehearsal would then skip the pin edit an operator makes. Rehearse the
+rollback too, by editing the pin back to the previous release and restoring
+the backup the upgrade took.
+
+A fix found here goes on the release branch, and the next rc is `-rc2`.
 
 ## Release
 
@@ -96,8 +152,10 @@ here goes on the release branch, and the next rc is `-rc2`.
     after.
 
 3. Publish the GitHub release from the tag with generated notes; they are
-   grouped by label, `breaking` first. On a new Release line, check the
-   operator actions are there and link the upgrading section.
+   grouped by label, `breaking` first. Put the Operator actions you collected
+   above them, under an **Operator action** heading with Compose and Quadlet
+   subheadings, or write "None" there. On a new Release line, also link the
+   upgrading section.
 4. Merge `main` back into `develop` with a PR (merge commit), so the release
    branch's commits reach `develop`.
 5. Delete `release/X.Y.Z`.

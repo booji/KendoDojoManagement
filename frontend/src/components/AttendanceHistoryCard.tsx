@@ -9,14 +9,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 type AttendanceHistoryCardProps = {
   memberId: string
-  /** Show the list without a click. The Member page starts collapsed. */
-  defaultOpen?: boolean
+  /**
+   * Hide the list behind a Show/Hide toggle, starting collapsed. The Member
+   * page needs it: the unpaged history would push the cards below it down.
+   */
+  collapsible?: boolean
 }
 
-const AttendanceHistoryCard = ({ memberId, defaultOpen = false }: AttendanceHistoryCardProps) => {
+const sessionCount = (n: number): string => `${n} ${n === 1 ? "session" : "sessions"}`
+
+const AttendanceHistoryCard = ({ memberId, collapsible = false }: AttendanceHistoryCardProps) => {
   const [records, setRecords] = useState<MemberAttendanceRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     getMemberAttendanceHistory(memberId)
@@ -29,7 +34,11 @@ const AttendanceHistoryCard = ({ memberId, defaultOpen = false }: AttendanceHist
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Attendance History</CardTitle>
+        <CardTitle>
+          Attendance History
+          {!collapsible && records !== null && records.length > 0 &&
+            ` · ${sessionCount(records.length)}`}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {error !== null ? (
@@ -43,22 +52,24 @@ const AttendanceHistoryCard = ({ memberId, defaultOpen = false }: AttendanceHist
           <p className="text-sm text-muted-foreground">No attendance records yet</p>
         ) : (
           <div>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setOpen((o) => !o)}
-              aria-expanded={open}
-              aria-controls="attendance-history-list"
-            >
-              {open ? (
-                <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
-              ) : (
-                <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
-              )}
-              {open ? "Hide" : "Show"} attendance ({records.length} sessions)
-            </button>
+            {collapsible && (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-controls="attendance-history-list"
+              >
+                {open ? (
+                  <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
+                ) : (
+                  <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
+                )}
+                {open ? "Hide" : "Show"} attendance ({sessionCount(records.length)})
+              </button>
+            )}
 
-            {open && (
+            {(open || !collapsible) && (
               <ol
                 id="attendance-history-list"
                 className="mt-2 space-y-1 border-l-2 border-border pl-3"

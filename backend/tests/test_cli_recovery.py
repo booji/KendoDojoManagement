@@ -168,6 +168,16 @@ def test_cli_create_recovery_token_prints_to_stdout(seeded_db) -> None:
     assert len(result.stdout.strip()) > 0
 
 
+def test_cli_ignores_the_case_of_the_email(seeded_db) -> None:
+    # #592: the operator may type the address as the Admin first entered it.
+    result = runner.invoke(
+        cli_app,
+        ["create-recovery-token", seeded_db["email"].upper()],
+        env={"DATABASE_URL": seeded_db["url"]},
+    )
+    assert result.exit_code == 0, result.stderr
+
+
 # ── AC2 — Token stored with created_by_id = NULL ──────────────────────────────
 
 
@@ -256,6 +266,46 @@ async def test_cli_token_only_one_row_created(tmp_db) -> None:
             await session.execute(delete(Account).where(Account.id == target_id))
             await session.commit()
         await eng.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cli_token_lifts_a_recovery_lockout(db_client, database_url) -> None:
+    """Five failures lock recovery, but the break-glass token still redeems:
+    minting it clears the Account's failures (#580)."""
+    target_id = str(uuid.uuid4())
+    target_email = _unique_email("cli-lockout")
+    await _seed_user(db_client, target_email, target_id)
+    async with AsyncSession(db_client) as session:
+        for _ in range(5):
+            session.add(
+                RecoveryAttempt(
+                    user_id=target_id,
+                    attempted_at=datetime.now(UTC),
+                    ip_address="127.0.0.1",
+                    success=False,
+                )
+            )
+        await session.commit()
+
+    try:
+        result = runner.invoke(
+            cli_app,
+            ["create-recovery-token", target_email],
+            env={"DATABASE_URL": database_url},
+        )
+        assert result.exit_code == 0
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test/api"
+        ) as c:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": result.stdout.strip()},
+            )
+
+        assert response.status_code == 200
+    finally:
+        await _delete_target(db_client, target_id)
 
 
 # ── AC3/AC6 — CLI-generated token (created_by_id=NULL) redeems via redeem endpoint ──

@@ -27,7 +27,7 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         "checkin_window_after_minutes": 120,
         "background_image_url": None,
         "login_show_background": False,
-        "login_show_logo": False,
+        "login_show_logo": True,
         "login_show_name": False,
     }
 
@@ -72,7 +72,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
                 "checkin_window_after_minutes": 120,
                 "background_image_url": None,
                 "login_show_background": False,
-                "login_show_logo": False,
+                "login_show_logo": True,
                 "login_show_name": False,
                 "updated_at": None,
             }

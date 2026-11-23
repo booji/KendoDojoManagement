@@ -20,17 +20,61 @@ from app.core.security_logger import request_ip
 # latency alone, without reading a single response body.
 _log = logging.getLogger(__name__)
 
-_CONSTANT_TIME_PATHS = frozenset(
-    config.API_PREFIX + path
-    for path in (
-        "/auth/login/passkey/begin",
-        "/auth/invites/redeem/begin",
-    )
-)
+# Each padded path and the config setting that holds its floor. Login
+# complete and recovery redeem have their own: their work is heavier than
+# begin's, and an unknown email would otherwise skip work a known one does
+# (#587, #594).
+# Each floor is read per request, not bound here, so it can be tuned or
+# overridden in tests.
+_CONSTANT_TIME_FLOORS: dict[str, tuple[str, Callable[[], int]]] = {
+    config.API_PREFIX + "/auth/login/passkey/begin": (
+        "AUTH_BEGIN_MIN_DURATION_MS",
+        lambda: config.AUTH_BEGIN_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/invites/redeem/begin": (
+        "AUTH_BEGIN_MIN_DURATION_MS",
+        lambda: config.AUTH_BEGIN_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/login/passkey/complete": (
+        "LOGIN_COMPLETE_MIN_DURATION_MS",
+        lambda: config.LOGIN_COMPLETE_MIN_DURATION_MS,
+    ),
+    config.API_PREFIX + "/auth/recovery/redeem": (
+        "RECOVERY_REDEEM_MIN_DURATION_MS",
+        lambda: config.RECOVERY_REDEEM_MIN_DURATION_MS,
+    ),
+}
+
+
+# How far short of the deadline the pad's sleep stops, leaving the rest to a
+# yield loop (#596). `asyncio.sleep` can wake a whole millisecond late for some
+# durations, so a pad that only sleeps ends later on whichever path happens to
+# leave such a duration to pad. 5ms covers the sleep's worst observed lateness
+# on a single shared CPU (2.36ms) with room to spare; the price is at most this
+# long spent yielding per padded request.
+_PAD_SPIN_MARGIN_S = 0.005
+
+
+async def _sleep_until(deadline: float) -> None:
+    """Return at `deadline` (a `time.perf_counter()` value), not after it.
+
+    On Linux, asyncio's `EpollSelector` rounds a timeout up to whole
+    milliseconds as `math.ceil(t * 1e3) * 1e-3`. For some k that float lands
+    just above k/1000 (`18 * 1e-3 == 0.018000000000000002`) and CPython's
+    `epoll.poll` rounds it up again, so a timeout of 9, 13, 18, 26, ... 87 ms
+    waits a whole extra millisecond. Sleeping to just short of the deadline
+    and yielding the rest makes the wake-up independent of what was left.
+    """
+    coarse = deadline - time.perf_counter() - _PAD_SPIN_MARGIN_S
+    if coarse > 0:
+        await asyncio.sleep(coarse)
+    while time.perf_counter() < deadline:
+        await asyncio.sleep(0)
 
 
 class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
-    """Hold the passkey begin endpoints to a fixed minimum response time.
+    """Hold the passkey login and invite begin endpoints, login complete and
+    recovery redeem to a fixed minimum response time.
 
     This lives in middleware rather than inside the service functions on
     purpose. An earlier revision padded inside `login_passkey_begin` /
@@ -52,17 +96,21 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if request.url.path not in _CONSTANT_TIME_PATHS:
+        padded = _CONSTANT_TIME_FLOORS.get(request.url.path)
+        if padded is None:
             return await call_next(request)
+        setting, read_floor = padded
 
         start = time.perf_counter()
         try:
             return await call_next(request)
         finally:
+            floor_ms = read_floor()
+            floor = floor_ms / 1000
             elapsed = time.perf_counter() - start
-            remaining = (config.AUTH_BEGIN_MIN_DURATION_MS / 1000) - elapsed
+            remaining = floor - elapsed
             if remaining > 0:
-                await asyncio.sleep(remaining)
+                await _sleep_until(start + floor)
             else:
                 # The request already outran the floor, so there is nothing
                 # left to pad and the real-vs-decoy delta is observable again.
@@ -73,11 +121,12 @@ class ConstantTimeAuthMiddleware(BaseHTTPMiddleware):
                 _log.warning(
                     "Constant-time floor exceeded on %s: %.1fms elapsed vs "
                     "%dms floor. Timing side channel is no longer masked; "
-                    "raise AUTH_BEGIN_MIN_DURATION_MS above the real path's "
-                    "p99 or investigate the slowdown.",
+                    "raise %s above the real path's p99 or investigate the "
+                    "slowdown.",
                     request.url.path,
                     elapsed * 1000,
-                    config.AUTH_BEGIN_MIN_DURATION_MS,
+                    floor_ms,
+                    setting,
                 )
 
 

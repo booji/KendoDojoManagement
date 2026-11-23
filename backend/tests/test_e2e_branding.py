@@ -201,7 +201,7 @@ def test_admin_settings_has_login_screen_subsection(page: Page) -> None:
     _complete_onboarding(token)
     _inject_cookie(page, token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     expect(page.get_by_role("heading", name="Login Screen")).to_be_visible()
     expect(page.locator("#login-show-background")).to_be_visible()
@@ -221,7 +221,7 @@ def test_admin_settings_login_screen_toggles_auto_save(page: Page) -> None:
     _complete_onboarding(token)
     _inject_cookie(page, token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     toggle = page.locator("#login-show-name")
     expect(toggle).not_to_be_checked()
@@ -251,7 +251,7 @@ def test_admin_settings_login_screen_background_upload(page: Page) -> None:
     _complete_onboarding(token)
     _inject_cookie(page, token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     expect(page.get_by_alt_text("Login background preview")).to_have_count(0)
 
@@ -288,7 +288,7 @@ def test_admin_settings_login_screen_background_remove(page: Page) -> None:
     _complete_onboarding(token)
     _inject_cookie(page, token)
 
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/general")
 
     expect(page.get_by_alt_text("Login background preview")).to_be_visible()
 

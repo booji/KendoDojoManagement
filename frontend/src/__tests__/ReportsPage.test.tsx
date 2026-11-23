@@ -36,6 +36,7 @@ describe("ReportsPage attendance report", () => {
     )
     render(<ReportsPage />)
 
+    await userEvent.click(screen.getByRole("tab", { name: "Attendance" }))
     await userEvent.click(
       screen.getByRole("button", { name: "Generate attendance report" }),
     )

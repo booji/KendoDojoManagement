@@ -253,3 +253,7 @@ deploy/traefik/selfhost/dynamic/*.bak
 
 # The Compose stack's secret files, written from .env by setup.sh (#462).
 /secrets/
+# The Compose stack's app settings, written by setup.sh from
+# deploy/env/kendo-app.env.example (#603).
+/kendo-app.env
+/kendo-app.env.bak

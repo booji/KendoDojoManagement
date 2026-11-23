@@ -64,13 +64,7 @@ def _setup_token(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _seed_user(session, email: str, role: str = "member") -> str:
-    """Seed a fully-registered user: an Account row plus a PasskeyCredential.
-
-    The credential is what makes the instance count as "already set up" --
-    the setup claim defines bootstrap as zero PasskeyCredential rows,
-    not zero Account rows, so that a phantom user left behind by an abandoned
-    first-run ceremony cannot permanently brick setup.
-    """
+    """Seed a fully-registered user: an Account row plus a PasskeyCredential."""
     user_id = str(uuid.uuid4())
     await seed_account(session, email, user_id=user_id, role=role)
     await session.execute(
@@ -86,10 +80,10 @@ async def _seed_user(session, email: str, role: str = "member") -> str:
     return user_id
 
 
-async def _seed_phantom_user(session, email: str, role: str = "member") -> str:
+async def _seed_phantom_user(session, email: str) -> str:
     """Seed an Account with NO credential -- an abandoned registration ceremony."""
     user_id = str(uuid.uuid4())
-    await seed_account(session, email, user_id=user_id, role=role)
+    await seed_account(session, email, user_id=user_id)
     await session.flush()
     return user_id
 
@@ -229,7 +223,9 @@ async def test_abandoned_first_run_ceremony_does_not_brick_setup(db_client) -> N
     """
     session = db_client
     await _reset_to_fresh_instance(session)
-    await _seed_phantom_user(session, "first-ever@dojo.test", role="admin")
+    # A member: begin never grants admin, only a completed claim does (#432),
+    # and an Admin Account claims the instance (#589).
+    await _seed_phantom_user(session, "first-ever@dojo.test")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -445,6 +441,38 @@ async def test_login_complete_errors_indistinguishable_unknown_vs_bad_credential
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential_id", ["A", "é"])
+async def test_login_complete_malformed_credential_id_same_for_known_and_unknown(
+    db_client, credential_id
+) -> None:
+    """A credential id that is not base64url used to 500 for a known email
+    and 401 for an unknown one: a one-request enumeration oracle (#587). Both
+    must get the generic 401."""
+    await _seed_user(db_client, "known-malformed@dojo.test")
+    credential = {
+        "id": credential_id,
+        "rawId": credential_id,
+        "response": {},
+        "type": "public-key",
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test/api",
+    ) as c:
+        responses = [
+            await c.post(
+                "/auth/login/passkey/complete",
+                json={"email": email, "credential": credential},
+            )
+            for email in ("known-malformed@dojo.test", "unknown-malformed@dojo.test")
+        ]
+
+    assert [r.status_code for r in responses] == [401, 401]
+    assert responses[0].json() == responses[1].json()
+
+
 # ── issue #267: allowCredentials removed as an enumeration channel ─────────
 #
 # #239/#255 masked login_passkey_begin's decoy shape and timing, but left
@@ -522,9 +550,9 @@ async def test_begin_endpoints_still_answer_unknown_email_and_stay_constant_time
     unknown one, and remains listed in the constant-time middleware's
     protected path set. (The email-addressed register begin is gone, #472.)"""
     from app.config import API_PREFIX
-    from app.core.middleware import _CONSTANT_TIME_PATHS
+    from app.core.middleware import _CONSTANT_TIME_FLOORS
 
-    assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/login/passkey/begin" in _CONSTANT_TIME_FLOORS
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -635,6 +663,68 @@ async def test_login_completes_end_to_end_without_allow_credentials(
 
     assert login_complete.status_code == 200
     assert "access_token" in login_complete.cookies
+
+
+@pytest.mark.asyncio
+async def test_sign_in_ignores_the_case_of_the_email(db_client) -> None:
+    """#592: an address claimed as `Kenji@…` signs in as `kenji@…`."""
+    await _reset_to_fresh_instance(db_client)
+    credential_id_b64 = "Y2FzZS1jcmVkZW50aWFsLWlk"  # b"case-credential-id"
+
+    def credential(response: dict) -> dict:
+        return {
+            "id": credential_id_b64,
+            "rawId": credential_id_b64,
+            "response": response,
+            "type": "public-key",
+        }
+
+    registration = MagicMock(
+        credential_id=b"case-credential-id",
+        credential_public_key=b"case-public-key",
+        sign_count=0,
+        aaguid=None,
+    )
+    login = MagicMock(credential_id=b"case-credential-id", new_sign_count=1)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        await c.post(
+            "/setup/passkey/begin",
+            json={"email": "Kenji@Dojo.test", "first_name": "Ai", "surname": "Sato"},
+            headers=_SETUP_HEADERS,
+        )
+        with patch("webauthn.verify_registration_response", return_value=registration):
+            claimed = await c.post(
+                "/setup/passkey/complete",
+                headers=_SETUP_HEADERS,
+                json={
+                    "email": "Kenji@Dojo.test",
+                    "credential": credential(
+                        {"clientDataJSON": "dGVzdA", "attestationObject": "dGVzdA"}
+                    ),
+                },
+            )
+        assert claimed.status_code == 201
+
+        await c.post("/auth/login/passkey/begin", json={"email": "kenji@dojo.test"})
+        with patch("webauthn.verify_authentication_response", return_value=login):
+            signed_in = await c.post(
+                "/auth/login/passkey/complete",
+                json={
+                    "email": "kenji@dojo.test",
+                    "credential": credential(
+                        {
+                            "clientDataJSON": "dGVzdA",
+                            "authenticatorData": "dGVzdA",
+                            "signature": "dGVzdA",
+                        }
+                    ),
+                },
+            )
+
+    assert signed_in.status_code == 200
 
 
 # ── Account verification enforcement (issue #267 follow-up) ──────────────────────

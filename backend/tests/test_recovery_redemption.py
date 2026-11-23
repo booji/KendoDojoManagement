@@ -14,13 +14,14 @@ Acceptance criteria exercised:
   AC2. POST /auth/recovery/redeem returns restricted JWT
   AC3. Restricted JWT blocked on regular guarded routes
   AC5. Used code rejected with 401
-  AC6. 5 failures → 429
+  AC6. 5 failures lock recovery (answered as a bad code, #588)
   AC7. All attempts logged
-  AC9. Unit: valid→used; used→rejected; wrong→counter++; 5th→429; success resets counter
+  AC9. Unit: valid→used; used→rejected; wrong→counter++; 5th→locked; success resets counter
 """
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -31,14 +32,22 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app import config
 from app.auth.attempt_repository import SqlAttemptRepository
-from app.auth.db_models import Account, AuthSession, RecoveryAttempt, RecoveryCode
+from app.auth.db_models import (
+    Account,
+    AdminRecoveryToken,
+    AuthSession,
+    RecoveryAttempt,
+    RecoveryCode,
+)
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
+from tests.timing_support import assert_latency_converges_sampled
 
 _TEST_EMAIL = "musashi@dojo.test"
 
@@ -73,6 +82,11 @@ async def _wipe_test_email(engine, email: str = _TEST_EMAIL) -> None:
         if user_ids:
             await session.execute(
                 delete(RecoveryAttempt).where(RecoveryAttempt.user_id.in_(user_ids))
+            )
+            await session.execute(
+                delete(AdminRecoveryToken).where(
+                    AdminRecoveryToken.user_id.in_(user_ids)
+                )
             )
             await session.execute(
                 delete(RecoveryCode).where(RecoveryCode.user_id.in_(user_ids))
@@ -213,6 +227,25 @@ async def test_redeem_valid_code_returns_200(db_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_redeem_ignores_the_case_of_the_email(db_client) -> None:
+    # #592: the address is stored folded; the Member may type it any way.
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": "Musashi@Dojo.test", "code": plaintext},
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_redeem_valid_code_returns_access_token(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -334,25 +367,35 @@ async def test_redeem_wrong_code_returns_401(db_client) -> None:
     assert response.status_code == 401
 
 
-# ── AC6 — 5 failures → 429 ────────────────────────────────────────────────────
+# ── AC6 — 5 failures lock recovery ────────────────────────────────────────────
+# A lockout answers exactly as a bad code does, so it cannot tell a caller the
+# email has an Account (#588); it shows only in the right code being refused.
 
 
 @pytest.mark.asyncio
-async def test_fifth_failed_attempt_returns_429(db_client) -> None:
+async def test_fifth_failed_attempt_locks_recovery(db_client) -> None:
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
-    await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
     await _seed_failed_attempt(db_client, user_id, count=4)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.post(
-            "/auth/recovery/redeem",
-            json={"email": "musashi@dojo.test", "code": "wrong-code-yyyy"},
-        )
+    assert (await _redeem("wrong-code-yyyy")).status_code == 401
+    assert (await _redeem(plaintext)).status_code == 401
 
-    assert response.status_code == 429
+
+@pytest.mark.asyncio
+async def test_a_lockout_answers_exactly_like_a_bad_code(db_client) -> None:
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    bad = await _redeem("wrong-code-yyyy")
+    await _seed_failed_attempt(db_client, user_id, count=4)
+
+    locked = await _redeem(plaintext)
+
+    assert (locked.status_code, locked.json()) == (bad.status_code, bad.json())
 
 
 @pytest.mark.asyncio
@@ -373,6 +416,92 @@ async def test_four_failures_still_allows_attempt(db_client) -> None:
         )
 
     assert response.status_code == 200
+
+
+async def _redeem(code: str):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        return await c.post(
+            "/auth/recovery/redeem",
+            json={"email": "musashi@dojo.test", "code": code},
+        )
+
+
+@pytest.mark.asyncio
+async def test_lockout_expires_after_fifteen_minutes(db_client) -> None:
+    """Five failures lock recovery for 15 minutes, not forever (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=5,
+        attempted_at=datetime.now(UTC) - timedelta(minutes=16),
+    )
+
+    assert (await _redeem(plaintext)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_each_failure_past_the_lockout_doubles_it(db_client) -> None:
+    """A sixth failure locks recovery for 30 minutes, not 15 (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=6,
+        attempted_at=datetime.now(UTC) - timedelta(minutes=20),
+    )
+
+    assert (await _redeem(plaintext)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_failures_older_than_a_day_stop_counting(db_client) -> None:
+    """Five day-old failures and one fresh one are one failure, not a sixth
+    that locks for 30 minutes (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=5,
+        attempted_at=datetime.now(UTC) - timedelta(hours=25),
+    )
+    await _seed_failed_attempt(db_client, user_id)
+
+    assert (await _redeem(plaintext)).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hours_ago", "expected"), [(15, 401), (17, 200)], ids=["inside", "past"]
+)
+async def test_the_doubling_stops_at_sixteen_hours(
+    db_client, hours_ago, expected
+) -> None:
+    """Twelve failures would lock for 32 hours if each doubled the lockout;
+    it stops doubling at 16 (#580)."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    plaintext = "abcd-efgh-ijkl"
+    await _seed_recovery_code(db_client, user_id, plaintext)
+    await _seed_failed_attempt(
+        db_client,
+        user_id,
+        count=12,
+        attempted_at=datetime.now(UTC) - timedelta(hours=hours_ago),
+    )
+
+    assert (await _redeem(plaintext)).status_code == expected
 
 
 # ── AC7 — Attempts logged ──────────────────────────────────────────────────────
@@ -514,7 +643,7 @@ async def test_wrong_code_increments_attempt_counter(db_client) -> None:
 async def test_successful_attempt_after_prior_failures_resets_counter(
     db_client,
 ) -> None:
-    """After a successful redemption, 4 new failures should NOT trigger 429."""
+    """After a successful redemption, 4 new failures do not lock recovery."""
 
     user_id = str(uuid.uuid4())
     await _seed_user(db_client, "musashi@dojo.test", user_id)
@@ -545,8 +674,10 @@ async def test_successful_attempt_after_prior_failures_resets_counter(
                 "/auth/recovery/redeem",
                 json={"email": "musashi@dojo.test", "code": "wrong-code-yyyy"},
             )
-        # 4th new failure: should still be 401 (not 429) because counter was reset
         assert r.status_code == 401
+
+    # Not locked: the success reset the count, so 4 failures are not 7.
+    assert (await _redeem(plaintext2)).status_code == 200
 
 
 @pytest.mark.asyncio
@@ -687,3 +818,215 @@ async def test_cli_clears_aged_ip_addresses(db_client, database_url) -> None:
 
     assert result.exit_code == 0, f"output={result.output!r} exc={result.exception}"
     assert [a.ip_address for a in await _attempts_for(db_client, user_id)] == [None]
+
+
+# ── #588 — redeem does not reveal whether an email has an Account ─────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", ["x" * 73, "é" * 37], ids=["73-ascii", "74-utf8"])
+async def test_code_over_72_bytes_is_a_422(db_client, code) -> None:
+    """bcrypt reads at most 72 bytes; past that it raised and answered 500
+    for a known email and 401 for an unknown one."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    await _seed_recovery_code(db_client, user_id, "real-code-xxxx")
+
+    assert (await _redeem(code)).status_code == 422
+
+
+async def _seed_code_set(engine, user_id: str) -> None:
+    """A full set of 8 codes, hashed at bcrypt cost 4 to keep tests short."""
+    async with engine.begin() as conn:
+        for index in range(8):
+            await conn.execute(
+                insert(RecoveryCode).values(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    code_hash=bcrypt.hashpw(
+                        f"real-code-{index:04}".encode(), bcrypt.gensalt(4)
+                    ).decode(),
+                    set_id=str(uuid.uuid4()),
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+
+@pytest.fixture
+def cheap_bcrypt(monkeypatch):
+    """The app hashes and pads at the cost 4 `_seed_code_set` uses."""
+    from app.auth import recovery_service
+
+    monkeypatch.setattr(recovery_service, "BCRYPT_ROUNDS", 4)
+
+
+async def _bad_code_answer(monkeypatch, email: str) -> tuple[int, dict, int]:
+    """(status, body, bcrypt comparisons) for a bad code sent for `email`."""
+    comparisons = []
+    checkpw = bcrypt.checkpw
+
+    def counting(password: bytes, hashed: bytes) -> bool:
+        comparisons.append(hashed)
+        return checkpw(password, hashed)
+
+    monkeypatch.setattr(bcrypt, "checkpw", counting)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(
+            "/auth/recovery/redeem", json={"email": email, "code": "wrong-code-yyyy"}
+        )
+    monkeypatch.setattr(bcrypt, "checkpw", checkpw)
+    return response.status_code, response.json(), len(comparisons)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["no codes", "unknown", "barred", "locked out"])
+async def test_every_failure_answers_and_costs_as_a_bad_code(
+    db_client, cheap_bcrypt, monkeypatch, case
+) -> None:
+    """An unknown email answered 401 before any bcrypt, and a lockout 429: both
+    told a caller whether the email had an Account (#588). Every failure now
+    gets the answer a bad code gets, after as many bcrypt comparisons."""
+    user_id = str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", user_id)
+    await _seed_code_set(db_client, user_id)
+    bad_code = await _bad_code_answer(monkeypatch, "musashi@dojo.test")
+
+    email = "musashi@dojo.test"
+    if case == "no codes":
+        async with db_client.begin() as conn:
+            await conn.execute(
+                delete(RecoveryCode).where(RecoveryCode.user_id == user_id)
+            )
+    elif case == "unknown":
+        email = "nobody@dojo.test"
+    elif case == "barred":
+        async with db_client.begin() as conn:
+            await conn.execute(
+                update(Member)
+                .where(Member.email == "musashi@dojo.test")
+                .values(membership_status="archived")
+            )
+    else:
+        await _seed_failed_attempt(db_client, user_id, count=4)
+
+    assert await _bad_code_answer(monkeypatch, email) == bad_code
+
+
+@pytest.mark.asyncio
+@pytest.mark.timing_sensitive
+async def test_the_padding_costs_what_a_real_code_does(
+    db_client, cheap_bcrypt, monkeypatch
+) -> None:
+    """An Account with no codes checks the dummy hash where one with a full
+    set checks its own; neither may answer faster (#588). Unknown, barred and
+    locked-out emails check the same dummy (the test above).
+
+    Both are Accounts, so the database work matches and only bcrypt is
+    measured. An unknown email does less database work than a known one --
+    no lockout lookup, no failed attempt to write -- which this helper's 1ms
+    budget would see; that is not bcrypt, and not what #588 closes.
+    """
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    full_id, empty_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", full_id)
+    await _seed_code_set(db_client, full_id)
+    await _seed_user(db_client, "kojiro@dojo.test", empty_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+
+        async def timed(email: str) -> float:
+            # Outside the timing: clear failures so neither is locked out.
+            async with db_client.begin() as conn:
+                await conn.execute(
+                    delete(RecoveryAttempt).where(
+                        RecoveryAttempt.user_id.in_([full_id, empty_id])
+                    )
+                )
+            start = time.perf_counter()
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": email, "code": "wrong-code-yyyy"},
+            )
+            elapsed = time.perf_counter() - start
+            assert response.status_code == 401
+            return elapsed
+
+        try:
+            await assert_latency_converges_sampled(
+                lambda: timed("musashi@dojo.test"),
+                lambda: timed("kojiro@dojo.test"),
+                label_a="full code set",
+                label_b="no codes",
+            )
+        finally:
+            await _wipe_test_email(db_client, "kojiro@dojo.test")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timing_sensitive
+@pytest.mark.parametrize("other", ["unknown email", "Account with no tokens"])
+async def test_an_account_holding_admin_tokens_answers_as_fast_as(
+    db_client, cheap_bcrypt, monkeypatch, other
+) -> None:
+    """The redeem floor hides what only some emails cost (#594). Against an
+    unknown email: the lockout lookup, the codes and tokens read, the failed
+    attempt written. Against an Account with none: the comparisons of tokens
+    seeded past the one-live-token rule."""
+    monkeypatch.setattr(app.state.limiter, "enabled", False)
+    monkeypatch.setattr(config, "RECOVERY_REDEEM_MIN_DURATION_MS", 150)
+    holder_id, other_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, "musashi@dojo.test", holder_id)
+    await _seed_code_set(db_client, holder_id)
+    async with db_client.begin() as conn:
+        for _ in range(3):
+            await conn.execute(
+                insert(AdminRecoveryToken).values(
+                    id=str(uuid.uuid4()),
+                    user_id=holder_id,
+                    token_hash=bcrypt.hashpw(
+                        b"admin-token", bcrypt.gensalt(4)
+                    ).decode(),
+                    expires_at=datetime.now(UTC) + timedelta(minutes=60),
+                    created_at=datetime.now(UTC),
+                )
+            )
+    other_email = "nobody@dojo.test"
+    if other == "Account with no tokens":
+        other_email = "kojiro@dojo.test"
+        await _seed_user(db_client, other_email, other_id)
+        await _seed_code_set(db_client, other_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+
+        async def timed(email: str) -> float:
+            # Outside the timing: clear failures so neither is locked out.
+            async with db_client.begin() as conn:
+                await conn.execute(
+                    delete(RecoveryAttempt).where(
+                        RecoveryAttempt.user_id.in_([holder_id, other_id])
+                    )
+                )
+            start = time.perf_counter()
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": email, "code": "wrong-code-yyyy"},
+            )
+            elapsed = time.perf_counter() - start
+            assert response.status_code == 401
+            return elapsed
+
+        try:
+            await assert_latency_converges_sampled(
+                lambda: timed("musashi@dojo.test"),
+                lambda: timed(other_email),
+                label_a="Account holding admin tokens",
+                label_b=other,
+            )
+        finally:
+            await _wipe_test_email(db_client, "kojiro@dojo.test")

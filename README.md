@@ -55,7 +55,7 @@ Quickest start, on a host with Podman:
 
 ```bash
 podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
-./setup.sh          # asks for your domain, writes .env and the Traefik config
+./setup.sh          # asks for your domain, writes .env, kendo-app.env and the Traefik config
 ./setup.sh check    # green? then:
 podman-compose up -d
 ```

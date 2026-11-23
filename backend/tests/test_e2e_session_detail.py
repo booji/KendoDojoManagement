@@ -239,3 +239,88 @@ def test_editing_the_date_moves_the_session_on_the_calendar(page: Page) -> None:
     expect(chip).to_be_visible(timeout=10000)
     # The chip's day cell leads with its day-of-month number.
     expect(chip.locator("xpath=..").locator("span").first).to_have_text("20")
+
+
+# ---------------------------------------------------------------------------
+# Issue #579 — cancelling asks first, and a Cancellation can be undone
+# ---------------------------------------------------------------------------
+
+
+def _is_cancelled(page: Page, token: str, session_id: str) -> bool:
+    resp = page.request.get(
+        f"{API_URL}/sessions/{session_id}", headers=_api_headers(token)
+    )
+    return resp.json()["cancelled"]
+
+
+def test_cancelling_a_session_asks_first_and_can_be_reinstated(page: Page) -> None:
+    admin_token = _make_token("admin")
+    session_id = _create_session(page, admin_token)
+    _set_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/sessions/{session_id}")
+
+    # Backing out of the dialog cancels nothing.
+    page.get_by_role("button", name="Cancel Session").click()
+    dialog = page.get_by_role("dialog")
+    cancel = dialog.get_by_role("button", name="Cancel", exact=True)
+    expect(cancel).to_be_focused()
+    cancel.click()
+    expect(dialog).to_be_hidden()
+    assert not _is_cancelled(page, admin_token, session_id)
+
+    page.get_by_role("button", name="Cancel Session").click()
+    dialog.get_by_role("button", name="Cancel session").click()
+    expect(page.get_by_text("Cancelled", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Cancel Session")).to_have_count(0)
+    assert _is_cancelled(page, admin_token, session_id)
+
+    page.get_by_role("button", name="Reinstate Session").click()
+    expect(page.get_by_role("button", name="Cancel Session")).to_be_visible()
+    expect(page.get_by_text("Cancelled", exact=True)).to_have_count(0)
+    assert not _is_cancelled(page, admin_token, session_id)
+
+
+def test_cancelling_a_series_asks_first_and_shows_the_session_cancelled(
+    page: Page,
+) -> None:
+    admin_token = _make_token("admin")
+    type_id = page.request.get(
+        f"{API_URL}/session-types", headers=_api_headers(admin_token)
+    ).json()[0]["id"]
+    resp = page.request.post(
+        f"{API_URL}/sessions/templates",
+        headers={**_api_headers(admin_token), "Content-Type": "application/json"},
+        data=json.dumps(
+            {
+                "title": "Series To Cancel",
+                "start_date": "2099-03-02",
+                "end_date": "2099-03-20",
+                "recurrence_days": [0],
+                "segments": [
+                    {
+                        "start_time": "19:00",
+                        "duration_minutes": 60,
+                        "type_ids": [type_id],
+                    }
+                ],
+            }
+        ),
+    )
+    assert resp.status == 201, resp.text()
+    template_id = resp.json()["id"]
+    sessions = page.request.get(
+        f"{API_URL}/sessions", headers=_api_headers(admin_token)
+    ).json()
+    session_id = next(s["id"] for s in sessions if s["template_id"] == template_id)
+
+    _set_cookie(page, admin_token)
+    page.goto(f"{BASE_URL}/sessions/{session_id}")
+    page.get_by_role("button", name="Cancel Series").click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_focused()
+    assert not _is_cancelled(page, admin_token, session_id)
+
+    dialog.get_by_role("button", name="Cancel series").click()
+    expect(page.get_by_text("Cancelled", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Cancel Series")).to_have_count(0)
+    assert _is_cancelled(page, admin_token, session_id)

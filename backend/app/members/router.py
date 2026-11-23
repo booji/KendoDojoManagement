@@ -40,16 +40,6 @@ _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
 _AdminDirectory = Annotated[AbstractAdminDirectory, Depends(get_admin_directory)]
 _GradeRepo = Annotated[AbstractGradeRepository, Depends(get_grade_repo)]
 
-# Member fields an admin may clear by sending an explicit null. Every other
-# field on UpdateMemberRequest is required-by-domain, so a null there means
-# "leave alone" rather than "wipe".
-_CLEARABLE_FIELDS = (
-    "display_name",
-    "dob",
-    "emergency_contact_name",
-    "emergency_contact_phone",
-)
-
 
 def _stringify(value: Any) -> str | None:
     if value is None:
@@ -172,15 +162,7 @@ async def update_member(
     uow: _UoW,
     directory: _AdminDirectory,
 ) -> MemberResponse:
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    # The optional PII fields are nullable-by-design: an explicitly provided
-    # None clears the stored value, so it must survive the generic not-None
-    # filter above (which otherwise treats missing and None alike — the
-    # correct reading for the required-by-domain fields in this payload).
-    explicitly_set = payload.model_dump(exclude_unset=True)
-    for key in _CLEARABLE_FIELDS:
-        if key in explicitly_set:
-            data[key] = explicitly_set[key]
+    data = payload.changes()
     before = await repo.get(str(member_id))
     if before is None:
         raise HTTPException(
@@ -227,12 +209,13 @@ async def update_member(
 
 @router.post("/members/{member_id}/erase")
 async def erase_member(
-    member_id: str,
+    member_id: uuid.UUID,
     claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
-    record = await repo.get(member_id)
+    member_key = str(member_id)
+    record = await repo.get(member_key)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -253,10 +236,10 @@ async def erase_member(
         await delete_account(session, target_user_id)
 
     await session.execute(
-        delete(GradeHistory).where(GradeHistory.member_id == member_id)
+        delete(GradeHistory).where(GradeHistory.member_id == member_key)
     )
     await session.execute(
-        delete(MemberFederation).where(MemberFederation.member_id == member_id)
+        delete(MemberFederation).where(MemberFederation.member_id == member_key)
     )
 
     scrub = {
@@ -264,12 +247,12 @@ async def erase_member(
         "anonymised_at": datetime.now(UTC),
         "anonymised_by": claims.sub,
     }
-    updated = await repo.update(member_id, scrub)
+    updated = await repo.update(member_key, scrub)
     if updated is None:
         # Deleted under us: raising before commit rolls back the partial erase.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     await uow.commit()
-    log_admin_event("member_erased", claims.sub, member_id=member_id)
+    log_admin_event("member_erased", claims.sub, member_id=member_key)
     return _to_response(updated)
