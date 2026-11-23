@@ -32,17 +32,19 @@ MEMBER_STEPS = [
     ("Grades", False),
     ("Settings", True),
 ]
+# Every Member step comes first, without the Member's Grades note, then the
+# Admin steps in sidebar order, ending in Admin Settings (#629).
 ADMIN_STEPS = [
     ("Dashboard", True),
     ("Sessions", True),
     ("Calendar feed", True),
     ("My Attendance", True),
-    ("Grades", True),
     ("Settings", True),
-    ("Create a Session or Series", True),
     ("Members", True),
+    ("Create a Session or Series", True),
     ("Reports", True),
     ("Admin Settings", True),
+    ("Grades", True),
 ]
 
 DESKTOP = {"width": 1280, "height": 800}
