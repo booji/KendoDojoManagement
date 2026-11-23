@@ -154,16 +154,29 @@ def _reset_rate_limiter():
         pass
 
 
+# Mirrors SEEN_KEY in frontend/src/lib/tourSeen.ts.
+TOUR_SEEN_SCRIPT = "localStorage.setItem('tour_seen', '1')"
+
+
 @pytest.fixture(autouse=True)
-def _tour_already_seen(request: pytest.FixtureRequest):
+def _tour_already_seen(request: pytest.FixtureRequest, monkeypatch):
     """The guided tour starts on a first sign-in and covers the page (#609), so
-    browser tests start with it seen; test_e2e_tour.py opts out (``tour``)."""
-    if "context" in request.fixturenames and not request.node.get_closest_marker(
+    browser tests start with it seen; test_e2e_tour.py opts out (``tour``).
+
+    Applied at ``browser.new_context``, so the ``context`` fixture and any
+    context a test opens itself both get it."""
+    if "browser" in request.fixturenames and not request.node.get_closest_marker(
         "tour"
     ):
-        request.getfixturevalue("context").add_init_script(
-            "localStorage.setItem('tour_seen', '1')"
-        )
+        browser = request.getfixturevalue("browser")
+        new_context = browser.new_context
+
+        def _new_context(*args, **kwargs):
+            context = new_context(*args, **kwargs)
+            context.add_init_script(TOUR_SEEN_SCRIPT)
+            return context
+
+        monkeypatch.setattr(browser, "new_context", _new_context)
     yield
 
 
