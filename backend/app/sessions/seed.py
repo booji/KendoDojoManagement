@@ -1,4 +1,4 @@
-"""Default session types seeded on first boot (issue #173).
+"""Default session types seeded on first boot (issues #173, #614).
 
 A fresh dojo gets a useful spread of session types so it can schedule
 immediately. Seeding is idempotent: it runs only while the session-types table
@@ -14,22 +14,15 @@ from sqlalchemy import insert, select
 
 from app.sessions.db_models import SessionType
 
-# (name, hex colour). Each colour is distinct so types are visually
-# distinguishable in the calendar and listings.
+# (name, hex colour). Five kinds of practice, not audience or equipment: what
+# is practised within a Session lives in its Segments (#614). Each colour is
+# distinct so types are visually distinguishable in the calendar and listings.
 DEFAULT_SESSION_TYPES: list[tuple[str, str]] = [
     ("General Keiko", "#1E88E5"),
-    ("Kihon", "#43A047"),
-    ("Kihon-Keiko-Ho", "#8E24AA"),
-    ("Kata", "#F4511E"),
     ("Beginners", "#FDD835"),
-    ("Kids", "#00ACC1"),
-    ("Mudansha", "#6D4C41"),
-    ("Yudansha", "#3949AB"),
+    ("Kata", "#F4511E"),
     ("Jigeiko", "#C0CA33"),
-    ("Shiai", "#E53935"),
     ("Shiai Practice", "#D81B60"),
-    ("Bogu Practice", "#00897B"),
-    ("Non Bogu Practice", "#757575"),
 ]
 
 
