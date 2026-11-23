@@ -256,6 +256,9 @@ def test_a_restore_ends_by_saying_migrate_must_re_run(tmp_path):
     assert out.returncode == 0, out.stderr
     after_uploads = out.stdout[out.stdout.index("uploads restored from:") :]
     assert "systemctl --user restart kendo-migrate kendo-app" in after_uploads
+    # Stopping kendo-app for the restore stopped Traefik too (Requires=), and
+    # restarting the app does not start it again (#628).
+    assert "systemctl --user start kendo-traefik" in after_uploads
     assert "podman-compose up -d --force-recreate" in after_uploads
 
 

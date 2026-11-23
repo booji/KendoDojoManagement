@@ -65,7 +65,16 @@ sed -n 's/^Image=//p' "$u"/kendo-app.container "$u"/kendo-migrate.container \
 
 # Restart onto it: kendo-migrate migrates, then the app starts.
 systemctl --user restart kendo-migrate kendo-app
+
+# Make sure Traefik is running. It needs kendo-app (Requires=), so systemd
+# stops it whenever the app stops or fails to start, and restarting the app
+# does not start it again. When Traefik is already running, this does nothing.
+systemctl --user start kendo-traefik
 ```
+
+Without that last line, a restart that failed once (say `kendo-migrate`
+stopped on an error you then fixed) leaves the app running but the site
+unreachable: the browser reports it cannot connect (#628).
 
 Then, from your admin account, read what `kendo-migrate` did: the revision the
 schema started at, each one applied, and the one it is at now (#606). On a
