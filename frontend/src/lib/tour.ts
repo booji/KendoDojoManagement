@@ -60,31 +60,24 @@ const MEMBER_STEPS: Step[] = [
   },
 ]
 
+// Every Member step first, then the Admin steps in sidebar order, so the tour
+// does not jump between pages (#629). An Admin skips the Member's Grades note
+// and meets Grade approval last, inside Admin Settings.
 const ADMIN_STEPS: Step[] = [
-  ...MEMBER_STEPS.map((s): Step =>
-    s.title === "Grades"
-      ? {
-          path: "/admin/settings/grades",
-          target: "admin-settings-grades",
-          title: "Grades",
-          description:
-            "Each Member's Grade is on their page under Members. Proposed Promotions wait for approval here, in Admin Settings.",
-        }
-      : s,
-  ),
-  {
-    path: "/sessions",
-    target: "create-session",
-    title: "Create a Session or Series",
-    description:
-      "Create an Ad-hoc Session here, or a Session Template that generates a whole Series.",
-  },
+  ...MEMBER_STEPS.filter((s) => s.title !== "Grades"),
   {
     path: "/members",
     target: "nav-/members",
     nav: true,
     title: "Members",
     description: "Every Member of the dojo: their details, Grade and Attendance.",
+  },
+  {
+    path: "/sessions",
+    target: "create-session",
+    title: "Create a Session or Series",
+    description:
+      "Create an Ad-hoc Session here, or a Session Template that generates a whole Series.",
   },
   {
     path: "/reports",
@@ -100,6 +93,13 @@ const ADMIN_STEPS: Step[] = [
     title: "Admin Settings",
     description:
       "Where every type is configured: Session Types, Grades, Federations and so on, plus invites and the dojo's details.",
+  },
+  {
+    path: "/admin/settings/grades",
+    target: "admin-settings-grades",
+    title: "Grades",
+    description:
+      "Each Member's Grade is on their page under Members. Proposed Promotions wait for approval here.",
   },
 ]
 
