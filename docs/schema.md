@@ -109,6 +109,8 @@ erDiagram
         string type
         bool is_pinned
         bool is_active
+        string source
+        string source_key
     }
     member_federations {
         string id PK
@@ -302,6 +304,9 @@ erDiagram
 - **Index policy** (#418). No indexes beyond those that keys and constraints
   create and the `index=True` lookup columns on the ORM. Add one when a query
   is measured slow — at dojo scale a sequential scan is microseconds.
+- `federations.source`/`source_key` mark the rows the bundled FIK affiliate
+  list owns (`source = 'fik'`, keyed by ISO code or a body's slug; #613).
+  `kendo-migrate` syncs them on every run; Admin-added rows have both null.
 - **Federation membership is a table, not a column.** `members` has no
   `federation_number`: a member can hold numbers with several federations, so
   it lives in `member_federations` (dropped from `members` in #297 — see

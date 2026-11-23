@@ -168,6 +168,35 @@ async def test_fresh_database_reaches_head_via_migrations(
     assert await _alembic_version(_bootstrap_db) == _expected_head_revision()
 
 
+async def test_fresh_database_holds_every_fik_affiliate(_bootstrap_db: str) -> None:
+    """#613: the bundled FIK list is synced in, with no Admin action, and a
+    second run changes nothing."""
+    from app.db.bootstrap import prepare_database
+    from app.federations.fik_catalogue import load
+
+    async def catalogue() -> set[tuple]:
+        engine = create_async_engine(_bootstrap_db, poolclass=NullPool)
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(
+                    text(
+                        "SELECT id, source_key, name, website, is_active "
+                        "FROM federations WHERE source = 'fik'"
+                    )
+                )
+                return set(result.all())
+        finally:
+            await engine.dispose()
+
+    await prepare_database(_bootstrap_db, _app_url(_bootstrap_db))
+    first = await catalogue()
+    await prepare_database(_bootstrap_db, _app_url(_bootstrap_db))
+
+    assert {row[1] for row in first} == {r["source_key"] for r in load()}
+    assert all(row[4] for row in first)
+    assert await catalogue() == first
+
+
 # ---------------------------------------------------------------------------
 # Criterion 2: already at head -> running prepare_database again is a no-op
 # ---------------------------------------------------------------------------

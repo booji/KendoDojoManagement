@@ -6,6 +6,8 @@ import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import BottomTabBar from "@/components/BottomTabBar"
 import ThemeToggle from "@/components/ThemeToggle"
 import LogoutButton from "@/components/LogoutButton"
+import NotificationBell from "@/components/NotificationBell"
+import { useNotifications } from "@/hooks/useNotifications"
 import {
   SidebarProvider,
   Sidebar,
@@ -52,6 +54,9 @@ const AppShell = ({ role, children }: AppShellProps) => {
   const navItems = useNavItems(role)
   const { pathname } = useLocation()
   const { theme, setTheme } = useThemeContext()
+  // One poller shared by the desktop and mobile bells.
+  const notifications = useNotifications(role)
+  const showBell = role === "admin"
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
@@ -83,6 +88,7 @@ const AppShell = ({ role, children }: AppShellProps) => {
                             <Link
                               to={item.href}
                               aria-label={item.label}
+                              data-tour={`nav-${item.href}`}
                               aria-current={active ? "page" : undefined}
                               className={cn(
                                 "focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -105,12 +111,21 @@ const AppShell = ({ role, children }: AppShellProps) => {
             {/* Destructive action leftmost, safe action rightmost (macOS HIG). */}
             <div className="flex items-center justify-between gap-2">
               <LogoutButton />
-              <ThemeToggle theme={theme} setTheme={setTheme} />
+              <div className="flex items-center gap-1">
+                {showBell && <NotificationBell items={notifications} />}
+                <ThemeToggle theme={theme} setTheme={setTheme} />
+              </div>
             </div>
           </SidebarFooter>
         </Sidebar>
 
         <SidebarInset>
+          {/* Mobile top bar: the app has no other header on mobile. */}
+          {showBell && (
+            <header className="sticky top-0 z-40 flex h-11 items-center justify-end border-b bg-background px-2 md:hidden">
+              <NotificationBell items={notifications} placement="topbar" />
+            </header>
+          )}
           {/* Page content — add bottom padding on mobile to clear the tab bar */}
           <div className="flex flex-col min-h-full pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0">
             {children}

@@ -80,7 +80,25 @@ a Compose heading and a Quadlet heading.
 
 ## Rehearse a release candidate
 
-Tag the release branch and push the tag:
+First refresh the bundled FIK affiliate list, which every instance syncs into
+its Federation catalogue on upgrade. From `backend/` on the release branch:
+
+```bash
+uv run python -m scripts.update_fik_affiliates
+```
+
+It rewrites `backend/app/federations/fik_affiliates.json` from
+<https://www.kendo-fik.org/organization/affiliate>, or fails without writing
+if the page's layout has changed. Review the diff and land any change through
+a PR like any other fix; a new country heading fails the run until it is added
+to the script's ISO table.
+
+An affiliate that drops off the list is deactivated on upgrade, not deleted.
+One that later returns to the list stays inactive until an Admin re-activates
+it in Admin Settings: the Admin owns `is_active`, so the sync never turns it
+back on.
+
+Then tag the release branch and push the tag:
 
 ```bash
 git tag -a vX.Y.Z-rc1 -m vX.Y.Z-rc1

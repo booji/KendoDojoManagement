@@ -1,0 +1,22 @@
+/* driver.js's popover in the app's theme, light and dark (#609). */
+.driver-popover {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+}
+.driver-popover-title {
+  font-size: 1rem;
+}
+.driver-popover-description,
+.driver-popover-progress-text {
+  color: var(--muted-foreground);
+}
+.driver-popover-close-btn {
+  color: var(--muted-foreground);
+}
+.driver-popover-footer-btn {
+  background-color: var(--background);
+  color: var(--foreground);
+  border-color: var(--border);
+  text-shadow: none;
+}

@@ -292,7 +292,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
-      <DialogTrigger render={<Button size="sm" />}>
+      <DialogTrigger render={<Button size="sm" data-tour="create-session" />}>
         Create Session
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
@@ -456,7 +456,7 @@ type ICalButtonProps = {
 const ICalButton = ({ icalUrl }: ICalButtonProps) => {
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Subscribe to iCal feed" className="shrink-0" />}>
+      <PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Subscribe to iCal feed" data-tour="calendar-feed" className="shrink-0" />}>
         <CalendarIcon className="h-4 w-4" />
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">

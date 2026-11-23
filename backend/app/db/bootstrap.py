@@ -16,6 +16,10 @@ waits for the database to become reachable, then runs `alembic upgrade head`
 unconditionally, whatever state the database is already in (empty,
 mid-migration, or already at head).
 
+Then it syncs the FIK affiliate list bundled with the release into the
+Federation catalogue (`app.federations.fik_catalogue`, #613), so a release
+that refreshes the list updates every instance on upgrade.
+
 It then creates and maintains the app's own database user (ADR-0007, #453).
 Migrations run as the superuser in MIGRATION_DATABASE_URL; the app connects as
 the user named in DATABASE_URL, which can only read and write rows. Every run
@@ -35,10 +39,11 @@ import sys
 
 import asyncpg
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from app.config import DATABASE_URL, MIGRATION_DATABASE_URL
 from app.db.scratch import asyncpg_dsn, url_parts, validate_identifier
+from app.federations import fik_catalogue
 
 # Named, not __name__: run as `python -m`, __name__ is "__main__" (#606).
 _log = logging.getLogger("app.db.bootstrap")
@@ -117,6 +122,19 @@ async def _upgrade_head(database_url: str) -> None:
         _log.info("Schema already at head %s", ", ".join(after))
     else:
         _log.info("Schema now at head %s", ", ".join(after))
+
+
+async def _sync_fik_affiliates(database_url: str) -> None:
+    """Sync the bundled FIK affiliate list into the Federation catalogue
+    (#613), in one transaction."""
+    records = fik_catalogue.load()
+    engine = create_async_engine(database_url)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            await fik_catalogue.sync(session, records)
+    finally:
+        await engine.dispose()
+    _log.info("Federation catalogue synced: %d FIK affiliates", len(records))
 
 
 async def _wait_for_connection(
@@ -245,7 +263,8 @@ async def prepare_database(
     max_attempts: int = 10,
     initial_delay: float = 1.0,
 ) -> None:
-    """Bring the database up to head, then (re)provision the app user.
+    """Bring the database up to head, sync the FIK list, then (re)provision
+    the app user.
 
     `migration_url` (default MIGRATION_DATABASE_URL) is the superuser login
     that migrates; `app_url` (default DATABASE_URL) names the app user to
@@ -267,6 +286,7 @@ async def prepare_database(
     finally:
         await engine.dispose()
     await _upgrade_head(migration_url)
+    await _sync_fik_affiliates(migration_url)
     await _ensure_app_user(migration_url, user, password)
 
 

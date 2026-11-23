@@ -108,7 +108,7 @@ async def _require_known_types(
 
 
 @router.get("/session-types")
-async def list_session_types(repo: _TypeRepo) -> list[dict[str, Any]]:
+async def list_session_types(_claims: _Member, repo: _TypeRepo) -> list[dict[str, Any]]:
     rows = await repo.list()
     return [SessionTypeRead.model_validate(r).model_dump() for r in rows]
 

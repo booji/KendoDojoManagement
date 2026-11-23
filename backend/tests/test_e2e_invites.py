@@ -2,7 +2,7 @@
 registration.
 
 One test per acceptance criterion from the issue. Promoted from red-phase
-xfail stubs once the admin invites page (/settings/invites) and the public
+xfail stubs once the admin invites page (/admin/settings/invites) and the public
 landing page (/invite/:token) were implemented.
 
 Two criteria are deliberately NOT asserted at the browser level:
@@ -156,7 +156,7 @@ def _mark_invite_expired(token: str) -> None:
 
 def test_admin_invite_ui_never_displays_a_token_hash(page: Page) -> None:
     authenticate(page)
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
     page.fill('[data-testid="invite-first-name-input"]', "Test")
     page.fill('[data-testid="invite-surname-input"]', "Invitee")
@@ -173,7 +173,7 @@ def test_admin_invite_ui_never_displays_a_token_hash(page: Page) -> None:
 
 def test_admin_can_issue_invite_and_sees_copyable_link_once(page: Page) -> None:
     authenticate(page)
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     email = f"newmember-{uuid.uuid4().hex[:8]}@dojo.test"
     page.fill('[data-testid="invite-first-name-input"]', "Test")
     page.fill('[data-testid="invite-surname-input"]', "Invitee")
@@ -193,10 +193,10 @@ def test_admin_can_issue_invite_and_sees_copyable_link_once(page: Page) -> None:
 
 def test_non_admin_cannot_reach_invites_settings_page(page: Page) -> None:
     authenticate(page, "member")
-    page.goto(f"{BASE_URL}/settings/invites")
-    # A member-role session must be shown a forbidden state, not the
-    # invite-issuance form.
-    page.wait_for_selector('[data-testid="forbidden"]', timeout=5000)
+    page.goto(f"{BASE_URL}/admin/settings/invites")
+    # RequireAdmin sends a member-role session home, away from the
+    # invite-issuance form (#610).
+    expect(page).to_have_url(f"{BASE_URL}/")
     assert page.locator('[data-testid="invite-email-input"]').count() == 0
 
 
@@ -214,7 +214,7 @@ def test_invite_list_shows_status_and_no_token(page: Page) -> None:
     )
     resp.raise_for_status()
 
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     row = page.locator('[data-testid="invite-row"]', has_text=email)
     expect(row).to_be_visible(timeout=5000)
     row_text = row.inner_text()
@@ -236,7 +236,7 @@ def test_admin_can_revoke_invite_from_list(page: Page) -> None:
     )
     resp.raise_for_status()
 
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     row = page.locator('[data-testid="invite-row"]', has_text=email)
     expect(row).to_be_visible(timeout=5000)
     row.locator('[data-testid="invite-revoke-button"]').click()
@@ -367,7 +367,7 @@ def test_admin_can_issue_list_and_revoke_invite_end_to_end(page: Page) -> None:
     authenticate(page)
     email = f"roundtrip-{uuid.uuid4().hex[:8]}@dojo.test"
 
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     page.fill('[data-testid="invite-first-name-input"]', "Test")
     page.fill('[data-testid="invite-surname-input"]', "Invitee")
     page.fill('[data-testid="invite-email-input"]', email)
@@ -424,7 +424,7 @@ def test_admin_sees_why_a_barred_member_cannot_be_invited(page: Page) -> None:
         timeout=5,
     ).raise_for_status()
 
-    page.goto(f"{BASE_URL}/settings/invites")
+    page.goto(f"{BASE_URL}/admin/settings/invites")
     page.fill('[data-testid="invite-first-name-input"]', "Sus")
     page.fill('[data-testid="invite-surname-input"]', "Pended")
     page.fill('[data-testid="invite-email-input"]', email)
