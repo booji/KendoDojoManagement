@@ -42,6 +42,7 @@ const SubNav = () => (
         <li key={p.to} className="shrink-0">
           <NavLink
             to={p.to}
+            data-tour={`admin-settings-${p.to}`}
             className={({ isActive }) =>
               cn(
                 "flex min-h-[44px] items-center whitespace-nowrap rounded-md px-3 text-sm hover:bg-muted",
