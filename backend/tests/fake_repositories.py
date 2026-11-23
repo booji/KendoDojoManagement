@@ -875,3 +875,35 @@ class InMemoryGradeRepository(AbstractGradeRepository):
             for r in self._by_date()
             if r["status"] == "pending"
         ]
+
+
+# ---------------------------------------------------------------------------
+# Unit of work
+# ---------------------------------------------------------------------------
+
+
+class _InertSession:
+    """Accepts the raw statements a route runs and does nothing with them."""
+
+    async def execute(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+class RecordingUnitOfWork:
+    """Counts commits, so a test can show a failed write committed nothing."""
+
+    def __init__(self) -> None:
+        self.session = _InertSession()
+        self.commits = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        return None
+
+    async def __aenter__(self) -> RecordingUnitOfWork:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None

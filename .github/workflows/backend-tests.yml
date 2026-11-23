@@ -44,6 +44,18 @@ jobs:
           pipx run --spec "$spec" ruff check .
           pipx run --spec "$spec" ruff format --check .
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # Same uv as the Dockerfile, so the lock it reads and writes matches.
+          version: "0.11.7"
+
+      - name: Type check (ty)
+        # Unlike ruff, ty must import the app's dependencies to resolve their
+        # types, so it runs from the locked venv rather than pipx. The ty
+        # version is the one pinned in pyproject.toml's dev group.
+        working-directory: backend
+        run: uv run --frozen ty check app
+
       - name: Run the backend tests
         # The test-backend service builds the backend-dev-deps stage and runs
         # backend/run_tests.sh with BACKEND_ONLY=1: uvicorn still comes up (a

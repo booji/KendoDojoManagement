@@ -44,8 +44,8 @@ if [ "$mode" = quadlet ]; then
             deploy/quadlet/kendo-db-data.volume
             deploy/bin/kendo-backup.sh deploy/bin/kendo-restore.sh)
 else
-  required=(.env.example "$selfhost/traefik.yml.example" "$selfhost/dynamic/kendo.yml.example"
-            deploy/bin/kendo-backup.sh)
+  required=(.env.example deploy/env/kendo-app.env.example "$selfhost/traefik.yml.example"
+            "$selfhost/dynamic/kendo.yml.example" deploy/bin/kendo-backup.sh)
 fi
 # Every action reads backup.env through kendo-backup.sh (backup_setting).
 [ "$action" = setup ] || required=(deploy/bin/kendo-backup.sh)
@@ -198,23 +198,25 @@ write_compose_secrets() {
 }
 
 run_check() {
-  local env_file traefik_dir certs rerun
+  # env_file holds the app settings on both paths; compose_env is the Compose
+  # stack's .env, its secrets and database logins (#603).
+  local env_file compose_env="" traefik_dir certs rerun
   if [ "$mode" = quadlet ]; then
     env_file=$kendo/kendo-app.env traefik_dir=$kendo/traefik certs=$kendo/traefik/certs
     rerun="./setup.sh --quadlet"
   else
-    env_file=.env traefik_dir=$selfhost certs=deploy/certs rerun=./setup.sh
+    env_file=kendo-app.env compose_env=.env traefik_dir=$selfhost certs=deploy/certs rerun=./setup.sh
   fi
   local static=$traefik_dir/traefik.yml router=$traefik_dir/dynamic/kendo.yml
   echo "KendoDojoManagement — check ($([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host"))"
   echo
 
   local f p configured=1
-  for f in "$env_file" "$static" "$router"; do
+  for f in $compose_env "$env_file" "$static" "$router"; do
     [ -f "$f" ] || { fail "$f is missing — run $rerun first"; configured=""; }
   done
   if [ -n "$configured" ]; then
-    for f in "$env_file" "$router"; do
+    for f in $compose_env "$env_file" "$router"; do
       p=$(placeholders "$f")
       if [ -z "$p" ]; then ok "$f has no placeholders"; else fail "$f still has placeholders: ${p% }"; fi
     done
@@ -260,6 +262,13 @@ run_check() {
       if [ -z "$absent" ]; then ok "Every podman secret the units name exists"
       else fail "podman secret missing:$absent — re-run $rerun, or create it for your own drop-in"; fi
     fi
+    # A pin edited in one unit only would migrate with one image and serve
+    # with another (#604).
+    local pins
+    pins=$(sed -n 's/^Image=//p' "$units"/kendo-app.container "$units"/kendo-migrate.container \
+           "$units"/kendo-ip-retention.container 2>/dev/null | sort -u || true)
+    [ "$(printf '%s\n' "$pins" | grep -c .)" -le 1 ] ||
+      warn "The Release units pin different images: $(printf '%s\n' "$pins" | paste -sd, - | sed 's/,/, /g') — pin all three alike (docs/install/upgrading.md)"
     # Without the daily timer, recovery-attempt IPs are cleared only when
     # kendo-app restarts, and can outlive their 30 days (#467).
     local timer=kendo-ip-retention.timer
@@ -268,14 +277,14 @@ run_check() {
     elif command -v systemctl >/dev/null && ! systemctl --user is-enabled --quiet "$timer" 2>/dev/null; then
       fail "$timer is not enabled — run: systemctl --user enable --now $timer"
     else ok "$timer is installed and enabled"; fi
-  elif [ -f "$env_file" ]; then
+  elif [ -f "$compose_env" ]; then
     for s in POSTGRES_PASSWORD JWT_SECRET SETUP_TOKEN; do
-      [ -n "$(env_value "$env_file" "$s")" ] || absent+=" $s"
+      [ -n "$(env_value "$compose_env" "$s")" ] || absent+=" $s"
     done
     if [ -z "$absent" ]; then ok "POSTGRES_PASSWORD, JWT_SECRET and SETUP_TOKEN are set"
-    else for s in $absent; do fail "$s is blank in $env_file"; done; fi
-    case $(env_value "$env_file" MIGRATION_DATABASE_URL) in
-      *":$(env_value "$env_file" POSTGRES_PASSWORD)@"*) ok "MIGRATION_DATABASE_URL embeds POSTGRES_PASSWORD" ;;
+    else for s in $absent; do fail "$s is blank in $compose_env"; done; fi
+    case $(env_value "$compose_env" MIGRATION_DATABASE_URL) in
+      *":$(env_value "$compose_env" POSTGRES_PASSWORD)@"*) ok "MIGRATION_DATABASE_URL embeds POSTGRES_PASSWORD" ;;
       *) fail "MIGRATION_DATABASE_URL does not embed POSTGRES_PASSWORD — the database will refuse the migrate service." ;;
     esac
   fi
@@ -352,7 +361,7 @@ run_check() {
     # night (an expired rclone token, say) shows only as a failed unit.
     if command -v systemctl >/dev/null && systemctl --user is-failed --quiet kendo-backup.service 2>/dev/null; then
       if [ "$(systemctl --user show -P ExecMainStatus kendo-backup.service 2>/dev/null)" = 75 ]; then
-        warn "The last backup could not be copied off-site — check: journalctl --user -u kendo-backup"
+        warn "The last backup could not be copied off-site — check, from your admin account: sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-backup.service"
       else
         warn "The last backup run failed — check: systemctl --user status kendo-backup"
       fi
@@ -382,6 +391,8 @@ run_check() {
 # the live database unprompted, so this puts a backup in front of it and the
 # exact restore behind it. It never refuses to go ahead without a backup of its
 # own making: that would block the first upgrade and train people into --force.
+# It never touches a deployment file either (#604): once installed they are the
+# operator's, and a release that changes one lists it as an Operator action.
 #
 # The stack is the Compose project `kendodojo` (docker-compose.yml's `name:`);
 # both podman-compose and docker compose label its containers with it.
@@ -389,62 +400,6 @@ project=kendodojo
 compose_container() { # compose_container SERVICE — its container's name
   podman ps -a --filter "label=com.docker.compose.project=$project" \
     --filter "label=com.docker.compose.service=$1" --format '{{.Names}}' | head -1
-}
-
-# Take the bundle out of the image about to run, so config and image stay on
-# one version axis (ADR-0004): a stale compose file must not drive a new app.
-# PREV is the bundle the pinned image carried before the pull, which is what
-# tells a file this release changed from an edit of the operator's (a BYO
-# certificate's mount in docker-compose.yml, say). An edited file the release
-# also changed is never overwritten: its new version lands next to it as .new
-# and the upgrade stops before anything is recreated. The bundle carries only
-# shipped files — never .env or the filled-in Traefik config — but a
-# contributor's own build could, so those are skipped by name.
-refresh_bundle() { # refresh_bundle PREV NEXT
-  local prev=$1 next=$2 f changed="" merge=""
-  while IFS= read -r f; do
-    case $f in .env|"$selfhost"/traefik.yml|"$selfhost"/dynamic/*.yml) continue ;; esac
-    if cmp -s "$next/$f" "$f"; then
-      rm -f -- "$f.new"                     # current, or merged into exactly this
-    elif [ ! -e "$f" ] || cmp -s "$prev/$f" "$f"; then
-      [ ! -e "$f" ] || mv -- "$f" "$f.bak"  # untouched since the last release
-      mkdir -p "$(dirname "$f")"
-      # A rename, not a copy: setup.sh replaces itself here, and bash reads a
-      # script as it runs — this run carries on reading setup.sh.bak.
-      mv -- "$next/$f" "$f"
-      changed+="  $f"$'\n'
-    elif cmp -s "$f.new" "$next/$f"; then
-      # Merged by hand after the last run stopped. Checked first: that run's
-      # pull already moved the tag, so PREV is this release by now.
-      rm -f -- "$f.new"
-    elif cmp -s "$prev/$f" "$next/$f"; then
-      :                                     # edited, and the release left it alone
-    else
-      mv -- "$next/$f" "$f.new"
-      merge+="  $f.new"$'\n'
-    fi
-  done < <(cd "$next" && find . -type f | sed 's|^\./||' | sort)
-
-  if [ -n "$changed" ]; then
-    echo "Deployment bundle files that changed in this release (previous copies kept as .bak):"
-    printf '%s' "$changed"
-    case $changed in *"  .env.example"$'\n'*)
-      echo "  .env.example changed: compare it with your .env for new settings." ;;
-    esac
-  elif [ -z "$merge" ]; then
-    echo "Deployment bundle unchanged in this release."
-  fi
-  if [ -n "$merge" ]; then
-    {
-      echo
-      echo "These carry edits of yours and also changed in this release; its version is"
-      echo "next to each as .new:"
-      printf '%s' "$merge"
-      echo "Merge each into yours (or take it whole), then re-run ./setup.sh upgrade."
-      echo "Nothing has been recreated: the stack still runs the previous image."
-    } >&2
-    exit 1
-  fi
 }
 
 # Run kendo-backup.sh against this stack and print what it wrote. Its output is
@@ -473,6 +428,15 @@ run_backup() {
 
 run_upgrade() {
   [ -f .env ] || { echo "No .env here — run ./setup.sh first." >&2; exit 1; }
+  # A host set up by an rc keeps its app settings in .env, and the compose file
+  # this upgrade brings reads them from kendo-app.env (#603): going on would
+  # recreate the app without them.
+  [ -f kendo-app.env ] || {
+    echo "No kendo-app.env here: the app's settings now live in it, not in .env." >&2
+    echo "Split .env once as docs/install/upgrading.md says (\"From a release candidate\")," >&2
+    echo "then re-run ./setup.sh upgrade. Nothing was changed." >&2
+    exit 1
+  }
   command -v podman-compose >/dev/null || { echo "podman-compose is not installed." >&2; exit 1; }
 
   [ -z "$(backup_setting KENDO_BACKUP_RECIPIENT)" ] ||
@@ -494,22 +458,8 @@ run_upgrade() {
   image=${image:-ghcr.io/booji/kendodojomanagement:0.1}
   previous=$(podman image inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true)
 
-  # Global, not local: the EXIT trap runs after this function has returned.
-  # Inside this directory so refresh_bundle's `mv`s are renames.
-  tmp=$(mktemp -d .upgrade.XXXXXX)
-  trap 'rm -rf -- "$tmp"' EXIT
-  mkdir "$tmp/prev" "$tmp/next"
-  # Before the pull moves the tag. Missing (an image removed by hand) only
-  # makes refresh_bundle treat every differing file as edited: it stops, never
-  # overwrites.
-  podman run --rm "$image" init 2>/dev/null | tar -x -C "$tmp/prev" 2>/dev/null || true
-
   podman-compose pull || { echo "Pull failed — nothing past the backup was changed." >&2; exit 1; }
-  podman run --rm "$image" init | tar -x -C "$tmp/next" ||
-    { echo "Could not extract the bundle from $image — nothing past the backup was changed." >&2; exit 1; }
-  refresh_bundle "$tmp/prev" "$tmp/next"
-  # A stack set up before #462 has no secrets/ yet, and the compose file it
-  # just took mounts them; re-deriving also picks up a hand edit of .env.
+  # Derived from .env, not installed config: re-deriving picks up a hand edit.
   write_compose_secrets
 
   # --force-recreate: podman-compose recreates a container only when the YAML
@@ -750,6 +700,35 @@ MENU
     ;;
 esac
 
+# ------------------------------------------------------- kendo-app.env --------
+# The app settings, from the one example both paths share (#603). No umask 077
+# like .env gets: every secret is a mounted file instead. Compose and the
+# Quadlet unit alike pass this whole file, so a key the example gains reaches
+# the app without a compose or unit change.
+# A re-run keeps the operator's settings (#603): every key the previous file
+# sets carries over, its own keys included, and only the domain answer and
+# keys the example gained are new.
+write_app_env() { # write_app_env DST
+  local prev=/dev/null
+  [ ! -e "$1" ] || prev="$1.bak"
+  backup "$1"
+  sed \
+    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
+    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
+    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
+    deploy/env/kendo-app.env.example |
+  awk -F= -v answered="WEBAUTHN_RP_ID WEBAUTHN_ORIGIN CORS_ORIGINS" '
+    BEGIN { split(answered, a, " "); for (i in a) skip[a[i]] = 1 }
+    { key = $1; sub(/^[ \t]+/, "", key); sub(/[ \t]+$/, "", key) }
+    /^[ \t]*#/ || !index($0, "=") || key in skip { if (FILENAME == ARGV[1]) next; print; next }
+    FILENAME == ARGV[1] { if (!(key in kept)) order[++n] = key; kept[key] = $0; next }
+    key in kept { print kept[key]; done[key] = 1; next }
+    { print }
+    END { for (i = 1; i <= n; i++) if (!(order[i] in done)) print kept[order[i]] }
+  ' "$prev" - > "$1"
+  echo "  wrote $1"
+}
+
 # ---------------------------------------------------------------- .env --------
 # Re-running must never silently clobber secrets: existing values are carried
 # forward rather than regenerated.
@@ -774,6 +753,8 @@ app_db_password=$(carry DATABASE_URL | sed -n 's|^postgresql+asyncpg://kendo_app
 # must not have a re-run revert them to the published default.
 image=$(cat .image-tag 2>/dev/null || true)
 [ -n "$image" ] || image=$(carry KENDO_IMAGE)
+# The db's zone, kept like the app's TZ in kendo-app.env so the two stay alike.
+tz=$(carry TZ)
 
 echo
 if [ "$mode" = compose ]; then
@@ -785,16 +766,15 @@ if [ "$mode" = compose ]; then
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$db_password|" \
     -e "s|^JWT_SECRET=.*|JWT_SECRET=$jwt_secret|" \
     -e "s|^SETUP_TOKEN=.*|SETUP_TOKEN=$setup_token|" \
-    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
-    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
-    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
     ${image:+-e "s|^KENDO_IMAGE=.*|KENDO_IMAGE=$image|"} \
+    ${tz:+-e "s|^TZ=.*|TZ=$tz|"} \
     .env.example > .env
   )
   chmod 600 .env
   echo "  wrote .env (mode 600)"
   write_compose_secrets
   echo "  wrote secrets/ from it (mode 700)"
+  write_app_env kendo-app.env
 fi
 
 # The one provider table. dns_var is the single environment variable lego reads,
@@ -933,16 +913,9 @@ quadlet_install() {
     fi
   fi
 
-  # Non-sensitive app config — no umask 077 like .env gets, because every secret
-  # here is a podman secret instead. The unit passes this file and nothing else,
-  # so a key missing here is a key missing from the app's environment.
-  backup "$kendo/kendo-app.env"
-  sed \
-    -e "s|^WEBAUTHN_RP_ID=.*|WEBAUTHN_RP_ID=$domain|" \
-    -e "s|^WEBAUTHN_ORIGIN=.*|WEBAUTHN_ORIGIN=https://$domain|" \
-    -e "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$domain|" \
-    deploy/env/kendo-app.env.example > "$kendo/kendo-app.env"
-  echo "  wrote $kendo/kendo-app.env"
+  # The unit passes this file and nothing else, so a key missing here is a key
+  # missing from the app's environment.
+  write_app_env "$kendo/kendo-app.env"
 
   write_static "$hardened/traefik.yml" "$kendo/traefik/traefik.yml"
   write_router "$hardened/dynamic/kendo.yml" "$kendo/traefik/dynamic/kendo.yml"
@@ -968,9 +941,9 @@ quadlet_install() {
     install -D -m 644 "deploy/systemd/$f" "$HOME/.config/systemd/user/$f"
   done
 
-  # Drop-ins rather than edits to the units: docs/install/upgrading.md tells an
-  # operator to re-copy the units on upgrade, which would silently revert an edit made
-  # here and leave Traefik asking for a secret or a mount that is not there.
+  # Drop-ins rather than edits to the units: an Operator action that hands over a
+  # new unit (docs/install/upgrading.md) would otherwise drop an edit made here
+  # and leave Traefik asking for a secret or a mount that is not there.
   local dropin=$units/kendo-traefik.container.d
   mkdir -p "$dropin"
   rm -f "$dropin/20-byo-cert.conf"
@@ -1056,7 +1029,7 @@ DNS-01 needs credentials in the proxy container's environment. For $dns_provider
 DNS
 [ "$mode" = quadlet ] && cat <<DROPIN
 Put them in $units/kendo-traefik.container.d/10-dns-01.conf as a podman secret
-each (a drop-in, so re-copying the units on upgrade does not revert it):
+each (a drop-in, so taking a new unit from a release does not revert it):
   [Container]
   Environment=<VAR>_FILE=/run/secrets/<target>
   Secret=<secret-name>,type=mount,target=<target>

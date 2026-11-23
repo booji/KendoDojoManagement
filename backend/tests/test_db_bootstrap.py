@@ -48,7 +48,11 @@ port) with no UI surface for a browser to observe.
 """
 
 import asyncio
+import os
+import subprocess
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect, text
@@ -554,3 +558,99 @@ async def test_bootstrap_refuses_to_demote_an_existing_superuser(
                 await conn.execute(text(f'DROP ROLE IF EXISTS "{other}"'))
     finally:
         await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# #606: the migration unit says in the journal what it did
+# ---------------------------------------------------------------------------
+
+
+def _run_migration_unit(database_url: str) -> str:
+    """Run the migration unit as kendo-migrate does; return what it printed."""
+    env = {
+        **os.environ,
+        "MIGRATION_DATABASE_URL": database_url,
+        "DATABASE_URL": _app_url(database_url),
+    }
+    result = subprocess.run(
+        [sys.executable, "-m", "app.db.bootstrap"],
+        cwd=Path(__file__).parent.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout + result.stderr
+
+
+async def test_migration_unit_logs_each_revision_it_applies(
+    _bootstrap_db: str,
+) -> None:
+    head = _expected_head_revision()
+
+    output = await asyncio.to_thread(_run_migration_unit, _bootstrap_db)
+
+    assert "Schema at revision none, upgrading to head" in output
+    assert "Running upgrade  -> 000000000000" in output
+    assert f"-> {head}" in output
+    assert f"Schema now at head {head}" in output
+
+
+async def test_migration_unit_at_head_says_so(_bootstrap_db: str) -> None:
+    head = _expected_head_revision()
+    await asyncio.to_thread(_run_migration_unit, _bootstrap_db)
+
+    output = await asyncio.to_thread(_run_migration_unit, _bootstrap_db)
+
+    assert f"Schema at revision {head}, upgrading to head" in output
+    assert "Running upgrade" not in output
+    assert f"Schema already at head {head}" in output
+
+
+async def test_migrating_in_process_leaves_the_app_loggers_enabled(
+    _bootstrap_db: str,
+) -> None:
+    """The fix must not be fileConfig, which disables loggers it doesn't know."""
+    import logging
+
+    import app.core.middleware  # noqa: F401
+    import app.core.security_logger  # noqa: F401
+    from app.db.bootstrap import prepare_database
+
+    await prepare_database(_bootstrap_db, _app_url(_bootstrap_db))
+
+    for name in ("security_events", "app.core.middleware"):
+        assert logging.getLogger(name).disabled is False, name
+
+
+async def test_a_schema_at_several_heads_logs_every_one(
+    _bootstrap_db: str, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    """Merged branches leave alembic_version one row per head: the log names
+    them all, in a stable order, and "already at head" compares them as a set
+    (#606). The upgrade itself is stubbed: no shipped chain branches."""
+    import logging
+
+    from app.db import bootstrap
+
+    engine = create_async_engine(_bootstrap_db, poolclass=NullPool)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE alembic_version (version_num varchar(32) PRIMARY KEY)"
+                )
+            )
+            await conn.execute(
+                text("INSERT INTO alembic_version VALUES ('bbbb'), ('aaaa')")
+            )
+    finally:
+        await engine.dispose()
+    monkeypatch.setattr(bootstrap, "_run_alembic_upgrade", lambda url: None)
+
+    with caplog.at_level(logging.INFO, logger="app.db.bootstrap"):
+        await bootstrap._upgrade_head(_bootstrap_db)
+
+    assert "Schema at revision aaaa, bbbb, upgrading to head" in caplog.text
+    assert "Schema already at head aaaa, bbbb" in caplog.text

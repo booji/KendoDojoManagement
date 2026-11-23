@@ -17,7 +17,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.deploy_contract import PUBLISHED_IMAGE, RELEASE_PIN
+from tests.deploy_contract import (
+    COMPOSE_IMAGE_PIN,
+    DEPLOYMENT_FILES,
+    IMAGE_PIN_UNITS,
+    PUBLISHED_IMAGE,
+    RELEASE_PIN,
+)
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -138,3 +144,65 @@ def test_every_machinectl_shell_names_the_shell_to_run():
         if re.search(r"machinectl shell kendo@(?! /bin/bash)", line)
     ]
     assert not bare, bare
+
+
+def test_every_deployment_file_change_asks_for_an_operator_action():
+    """No upgrade step overwrites a deployment file (#604), so a change to one
+    reaches a host only through the Operator action its PR writes, breaking
+    or not. The rule names every such file, where a contributor reads it."""
+    for page in (ROOT / "CONTRIBUTING.md", ROOT / ".github/pull_request_template.md"):
+        text = page.read_text()
+        assert "Operator action" in text, page
+        missing = [f for f in DEPLOYMENT_FILES if f"`{f}`" not in text]
+        assert not missing, (page, missing)
+
+
+def test_releasing_collects_operator_actions_for_every_release():
+    """Not only the `breaking` ones: a non-breaking unit change is still one
+    no upgrade step delivers (#604)."""
+    text = (ROOT / "docs/contributing/releasing.md").read_text().replace("\n", " ")
+    assert "**Operator action** section of every PR in the release" in text
+    assert "--label breaking" in text  # the version bump still reads it
+
+
+def test_releasing_lists_the_prs_that_changed_any_deployment_file():
+    """The `git log -- <paths>` that finds the PRs owing an Operator action
+    covers every deployment file, or one slips out of the notes (#604)."""
+    text = (ROOT / "docs/contributing/releasing.md").read_text()
+    log = re.search(r"git log --oneline origin/main\.\.HEAD -- ([^\n]*)", text)
+    assert log, "no git log over the deployment files"
+    paths = log.group(1).split()
+    missed = [
+        f
+        for f in DEPLOYMENT_FILES
+        if not any(f == p or f.startswith(f"{p}/") for p in paths)
+    ]
+    assert not missed, missed
+
+
+def test_an_rc_is_rehearsed_by_editing_the_image_pin():
+    """An rc image publishes only its exact tag, never :0.1 (#604), so the
+    rehearsal pins it where an operator would, and rolls back the same way."""
+    for page in ("docs/contributing/releasing.md", "docs/install/upgrading.md"):
+        text = (ROOT / page).read_text()
+        missing = [u for u in [*IMAGE_PIN_UNITS, COMPOSE_IMAGE_PIN] if u not in text]
+        assert not missing, (page, missing)
+    assert "podman tag" not in (ROOT / "docs/contributing/releasing.md").read_text()
+
+
+def test_no_step_reads_the_journal_as_kendo():
+    """`kendo` cannot read its own journal on a default AlmaLinux/RHEL host:
+    without persistent storage there is no per-user journal file, and the
+    system journal is readable only by root and the `systemd-journal`/`adm`/
+    `wheel` groups. `journalctl --user ...` as `kendo` prints "No journal files
+    were opened due to insufficient permissions" (#605). Read it from the
+    admin account, by `kendo`'s UID: `--user-unit` under sudo would match
+    root's UID instead."""
+    sources = [ROOT / "README.md", ROOT / "setup.sh", *(ROOT / "docs").rglob("*.md")]
+    as_kendo = [
+        (src.relative_to(ROOT).as_posix(), line.strip())
+        for src in sources
+        for line in src.read_text().splitlines()
+        if re.search(r"journalctl\b(?![^`\"]*_UID=)[^`\"]*--user", line)
+    ]
+    assert not as_kendo, as_kendo

@@ -31,6 +31,7 @@ against the same empty volume would need an advisory lock here first.
 import asyncio
 import logging
 import os
+import sys
 
 import asyncpg
 from sqlalchemy.engine.url import make_url
@@ -39,7 +40,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from app.config import DATABASE_URL, MIGRATION_DATABASE_URL
 from app.db.scratch import asyncpg_dsn, url_parts, validate_identifier
 
-_log = logging.getLogger(__name__)
+# Named, not __name__: run as `python -m`, __name__ is "__main__" (#606).
+_log = logging.getLogger("app.db.bootstrap")
 
 _BACKEND_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -89,9 +91,32 @@ def _run_alembic_upgrade(database_url: str) -> None:
     command.upgrade(_alembic_config(database_url), "head")
 
 
+async def _schema_revisions(database_url: str) -> list[str]:
+    """The revisions alembic_version records, sorted: one per head, none on an
+    empty database."""
+    base_url, db_name = url_parts(database_url)
+    conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
+    try:
+        if not await conn.fetchval("SELECT to_regclass('alembic_version')"):
+            return []
+        rows = await conn.fetch("SELECT version_num FROM alembic_version")
+        return sorted(row["version_num"] for row in rows)
+    finally:
+        await conn.close()
+
+
 async def _upgrade_head(database_url: str) -> None:
-    """Run all pending alembic migrations up to head."""
+    """Run all pending alembic migrations up to head, logging where the schema
+    started and ended; alembic logs each revision it applies in between.
+    """
+    before = await _schema_revisions(database_url)
+    _log.info("Schema at revision %s, upgrading to head", ", ".join(before) or "none")
     await asyncio.to_thread(_run_alembic_upgrade, database_url)
+    after = await _schema_revisions(database_url)
+    if after == before:  # both sorted, so equal as sets
+        _log.info("Schema already at head %s", ", ".join(after))
+    else:
+        _log.info("Schema now at head %s", ", ".join(after))
 
 
 async def _wait_for_connection(
@@ -133,7 +158,8 @@ def _app_login(migration_url: str, app_url: str) -> tuple[str, str]:
     security boundary for that.
     """
     app = make_url(app_url)
-    validate_identifier(app.username or "")
+    username = app.username or ""
+    validate_identifier(username)
     if app.username == make_url(migration_url).username:
         raise RuntimeError(
             f"DATABASE_URL and MIGRATION_DATABASE_URL both log in as "
@@ -144,7 +170,7 @@ def _app_login(migration_url: str, app_url: str) -> tuple[str, str]:
         raise RuntimeError(
             f"DATABASE_URL has no password for the app user {app.username!r}."
         )
-    return app.username, app.password
+    return username, app.password
 
 
 async def _ensure_app_user(migration_url: str, user: str, password: str) -> None:
@@ -245,4 +271,14 @@ async def prepare_database(
 
 
 if __name__ == "__main__":
+    # The unit's stdout is the journal. A root handler at INFO carries this
+    # module's lines and alembic's "Running upgrade" lines (#606); unlike the
+    # fileConfig this module avoids, it disables no existing logger.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    # One "setup plugin" line per autogenerate plugin: noise to an operator.
+    logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
     asyncio.run(prepare_database())

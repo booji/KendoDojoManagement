@@ -232,8 +232,12 @@ async def delete_session_type(
             ),
         )
     deleted = await repo.delete(str(type_id))
+    if deleted is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session type not found"
+        )
     await uow.commit()
-    return deleted  # type: ignore[return-value]
+    return deleted
 
 
 # ---------------------------------------------------------------------------

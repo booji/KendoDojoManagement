@@ -62,6 +62,22 @@ upgrading section.
 
 Commit those to the release branch and push it.
 
+## Collect the Operator actions
+
+Every release, patch or not. No upgrade step overwrites a deployment file
+(#604), so a change to one reaches an operator only through the release
+notes. Collect the **Operator action** section of every PR in the release
+that has one, breaking or not. Then check that every commit touching a
+deployment file came with one:
+
+```bash
+git log --oneline origin/main..HEAD -- deploy docker-compose.yml .env.example setup.sh
+```
+
+A PR missing its section gets one written now, from its diff. Keep the
+collected actions for the release notes ([Release](#release), step 3), under
+a Compose heading and a Quadlet heading.
+
 ## Rehearse a release candidate
 
 Tag the release branch and push the tag:
@@ -87,9 +103,18 @@ podman pull ghcr.io/booji/kendodojomanagement:$RC_TAG   # e.g. RC_TAG=X.Y.Z-rc1
 ```
 
 Rehearse on a clean host: install from the rc image with
-[Quick self-host](../install/quick-self-host.md), and upgrade a host running the
-previous release to it by following your own upgrading notes. A fix found
-here goes on the release branch, and the next rc is `-rc2`.
+[Quick self-host](../install/quick-self-host.md). Then upgrade a host running
+the previous release to it, the way an operator pins a Version
+([Upgrading § Pinning a Version](../install/upgrading.md#pinning-a-version-and-rolling-back)):
+apply the collected Operator actions, edit the pin to the rc tag, and run the
+routine upgrade. The pin is `Image=` in `kendo-app.container`,
+`kendo-migrate.container` and `kendo-ip-retention.container` on Quadlet, and
+`KENDO_IMAGE` in `.env` on Compose. Do not retag the rc image as `:0.1`: the
+rehearsal would then skip the pin edit an operator makes. Rehearse the
+rollback too, by editing the pin back to the previous release and restoring
+the backup the upgrade took.
+
+A fix found here goes on the release branch, and the next rc is `-rc2`.
 
 ## Release
 
@@ -109,8 +134,10 @@ here goes on the release branch, and the next rc is `-rc2`.
     after.
 
 3. Publish the GitHub release from the tag with generated notes; they are
-   grouped by label, `breaking` first. On a new Release line, check the
-   operator actions are there and link the upgrading section.
+   grouped by label, `breaking` first. Put the Operator actions you collected
+   above them, under an **Operator action** heading with Compose and Quadlet
+   subheadings, or write "None" there. On a new Release line, also link the
+   upgrading section.
 4. Merge `main` back into `develop` with a PR (merge commit), so the release
    branch's commits reach `develop`.
 5. Delete `release/X.Y.Z`.

@@ -37,5 +37,5 @@ Two supported ways to run this in production — pick one:
 
 | Path | Files | Use when |
 |------|-------|----------|
-| **Compose** | `docker-compose.yml` + `.env` | You want a single host up quickly. Traefik terminates TLS on 80/443 with a Let's Encrypt certificate over the HTTP challenge. See [Quick self-host](install/quick-self-host.md). |
+| **Compose** | `docker-compose.yml` + `.env` + `kendo-app.env` | You want a single host up quickly. Traefik terminates TLS on 80/443 with a Let's Encrypt certificate over the HTTP challenge. See [Quick self-host](install/quick-self-host.md). |
 | **Quadlet** | `deploy/quadlet` | You want the hardened deployment: rootless systemd units, Traefik with automatic TLS, network segmentation, Podman secrets, automated backups. `./setup.sh --quadlet` lays it all down; full runbook in **[Hardened deployment](deployment.md)**. |
