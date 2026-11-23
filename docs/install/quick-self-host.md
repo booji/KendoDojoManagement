@@ -28,11 +28,31 @@ podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 It asks for your domain and an ACME email, generates `POSTGRES_PASSWORD`,
 `JWT_SECRET`, `SETUP_TOKEN` and the app's own database password — the app
 connects as `kendo_app`, which can only read and write rows, and the superuser
-login goes to the `migrate` service alone — and writes `.env` plus
+login goes to the `migrate` service alone — and writes `.env`, `kendo-app.env`,
 `deploy/traefik/selfhost/traefik.yml` and `dynamic/kendo.yml` from their
-`.example` files. The app's secrets also go to files in `secrets/`, which the
-containers get mounted as files rather than as environment variables; after
-changing one in `.env`, re-run `./setup.sh` so they match. One domain answer reaches all three passkey-bound settings
+`.example` files.
+
+The configuration is split in two, the same way as on the hardened deployment:
+
+- **`kendo-app.env`** holds every app setting: the domain values, session
+  timeouts, the timing floors, `TZ` and so on. It is written from
+  `deploy/env/kendo-app.env.example`, the file the Quadlet deployment uses
+  too, and holds no secret. The `app` and `migrate` services read the whole
+  file, so a setting a release adds there reaches the app without a change to
+  `docker-compose.yml`. Tune the app here.
+- **`.env`** holds only what `docker-compose.yml` itself interpolates — the
+  image pin `KENDO_IMAGE`, the db's `TZ` and `POSTGRES_*` — plus the
+  superuser login `MIGRATION_DATABASE_URL` and the app's secrets
+  (`DATABASE_URL`, `JWT_SECRET`, `SETUP_TOKEN`). No container reads it whole,
+  which is what keeps the superuser password away from the app (ADR-0007).
+
+The secrets reach the containers as files in `secrets/`, which `setup.sh`
+writes from `.env` and Compose mounts as `<NAME>_FILE`, rather than as
+environment variables; after changing one in `.env`, re-run `./setup.sh` so
+they match. Re-running also rewrites `kendo-app.env` from its example (the
+previous copy is kept as `kendo-app.env.bak`), keeping every setting you
+already set: only the domain answer and any key a release added to the
+example are new. One domain answer reaches all three passkey-bound settings
 (`WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGIN`, `CORS_ORIGINS`) and the Traefik `Host()`
 rule — an `RP_ID` typo is the whole "passkeys silently don't work" failure
 class, so it is worth not typing four times.
@@ -63,9 +83,17 @@ escalates itself; you run those.
 podman-compose up -d   # pulls ghcr.io/booji/kendodojomanagement:0.1
 ```
 
+`app`, `proxy` and `db` are `restart: always`, so a crash or an OOM kill brings
+them straight back. A reboot does not: rootless Podman has no daemon, and only
+`podman-restart.service` (with linger on) starts them again at boot. `setup.sh`
+enables it for you (`systemctl --user enable podman-restart.service`, no sudo),
+and `check` fails while it is disabled. It starts every `restart: always`
+container, stopped or not, so `podman-compose stop` does not survive a reboot:
+use `podman-compose down` to keep the stack stopped.
+
 `check` looks at what the app cannot see from inside its container, the things
 that otherwise surface as a browser error or a certificate that never arrives:
-placeholder domains, emails or secrets left in `.env` or the Traefik files, a
+placeholder domains, emails or secrets left in `.env`, `kendo-app.env` or the Traefik files, a
 Traefik `Host()` rule that no longer matches `WEBAUTHN_RP_ID`, TLS skipped or a
 bring-your-own certificate not in place, the domain not resolving to this host,
 something else already on 80/443, and the five host prerequisites. Each `FAIL`

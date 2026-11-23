@@ -979,9 +979,9 @@ def test_invite_redeem_begin_is_registered_as_constant_time_path() -> None:
     ConstantTimeAuthMiddleware path set (app.core.middleware) rather than
     growing its own ad hoc timing protection."""
     from app.config import API_PREFIX
-    from app.core.middleware import _CONSTANT_TIME_PATHS
+    from app.core.middleware import _CONSTANT_TIME_FLOORS
 
-    assert f"{API_PREFIX}/auth/invites/redeem/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/invites/redeem/begin" in _CONSTANT_TIME_FLOORS
 
 
 @pytest.mark.asyncio

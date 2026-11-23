@@ -74,13 +74,25 @@ def test_validate_startup_config_passes_with_database_url_set(
 
 def _set_required_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Sets the non-webauthn required vars to valid values so each test below
-    isolates only the webauthn-related failure it's checking."""
+    isolates only the webauthn-related failure it's checking.
+
+    ALLOW_TEST_AUTH goes off too: .env.test turns it on so the suite can sign
+    in through POST /auth/login/test, and production refuses it (#590). The
+    route was registered at import, so this leaves it in place."""
     monkeypatch.setattr(config, "JWT_SECRET", "a-real-non-empty-secret-value")
     monkeypatch.setattr(
         config,
         "DATABASE_URL",
         "postgresql+asyncpg://user:pass@db:5432/kendo",
     )
+    monkeypatch.setattr(config, "ALLOW_TEST_AUTH", False)
+
+
+def _set_production_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "production")
+    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "dojo.example.com")
+    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
 
 
 def test_validate_startup_config_raises_when_production_rp_id_is_localhost(
@@ -114,10 +126,7 @@ def test_validate_startup_config_raises_when_production_origin_is_localhost(
 def test_validate_startup_config_passes_in_production_with_real_webauthn_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _set_required_baseline(monkeypatch)
-    monkeypatch.setattr(config, "APP_ENV", "production", raising=False)
-    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "dojo.example.com")
-    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
+    _set_production_baseline(monkeypatch)
 
     # Should not raise.
     config.validate_startup_config()
@@ -928,17 +937,44 @@ def test_validate_startup_config_rejects_template_placeholder_secrets(
 ) -> None:
     """A production deploy that copies .env.example and misses a secret boots
     with a value published in this repo — for SETUP_TOKEN, the claim gate."""
-    monkeypatch.setattr(config, "JWT_SECRET", "a-real-non-empty-secret-value")
+    _set_production_baseline(monkeypatch)
     monkeypatch.setattr(config, "SETUP_TOKEN", "a-real-non-empty-setup-token")
-    monkeypatch.setattr(
-        config, "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/kendo"
-    )
-    monkeypatch.setattr(config, "APP_ENV", "production")
-    monkeypatch.setattr(config, "WEBAUTHN_RP_ID", "dojo.example.com")
-    monkeypatch.setattr(config, "WEBAUTHN_ORIGIN", "https://dojo.example.com")
     monkeypatch.setattr(config, name, f"<your-{name.lower()}>")
 
     with pytest.raises(RuntimeError) as exc_info:
         config.validate_startup_config()
 
     assert name in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# ALLOW_TEST_AUTH registers POST /auth/login/test, which mints an admin
+# session for any email with no credential (#590).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", [True, "true", 1, None])
+def test_validate_startup_config_refuses_test_auth_in_production(
+    monkeypatch: pytest.MonkeyPatch, value: object
+) -> None:
+    """Anything but the parsed False refuses: a non-bool or missing global
+    is tampered module state, as with APP_ENV (#313)."""
+    _set_production_baseline(monkeypatch)
+    monkeypatch.setattr(config, "ALLOW_TEST_AUTH", value)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        config.validate_startup_config()
+
+    assert "ALLOW_TEST_AUTH" in str(exc_info.value)
+
+
+def test_validate_startup_config_allows_test_auth_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The test suite and dev servers run with it on: only production refuses."""
+    _set_required_baseline(monkeypatch)
+    monkeypatch.setattr(config, "APP_ENV", "development")
+    monkeypatch.setattr(config, "ALLOW_TEST_AUTH", True)
+
+    # Should not raise.
+    config.validate_startup_config()

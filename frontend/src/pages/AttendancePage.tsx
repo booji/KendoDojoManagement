@@ -38,7 +38,7 @@ const AttendancePage = () => {
       ) : memberId === null ? (
         <EmptyState message="Your account has no Member record yet, so there is no attendance to show." />
       ) : (
-        <AttendanceHistoryCard memberId={memberId} defaultOpen />
+        <AttendanceHistoryCard memberId={memberId} />
       )}
     </div>
   )

@@ -8,6 +8,9 @@ import { getMyMember } from "@/api/accounts"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
+import DevicePasskeyPrompt from "@/components/DevicePasskeyPrompt"
+import GuidedTour from "@/components/GuidedTour"
+import { isDevicePasskeyOffered } from "@/lib/devicePasskeyOffer"
 import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
@@ -20,6 +23,9 @@ import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
+import AdminGeneralSettingsPage from "@/pages/AdminGeneralSettingsPage"
+import AdminSessionTypesPage from "@/pages/AdminSessionTypesPage"
+import AdminFederationsPage from "@/pages/AdminFederationsPage"
 import AdminInvitesPage from "@/pages/AdminInvitesPage"
 import InviteLandingPage from "@/pages/InviteLandingPage"
 import SessionCheckinPage from "@/pages/SessionCheckinPage"
@@ -37,6 +43,8 @@ const AuthenticatedLayout = () => {
   const { refresh } = useDojoSettings()
   const navigate = useNavigate()
   const [user, setUser] = useState<AccountClaims | null>(null)
+  // The tour waits for the device passkey offer (#612) to close.
+  const [offerOpen, setOfferOpen] = useState(isDevicePasskeyOffered)
 
   useEffect(() => {
     getMe()
@@ -66,6 +74,8 @@ const AuthenticatedLayout = () => {
   return (
     <AppShell role={user.role}>
       <Outlet context={{ user } satisfies LayoutContext} />
+      <DevicePasskeyPrompt onClose={() => setOfferOpen(false)} />
+      <GuidedTour role={user.role} paused={offerOpen} />
     </AppShell>
   )
 }
@@ -122,10 +132,6 @@ const App = () => (
             {/* Onboarding: authenticated but NOT profile-gated */}
             <Route path="/onboarding" element={<OnboardingPage />} />
 
-            {/* Invite management: authenticated but not profile-gated — checks
-                admin role itself and renders a forbidden state for members */}
-            <Route path="/settings/invites" element={<AdminInvitesPage />} />
-
             {/* Profile-required routes */}
             <Route element={<RequireProfile />}>
               <Route path="/" element={<HomePage />} />
@@ -140,9 +146,15 @@ const App = () => (
               <Route element={<RequireAdmin />}>
                 <Route path="/members" element={<MembersPage />} />
                 <Route path="/members/:id" element={<MemberDetailPage />} />
-                <Route path="/grades" element={<GradesPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                <Route path="/admin/settings" element={<AdminSettingsPage />}>
+                  <Route index element={<Navigate to="general" replace />} />
+                  <Route path="general" element={<AdminGeneralSettingsPage />} />
+                  <Route path="session-types" element={<AdminSessionTypesPage />} />
+                  <Route path="federations" element={<AdminFederationsPage />} />
+                  <Route path="invites" element={<AdminInvitesPage />} />
+                  <Route path="grades" element={<GradesPage />} />
+                </Route>
               </Route>
             </Route>
           </Route>

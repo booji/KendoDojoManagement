@@ -40,11 +40,11 @@ export type MemberFederationUpdateRequest = {
 
 export type FederationCreateRequest = {
   name: string
-  abbreviation?: string
-  iso_code?: string
-  website?: string
-  continental_grouping?: string
-  type?: string
+  abbreviation?: string | null
+  iso_code?: string | null
+  website?: string | null
+  continental_grouping?: string | null
+  type?: string | null
   is_pinned?: boolean
   is_active?: boolean
 }

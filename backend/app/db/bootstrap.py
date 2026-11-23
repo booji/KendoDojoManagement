@@ -16,6 +16,10 @@ waits for the database to become reachable, then runs `alembic upgrade head`
 unconditionally, whatever state the database is already in (empty,
 mid-migration, or already at head).
 
+Then it syncs the FIK affiliate list bundled with the release into the
+Federation catalogue (`app.federations.fik_catalogue`, #613), so a release
+that refreshes the list updates every instance on upgrade.
+
 It then creates and maintains the app's own database user (ADR-0007, #453).
 Migrations run as the superuser in MIGRATION_DATABASE_URL; the app connects as
 the user named in DATABASE_URL, which can only read and write rows. Every run
@@ -31,15 +35,18 @@ against the same empty volume would need an advisory lock here first.
 import asyncio
 import logging
 import os
+import sys
 
 import asyncpg
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from app.config import DATABASE_URL, MIGRATION_DATABASE_URL
 from app.db.scratch import asyncpg_dsn, url_parts, validate_identifier
+from app.federations import fik_catalogue
 
-_log = logging.getLogger(__name__)
+# Named, not __name__: run as `python -m`, __name__ is "__main__" (#606).
+_log = logging.getLogger("app.db.bootstrap")
 
 _BACKEND_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -89,9 +96,45 @@ def _run_alembic_upgrade(database_url: str) -> None:
     command.upgrade(_alembic_config(database_url), "head")
 
 
+async def _schema_revisions(database_url: str) -> list[str]:
+    """The revisions alembic_version records, sorted: one per head, none on an
+    empty database."""
+    base_url, db_name = url_parts(database_url)
+    conn = await asyncpg.connect(asyncpg_dsn(base_url, db_name))
+    try:
+        if not await conn.fetchval("SELECT to_regclass('alembic_version')"):
+            return []
+        rows = await conn.fetch("SELECT version_num FROM alembic_version")
+        return sorted(row["version_num"] for row in rows)
+    finally:
+        await conn.close()
+
+
 async def _upgrade_head(database_url: str) -> None:
-    """Run all pending alembic migrations up to head."""
+    """Run all pending alembic migrations up to head, logging where the schema
+    started and ended; alembic logs each revision it applies in between.
+    """
+    before = await _schema_revisions(database_url)
+    _log.info("Schema at revision %s, upgrading to head", ", ".join(before) or "none")
     await asyncio.to_thread(_run_alembic_upgrade, database_url)
+    after = await _schema_revisions(database_url)
+    if after == before:  # both sorted, so equal as sets
+        _log.info("Schema already at head %s", ", ".join(after))
+    else:
+        _log.info("Schema now at head %s", ", ".join(after))
+
+
+async def _sync_fik_affiliates(database_url: str) -> None:
+    """Sync the bundled FIK affiliate list into the Federation catalogue
+    (#613), in one transaction."""
+    records = fik_catalogue.load()
+    engine = create_async_engine(database_url)
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            await fik_catalogue.sync(session, records)
+    finally:
+        await engine.dispose()
+    _log.info("Federation catalogue synced: %d FIK affiliates", len(records))
 
 
 async def _wait_for_connection(
@@ -220,7 +263,8 @@ async def prepare_database(
     max_attempts: int = 10,
     initial_delay: float = 1.0,
 ) -> None:
-    """Bring the database up to head, then (re)provision the app user.
+    """Bring the database up to head, sync the FIK list, then (re)provision
+    the app user.
 
     `migration_url` (default MIGRATION_DATABASE_URL) is the superuser login
     that migrates; `app_url` (default DATABASE_URL) names the app user to
@@ -242,8 +286,19 @@ async def prepare_database(
     finally:
         await engine.dispose()
     await _upgrade_head(migration_url)
+    await _sync_fik_affiliates(migration_url)
     await _ensure_app_user(migration_url, user, password)
 
 
 if __name__ == "__main__":
+    # The unit's stdout is the journal. A root handler at INFO carries this
+    # module's lines and alembic's "Running upgrade" lines (#606); unlike the
+    # fileConfig this module avoids, it disables no existing logger.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    # One "setup plugin" line per autogenerate plugin: noise to an operator.
+    logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
     asyncio.run(prepare_database())

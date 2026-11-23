@@ -274,6 +274,8 @@ class InMemorySessionInstanceRepository:
         "title": "Session",
         "date": None,
         "template_id": None,
+        "original_date": None,
+        "edited": False,
         "cancelled": False,
         "location": None,
         "info": None,
@@ -334,10 +336,18 @@ class InMemorySessionInstanceRepository:
         ]
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, True)
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, False)
+
+    def _set_cancelled(
+        self, instance_id: str, cancelled: bool
+    ) -> dict[str, Any] | None:
         row = self._store.get(instance_id)
         if row is None:
             return None
-        row["cancelled"] = True
+        row["cancelled"] = cancelled
         return _instance_record(row)
 
     async def update(
@@ -349,9 +359,11 @@ class InMemorySessionInstanceRepository:
         updates = _row(self._DEFAULTS, data) if data else {}
         for key, value in data.items():
             row[key] = _segments(value) if key == "segments" else updates[key]
+        row["edited"] = True
         return _instance_record(row)
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        # No Attendance lives here: the in-memory attendance fake is separate.
         row = self._store.pop(instance_id, None)
         return _instance_record(row) if row else None
 
@@ -369,19 +381,6 @@ class InMemorySessionInstanceRepository:
                 row["cancelled"] = True
                 cancelled.append(_instance_record(row))
         return cancelled
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        as_of = as_of_date.isoformat()
-        doomed = [
-            row_id
-            for row_id, row in self._store.items()
-            if row["template_id"] == template_id and row["date"] >= as_of
-        ]
-        for row_id in doomed:
-            del self._store[row_id]
-        return len(doomed)
 
 
 def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
@@ -406,6 +405,8 @@ def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
         "duration_minutes": _minutes_between(start_time, end_time) if segments else 0,
         "location": row["location"],
         "template_id": row["template_id"],
+        "original_date": row["original_date"],
+        "edited": row["edited"],
         "status": "cancelled" if row["cancelled"] else "scheduled",
         "date": row["date"],
         "cancelled": row["cancelled"],

@@ -10,9 +10,12 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
 import LoginPage from "@/pages/LoginPage"
+import { performPasskeyLogin } from "@/api/auth"
+import { isDevicePasskeyOffered } from "@/lib/devicePasskeyOffer"
 
 // ── Mock @/api/settings ────────────────────────────────────────────────────
 
@@ -105,5 +108,36 @@ describe("branding fetch fails", () => {
     expect(screen.getByText("Sign in")).toBeInTheDocument()
     expect(screen.queryByAltText("Dojo logo")).not.toBeInTheDocument()
     expect(document.querySelector(".bg-black\\/40")).toBeNull()
+  })
+})
+
+describe("signing in from a phone (#612)", () => {
+  it("tells a Member whose passkey is on their phone to use the phone option", async () => {
+    getBrandingMock.mockRejectedValue(new Error("network error"))
+
+    renderLoginPage()
+
+    expect(
+      await screen.findByText(/passkey is on your phone\?.*phone or tablet.*scan the QR code/i),
+    ).toBeInTheDocument()
+  })
+
+  it("offers a passkey for this device after a cross-platform sign-in", async () => {
+    getBrandingMock.mockRejectedValue(new Error("network error"))
+    vi.mocked(performPasskeyLogin).mockResolvedValue({
+      detail: "ok",
+      authenticatorAttachment: "cross-platform",
+    })
+    vi.stubGlobal("location", { ...window.location, assign: vi.fn() })
+    Object.defineProperty(navigator, "credentials", { value: {}, configurable: true })
+    sessionStorage.clear()
+
+    renderLoginPage()
+    await userEvent.type(screen.getByLabelText("Email"), "a@dojo.test")
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with passkey" }))
+
+    await waitFor(() => expect(window.location.assign).toHaveBeenCalledWith("/"))
+    expect(isDevicePasskeyOffered()).toBe(true)
+    vi.unstubAllGlobals()
   })
 })

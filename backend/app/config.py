@@ -78,10 +78,38 @@ COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 # UAT/PROD) that overwrites the header; leaving it off keeps dev spoof-proof.
 TRUST_PROXY_XFF: bool = os.getenv("TRUST_PROXY_XFF", "false").lower() == "true"
 
+# Registers POST /auth/login/test, which mints an admin session for any email
+# with no credential; app/auth/router.py reads this to decide whether to
+# register the route. Test-only: validate_startup_config() refuses it in
+# production (#590).
+ALLOW_TEST_AUTH: bool = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
+
 # IANA timezone the dojo runs in. Sourced from the container's TZ env var so the
 # calendar feed anchors event wall-clock times to the dojo's zone (with correct
 # DST) instead of emitting floating time. Defaults to UTC.
 TIMEZONE: str = os.getenv("TZ", "UTC")
+
+
+def _floor_ms(name: str, default: int) -> int:
+    """A constant-time floor from the environment, or `default` if it is unset,
+    not an integer, or not positive."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        logging.getLogger(__name__).warning(
+            "%s is not an integer; falling back to %dms", name, default
+        )
+        return default
+    if value <= 0:
+        logging.getLogger(__name__).warning(
+            "%s must be positive; falling back to %dms. A non-positive floor "
+            "disables timing-side-channel protection.",
+            name,
+            default,
+        )
+        return default
+    return value
+
 
 # Minimum wall-clock duration (ms) the passkey begin endpoints must take,
 # regardless of whether the email is known/authorized (real path) or
@@ -107,25 +135,25 @@ TIMEZONE: str = os.getenv("TZ", "UTC")
 # A non-positive value would make the pad never fire and silently restore the
 # leak, so a typo or a well-meaning "disable this in dev" is treated as
 # misconfiguration rather than honoured. Same for a non-integer.
-_AUTH_BEGIN_MIN_DURATION_DEFAULT = 100
-try:
-    AUTH_BEGIN_MIN_DURATION_MS: int = int(
-        os.getenv("AUTH_BEGIN_MIN_DURATION_MS", str(_AUTH_BEGIN_MIN_DURATION_DEFAULT))
-    )
-except ValueError:
-    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
-    logging.getLogger(__name__).warning(
-        "AUTH_BEGIN_MIN_DURATION_MS is not an integer; falling back to %dms",
-        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
-    )
-if AUTH_BEGIN_MIN_DURATION_MS <= 0:
-    logging.getLogger(__name__).warning(
-        "AUTH_BEGIN_MIN_DURATION_MS must be positive; falling back to %dms. "
-        "A non-positive floor disables timing-side-channel protection on the "
-        "passkey begin endpoints.",
-        _AUTH_BEGIN_MIN_DURATION_DEFAULT,
-    )
-    AUTH_BEGIN_MIN_DURATION_MS = _AUTH_BEGIN_MIN_DURATION_DEFAULT
+AUTH_BEGIN_MIN_DURATION_MS: int = _floor_ms("AUTH_BEGIN_MIN_DURATION_MS", 100)
+
+# The same floor for POST /auth/login/passkey/complete (#594). A successful
+# login does more than begin -- signature check, sign count, a new Auth
+# Session, a commit -- and its worst request measured 105ms, past begin's
+# 100ms floor. p99 26ms one at a time, 71ms at 4 in flight.
+LOGIN_COMPLETE_MIN_DURATION_MS: int = _floor_ms("LOGIN_COMPLETE_MIN_DURATION_MS", 250)
+
+# And for POST /auth/recovery/redeem (#594), whose work is bcrypt, not a
+# commit: nine comparisons at cost 12 for any email, known or not. The
+# database work only a known email does -- the lockout lookup, its codes and
+# tokens, the failed attempt it writes -- runs inside it. p99 2.3s one at a
+# time, 3.0s at 4 in flight; bcrypt is CPU-bound, so a slower VPS core scales
+# it directly. Both floors are calibrated in docs/auth-timing-calibration.md,
+# and the same rules hold: above the p99, and a capacity signal rather than a
+# dial when the middleware warns.
+RECOVERY_REDEEM_MIN_DURATION_MS: int = _floor_ms(
+    "RECOVERY_REDEEM_MIN_DURATION_MS", 5000
+)
 
 
 def _strip_origin_whitespace_and_trailing_slash(origin: str) -> str:
@@ -399,6 +427,22 @@ def validate_startup_config() -> None:
         )
 
     if app_env == "production":
+        # Keyed off APP_ENV alone, like every check in this block, rather than
+        # also "WEBAUTHN_ORIGIN is not localhost": production already refuses
+        # a localhost origin below, and inferring production from other
+        # settings is what the APP_ENV comment at the top rules out.
+        #
+        # Anything but the parsed False refuses: the import-time parse always
+        # yields a bool, so a missing or non-bool global is tampered state and
+        # fails closed, as APP_ENV does (#313).
+        if globals().get("ALLOW_TEST_AUTH") is not False:
+            raise RuntimeError(
+                "ALLOW_TEST_AUTH is set (or not a bool) while APP_ENV=production. "
+                "It registers POST /api/auth/login/test, which signs anyone in "
+                "as an admin with no credential. Remove it: it is for the test "
+                "suite only."
+            )
+
         # Stripped/lowercased here BECAUSE these values are read raw
         # elsewhere (passkey_service.py, invite_service.py) and passed
         # straight to py_webauthn — validating a cleaned-up copy while
@@ -412,10 +456,10 @@ def validate_startup_config() -> None:
         rp_id = (globals().get("WEBAUTHN_RP_ID") or "").strip().lower()
         origin = (globals().get("WEBAUTHN_ORIGIN") or "").strip()
 
-        # Both secrets ship as angle-bracket placeholders in .env.example /
-        # .env.prod.example, and a non-blank placeholder clears the
-        # required-vars check above. A production deploy that copies the
-        # template and misses one would otherwise boot with a value published
+        # Both secrets ship as angle-bracket placeholders in .env.example, and a
+        # non-blank placeholder clears the required-vars check above. A
+        # production deploy that copies the template and misses one would
+        # otherwise boot with a value published
         # in this repo — for SETUP_TOKEN that is the claim gate handed to
         # anyone who reads it (ADR-0003).
         _reject_template_placeholder("JWT_SECRET", globals().get("JWT_SECRET") or "")

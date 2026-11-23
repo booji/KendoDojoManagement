@@ -147,7 +147,7 @@ class AbstractAdminTokenRepository(Protocol):
         expires_at: datetime,
     ) -> dict[str, Any]: ...
 
-    async def get_unused_admin_tokens_for_user(
+    async def get_live_admin_tokens_for_account(
         self, user_id: str
     ) -> list[dict[str, Any]]: ...
 
@@ -165,6 +165,17 @@ class SqlAdminTokenRepository:
         token_hash: str,
         expires_at: datetime,
     ) -> dict[str, Any]:
+        # One live token per Account: issuing a new one expires the rest, so a
+        # redeem never compares more hashes than its padding covers (#594).
+        await self._session.execute(
+            update(AdminRecoveryToken)
+            .where(
+                AdminRecoveryToken.user_id == user_id,
+                AdminRecoveryToken.used_at.is_(None),
+                AdminRecoveryToken.expires_at > func.now(),
+            )
+            .values(expires_at=func.now())
+        )
         obj = AdminRecoveryToken(
             user_id=user_id,
             created_by_id=created_by_id,
@@ -175,13 +186,14 @@ class SqlAdminTokenRepository:
         await self._session.flush()
         return _admin_token_to_dict(obj)
 
-    async def get_unused_admin_tokens_for_user(
+    async def get_live_admin_tokens_for_account(
         self, user_id: str
     ) -> list[dict[str, Any]]:
         result = await self._session.execute(
             select(AdminRecoveryToken).where(
                 AdminRecoveryToken.user_id == user_id,
                 AdminRecoveryToken.used_at.is_(None),
+                AdminRecoveryToken.expires_at > func.now(),
             )
         )
         return [_admin_token_to_dict(obj) for obj in result.scalars().all()]

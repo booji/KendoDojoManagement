@@ -237,10 +237,10 @@ const ReportsPage = () => (
       <PageHeader title="Reports" />
     </div>
 
-    <Tabs defaultValue="attendance">
+    <Tabs defaultValue="charts">
       <TabsList className="mb-6">
-        <TabsTrigger value="attendance">Attendance</TabsTrigger>
         <TabsTrigger value="charts">Charts</TabsTrigger>
+        <TabsTrigger value="attendance">Attendance</TabsTrigger>
       </TabsList>
 
       <TabsContent value="attendance">

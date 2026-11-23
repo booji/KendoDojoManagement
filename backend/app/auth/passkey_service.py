@@ -36,6 +36,10 @@ _AUTH_FAILED = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed"
 )
 
+# The user_id an unknown email's credential lookup asks for: no Account has it,
+# so the lookup costs what a known email's does and finds nothing (#587).
+_NO_ACCOUNT = "00000000-0000-0000-0000-000000000000"
+
 
 def refuse_registration() -> NoReturn:
     """Refuse an email-addressed registration with the generic failure (#472):
@@ -102,10 +106,8 @@ async def register_passkey_complete(
         log_security_event("passkey_registered", "failure")
         raise _AUTH_FAILED
 
-    # Only an Account nobody has enrolled yet. Setup reopens once the last
-    # passkey on the instance is gone, and an Admin who deleted their only
-    # passkey while holding recovery codes still owns that Account; the claim
-    # must not hand it to whoever holds the setup token. Adding a passkey to
+    # Only an Account nobody has enrolled yet: the claim must never hand an
+    # Account someone holds to whoever holds the setup token. Adding a passkey to
     # an enrolled Account goes through add_passkey_*, which takes the Account
     # from the session.
     if await _is_enrolled(uow, user.id):
@@ -246,8 +248,24 @@ async def login_passkey_begin(email: str, uow: AbstractUnitOfWork) -> dict:
 async def login_passkey_complete(
     payload: PasskeyLoginCompleteRequest, uow: AbstractUnitOfWork
 ) -> TokenResponse:
+    # A known and an unknown email must fail the same way and do the same
+    # work until a registered credential matches (#587): a malformed id is a
+    # 401 for both, and the credential lookup runs for both, so neither the
+    # status nor an extra SELECT tells the caller the email has an Account.
+    try:
+        cred_id_bytes = decode_challenge(payload.credential.id)
+    except ValueError as exc:  # binascii.Error, and non-ASCII input
+        raise _AUTH_FAILED from exc
+
     user = await account_for_email(uow.session, payload.email)
-    if user is None:
+    cred_result = await uow.session.execute(
+        select(PasskeyCredential).where(
+            PasskeyCredential.user_id == (user.id if user else _NO_ACCOUNT),
+            PasskeyCredential.credential_id == cred_id_bytes,
+        )
+    )
+    stored_cred = cred_result.scalar_one_or_none()
+    if user is None or stored_cred is None:
         raise _AUTH_FAILED
 
     # NOTE: the may-sign-in check (#484) deliberately happens *after*
@@ -256,20 +274,6 @@ async def login_passkey_complete(
     # member" from "unknown email" with a single request carrying a junk
     # credential. Membership Status is only disclosed to someone who has
     # already proved possession of a registered passkey.
-
-    # Decode credential_id from the request to find the matching stored credential
-    cred_id_b64 = payload.credential.id
-    cred_id_bytes = decode_challenge(cred_id_b64)
-
-    cred_result = await uow.session.execute(
-        select(PasskeyCredential).where(
-            PasskeyCredential.user_id == user.id,
-            PasskeyCredential.credential_id == cred_id_bytes,
-        )
-    )
-    stored_cred = cred_result.scalar_one_or_none()
-    if stored_cred is None:
-        raise _AUTH_FAILED
 
     if not user.pending_challenge or not user.challenge_issued_at:
         raise _AUTH_FAILED

@@ -89,7 +89,7 @@ def test_admin_can_set_colour_on_session_type(page: Page) -> None:
     type_name = session_type["name"]
 
     _set_cookie(page, admin_token)
-    page.goto(f"{BASE_URL}/admin/settings")
+    page.goto(f"{BASE_URL}/admin/settings/session-types")
     page.wait_for_load_state("networkidle")
 
     # Colour picker input is identified by its aria-label

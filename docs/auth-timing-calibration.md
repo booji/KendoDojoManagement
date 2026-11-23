@@ -18,6 +18,11 @@ for a fixed minimum wall-clock time:
 - `POST /auth/login/passkey/begin`
 - `POST /auth/invites/redeem/begin`
 
+Two heavier endpoints have floors of their own, calibrated in
+[Login complete and recovery redeem](#login-complete-and-recovery-redeem-594):
+`LOGIN_COMPLETE_MIN_DURATION_MS` for `POST /auth/login/passkey/complete` and
+`RECOVERY_REDEEM_MIN_DURATION_MS` for `POST /auth/recovery/redeem`.
+
 **The masking only works while the real path finishes under the floor.** Once a
 real request overruns it there is nothing left to pad, and the delta is
 observable again. So the floor has to sit above the real path's p99 — which is
@@ -156,6 +161,77 @@ saturation:
   simultaneous begin requests requires many distinct source addresses, given the
   20/min per-IP limit, which is itself the signal worth acting on.
 
+## Login complete and recovery redeem (#594)
+
+[#594](https://github.com/booji/KendoDojoManagement/issues/594) put two more
+endpoints behind the middleware, each with its own floor:
+
+- **`login/passkey/complete`.** #587 made a known and an unknown email do the
+  same work before a credential matches. That left no margin: its timing test
+  failed on the pre-fix code by only 0.03ms. A floor gives a margin that does
+  not depend on the machine.
+- **`recovery/redeem`.** #588 padded the bcrypt work, but a known email still
+  did database work an unknown one skipped, about 12ms: the lockout lookup,
+  reading its codes and tokens, and writing a failed attempt.
+
+The harness is `test_measure_redeem_and_login_complete_latency`, in the same
+file and behind the same flag:
+
+```bash
+podman-compose -f docker-compose.test.yml run --rm \
+  -e PYTEST_TARGET=tests/test_auth_begin_calibration.py \
+  -e "PYTEST_ARGS=-k redeem_and_login_complete" \
+  -e AUTH_BEGIN_BENCH=1 \
+  -e AUTH_BEGIN_MIN_DURATION_MS=1 \
+  -e LOGIN_COMPLETE_MIN_DURATION_MS=1 \
+  -e RECOVERY_REDEEM_MIN_DURATION_MS=1 \
+  -e RATE_LIMIT_PER_IP=1000000/minute \
+  -e PYTEST_ADDOPTS=-s \
+  test-backend > /tmp/bench.log 2>&1
+```
+
+The warning about the overrides above applies here too.
+
+- **Login complete** is measured on a successful login, its heaviest path:
+  signature check, sign count, a new Auth Session, a commit. The harness signs
+  real assertions with a P-256 key.
+- **Redeem** is measured on its slowest path: a known email with a full code
+  set and an admin token, sending a wrong code. All nine hashes are compared at
+  cost 12, and a failed attempt is written. Each Account is used once, so none
+  reaches the lockout.
+
+Same environment class as above, 2026-11-12. Milliseconds, after warmups.
+
+| endpoint | n | p50 | p90 | p95 | **p99** | max |
+|---|---|---|---|---|---|---|
+| `login/passkey/complete`, success, seq | 1000 | 19.1 | 22.0 | 22.9 | **26.1** | 105.2 |
+| `login/passkey/complete`, success, c=4 | 1000 | 49.0 | 58.5 | 61.6 | **70.6** | 203.2 |
+| `login/passkey/complete`, success, c=8 | 1000 | 96.9 | 113.9 | 119.4 | **163.6** | 250.2 |
+| `recovery/redeem`, known, seq | 200 | 1902.9 | 1949.0 | 1970.7 | **2018.8** | 2148.5 |
+| `recovery/redeem`, unknown, seq | 200 | 1906.0 | 2193.5 | 2237.0 | **2337.0** | 2521.2 |
+| `recovery/redeem`, known, c=2 | 200 | 2333.8 | 2448.3 | 2494.9 | **2568.8** | 2619.1 |
+| `recovery/redeem`, known, c=4 | 200 | 2346.5 | 2452.9 | 2635.9 | **3016.9** | 3061.1 |
+
+The redeem rows are server-side, from the middleware's warnings. The login
+complete rows are client-observed, because the endpoint had no floor yet to
+log one. Over loopback, that adds well under a millisecond. Redeem takes
+seconds per request, so its rows have 200 samples, and each p99 rests on two.
+
+**`LOGIN_COMPLETE_MIN_DURATION_MS` defaults to 250ms.** Its worst single
+request one at a time, 105ms, already passes the begin endpoints' 100ms floor,
+so complete needs a floor of its own. 250ms is 2.4 times that worst case. It
+also clears every request at 4 in flight, and the p99 at 8.
+
+**`RECOVERY_REDEEM_MIN_DURATION_MS` defaults to 5000ms.** That is 2.1 times
+the worst sequential p99, the unknown email's 2337ms, and 1.6 times the worst
+request at 4 in flight. bcrypt is
+CPU-bound, so a slower VPS core scales the whole figure, not only the commit.
+Recovery is rare and deliberate, so a 5-second answer costs a user little.
+
+The [Conclusions](#conclusions) above hold for both floors. A "Constant-time
+floor exceeded" warning names the endpoint and its setting, and it is a
+capacity signal, not a reason to keep raising the floor.
+
 ## The convergence assertion's own false-failure rate
 
 Separately from the floor, `backend/tests/timing_support.py` asserts that the
@@ -253,6 +329,69 @@ Two hypotheses were tested and ruled out:
 So the **local contention case is understood** (the real path approaches the
 floor, the mask stops working, a larger floor absorbs it) and the **CI case is
 not**.
+
+The same unexplained shape also shows up locally, so it is not specific to
+GitHub's runners. On 2026-11-09, `test_invite_redeem_begin_valid_vs_invalid_median_latency_converges`
+failed in a local full-suite run (Podman, `docker-compose.test.yml`, the `test`
+service) on the #593 branch. That branch does not touch the invite or
+floor-middleware code. The failure:
+
+- same-path control **0.098 ms**
+- cross-path delta **1.225 ms**, n=31, reproduced on both rounds
+- **no** `Constant-time floor exceeded` warning
+
+The same test passed in the full run before it, on the same branch, and when
+`tests/test_invites.py` was rerun alone straight afterwards. During #589 it also
+failed once and passed on two reruns.
+
+### Explained: the pad's own wake-up (#596)
+
+[#596](https://github.com/booji/KendoDojoManagement/issues/596) found the cause.
+The delta was never in the endpoint's work or in teardown. It was in how late
+the pad's `asyncio.sleep(remaining)` woke up, and that depended on `remaining`.
+
+On Linux, asyncio's `EpollSelector` rounds a timeout up to whole milliseconds
+as `math.ceil(t * 1e3) * 1e-3`. For some k, the float `k * 1e-3` lands just
+above k/1000 (`18 * 1e-3 == 0.018000000000000002`), and CPython's
+`epoll.poll` rounds it up again. A timeout of k ms then waits k+1 ms. Up to
+200ms the affected values are 9, 13, 18, 26, 36, 52, 59, 67, 71, 72, 87, 103,
+104, 118, 119, 134, 142, 143, 144, 174 and 175.
+
+Under the invite test's 20ms floor, the decoy path had 17.x ms left to pad.
+That rounds up to 18 and waited 19ms. The real path had 16.x ms, which rounds
+up to 17 and waited 17ms. Which path lands in a bad bucket depends on how fast
+the machine runs the handler. That is why the failure came and went with load
+and runner, why its sign flipped, and why it reproduced on both rounds with a
+quiet control and no floor-exceeded warning.
+
+The earlier test that "ruled out" a residual outside the padded region was
+taken under contention: the +3.529ms row is the loaded case. It never measured
+the quiet case. In this test the residual couldn't be teardown anyway:
+`DbSessionUnitOfWork`, which DB-backed tests use, does nothing on exit.
+
+Measured with probes on the middleware, the service and each ASGI send,
+Python 3.13.18, median sleep overshoot past the pad's deadline:
+
+| run | valid | invalid | median delta | result |
+|---|---|---|---|---|
+| isolated | 0.67ms | 1.79ms | −0.98ms | pass, just under tolerance |
+| full backend suite ×2 | 0.51–0.52ms | 1.72–1.78ms | −1.20 / −1.21ms | fail on both rounds |
+| fixed, full suite ×2 | 0.002ms | 0.002ms | +0.024 / −0.015ms | pass |
+| fixed, one shared CPU ×3 | 0.003–0.004ms | 0.003–0.004ms | +0.017 / +0.101 / −0.200ms | pass |
+
+The pad now sleeps to 5ms short of its deadline and yields the rest
+(`_sleep_until` in `app/core/middleware.py`). The coarse sleep woke at most
+2.36ms late on one shared CPU, so 5ms leaves room. The cost is at most 5ms of
+yielding per padded request. `tests/test_constant_time_pad.py` pins the
+property: two handlers whose remaining time rounds up to 18 and to 17 must end
+together.
+
+This is a production fix, not only a test fix. With the 100ms floor, bucket 87
+is hit when a path's work takes 13–14ms. That would have shown about a 1ms
+real-versus-decoy difference over HTTP.
+
+The CI step below stays advisory until runs on GitHub's runners show the
+delta has gone there too.
 
 Given that, `.github/workflows/backend-tests.yml` marks the three wall-clock
 assertions `timing_sensitive` and runs them in a `continue-on-error` step. The

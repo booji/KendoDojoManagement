@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import IsoDate, IsoTime, UUIDBase, UUIDType
@@ -76,12 +76,24 @@ class SessionTemplateSegmentType(UUIDBase):
 
 class SessionInstance(UUIDBase):
     __tablename__ = "session_instances"
+    __table_args__ = (
+        # One Session per slot of a series (#578). NULLs are distinct, so
+        # ad-hoc Sessions (no template, no slot) stay unconstrained.
+        UniqueConstraint(
+            "template_id", "original_date", name="uq_session_instances_template_slot"
+        ),
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     date: Mapped[str] = mapped_column(IsoDate(), nullable=False)
     template_id: Mapped[str | None] = mapped_column(
         UUIDType(), ForeignKey("session_templates.id"), nullable=True
     )
+    # The date the template generated this Session for, kept when the Session
+    # is moved, so it goes on covering that slot of the recurrence (#578).
+    original_date: Mapped[str | None] = mapped_column(IsoDate(), nullable=True)
+    # Set by any Admin edit; reconciliation never deletes an edited Session.
+    edited: Mapped[bool] = mapped_column(nullable=False, default=False)
     cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     info: Mapped[str | None] = mapped_column(Text, nullable=True)

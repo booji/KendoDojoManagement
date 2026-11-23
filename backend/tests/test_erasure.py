@@ -75,9 +75,12 @@ def clear_overrides():
     app.dependency_overrides.clear()
 
 
+_MEMBER_ID = "11111111-1111-1111-1111-111111111111"
+
+
 def _member(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "id": "member-1",
+        "id": _MEMBER_ID,
         "email": "taro@dojo.test",
         "first_name": "Taro",
         "surname": "Yamada",
@@ -186,35 +189,35 @@ def _override_member_repo(records: dict[str, dict[str, Any]]) -> None:
 async def test_erase_as_non_admin_returns_403() -> None:
     from tests.auth_support import sign_in
 
-    _override_member_repo({"member-1": _member()})
+    _override_member_repo({_MEMBER_ID: _member()})
     token = sign_in(_MEMBER_CLAIMS)
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
-            "/members/member-1/erase", cookies={"access_token": token}
+            f"/members/{_MEMBER_ID}/erase", cookies={"access_token": token}
         )
     assert response.status_code == 403
 
 
 async def test_erase_unauthenticated_returns_401() -> None:
-    _override_member_repo({"member-1": _member()})
+    _override_member_repo({_MEMBER_ID: _member()})
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 401
 
 
 async def test_erase_member_not_archived_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
-        {"member-1": _member(membership_status="active", user_id="someone-else")}
+        {_MEMBER_ID: _member(membership_status="active", user_id="someone-else")}
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 409
     assert "archived" in response.json()["detail"].lower()
 
@@ -222,12 +225,12 @@ async def test_erase_member_not_archived_returns_409() -> None:
 async def test_erase_self_returns_409() -> None:
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: _ADMIN_CLAIMS
     _override_member_repo(
-        {"member-1": _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
+        {_MEMBER_ID: _member(membership_status="archived", user_id=_ADMIN_CLAIMS.sub)}
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 409
     detail = response.json()["detail"].lower()
     assert "self" in detail or "yourself" in detail
@@ -239,7 +242,7 @@ async def test_erase_missing_member_returns_404() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/does-not-exist/erase")
+        response = await c.post("/members/99999999-9999-9999-9999-999999999999/erase")
     assert response.status_code == 404
 
 
@@ -264,7 +267,7 @@ async def test_erase_of_a_member_gone_before_the_scrub_returns_404() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.post("/members/member-1/erase")
+        response = await c.post(f"/members/{_MEMBER_ID}/erase")
     assert response.status_code == 404
     # No commit: the grade and federation deletes before the scrub roll back.
     assert uow.commits == 0
@@ -534,6 +537,66 @@ async def test_erase_endpoint_anonymises_deletes_and_retains_attendance(
         )
     ).scalar_one()
     assert actor_count == 1
+
+
+async def test_erase_succeeds_when_the_members_account_issued_an_admin_recovery_token(
+    db_session: AsyncSession,
+) -> None:
+    """The token outlives its issuer, for the Account it was issued to (#570)."""
+    from app.dependencies import get_uow
+    from app.members.dependencies import get_member_repo
+    from app.members.repository import SqlMemberRepository
+
+    actor_id = await seed_account(
+        db_session, f"actor-{uuid.uuid4()}@dojo.test", role="admin"
+    )
+    issuer_email = f"issuer-{uuid.uuid4()}@dojo.test"
+    issuer_id = await seed_account(
+        db_session, issuer_email, role="admin", membership_status="archived"
+    )
+    member_id = (
+        await db_session.execute(
+            text("SELECT member_id FROM accounts WHERE id = :id"), {"id": issuer_id}
+        )
+    ).scalar_one()
+    token_id = str(uuid.uuid4())
+    await db_session.execute(
+        text(
+            "INSERT INTO admin_recovery_tokens "
+            "(id, user_id, created_by_id, token_hash, expires_at, created_at) "
+            "VALUES (:id, :user_id, :created_by_id, 'hash', "
+            "now() + interval '1 day', now())"
+        ),
+        {"id": token_id, "user_id": actor_id, "created_by_id": issuer_id},
+    )
+    await db_session.flush()
+
+    app.dependency_overrides[get_uow] = lambda: _DbSessionUnitOfWork(db_session)
+    app.dependency_overrides[get_member_repo] = lambda: SqlMemberRepository(db_session)
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=actor_id, email="actor@dojo.test", role="admin"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(f"/members/{member_id}/erase")
+
+    assert response.status_code == 200, response.text
+    token = (
+        (
+            await db_session.execute(
+                text(
+                    "SELECT user_id, created_by_id FROM admin_recovery_tokens "
+                    "WHERE id = :id"
+                ),
+                {"id": token_id},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    assert str(token["user_id"]) == actor_id
+    assert token["created_by_id"] is None
 
 
 async def test_list_search_tolerates_erased_member_with_null_email(

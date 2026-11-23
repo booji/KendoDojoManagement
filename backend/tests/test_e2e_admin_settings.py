@@ -13,6 +13,7 @@ Acceptance criteria covered here (criteria 6-9):
 
 import uuid
 
+import pytest
 from playwright.sync_api import Page, expect
 
 from app.auth.models import AccountClaims
@@ -113,3 +114,69 @@ def test_admin_settings_page_redirects_regular_member(page: Page) -> None:
 
     # RequireAdmin guard redirects non-admins to /
     expect(page).not_to_have_url(f"{BASE_URL}/admin/settings")
+
+
+# ── #610 — Admin Settings sub-pages ────────────────────────────────────────
+
+SUB_PAGES = [
+    ("General", "/admin/settings/general", "Dojo Branding"),
+    ("Session Types", "/admin/settings/session-types", "Session Types"),
+    ("Federations", "/admin/settings/federations", "Federations"),
+    ("Invites", "/admin/settings/invites", "Invites"),
+    ("Grades", "/admin/settings/grades", "Grade management"),
+]
+
+
+def test_admin_settings_lands_on_general(page: Page) -> None:
+    _inject_cookie(page, _make_token("admin"))
+
+    page.goto(f"{BASE_URL}/admin/settings")
+
+    expect(page).to_have_url(f"{BASE_URL}/admin/settings/general")
+    expect(page.get_by_role("heading", name="Check-in Window")).to_be_visible()
+
+
+@pytest.mark.parametrize("width", [1280, 375])
+def test_sub_nav_opens_each_sub_page_and_marks_it_current(
+    page: Page, width: int
+) -> None:
+    page.set_viewport_size({"width": width, "height": 800})
+    _inject_cookie(page, _make_token("admin"))
+    page.goto(f"{BASE_URL}/admin/settings")
+    sub_nav = page.get_by_role("navigation", name="Admin Settings sections")
+
+    for label, path, heading in SUB_PAGES:
+        link = sub_nav.get_by_role("link", name=label, exact=True)
+        link.click()
+        expect(page).to_have_url(f"{BASE_URL}{path}")
+        expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
+        expect(link).to_have_attribute("aria-current", "page")
+        expect(sub_nav.locator("[aria-current='page']")).to_have_count(1)
+
+
+def test_non_admin_is_redirected_from_every_sub_page(page: Page) -> None:
+    _inject_cookie(page, _make_token("member"))
+
+    for _label, path, _heading in SUB_PAGES:
+        page.goto(f"{BASE_URL}{path}")
+        expect(page).to_have_url(f"{BASE_URL}/")
+
+
+@pytest.mark.parametrize("old_path", ["/settings/invites", "/grades"])
+def test_old_paths_are_gone(page: Page, old_path: str) -> None:
+    _inject_cookie(page, _make_token("admin"))
+
+    page.goto(f"{BASE_URL}{old_path}", wait_until="networkidle")
+
+    # No route matches, so the app renders nothing at all.
+    expect(page.locator("#root > *")).to_have_count(0)
+
+
+def test_admin_nav_has_no_grades_item(page: Page) -> None:
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _inject_cookie(page, _make_token("admin"))
+    page.goto(f"{BASE_URL}/")
+
+    sidebar = page.locator("[data-slot='sidebar']")
+    expect(sidebar.get_by_role("link", name="Members", exact=True)).to_be_visible()
+    expect(sidebar.get_by_role("link", name="Grades", exact=True)).to_have_count(0)

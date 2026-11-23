@@ -20,8 +20,10 @@ import subprocess
 import time
 from pathlib import Path
 
+import yaml
+
 from tests.backup_support import decrypt, keypair, no_file_holds
-from tests.deploy_contract import ALL_SECRETS
+from tests.deploy_contract import ALL_SECRETS, container_env
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -41,19 +43,23 @@ def bundle(tmp_path: Path) -> Path:
     shutil.copy(ROOT / SELFHOST / "traefik.yml.example", home / SELFHOST)
     for example in (ROOT / SELFHOST / "dynamic").glob("*.example"):
         shutil.copy(example, home / SELFHOST / "dynamic")
-    (home / "deploy" / "sysctl-99-kendo-rootless-ports.conf").touch()
     # setup.sh reads backup.env through kendo-backup.sh, in every mode.
     shutil.copytree(ROOT / "deploy/bin", home / "deploy/bin")
+    # The app settings, for Compose and Quadlet alike (#603).
+    shutil.copytree(ROOT / "deploy/env", home / "deploy/env")
     return home
 
 
-def run(home: Path, *answers: str) -> subprocess.CompletedProcess:
+def run(
+    home: Path, *answers: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
     result = subprocess.run(
         ["bash", str(home / "setup.sh")],
         input="".join(f"{a}\n" for a in answers),
         capture_output=True,
         text=True,
         cwd=home,
+        env=env,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -72,7 +78,7 @@ def test_one_domain_answer_reaches_every_passkey_bound_setting(tmp_path):
     home = bundle(tmp_path)
     run(home, "DOJO.Example.com", "1", "1", "admin@example.com")
 
-    env = env_of(home)
+    env = env_of(home, "kendo-app.env")
     # Lowercased: WebAuthn matches RP_ID against the browser's lowercased host.
     assert env["WEBAUTHN_RP_ID"] == "dojo.example.com"
     assert env["WEBAUTHN_ORIGIN"] == "https://dojo.example.com"
@@ -119,6 +125,25 @@ def test_writes_the_secret_files_compose_mounts(tmp_path):
     assert secrets.stat().st_mode & 0o777 == 0o700
 
 
+def test_a_key_added_to_the_app_env_example_reaches_compose_with_no_compose_change(
+    tmp_path,
+):
+    # #603: an app setting listed only in .env.example and not in the compose
+    # file's environment: mapping silently never reached the app (#594's floors).
+    # The shipped docker-compose.yml is taken as is: no edit lets the key in.
+    home = bundle(tmp_path)
+    shutil.copy(ROOT / "docker-compose.yml", home)
+    example = home / "deploy/env/kendo-app.env.example"
+    example.write_text(example.read_text() + "KENDO_NEW_SETTING=42\n")
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    services = yaml.safe_load((home / "docker-compose.yml").read_text())["services"]
+    for service in ("app", "migrate"):
+        env = container_env(services[service], home)
+        assert env.get("KENDO_NEW_SETTING") == "42", service
+        assert env.get("WEBAUTHN_RP_ID") == "dojo.example.com", service
+
+
 def test_a_hand_quoted_value_in_env_reaches_its_secret_file_unquoted(tmp_path):
     # Compose's own .env parser strips one pair of quotes; the secret files
     # must hold what Compose would have passed, or the app gets `'...'`.
@@ -150,8 +175,40 @@ def test_rerunning_changes_the_domain_without_clobbering_the_secrets(tmp_path):
 
     for key in ("POSTGRES_PASSWORD", "DATABASE_URL", "JWT_SECRET", "SETUP_TOKEN"):
         assert second[key] == first[key]
-    assert second["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
     assert (home / ".env.bak").exists()
+    assert (home / "kendo-app.env.bak").exists()
+
+
+def test_rerunning_keeps_every_app_setting_the_operator_set(tmp_path):
+    """A re-run rewrites kendo-app.env from the example: every key already set
+    carries over, and only the domain answer and keys the example gained are
+    new. It once reset tuned timeouts and TZ to the shipped defaults."""
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+    app_env = home / "kendo-app.env"
+    app_env.write_text(
+        app_env.read_text()
+        .replace("SESSION_MAX_MINUTES=10080", "SESSION_MAX_MINUTES=60")
+        .replace("TZ=Europe/London", "TZ=Asia/Tokyo")
+        + "KENDO_OPERATOR_SETTING=own\n"
+    )
+    dot_env = home / ".env"
+    dot_env.write_text(dot_env.read_text().replace("TZ=Europe/London", "TZ=Asia/Tokyo"))
+    example = home / "deploy/env/kendo-app.env.example"
+    example.write_text(example.read_text() + "KENDO_NEW_SETTING=42\n")
+
+    run(home, "shinkendo.example.org", "1", "1", "admin@example.com")
+
+    env = env_of(home, "kendo-app.env")
+    assert env["SESSION_MAX_MINUTES"] == "60"
+    assert env["TZ"] == "Asia/Tokyo"
+    assert env["KENDO_OPERATOR_SETTING"] == "own"
+    assert env["KENDO_NEW_SETTING"] == "42"
+    assert env["WEBAUTHN_RP_ID"] == "shinkendo.example.org"
+    assert env["CORS_ORIGINS"] == "https://shinkendo.example.org"
+    # The db's zone is .env's TZ: it stays with the app's.
+    assert env_of(home)["TZ"] == "Asia/Tokyo"
 
 
 def test_rerunning_moves_a_pre_453_env_onto_the_app_user(tmp_path):
@@ -272,7 +329,7 @@ def test_skipping_tls_still_writes_everything_else_and_says_what_is_left(tmp_pat
     home = bundle(tmp_path)
     out = run(home, "dojo.example.com", "4")
 
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
     assert (home / SELFHOST / "traefik.yml").exists()
     assert "certResolver" not in (home / SELFHOST / "dynamic/kendo.yml").read_text()
     assert not (home / SELFHOST / "dynamic/byo-cert.yml").exists()
@@ -296,7 +353,7 @@ def test_a_domain_that_would_break_passkeys_is_rejected_before_anything_is_writt
 
     assert out.stdout.count("Bare hostname only") == 2
     assert "cannot bind to a bare label" in out.stdout
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
 
 
 def test_a_hostname_with_an_empty_or_hyphen_edged_label_is_rejected(tmp_path):
@@ -306,7 +363,7 @@ def test_a_hostname_with_an_empty_or_hyphen_edged_label_is_rejected(tmp_path):
     out = run(home, "dojo.example.com.", "-dojo.example.com", "dojo.example.com", "4")
 
     assert out.stdout.count("Every label must be non-empty") == 2
-    assert env_of(home)["WEBAUTHN_RP_ID"] == "dojo.example.com"
+    assert env_of(home, "kendo-app.env")["WEBAUTHN_RP_ID"] == "dojo.example.com"
 
 
 def test_an_unrecognised_tls_answer_re_asks_instead_of_silently_skipping_tls(tmp_path):
@@ -380,7 +437,7 @@ class Host:
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
-        for sub in ("quadlet", "env", "systemd"):
+        for sub in ("quadlet", "systemd"):
             shutil.copytree(ROOT / "deploy" / sub, self.src / "deploy" / sub)
         (self.src / "deploy/traefik/dynamic").mkdir()
         shutil.copy(ROOT / "deploy/traefik/traefik.yml", self.src / "deploy/traefik")
@@ -450,6 +507,17 @@ def test_quadlet_secrets_cannot_mismatch_the_password_they_embed(tmp_path):
     assert not (host.state / "kendo_dns_token").exists()
 
 
+def test_compose_env_trusts_the_forwarded_for_traefik_sets(tmp_path):
+    """#581: behind Traefik every peer address is Traefik's, so an `.env` that
+    resolves TRUST_PROXY_XFF to false puts the whole dojo in one rate-limit
+    bucket. Read as docker-compose.yml's `${TRUST_PROXY_XFF:-true}` reads it:
+    unset or empty takes the default."""
+    home = bundle(tmp_path)
+    run(home, "dojo.example.com", "1", "1", "admin@example.com")
+
+    assert (env_of(home).get("TRUST_PROXY_XFF") or "true") == "true"
+
+
 def test_quadlet_lays_down_the_config_tree_the_units_expect(tmp_path):
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "1", "admin@example.com")
@@ -504,6 +572,22 @@ def test_quadlet_enables_the_daily_ip_retention_timer(tmp_path):
     assert f"--user enable --now {timer}" in calls[reload + 1 :], calls
 
 
+def test_quadlet_enables_the_nightly_backup_timer(tmp_path):
+    """Without it a fresh install takes no backups until the operator finds
+    the manual step (#576)."""
+    host = Host(tmp_path)
+    out = host.run("dojo.example.com", "1", "1", "admin@example.com")
+
+    for unit in ("kendo-backup.service", "kendo-backup.timer"):
+        assert (host.home / ".config/systemd/user" / unit).read_text() == (
+            ROOT / "deploy/systemd" / unit
+        ).read_text()
+    calls = host.systemctl_log.read_text().splitlines()
+    reload = calls.index("--user daemon-reload")
+    assert "--user enable --now kendo-backup.timer" in calls[reload + 1 :], calls
+    assert "kendo-backup.timer is enabled" in out.stdout
+
+
 def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     host = Host(tmp_path)
     (tmp_path / "bin/systemctl").write_text(
@@ -511,13 +595,15 @@ def test_quadlet_names_a_failed_timer_enable_not_the_reload(tmp_path):
     )
     out = host.run("dojo.example.com", "1", "1", "admin@example.com")
 
-    assert "enable --now kendo-ip-retention.timer` failed" in out.stdout
+    note = "enable --now kendo-ip-retention.timer kendo-backup.timer` failed"
+    assert out.stdout.count(note) == 1, out.stdout
     assert "daemon-reload` failed" not in out.stdout
+    assert "kendo-backup.timer is enabled" not in out.stdout
 
 
 def test_quadlet_wires_dns_01_credentials_as_a_drop_in(tmp_path):
-    # A drop-in, not an edit to the unit: docs/install/upgrading.md tells an
-    # operator to re-copy the units on upgrade, which would revert an edit made here.
+    # A drop-in, not an edit to the unit: an Operator action that replaces the
+    # unit (docs/install/upgrading.md) would revert an edit made here.
     host = Host(tmp_path)
     host.run("dojo.example.com", "1", "3", "hetzner", "admin@example.com", "tok-123")
 
@@ -753,6 +839,44 @@ def test_check_passes_what_setup_just_wrote_on_a_healthy_host(tmp_path):
     assert "podman-compose up -d" in out.stdout
 
 
+def test_check_fails_until_podman_restart_brings_the_stack_back_after_a_reboot(
+    tmp_path,
+):
+    # restart: always covers a crash; after a reboot only podman-restart.service
+    # starts the containers again (#582).
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+    env = host_env(
+        tmp_path,
+        systemctl='case "$*" in *is-failed*|*podman-restart*) exit 1 ;; esac',
+    )
+
+    out = check(home, env)
+
+    assert out.returncode == 1
+    assert "systemctl --user enable podman-restart.service" in out.stdout
+
+
+def test_compose_setup_enables_podman_restart_so_check_can_go_green(tmp_path):
+    # check fails until it is enabled, and the docs run check before starting
+    # the stack: setup enables it itself, no sudo needed (#582).
+    home = bundle(tmp_path)
+    log = tmp_path / "systemctl.log"
+    env = host_env(tmp_path, systemctl=f'echo "$*" >> {log}')
+
+    out = run(home, *ANSWERS, env=env)
+
+    assert "--user enable podman-restart.service" in log.read_text().splitlines()
+    assert "podman-restart.service is enabled" in out.stdout
+
+
+def test_compose_setup_names_a_failed_podman_restart_enable(tmp_path):
+    home = bundle(tmp_path)
+    out = run(home, *ANSWERS, env=host_env(tmp_path, systemctl="exit 1"))
+
+    assert "systemctl --user enable podman-restart.service` failed" in out.stdout
+
+
 def test_check_before_setup_says_to_run_setup_first(tmp_path):
     home = bundle(tmp_path)
 
@@ -765,6 +889,7 @@ def test_check_before_setup_says_to_run_setup_first(tmp_path):
 def test_check_names_every_placeholder_a_hand_copied_config_still_has(tmp_path):
     home = bundle(tmp_path)
     shutil.copy(home / ".env.example", home / ".env")
+    shutil.copy(home / "deploy/env/kendo-app.env.example", home / "kendo-app.env")
     shutil.copy(
         home / SELFHOST / "traefik.yml.example", home / SELFHOST / "traefik.yml"
     )
@@ -777,7 +902,7 @@ def test_check_names_every_placeholder_a_hand_copied_config_still_has(tmp_path):
 
     assert out.returncode == 1
     for placeholder in (
-        "<your-domain.com>",
+        "<your-db-password>",
         "<your-jwt-secret>",
         "dojo.example.com",
         "you@example.com",
@@ -833,11 +958,11 @@ def test_check_warns_that_a_staging_certificate_is_untrusted(tmp_path):
 
 
 def test_check_catches_a_domain_changed_in_only_one_place(tmp_path):
-    # A hand edit of .env after a domain change, the router left behind.
+    # A hand edit of kendo-app.env after a domain change, the router left behind.
     home = bundle(tmp_path)
     run(home, *ANSWERS)
-    env = (home / ".env").read_text().replace(DOMAIN, "kendo.shinbukan.org")
-    (home / ".env").write_text(env)
+    app_env = home / "kendo-app.env"
+    app_env.write_text(app_env.read_text().replace(DOMAIN, "kendo.shinbukan.org"))
 
     out = check(home, host_env(tmp_path))
 
@@ -909,6 +1034,31 @@ def test_check_quadlet_fails_until_the_ip_retention_timer_is_enabled(tmp_path):
     assert "kendo-ip-retention.timer is not installed" in missing.stdout
 
 
+def test_check_quadlet_warns_when_the_release_units_pin_different_images(tmp_path):
+    """A pin edited in one unit only (an rc rehearsal, a rollback) would
+    migrate with one image and serve with another."""
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    unit = host.units() / "kendo-migrate.container"
+    unit.write_text(
+        re.sub(
+            r"^Image=.*$",
+            "Image=ghcr.io/booji/kendodojomanagement:0.1.0-rc2",
+            unit.read_text(),
+            flags=re.M,
+        )
+    )
+
+    out = check(host.src, host_env(tmp_path), "--quadlet")
+
+    assert out.returncode == 0, out.stdout
+    assert (
+        "warn  The Release units pin different images: "
+        "ghcr.io/booji/kendodojomanagement:0.1, "
+        "ghcr.io/booji/kendodojomanagement:0.1.0-rc2"
+    ) in out.stdout
+
+
 def test_check_fails_a_domain_that_does_not_resolve(tmp_path):
     home = bundle(tmp_path)
     run(home, *ANSWERS)
@@ -973,6 +1123,38 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     assert out.returncode == 1
     assert "FAIL  Linger is off for kendo" in out.stdout
     assert "sudo loginctl enable-linger kendo" in out.stdout
+    # Compose runs as the operator, not `kendo`, so the header names no account.
+    header = "run these yourself (this script never escalates)"
+    assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+    assert "not as `kendo`" not in out.stdout
+
+
+def test_check_quadlet_says_prerequisites_are_fixed_from_an_admin_account(tmp_path):
+    # `kendo` has no sudo: the fix is run from another account (#576).
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+
+    out = check(host.src, host_env(tmp_path, loginctl="echo Linger=no"), "--quadlet")
+
+    assert out.returncode == 1
+    header = "run these from an admin account, not as `kendo`"
+    assert out.stdout.index(header) < out.stdout.index("FAIL  Linger")
+
+
+def test_check_prints_a_sysctl_fix_that_needs_no_bundle(tmp_path):
+    # The fix is run from an admin account, where the bundle extracted into
+    # kendo's home is not: it writes the one line rather than copying a file.
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(home, host_env(tmp_path, sysctl="echo 1024"))
+
+    assert out.returncode == 1
+    assert (
+        "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee "
+        "/etc/sysctl.d/99-kendo-rootless-ports.conf" in out.stdout
+    )
+    assert "deploy/sysctl" not in out.stdout
 
 
 def test_check_only_warns_about_a_firewall_it_cannot_see(tmp_path):
@@ -1026,14 +1208,35 @@ def test_check_only_warns_when_ufw_will_not_report_without_root(tmp_path):
     )
 
     assert out.returncode == 0, out.stdout
-    assert "sudo ufw status" in out.stdout
+    assert "from an admin account, check that `sudo ufw status`" in out.stdout
+
+
+def test_check_only_warns_when_firewalld_will_not_report_without_root(tmp_path):
+    # polkit answers `firewall-cmd --list-services` for root alone, and check
+    # runs as `kendo`: the refusal says nothing about the rules (#576).
+    home = bundle(tmp_path)
+    run(home, *ANSWERS)
+
+    out = check(
+        home,
+        host_env(
+            tmp_path,
+            firewall_cmd='echo "Authorization failed." >&2; exit 253',
+        ),
+    )
+
+    assert out.returncode == 0, out.stdout
+    assert "FAIL  firewalld" not in out.stdout
+    assert "from an admin account, check that `sudo firewall-cmd --list-services`" in (
+        out.stdout
+    )
 
 
 # ---------------------------------------------------------------- upgrade ---
-# `./setup.sh upgrade` (#414): back up, refresh the bundle from the image about
-# to run, pull, recreate — and on failure, the exact restore for the backup just
-# taken. podman and podman-compose are stubbed; what is asserted is the order
-# the script asks them for things in and what it leaves on disk.
+# `./setup.sh upgrade` (#414): back up, pull, recreate — and on failure, the
+# exact restore for the backup just taken. podman and podman-compose are
+# stubbed; what is asserted is the order the script asks them for things in and
+# what it leaves on disk.
 
 UPGRADE_PODMAN_STUB = r"""#!/bin/sh
 echo "podman $*" >> "$CALLS"
@@ -1043,30 +1246,24 @@ case "$1" in
   exec) [ -z "$BACKUP_FAILS" ] || exit 1; echo PGDMP ;;
   volume) echo uploads ;;
   image) echo "ghcr.io/booji/kendodojomanagement@sha256:0ld" ;;
-  run) if [ -f "$PULLED" ]; then tar -C "$NEW_BUNDLE" -c .; else tar -C "$PREV_BUNDLE" -c .; fi ;;
   wait) case "$*" in *--condition*) ;; *) echo "${MIGRATE_EXIT:-0}" ;; esac ;;
 esac
 """
 
 UPGRADE_COMPOSE_STUB = """#!/bin/sh
 echo "podman-compose $*" >> "$CALLS"
-[ "$1" != pull ] || touch "$PULLED"
 """
 
 
 class Upgrade:
-    """A configured quick self-host, the bundle the running image carries, and
-    the one the next image carries — identical until a test edits one."""
+    """A configured quick self-host, with the compose file and units a bundle
+    carries."""
 
     def __init__(self, tmp_path: Path):
         self.src = bundle(tmp_path)
         run(self.src, *ANSWERS)
-        self.prev = bundle(tmp_path / "prev")
-        self.new = bundle(tmp_path / "next")
-        for home in (self.src, self.prev, self.new):
-            for sub in ("quadlet",):
-                shutil.copytree(ROOT / "deploy" / sub, home / "deploy" / sub)
-            shutil.copy(ROOT / "docker-compose.yml", home)
+        shutil.copytree(ROOT / "deploy/quadlet", self.src / "deploy/quadlet")
+        shutil.copy(ROOT / "docker-compose.yml", self.src)
         stubs = tmp_path / "upgrade-bin"
         stubs.mkdir()
         for name, body in (
@@ -1083,9 +1280,6 @@ class Upgrade:
             "HOME": str(self.home),
             "PATH": f"{stubs}:{os.environ['PATH']}",
             "CALLS": str(self.log),
-            "PREV_BUNDLE": str(self.prev),
-            "NEW_BUNDLE": str(self.new),
-            "PULLED": str(tmp_path / "pulled"),
         }
 
     def run(self, **env: str) -> subprocess.CompletedProcess:
@@ -1128,6 +1322,23 @@ def test_upgrade_backs_up_the_database_and_uploads_before_it_pulls(tmp_path):
     assert str(uploads) in out.stdout
 
 
+def test_an_rc_host_without_kendo_app_env_is_stopped_before_anything_changes(
+    tmp_path,
+):
+    # #603: a host set up by an rc keeps every app setting in .env, and the
+    # compose file this upgrade brings reads them from kendo-app.env instead.
+    # Going on would recreate the stack without them, then print a restore.
+    up = Upgrade(tmp_path)
+    (up.src / "kendo-app.env").unlink()
+
+    out = up.run()
+
+    assert out.returncode == 1
+    assert "kendo-app.env" in out.stderr
+    assert "docs/install/upgrading.md" in out.stderr
+    assert up.calls() == []
+
+
 def test_upgrade_never_pulls_without_the_backup_it_just_took(tmp_path):
     up = Upgrade(tmp_path)
 
@@ -1138,37 +1349,23 @@ def test_upgrade_never_pulls_without_the_backup_it_just_took(tmp_path):
     assert not any(c.startswith("podman-compose pull") for c in up.calls())
 
 
-def test_upgrade_takes_the_bundle_from_the_image_about_to_run(tmp_path):
-    # Config and image on one version axis: a stale compose file must not drive
-    # a new app. The operator's own files are never in play.
+def test_upgrade_overwrites_no_deployment_file(tmp_path):
+    # #604: once installed, the compose file, the units and the config are the
+    # operator's. A release that changes one says so as an Operator action in
+    # its notes; the upgrade only backs up, pulls and recreates. An edit of the
+    # operator's (a BYO certificate mount) survives, and the stack is recreated.
     up = Upgrade(tmp_path)
-    old_compose = (up.src / "docker-compose.yml").read_text()
-    (up.new / "docker-compose.yml").write_text(old_compose + "# next release\n")
-    unit = up.new / "deploy/quadlet/kendo-app.container"
-    unit.write_text(unit.read_text() + "# next release\n")
-    # What a contributor's own build could carry: filled-in files.
-    (up.new / ".env").write_text("JWT_SECRET=from-the-image\n")
-    (up.new / SELFHOST / "traefik.yml").write_text("from: the-image\n")
-    ours = {
-        f: (up.src / f).read_text() for f in (".env", str(SELFHOST / "traefik.yml"))
-    }
+    compose = up.src / "docker-compose.yml"
+    compose.write_text(with_byo_mount(compose.read_text()))
+    before = {p: p.read_bytes() for p in up.src.rglob("*") if p.is_file()}
 
     out = up.run()
 
     assert out.returncode == 0, out.stdout + out.stderr
-    pulled = up.first("podman-compose pull")
-    recreated = up.first("podman-compose up -d --force-recreate")
-    assert (
-        "podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init"
-        in (up.calls()[pulled:recreated])
-    )
-    assert "# next release" in (up.src / "docker-compose.yml").read_text()
-    assert (up.src / "docker-compose.yml.bak").read_text() == old_compose
-    assert "docker-compose.yml" in out.stdout
-    assert "deploy/quadlet/kendo-app.container" in out.stdout
-    assert "setup.sh" not in out.stdout.replace("./setup.sh", "")
-    for f, text in ours.items():
-        assert (up.src / f).read_text() == text, f
+    after = {p: p.read_bytes() for p in up.src.rglob("*") if p.is_file()}
+    assert after == before
+    assert not any(" init" in c for c in up.calls()), up.calls()
+    assert "podman-compose up -d --force-recreate" in up.calls()
 
 
 def test_a_failed_migration_prints_the_exact_restore_for_the_backup_just_taken(
@@ -1223,48 +1420,6 @@ def with_byo_mount(compose: str) -> str:
     return compose.replace(
         "      - traefik_acme:/acme\n", "      - traefik_acme:/acme\n" + BYO_MOUNT
     )
-
-
-def test_upgrade_stops_before_recreating_over_an_edited_compose_file(tmp_path):
-    # The BYO certificate mount is the operator's own edit to
-    # docker-compose.yml; replacing the file and recreating would bring the
-    # proxy back on Traefik's self-signed default.
-    up = Upgrade(tmp_path)
-    compose = up.src / "docker-compose.yml"
-    compose.write_text(with_byo_mount(compose.read_text()))
-    shipped = (up.new / "docker-compose.yml").read_text() + "# next release\n"
-    (up.new / "docker-compose.yml").write_text(shipped)
-    edited = compose.read_text()
-
-    out = up.run()
-
-    assert out.returncode == 1
-    assert compose.read_text() == edited
-    assert (up.src / "docker-compose.yml.new").read_text() == shipped
-    assert "docker-compose.yml.new" in out.stderr
-    assert not any("--force-recreate" in c for c in up.calls())
-
-    # Merged by hand; the re-run takes it as read and carries on.
-    compose.write_text(with_byo_mount(shipped))
-    again = up.run()
-
-    assert again.returncode == 0, again.stdout + again.stderr
-    assert compose.read_text() == with_byo_mount(shipped)
-    assert not (up.src / "docker-compose.yml.new").exists()
-    assert "podman-compose up -d --force-recreate" in up.calls()
-
-
-def test_upgrade_keeps_an_edited_file_the_release_did_not_change(tmp_path):
-    up = Upgrade(tmp_path)
-    compose = up.src / "docker-compose.yml"
-    compose.write_text(with_byo_mount(compose.read_text()))
-    edited = compose.read_text()
-
-    out = up.run()
-
-    assert out.returncode == 0, out.stdout + out.stderr
-    assert compose.read_text() == edited
-    assert "Deployment bundle unchanged" in out.stdout
 
 
 # ------------------------------------------------------------- backup-key ---

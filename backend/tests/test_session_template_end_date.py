@@ -249,7 +249,8 @@ async def test_update_template_delta_add_remove_preserve(
     type_repo, template_repo, instance_repo
 ) -> None:
     type_id = (await type_repo.list())[0]["id"]
-    start = date(2026, 2, 2)  # Monday
+    # Next Monday: only today onwards is reconciled (#578).
+    start = date.today() + timedelta(days=7 - date.today().weekday())
     end = start + timedelta(weeks=4)
     create_payload = {
         "title": "Weekly Keiko",
@@ -383,9 +384,9 @@ class _CountingInstanceRepo(InMemorySessionInstanceRepository):
         self.update_calls += 1
         return await super().update(instance_id, data)
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
         self.delete_calls += 1
-        return await super().delete(instance_id)
+        return await super().delete_unattended(instance_id)
 
 
 async def test_get_sessions_performs_no_writes(type_repo) -> None:
