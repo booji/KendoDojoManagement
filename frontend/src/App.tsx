@@ -8,6 +8,7 @@ import { getMyMember } from "@/api/accounts"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
+import DevicePasskeyPrompt from "@/components/DevicePasskeyPrompt"
 import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
@@ -66,6 +67,7 @@ const AuthenticatedLayout = () => {
   return (
     <AppShell role={user.role}>
       <Outlet context={{ user } satisfies LayoutContext} />
+      <DevicePasskeyPrompt />
     </AppShell>
   )
 }
