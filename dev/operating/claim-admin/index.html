@@ -1519,9 +1519,10 @@ that is not working, not a step:</p>
 <span class="c1"># anything else (000, 502, ...) -&gt; the check never reached the app. That is not</span>
 <span class="c1"># a closed window; fix the request and re-run before you believe it.</span>
 </code></pre></div>
-<p>The claimed guard counts <em>passkey credentials</em>, not users: an abandoned
-ceremony leaves a user row with no credential and deliberately does <strong>not</strong>
-count, so an operator whose browser died mid-ceremony is never locked out.</p>
+<p>The instance is claimed once an Admin Account exists, and stays claimed even
+if that Admin later deletes every passkey. An abandoned ceremony leaves only a
+member Account, which does <strong>not</strong> count, so an operator whose browser died
+mid-ceremony is never locked out.</p>
 <p><strong>Lost the token?</strong> Rotate it — nothing in the database has to change:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Keep the value: a podman secret cannot be read back, so piping straight into</span>
 <span class="c1"># `secret create` leaves you with a token nobody knows.</span>

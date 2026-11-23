@@ -1853,13 +1853,14 @@
 </table>
 <p>Uploaded images live on a volume, not in the database, so the dump alone does not cover them. With a <a href="#the-backup-key">backup key</a> set, both are encrypted and end in <code>.age</code>: <code>kendo-&lt;stamp&gt;.dump.age</code>, <code>kendo-uploads-&lt;stamp&gt;.tar.age</code>.</p>
 <p>The Quick self-host (Compose) stack has no nightly timer. It takes a backup to <code>~/backups</code> on every <code>./setup.sh upgrade</code>, and the backup key and off-site settings below apply to it too — run <code>./setup.sh backup-key</code> without <code>--quadlet</code>.</p>
+<p><code>./setup.sh --quadlet</code> installs <code>kendo-backup.service</code> and <code>kendo-backup.timer</code> in <code>~/.config/systemd/user/</code> and enables the timer: the first backup runs at the timer's next <code>OnCalendar=</code> (02:30 as shipped). Without <code>setup.sh</code>, the same by hand:</p>
 <div class="highlight"><pre><span></span><code>cp<span class="w"> </span>deploy/systemd/kendo-backup.service<span class="w"> </span>~/.config/systemd/user/
 cp<span class="w"> </span>deploy/systemd/kendo-backup.timer<span class="w">   </span>~/.config/systemd/user/
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
 systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-backup.timer
-
-<span class="c1"># Verify schedule + run once now</span>
-systemctl<span class="w"> </span>--user<span class="w"> </span>list-timers<span class="w"> </span>kendo-backup.timer<span class="w"> </span>--no-pager
+</code></pre></div>
+<p>Either way, check the schedule and take one now:</p>
+<div class="highlight"><pre><span></span><code>systemctl<span class="w"> </span>--user<span class="w"> </span>list-timers<span class="w"> </span>kendo-backup.timer<span class="w"> </span>--no-pager
 systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-backup.service
 ls<span class="w"> </span>-lh<span class="w"> </span>~/backups
 </code></pre></div>
@@ -1901,7 +1902,7 @@ podman-compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w
 </code></pre></div>
 <p>Both end by re-running migrate, as the restore prints when it finishes: the app's database user has no grants until it does (#481).</p>
 <p>Plaintext backups (<code>.dump</code>, <code>.tar</code>, from before a key was set) restore with the same command.</p>
-<p>For an encrypted backup it asks for the key at a hidden prompt: paste the whole <code>AGE-SECRET-KEY-1…</code> line. This works inside <code>sudo machinectl shell kendo@</code>. The key is never written to disk, and neither is anything it decrypts — it streams straight into <code>pg_restore</code> and the uploads volume.</p>
+<p>For an encrypted backup it asks for the key at a hidden prompt: paste the whole <code>AGE-SECRET-KEY-1…</code> line. This works inside <code>sudo machinectl shell kendo@ /bin/bash</code>. The key is never written to disk, and neither is anything it decrypts — it streams straight into <code>pg_restore</code> and the uploads volume.</p>
 <p>The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:</p>
 <ul>
 <li><em>"This backup was encrypted with a different key"</em> — keys were changed since. Use the one that was active on the date in the filename.</li>
@@ -1930,12 +1931,12 @@ rm<span class="w"> </span>key.txt
 <ul>
 <li>Encrypted (<code>.age</code>) files from the last 7 days that the remote does not have yet are copied, so a copy that failed one night goes up with the next. <strong>Plaintext never leaves the host:</strong> with no backup key, the copy is skipped and the log says why, and plaintext backups from before the key are never copied.</li>
 <li><code>KENDO_BACKUP_REMOTE_KEEP_DAYS</code> deletes <code>kendo-*.age</code> files older than that many days, in that folder only. About 90 is a good value: it also limits how long an erased Member's data survives in backups. Leave it unset if the credential cannot delete (see below).</li>
-<li>If the copy fails, the local backup is kept, the run shows as failed in <code>systemctl --user status kendo-backup</code>, and <code>./setup.sh upgrade</code> carries on regardless.</li>
+<li>If the copy fails, the local backup is kept, the run shows as failed in <code>systemctl --user status kendo-backup</code> (as <code>kendo</code>), and <code>./setup.sh upgrade</code> carries on regardless. The reason is in the unit's log, read from your admin account: <code>sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-backup.service --no-pager</code> (<a href="../../deployment/#9-logs">Deployment § Logs</a>).</li>
 <li>Each rclone call is stopped after an hour, so a stalled upload cannot block the next night's backup. On a slow link, raise it with <code>KENDO_BACKUP_REMOTE_TIMEOUT=2h</code> (or <code>30m</code>, <code>90s</code>).</li>
 </ul>
 <p>rclone runs as <code>kendo</code>, with <code>kendo</code>'s own config. Install it and add a remote from a <code>machinectl</code> shell:</p>
 <div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>rclone<span class="w">   </span><span class="c1"># or: sudo apt install -y rclone</span>
-sudo<span class="w"> </span>machinectl<span class="w"> </span>shell<span class="w"> </span>kendo@
+sudo<span class="w"> </span>machinectl<span class="w"> </span>shell<span class="w"> </span>kendo@<span class="w"> </span>/bin/bash
 rclone<span class="w"> </span>config
 </code></pre></div>
 <p>The host has no browser, so the login is done on a laptop: answer <code>n</code> to <em>"Use auto config?"</em>, run the <code>rclone authorize …</code> command it prints on a laptop with rclone installed, and paste the token back. Details: <a href="https://rclone.org/remote_setup/">rclone remote setup</a>.</p>

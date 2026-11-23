@@ -832,10 +832,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-self-host-env" class="md-nav__link">
+  <a href="#app-settings-kendo-appenv" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick self-host — .env
+        App settings — kendo-app.env
       
     </span>
   </a>
@@ -843,10 +843,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#hardened-deployment-kendokendo-appenv" class="md-nav__link">
+  <a href="#quick-self-host-env" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Hardened deployment — ~/kendo/kendo-app.env
+        Quick self-host — .env
       
     </span>
   </a>
@@ -1522,10 +1522,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-self-host-env" class="md-nav__link">
+  <a href="#app-settings-kendo-appenv" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Quick self-host — .env
+        App settings — kendo-app.env
       
     </span>
   </a>
@@ -1533,10 +1533,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#hardened-deployment-kendokendo-appenv" class="md-nav__link">
+  <a href="#quick-self-host-env" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Hardened deployment — ~/kendo/kendo-app.env
+        Quick self-host — .env
       
     </span>
   </a>
@@ -1572,113 +1572,17 @@
 <p>The two env templates are the reference: every variable is documented in place,
 next to the value it ships with. They are included here as they are in the
 release you are reading.</p>
-<h2 id="quick-self-host-env">Quick self-host — <code>.env</code><a class="headerlink" href="#quick-self-host-env" title="Permanent link">&para;</a></h2>
-<p><code>./setup.sh</code> writes <code>.env</code> from this template, filling in the domain and
-generating the secrets. It then writes <code>DATABASE_URL</code>,
-<code>MIGRATION_DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> to files in
-<code>secrets/</code>, which <code>docker-compose.yml</code> mounts under <code>/run/secrets</code> instead of
-passing them as environment variables. After changing one of them in <code>.env</code>,
-re-run <code>./setup.sh</code> so the files match.</p>
-<p>The app reads each of those four from the file <code>&lt;NAME&gt;_FILE</code> names when that is
-set, and from <code>&lt;NAME&gt;</code> otherwise. The dev and test stacks use <code>&lt;NAME&gt;</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Template for the production Compose stack (docker-compose.yml).</span>
-<span class="c1"># Start it with: podman-compose --env-file .env up -d</span>
-<span class="c1"># Copy to .env and fill in real values — .env is gitignored, never commit it.</span>
-<span class="c1"># DATABASE_URL, MIGRATION_DATABASE_URL, JWT_SECRET and SETUP_TOKEN reach the</span>
-<span class="c1"># containers as files, not environment: ./setup.sh writes them from this file to</span>
-<span class="c1"># secrets/ (#462). After changing one here, re-run ./setup.sh.</span>
-
-<span class="c1"># The image docker-compose.yml runs, for `app` and `migrate` alike. The</span>
-<span class="c1"># documented pin is the Release line (ADR-0004; before 1.0 that is 0.Y,</span>
-<span class="c1"># ADR-0009): `:0.1` takes fixes and features but no Breaking change;</span>
-<span class="c1"># `./setup.sh upgrade` backs up, pulls and migrates. Move to `:0.2`</span>
-<span class="c1"># deliberately, after reading the release notes. `:0.1.0` and `:latest` are</span>
-<span class="c1"># also published; a contributor running their own build sets this to</span>
-<span class="c1"># localhost/kendodojo:latest.</span>
-<span class="nv">KENDO_IMAGE</span><span class="o">=</span>ghcr.io/booji/kendodojomanagement:0.1
-
-<span class="c1"># Container timezone (IANA name). Applies to app and db.</span>
-<span class="nv">TZ</span><span class="o">=</span>UTC
-
-<span class="c1"># development | production. docker-compose.yml already defaults this to</span>
-<span class="c1"># production; set it here only to override. On production the app refuses to</span>
-<span class="c1"># start while WEBAUTHN_RP_ID / WEBAUTHN_ORIGIN are still at their localhost</span>
-<span class="c1"># dev defaults.</span>
-<span class="nv">APP_ENV</span><span class="o">=</span>production
-
-<span class="c1"># Required — the app refuses to start if this is unset/blank, or if it names a</span>
-<span class="c1"># superuser. The restricted app user (ADR-0007), which can only read and write</span>
-<span class="c1"># rows: the migrate service creates it and sets its password from this URL on</span>
-<span class="c1"># every start, so changing the password here, re-running ./setup.sh and</span>
-<span class="c1"># restarting rotates it.</span>
-<span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo_app:&lt;your-app-db-password&gt;@db:5432/kendo
-<span class="c1"># The superuser login, given to the migrate service only. Must embed</span>
-<span class="c1"># POSTGRES_USER and POSTGRES_PASSWORD below.</span>
-<span class="nv">MIGRATION_DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo:&lt;your-db-password&gt;@db:5432/kendo
-<span class="nv">POSTGRES_USER</span><span class="o">=</span>kendo
-<span class="nv">POSTGRES_PASSWORD</span><span class="o">=</span>&lt;your-db-password&gt;
-<span class="nv">POSTGRES_DB</span><span class="o">=</span>kendo
-<span class="c1"># Required — the app refuses to start if this is unset/blank.</span>
-<span class="c1"># Keys the HMAC behind the decoy user ids that keep passkey sign-in from</span>
-<span class="c1"># revealing which emails are registered. It no longer signs any token</span>
-<span class="c1"># (ADR-0008); the name is kept so existing env files keep working.</span>
-<span class="c1"># Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"</span>
-<span class="nv">JWT_SECRET</span><span class="o">=</span>&lt;your-jwt-secret&gt;
-<span class="c1"># Required — the app refuses to start if this is unset/blank, claimed or not.</span>
-<span class="c1"># Whoever holds it can claim the first admin account on an unclaimed instance,</span>
-<span class="c1"># so treat it like a password and hand it over out of band.</span>
-<span class="c1"># Generate with: openssl rand -base64 32</span>
-<span class="nv">SETUP_TOKEN</span><span class="o">=</span>&lt;your-setup-token&gt;
-<span class="c1"># The idle timeout: an Auth Session unused for this long ends (ADR-0008). One in</span>
-<span class="c1"># use slides forward, so this is a gap of inactivity rather than a cut-off</span>
-<span class="c1"># mid-work. The slide is written only past half the window, so the idle window</span>
-<span class="c1"># a user sees is between half this value and all of it (4-8 hours at 480). The</span>
-<span class="c1"># name predates server-side sessions and is kept. 480 matches app/config.py.</span>
-<span class="nv">JWT_EXPIRE_MINUTES</span><span class="o">=</span><span class="m">480</span>
-<span class="c1"># The ceiling on one session however continuously it is used: past it the</span>
-<span class="c1"># Auth Session ends and the user signs in again. Without it sliding means</span>
-<span class="c1"># "signed in forever". 10080 = 7 days, matching app/config.py.</span>
-<span class="nv">SESSION_MAX_MINUTES</span><span class="o">=</span><span class="m">10080</span>
-<span class="c1"># Set to false only for local dev (localhost does not support Secure cookies)</span>
-<span class="nv">COOKIE_SECURE</span><span class="o">=</span><span class="nb">true</span>
-
-<span class="c1"># Public domain the browser uses. Passkeys are bound to these values: RP_ID is</span>
-<span class="c1"># the bare host (no scheme, no port), ORIGIN is the full origin. Getting them</span>
-<span class="c1"># wrong makes every passkey ceremony fail.</span>
-<span class="nv">WEBAUTHN_RP_ID</span><span class="o">=</span>&lt;your-domain.com&gt;
-<span class="nv">WEBAUTHN_ORIGIN</span><span class="o">=</span>https://&lt;your-domain.com&gt;
-<span class="nv">WEBAUTHN_CHALLENGE_TTL_SECONDS</span><span class="o">=</span><span class="m">300</span>
-
-<span class="c1"># Comma-separated allowed CORS origins. Keep pinned to the canonical origin —</span>
-<span class="c1"># never "*", auth is cookie-based. Defaults to WEBAUTHN_ORIGIN if left empty.</span>
-<span class="nv">CORS_ORIGINS</span><span class="o">=</span>https://&lt;your-domain.com&gt;
-
-<span class="c1"># Minimum wall-clock time (ms) the passkey begin endpoints take, regardless of</span>
-<span class="c1"># whether the email is known/registered or not. Prevents timing-based email</span>
-<span class="c1"># enumeration, and only works while the real path finishes underneath it.</span>
-<span class="c1"># 100ms is measured, not guessed: the real path's p99 against PostgreSQL is</span>
-<span class="c1"># 16.8ms and its worst observed case 27.9ms, with headroom for slower</span>
-<span class="c1"># production storage. See docs/auth-timing-calibration.md before changing it.</span>
-<span class="nv">AUTH_BEGIN_MIN_DURATION_MS</span><span class="o">=</span><span class="m">100</span>
-
-<span class="c1"># Read the client IP from X-Forwarded-For (used by rate limiting and account</span>
-<span class="c1"># lockout). docker-compose.yml defaults this to true, which is safe there and</span>
-<span class="c1"># only there: Traefik fronts the app, and the app publishes no host port of its</span>
-<span class="c1"># own, so the header cannot arrive from a client. Left false here because .env</span>
-<span class="c1"># is also what a hand-rolled run outside that compose file uses — with nothing</span>
-<span class="c1"># overwriting the header, a client picks its own IP and gets a fresh</span>
-<span class="c1"># rate-limit and lockout bucket per request.</span>
-<span class="nv">TRUST_PROXY_XFF</span><span class="o">=</span><span class="nb">false</span>
-
-<span class="c1"># Upload paths are set in docker-compose.yml and backed by the static_uploads</span>
-<span class="c1"># volume; do not override STATIC_DIR / STATIC_BACKGROUNDS_DIR here or uploads</span>
-<span class="c1"># will be written outside the volume and lost on restart.</span>
-</code></pre></div>
-<h2 id="hardened-deployment-kendokendo-appenv">Hardened deployment — <code>~/kendo/kendo-app.env</code><a class="headerlink" href="#hardened-deployment-kendokendo-appenv" title="Permanent link">&para;</a></h2>
-<p>Non-sensitive settings only. <code>DATABASE_URL</code>, <code>MIGRATION_DATABASE_URL</code>,
-<code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> are
-podman secrets under the hardened deployment, not variables in this file — see
-<a href="../../deployment/">Hardened deployment</a>.</p>
+<p>Both deployments take their app settings from the same template,
+<code>deploy/env/kendo-app.env.example</code>. They differ only in where the secrets come
+from.</p>
+<h2 id="app-settings-kendo-appenv">App settings — <code>kendo-app.env</code><a class="headerlink" href="#app-settings-kendo-appenv" title="Permanent link">&para;</a></h2>
+<p>Non-sensitive settings only. The quick self-host keeps the file next to
+<code>docker-compose.yml</code>, and the hardened deployment at <code>~/kendo/kendo-app.env</code>.
+<code>./setup.sh</code> writes it from this template on both paths, filling in the domain.
+The container reads the whole file, so every key in it reaches the app.</p>
+<p><code>DATABASE_URL</code>, <code>MIGRATION_DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> are
+not in this file: see below for the quick self-host, and
+<a href="../../deployment/">Hardened deployment</a> for the podman secrets.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Non-sensitive app config for UAT/PROD. Copy to ~kendo/kendo/kendo-app.env and</span>
 <span class="c1"># edit the domain values. Secrets (DATABASE_URL, JWT_SECRET) are NOT here — they</span>
 <span class="c1"># are podman secrets the Quadlet unit mounts as files (&lt;NAME&gt;_FILE, #462).</span>
@@ -1733,12 +1637,88 @@ podman secrets under the hardened deployment, not variables in this file — see
 <span class="c1"># "Constant-time floor exceeded" warning — that is the signal this floor has</span>
 <span class="c1"># stopped protecting anything. See docs/auth-timing-calibration.md.</span>
 <span class="nv">AUTH_BEGIN_MIN_DURATION_MS</span><span class="o">=</span><span class="m">100</span>
+<span class="c1"># Floors for passkey login completion and recovery-code redemption, measured</span>
+<span class="c1"># the same way (#594). A successful login's worst request took 105ms; a</span>
+<span class="c1"># redeem runs nine bcrypt comparisons, p99 2.3s, 3.0s at 4 in flight.</span>
+<span class="nv">LOGIN_COMPLETE_MIN_DURATION_MS</span><span class="o">=</span><span class="m">250</span>
+<span class="nv">RECOVERY_REDEEM_MIN_DURATION_MS</span><span class="o">=</span><span class="m">5000</span>
 
 <span class="c1"># Upload targets. These MUST stay under /app/uploads — that is where the</span>
 <span class="c1"># kendo-app-uploads volume is mounted, and anything written outside it is lost</span>
 <span class="c1"># on restart. Kept out of /app/static too, which holds the built SPA.</span>
 <span class="nv">STATIC_DIR</span><span class="o">=</span>/app/uploads/logos
 <span class="nv">STATIC_BACKGROUNDS_DIR</span><span class="o">=</span>/app/uploads/backgrounds
+</code></pre></div>
+<h2 id="quick-self-host-env">Quick self-host — <code>.env</code><a class="headerlink" href="#quick-self-host-env" title="Permanent link">&para;</a></h2>
+<p>What <code>docker-compose.yml</code> itself interpolates (the image pin, the db's
+settings) and the secrets. No container reads it whole, so the superuser login
+in it never reaches the app (ADR-0007). <code>./setup.sh</code> writes <code>.env</code> from this
+template, generating the secrets. It then writes <code>DATABASE_URL</code>,
+<code>MIGRATION_DATABASE_URL</code>, <code>JWT_SECRET</code> and <code>SETUP_TOKEN</code> to files in
+<code>secrets/</code>, which <code>docker-compose.yml</code> mounts under <code>/run/secrets</code> instead of
+passing them as environment variables. After changing one of them in <code>.env</code>,
+re-run <code>./setup.sh</code> so the files match.</p>
+<p>The app reads each of those four from the file <code>&lt;NAME&gt;_FILE</code> names when that is
+set, and from <code>&lt;NAME&gt;</code> otherwise. The dev and test stacks use <code>&lt;NAME&gt;</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Template for the production Compose stack (docker-compose.yml).</span>
+<span class="c1"># Copy to .env and fill in real values — .env is gitignored, never commit it.</span>
+<span class="c1">#</span>
+<span class="c1"># The quick self-host keeps its configuration in two files (#603):</span>
+<span class="c1">#</span>
+<span class="c1">#   .env           this file's copy: what docker-compose.yml itself</span>
+<span class="c1">#                  interpolates (the image pin, the db's settings) and the</span>
+<span class="c1">#                  secrets. No container reads it whole.</span>
+<span class="c1">#   kendo-app.env  every app setting, written from</span>
+<span class="c1">#                  deploy/env/kendo-app.env.example — the file the Quadlet</span>
+<span class="c1">#                  deployment uses too. It holds no secret. The app and migrate</span>
+<span class="c1">#                  services read it whole, so a setting added there needs no</span>
+<span class="c1">#                  change to docker-compose.yml. Tune the app there, not here.</span>
+<span class="c1">#</span>
+<span class="c1"># The superuser login (POSTGRES_PASSWORD, MIGRATION_DATABASE_URL) must never</span>
+<span class="c1"># reach the app (ADR-0007), which is why the two are kept apart.</span>
+<span class="c1">#</span>
+<span class="c1"># DATABASE_URL, MIGRATION_DATABASE_URL, JWT_SECRET and SETUP_TOKEN reach the</span>
+<span class="c1"># containers as files, not environment: ./setup.sh writes them from this file to</span>
+<span class="c1"># secrets/ (#462), and docker-compose.yml mounts them as &lt;NAME&gt;_FILE, the way</span>
+<span class="c1"># the Quadlet units mount podman secrets. After changing one here, re-run</span>
+<span class="c1"># ./setup.sh.</span>
+
+<span class="c1"># The image docker-compose.yml runs, for `app` and `migrate` alike. The</span>
+<span class="c1"># documented pin is the Release line (ADR-0004; before 1.0 that is 0.Y,</span>
+<span class="c1"># ADR-0009): `:0.1` takes fixes and features but no Breaking change;</span>
+<span class="c1"># `./setup.sh upgrade` backs up, pulls and migrates. Move to `:0.2`</span>
+<span class="c1"># deliberately, after reading the release notes. `:0.1.0` and `:latest` are</span>
+<span class="c1"># also published; a contributor running their own build sets this to</span>
+<span class="c1"># localhost/kendodojo:latest.</span>
+<span class="nv">KENDO_IMAGE</span><span class="o">=</span>ghcr.io/booji/kendodojomanagement:0.1
+
+<span class="c1"># The db container's timezone (IANA name). The app's is TZ in kendo-app.env:</span>
+<span class="c1"># keep the two in sync.</span>
+<span class="nv">TZ</span><span class="o">=</span>Europe/London
+
+<span class="c1"># Required — the app refuses to start if this is unset/blank, or if it names a</span>
+<span class="c1"># superuser. The restricted app user (ADR-0007), which can only read and write</span>
+<span class="c1"># rows: the migrate service creates it and sets its password from this URL on</span>
+<span class="c1"># every start, so changing the password here, re-running ./setup.sh and</span>
+<span class="c1"># restarting rotates it.</span>
+<span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo_app:&lt;your-app-db-password&gt;@db:5432/kendo
+<span class="c1"># The superuser login, given to the migrate service only. Must embed</span>
+<span class="c1"># POSTGRES_USER and POSTGRES_PASSWORD below.</span>
+<span class="nv">MIGRATION_DATABASE_URL</span><span class="o">=</span>postgresql+asyncpg://kendo:&lt;your-db-password&gt;@db:5432/kendo
+<span class="nv">POSTGRES_USER</span><span class="o">=</span>kendo
+<span class="nv">POSTGRES_PASSWORD</span><span class="o">=</span>&lt;your-db-password&gt;
+<span class="nv">POSTGRES_DB</span><span class="o">=</span>kendo
+<span class="c1"># Required — the app refuses to start if this is unset/blank.</span>
+<span class="c1"># Keys the HMAC behind the decoy user ids that keep passkey sign-in from</span>
+<span class="c1"># revealing which emails are registered. It no longer signs any token</span>
+<span class="c1"># (ADR-0008); the name is kept so existing env files keep working.</span>
+<span class="c1"># Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"</span>
+<span class="nv">JWT_SECRET</span><span class="o">=</span>&lt;your-jwt-secret&gt;
+<span class="c1"># Required — the app refuses to start if this is unset/blank, claimed or not.</span>
+<span class="c1"># Whoever holds it can claim the first admin account on an unclaimed instance,</span>
+<span class="c1"># so treat it like a password and hand it over out of band.</span>
+<span class="c1"># Generate with: openssl rand -base64 32</span>
+<span class="nv">SETUP_TOKEN</span><span class="o">=</span>&lt;your-setup-token&gt;
 </code></pre></div>
 
 

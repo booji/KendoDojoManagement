@@ -1497,11 +1497,30 @@ there is no clone and no build (ADR-0004):</p>
 <p>It asks for your domain and an ACME email, generates <code>POSTGRES_PASSWORD</code>,
 <code>JWT_SECRET</code>, <code>SETUP_TOKEN</code> and the app's own database password — the app
 connects as <code>kendo_app</code>, which can only read and write rows, and the superuser
-login goes to the <code>migrate</code> service alone — and writes <code>.env</code> plus
+login goes to the <code>migrate</code> service alone — and writes <code>.env</code>, <code>kendo-app.env</code>,
 <code>deploy/traefik/selfhost/traefik.yml</code> and <code>dynamic/kendo.yml</code> from their
-<code>.example</code> files. The app's secrets also go to files in <code>secrets/</code>, which the
-containers get mounted as files rather than as environment variables; after
-changing one in <code>.env</code>, re-run <code>./setup.sh</code> so they match. One domain answer reaches all three passkey-bound settings
+<code>.example</code> files.</p>
+<p>The configuration is split in two, the same way as on the hardened deployment:</p>
+<ul>
+<li><strong><code>kendo-app.env</code></strong> holds every app setting: the domain values, session
+  timeouts, the timing floors, <code>TZ</code> and so on. It is written from
+  <code>deploy/env/kendo-app.env.example</code>, the file the Quadlet deployment uses
+  too, and holds no secret. The <code>app</code> and <code>migrate</code> services read the whole
+  file, so a setting a release adds there reaches the app without a change to
+  <code>docker-compose.yml</code>. Tune the app here.</li>
+<li><strong><code>.env</code></strong> holds only what <code>docker-compose.yml</code> itself interpolates — the
+  image pin <code>KENDO_IMAGE</code>, the db's <code>TZ</code> and <code>POSTGRES_*</code> — plus the
+  superuser login <code>MIGRATION_DATABASE_URL</code> and the app's secrets
+  (<code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>SETUP_TOKEN</code>). No container reads it whole,
+  which is what keeps the superuser password away from the app (ADR-0007).</li>
+</ul>
+<p>The secrets reach the containers as files in <code>secrets/</code>, which <code>setup.sh</code>
+writes from <code>.env</code> and Compose mounts as <code>&lt;NAME&gt;_FILE</code>, rather than as
+environment variables; after changing one in <code>.env</code>, re-run <code>./setup.sh</code> so
+they match. Re-running also rewrites <code>kendo-app.env</code> from its example (the
+previous copy is kept as <code>kendo-app.env.bak</code>), keeping every setting you
+already set: only the domain answer and any key a release added to the
+example are new. One domain answer reaches all three passkey-bound settings
 (<code>WEBAUTHN_RP_ID</code>, <code>WEBAUTHN_ORIGIN</code>, <code>CORS_ORIGINS</code>) and the Traefik <code>Host()</code>
 rule — an <code>RP_ID</code> typo is the whole "passkeys silently don't work" failure
 class, so it is worth not typing four times.</p>
@@ -1525,9 +1544,16 @@ escalates itself; you run those.</p>
 <div class="highlight"><pre><span></span><code>./setup.sh<span class="w"> </span>check<span class="w">       </span><span class="c1"># green? then:</span>
 podman-compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w">   </span><span class="c1"># pulls ghcr.io/booji/kendodojomanagement:0.1</span>
 </code></pre></div>
+<p><code>app</code>, <code>proxy</code> and <code>db</code> are <code>restart: always</code>, so a crash or an OOM kill brings
+them straight back. A reboot does not: rootless Podman has no daemon, and only
+<code>podman-restart.service</code> (with linger on) starts them again at boot. <code>setup.sh</code>
+enables it for you (<code>systemctl --user enable podman-restart.service</code>, no sudo),
+and <code>check</code> fails while it is disabled. It starts every <code>restart: always</code>
+container, stopped or not, so <code>podman-compose stop</code> does not survive a reboot:
+use <code>podman-compose down</code> to keep the stack stopped.</p>
 <p><code>check</code> looks at what the app cannot see from inside its container, the things
 that otherwise surface as a browser error or a certificate that never arrives:
-placeholder domains, emails or secrets left in <code>.env</code> or the Traefik files, a
+placeholder domains, emails or secrets left in <code>.env</code>, <code>kendo-app.env</code> or the Traefik files, a
 Traefik <code>Host()</code> rule that no longer matches <code>WEBAUTHN_RP_ID</code>, TLS skipped or a
 bring-your-own certificate not in place, the domain not resolving to this host,
 something else already on 80/443, and the five host prerequisites. Each <code>FAIL</code>

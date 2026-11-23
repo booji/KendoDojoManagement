@@ -1651,6 +1651,8 @@ mermaid rendering of that, not a varchar.</p>
         string type
         bool is_pinned
         bool is_active
+        string source
+        string source_key
     }
     member_federations {
         string id PK
@@ -1697,6 +1699,8 @@ mermaid rendering of that, not a varchar.</p>
         string title
         date date
         string template_id FK
+        date original_date
+        bool edited
         bool cancelled
         string location
         text info
@@ -1780,11 +1784,12 @@ mermaid rendering of that, not a varchar.</p>
   value — see <code>app/auth/invite_service.py</code> for why that differs).</li>
 <li><strong><code>recovery_attempts</code> retention</strong> (#434). A successful attempt deletes that
   Account's earlier rows, leaving only the success. Rows that remain (an
-  Account that keeps failing) are kept — lockout counts failures since the
-  last success with no time window, so deleting by age would expire lockouts
-  — but <code>ip_address</code> is cleared to NULL once a row is 30 days old
-  (<code>IP_RETENTION</code> in <code>app/auth/attempt_repository.py</code>). The clear runs for all
-  Accounts on every app start and, under Quadlet, daily from
+  Account that keeps failing) are kept as its audit trail — lockout counts
+  only failures from the last 24 hours, and none from before the Account's
+  latest admin or CLI recovery token (#580) — but <code>ip_address</code> is cleared to
+  NULL once a row is 30 days old (<code>IP_RETENTION</code> in
+  <code>app/auth/attempt_repository.py</code>). The clear runs for all Accounts on every
+  app start and, under Quadlet, daily from
   <code>kendo-ip-retention.timer</code> (#467), so an address outlives 30 days by at most
   a day. The Compose stack has no timer: there it runs only at app start, and
   an address can outlive 30 days until the next restart.</li>
@@ -1828,9 +1833,21 @@ mermaid rendering of that, not a varchar.</p>
 <li><code>uq_dojo_settings_single_row</code> — a unique index on the constant <code>(true)</code>:
     <code>dojo_settings</code> holds one row.</li>
 <li><code>uq_federations_name</code> — UNIQUE <code>federations.name</code>.</li>
+<li><code>uq_session_instances_template_slot</code> — UNIQUE
+    <code>(template_id, original_date)</code> on <code>session_instances</code> (#578): one Session
+    per slot of a series. <code>original_date</code> is the date the template generated
+    the Session for and survives a move, so reconciling a series matches on it
+    rather than on <code>date</code>. Ad-hoc Sessions have neither, so stay unconstrained.</li>
+<li><code>ck_members_email_lowercase</code> — CHECK <code>email = lower(email)</code> on <code>members</code>
+    (#592). Sign-in looks a Member up by exact match on the lowercase form
+    <code>LenientEmail</code> produces, so this also makes the UNIQUE on <code>members.email</code>
+    case-insensitive in effect.</li>
 <li><strong>Index policy</strong> (#418). No indexes beyond those that keys and constraints
   create and the <code>index=True</code> lookup columns on the ORM. Add one when a query
   is measured slow — at dojo scale a sequential scan is microseconds.</li>
+<li><code>federations.source</code>/<code>source_key</code> mark the rows the bundled FIK affiliate
+  list owns (<code>source = 'fik'</code>, keyed by ISO code or a body's slug; #613).
+  <code>kendo-migrate</code> syncs them on every run; Admin-added rows have both null.</li>
 <li><strong>Federation membership is a table, not a column.</strong> <code>members</code> has no
   <code>federation_number</code>: a member can hold numbers with several federations, so
   it lives in <code>member_federations</code> (dropped from <code>members</code> in #297 — see

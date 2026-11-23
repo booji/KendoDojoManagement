@@ -1992,9 +1992,8 @@
 podman<span class="w"> </span>--version<span class="w">             </span><span class="c1"># confirm &gt;= 4.4 (Quadlet); 5.x expected</span>
 </code></pre></div>
 <h3 id="12-allow-rootless-binding-of-ports-80443">1.2 Allow rootless binding of ports 80/443<a class="headerlink" href="#12-allow-rootless-binding-of-ports-80443" title="Permanent link">&para;</a></h3>
-<p>Rootless containers can't bind ports &lt;1024 by default. Install the provided sysctl drop-in:</p>
-<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0644</span><span class="w"> </span>deploy/sysctl-99-kendo-rootless-ports.conf<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>/etc/sysctl.d/99-kendo-rootless-ports.conf
+<p>Rootless containers can't bind ports &lt;1024 by default. Write the one-line sysctl drop-in:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s1">'net.ipv4.ip_unprivileged_port_start=80'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>/etc/sysctl.d/99-kendo-rootless-ports.conf
 sudo<span class="w"> </span>sysctl<span class="w"> </span>--system
 </code></pre></div>
 <blockquote>
@@ -2021,9 +2020,12 @@ sudo<span class="w"> </span>loginctl<span class="w"> </span>enable-linger<span c
 </code></pre></div>
 <h3 id="15-get-an-admin-shell-as-kendo">1.5 Get an admin shell as <code>kendo</code><a class="headerlink" href="#15-get-an-admin-shell-as-kendo" title="Permanent link">&para;</a></h3>
 <p>Always use <code>machinectl</code> — it sets up a proper session bus and <code>XDG_RUNTIME_DIR</code>, so <code>systemctl --user</code> works. (<code>su - kendo</code> does <strong>not</strong> and will leave <code>systemctl --user</code> broken.)</p>
-<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>machinectl<span class="w"> </span>shell<span class="w"> </span>kendo@
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>machinectl<span class="w"> </span>shell<span class="w"> </span>kendo@<span class="w"> </span>/bin/bash
 <span class="c1"># You are now kendo, with a working user systemd session.</span>
 </code></pre></div>
+<p>Name the shell: <code>kendo</code>'s login shell is <code>nologin</code>, so it can never be logged
+into directly, and without one <code>machinectl shell</code> ends at once with <em>This
+account is currently not available</em>.</p>
 <p>Everything from here (sections 2–6) runs <strong>as <code>kendo</code> via <code>machinectl shell</code></strong>.</p>
 <hr />
 <h2 id="2-4-lay-it-all-down-as-kendo">2-4. Lay it all down (as <code>kendo</code>)<a class="headerlink" href="#2-4-lay-it-all-down-as-kendo" title="Permanent link">&para;</a></h2>
@@ -2056,11 +2058,14 @@ transcription here:</p>
   Plus <code>~/backups</code> and the backup/restore scripts in <code>~/.local/bin</code>.</li>
 <li><strong>the Quadlet units</strong> — copied into <code>~/.config/containers/systemd/</code>, pinned
   to the tag the bundle was extracted from, then <code>systemctl --user
-  daemon-reload</code>. Plus <code>kendo-ip-retention.timer</code> in <code>~/.config/systemd/user/</code>,
-  enabled — see <a href="#ip-retention">IP retention</a> below.</li>
+  daemon-reload</code>. Plus <code>kendo-ip-retention.timer</code> and <code>kendo-backup.timer</code> in
+  <code>~/.config/systemd/user/</code>, enabled — see <a href="#ip-retention">IP retention</a> below
+  and <a href="../install/backups/">Backups</a>.</li>
 </ul>
 <p>It never escalates: the host prerequisites from section 1 are detected and the
-exact <code>sudo</code> command printed for you to run.</p>
+exact <code>sudo</code> command printed for you to run from your admin account (<code>kendo</code>
+has no sudo). Run as <code>kendo</code>, it cannot read the firewall rules either, so it
+asks you to check those yourself rather than failing.</p>
 <p><code>./setup.sh check --quadlet</code> is the preflight, and is safe to run at any time —
 after an upgrade, after a domain change, or pasted into a bug report. It checks
 what the app cannot see from inside its container: placeholders left in
@@ -2143,12 +2148,13 @@ cp<span class="w"> </span>deploy/quadlet/kendo-*.container<span class="w"> </spa
 <span class="c1"># Quadlet generates systemd units from these files on daemon-reload.</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
 
-<span class="c1"># Quadlet generates no timers, so the daily IP-retention trigger is a plain</span>
-<span class="c1"># user unit (see IP retention below).</span>
+<span class="c1"># Quadlet generates no timers, so the daily IP-retention trigger and the</span>
+<span class="c1"># nightly backup are plain user units (see IP retention below).</span>
 mkdir<span class="w"> </span>-p<span class="w"> </span>~/.config/systemd/user
 cp<span class="w"> </span>deploy/systemd/kendo-ip-retention.timer<span class="w"> </span>~/.config/systemd/user/
+cp<span class="w"> </span>deploy/systemd/kendo-backup.service<span class="w"> </span>deploy/systemd/kendo-backup.timer<span class="w"> </span>~/.config/systemd/user/
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
-systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-ip-retention.timer
+systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-ip-retention.timer<span class="w"> </span>kendo-backup.timer
 </code></pre></div>
 
 </details>
@@ -2171,7 +2177,11 @@ name resolution.</p>
 upgrade head</code> and exits, and <code>kendo-app</code> is ordered after it, so the app
 never serves against a half-migrated schema and a failed migration shows up
 as a failed <code>kendo-migrate.service</code> rather than as an app crash (#391).
-<code>systemctl --user status kendo-migrate --no-pager</code> shows the last run.</p>
+<code>systemctl --user status kendo-migrate --no-pager</code> (as <code>kendo</code>) shows whether
+the last run failed; its log, with the reason, is read from the admin account
+(see <a href="#9-logs">Logs</a>):</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>journalctl<span class="w"> </span><span class="nv">_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>kendo<span class="k">)</span><span class="w"> </span><span class="nv">_SYSTEMD_USER_UNIT</span><span class="o">=</span>kendo-migrate.service<span class="w"> </span>--no-pager
+</code></pre></div>
 <h3 id="ip-retention">IP retention<a class="headerlink" href="#ip-retention" title="Permanent link">&para;</a></h3>
 <p><code>recovery_attempts</code> stores the IP address of each recovery-code attempt, and
 the app clears it to NULL once the row is 30 days old (#434). <code>kendo-app</code> does
@@ -2181,7 +2191,7 @@ limit holds on an instance that is never restarted. <code>Persistent=true</code>
 a run missed while the host was off. <code>./setup.sh check --quadlet</code> fails while
 the timer is not installed or not enabled.</p>
 <div class="highlight"><pre><span></span><code>systemctl<span class="w"> </span>--user<span class="w"> </span>list-timers<span class="w"> </span>kendo-ip-retention.timer<span class="w"> </span>--no-pager
-systemctl<span class="w"> </span>--user<span class="w"> </span>status<span class="w"> </span>kendo-ip-retention<span class="w"> </span>--no-pager<span class="w">   </span><span class="c1"># the last run</span>
+systemctl<span class="w"> </span>--user<span class="w"> </span>status<span class="w"> </span>kendo-ip-retention<span class="w"> </span>--no-pager<span class="w">   </span><span class="c1"># did the last run fail? its log: see Logs</span>
 </code></pre></div>
 <p>The Compose stack has no timer: there the clear runs only when the app starts.</p>
 <h2 id="5-tls-options">5. TLS options<a class="headerlink" href="#5-tls-options" title="Permanent link">&para;</a></h2>
@@ -2190,7 +2200,7 @@ what it writes, for a deployment configured by hand or changed later.</p>
 <ul>
 <li><strong>HTTP-01 (default).</strong> Needs inbound port 80. Nothing beyond the <code>httpChallenge</code> block already in <code>traefik.yml</code>.</li>
 <li><strong>TLS-ALPN-01.</strong> Inbound 443 only — the answer when an ISP blocks 80. Replace the <code>httpChallenge</code> block with <code>tlsChallenge: {}</code>.</li>
-<li><strong>DNS-01.</strong> No inbound ports at all (e.g. UAT on a local network). Replace the <code>httpChallenge</code> block with a <code>dnsChallenge</code> naming your <a href="https://go-acme.github.io/lego/dns/">lego provider</a>, and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives re-copying the unit on upgrade:</li>
+<li><strong>DNS-01.</strong> No inbound ports at all (e.g. UAT on a local network). Replace the <code>httpChallenge</code> block with a <code>dnsChallenge</code> naming your <a href="https://go-acme.github.io/lego/dns/">lego provider</a>, and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives taking a new unit from a release:</li>
 </ul>
 <div class="highlight"><pre><span></span><code><span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s1">'REPLACE-with-provider-token'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>podman<span class="w"> </span>secret<span class="w"> </span>create<span class="w"> </span>kendo_dns_token<span class="w"> </span>-
 <span class="nv">d</span><span class="o">=</span>~/.config/containers/systemd/kendo-traefik.container.d<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">"</span>
@@ -2208,7 +2218,7 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<spa
 <p>The SPA is served <strong>same-origin</strong> with the API (both under <code>https://&lt;your-domain&gt;</code>), so CORS never fires in normal operation. Keep <code>CORS_ORIGINS</code> pinned to the single canonical origin (never <code>*</code>) — auth is cookie-based, and <code>*</code> + credentials is both invalid and a credential-leak risk. Pinning means any accidental cross-origin path fails closed.</p>
 <h2 id="8-container-limits">8. Container limits<a class="headerlink" href="#8-container-limits" title="Permanent link">&para;</a></h2>
 <p><code>kendo-app</code>, <code>kendo-migrate</code>, <code>kendo-ip-retention</code> and <code>kendo-traefik</code> assume they may be breached (#458): a read-only root filesystem (<code>/tmp</code> and the volumes are the only writable paths), every capability dropped (Traefik keeps <code>NET_BIND_SERVICE</code> for 80/443), <code>NoNewPrivileges=true</code>, and a cap of 256 pids and 512 MiB memory each. <code>kendo-db</code> is not hardened yet.</p>
-<p>The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later <code>PodmanArgs=</code> flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:</p>
+<p>The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later <code>PodmanArgs=</code> flag wins over the unit's own, and the drop-in survives taking a new unit from a release:</p>
 <div class="highlight"><pre><span></span><code><span class="nv">d</span><span class="o">=</span>~/.config/containers/systemd/kendo-app.container.d<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">"</span>
 <span class="nb">printf</span><span class="w"> </span><span class="s1">'[Container]\nPodmanArgs=--memory=1g --pids-limit=512\n'</span><span class="w"> </span>&gt;<span class="w"> </span><span class="s2">"</span><span class="nv">$d</span><span class="s2">/30-limits.conf"</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-app
@@ -2219,13 +2229,23 @@ systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload<spa
 log driver hands them to the <code>kendo</code> user's journal, tagged with the
 <code>kendo-app</code> unit, so the journal on the device is where they live. Nothing is
 written to a log file inside the container (the root filesystem is read-only).</p>
-<div class="highlight"><pre><span></span><code>podman<span class="w"> </span>logs<span class="w"> </span>kendo-app<span class="w">                    </span><span class="c1"># this container's output since it started</span>
-journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w">         </span><span class="c1"># the unit's history, across restarts</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># as kendo: this container's output since it started</span>
+podman<span class="w"> </span>logs<span class="w"> </span>kendo-app
+
+<span class="c1"># as your admin account (sudo): the unit's history, across restarts</span>
+sudo<span class="w"> </span>journalctl<span class="w"> </span><span class="nv">_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>kendo<span class="k">)</span><span class="w"> </span><span class="nv">_SYSTEMD_USER_UNIT</span><span class="o">=</span>kendo-app.service<span class="w"> </span>--no-pager
 </code></pre></div>
-<p>Use <code>--user-unit</code>, not <code>--user -u</code>. <code>--user</code> reads only the per-user journal
-file, which journald creates only when journal storage is persistent. On a host
-without it, everything is in the system journal and <code>--user -u</code> shows nothing.
-<code>--user-unit</code> works either way.</p>
+<p><code>kendo</code> cannot read the journal itself on a default AlmaLinux/RHEL host:
+as <code>kendo</code>, <code>journalctl</code> prints "No journal files were opened due to
+insufficient permissions". There is no per-user journal file unless journal
+storage is persistent, and the system journal is readable only by root and the
+<code>systemd-journal</code>, <code>adm</code> and <code>wheel</code> groups. So read it from the admin account,
+by <code>kendo</code>'s UID. Do not use <code>--user-unit</code> under <code>sudo</code>: it matches root's UID
+and shows nothing.</p>
+<p>The same command reads any unit's log: swap in <code>kendo-migrate</code>, <code>kendo-backup</code>,
+<code>kendo-traefik</code> or <code>kendo-ip-retention</code>. Add <code>--since "1 hour ago"</code> (or a time,
+<code>--since "11:06"</code>) to start at a failure. <code>systemctl --user status</code> shows only
+the last few lines, so it usually cuts off why a unit failed.</p>
 <h3 id="security-events">Security events<a class="headerlink" href="#security-events" title="Permanent link">&para;</a></h3>
 <p>Sign-ins, recovery, passkey and invite changes, the setup claim and the other
 security events are one JSON object per line:</p>
@@ -2325,9 +2345,10 @@ while serving a request carries the client's <code>ip_address</code>.</p>
 <p><code>changed_fields</code> lists field names only. The values, old or new, are never
 logged. Reading data is not logged.</p>
 <p>To see only these lines:</p>
-<div class="highlight"><pre><span></span><code>journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># as your admin account (sudo)</span>
+sudo<span class="w"> </span>journalctl<span class="w"> </span><span class="nv">_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>kendo<span class="k">)</span><span class="w"> </span><span class="nv">_SYSTEMD_USER_UNIT</span><span class="o">=</span>kendo-app.service<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span>
 <span class="c1"># or pretty-print them, if jq is installed</span>
-journalctl<span class="w"> </span>--user-unit<span class="w"> </span>kendo-app<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+sudo<span class="w"> </span>journalctl<span class="w"> </span><span class="nv">_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>kendo<span class="k">)</span><span class="w"> </span><span class="nv">_SYSTEMD_USER_UNIT</span><span class="o">=</span>kendo-app.service<span class="w"> </span>-o<span class="w"> </span>cat<span class="w"> </span>--grep<span class="w"> </span><span class="s1">'"event_type"'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </code></pre></div>
 <h3 id="how-long-they-survive">How long they survive<a class="headerlink" href="#how-long-they-survive" title="Permanent link">&para;</a></h3>
 <p>journald decides, not the app. Check two things as an admin user:</p>

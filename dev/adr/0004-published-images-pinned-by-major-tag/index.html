@@ -1690,6 +1690,10 @@ operators at that tag, so the dev-only paths (<code>deploy/certs/</code>,
 release rather than the moment it merges. <code>setup.sh upgrade</code> re-extracts the
 bundle and reports what changed instead of overwriting an operator's filled-in
 files.</p>
+<p><em>Amended by #604:</em> no upgrade re-extracts the bundle any more. Once
+installed, its files are the operator's; the upgrade is back up, pull,
+restart, and a release that changes a deployment file lists the change as an
+Operator action in its notes.</p>
 
 
 

@@ -1481,7 +1481,7 @@
 <thead>
 <tr>
 <th>Task</th>
-<th>Command (as <code>kendo</code> via <code>machinectl shell kendo@</code>)</th>
+<th>Command (as <code>kendo</code> via <code>machinectl shell kendo@ /bin/bash</code>)</th>
 </tr>
 </thead>
 <tbody>
@@ -1494,16 +1494,20 @@
 <td><code>podman logs -f kendo-app</code></td>
 </tr>
 <tr>
+<td>A unit's journal (why it failed)</td>
+<td>From your <strong>admin account</strong>, not <code>kendo</code>, which cannot read the journal: <code>sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service --no-pager</code>; swap in any unit. See <a href="../../deployment/#9-logs">Deployment § Logs</a></td>
+</tr>
+<tr>
 <td>Restart app</td>
 <td><code>systemctl --user restart kendo-app</code></td>
 </tr>
 <tr>
-<td><strong>Upgrade</strong> — the full procedure is <a href="../../install/upgrading/#hardened-deployment-quadlet">Upgrading</a></td>
-<td><code>podman pull ghcr.io/booji/kendodojomanagement:0.1 &amp;&amp; systemctl --user restart kendo-migrate kendo-app</code></td>
+<td><strong>Upgrade</strong></td>
+<td>Follow <a href="../../install/upgrading/#hardened-deployment-quadlet">Upgrading § Hardened deployment</a>: back up, pull the pinned image, restart — a restart without the pull is not a patch. Apply the release notes' Operator actions first</td>
 </tr>
 <tr>
 <td>Stop all</td>
-<td><code>systemctl --user stop kendo-ip-retention.timer kendo-traefik kendo-app kendo-migrate kendo-db</code> — the timer first, or its daily run starts <code>kendo-db</code> again</td>
+<td><code>systemctl --user stop kendo-ip-retention.timer kendo-backup.timer kendo-traefik kendo-app kendo-migrate kendo-db</code> — the timers first, or their next run starts <code>kendo-db</code> again</td>
 </tr>
 <tr>
 <td>Back up now</td>

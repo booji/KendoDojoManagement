@@ -596,6 +596,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#operator-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operator actions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Operator actions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-new-setting-in-the-env-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A new setting in the env file
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pinning-a-version-and-rolling-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning a Version, and rolling back
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-an-image-came-from-this-repository" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -607,10 +646,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
+  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Refreshing the env file after an upgrade
+        Upgrading to a new Release line
       
     </span>
   </a>
@@ -618,10 +657,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
+  <a href="#from-a-release-candidate-splitting-env-once" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Upgrading to a new Release line
+        From a release candidate: splitting .env once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#from-v010-rc1-on-quadlet-installing-the-backup-units-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From v0.1.0-rc1 on Quadlet: installing the backup units once
       
     </span>
   </a>
@@ -1574,6 +1624,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#operator-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operator actions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Operator actions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-new-setting-in-the-env-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A new setting in the env file
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pinning-a-version-and-rolling-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning a Version, and rolling back
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-an-image-came-from-this-repository" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1585,10 +1674,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#refreshing-the-env-file-after-an-upgrade" class="md-nav__link">
+  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Refreshing the env file after an upgrade
+        Upgrading to a new Release line
       
     </span>
   </a>
@@ -1596,10 +1685,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#upgrading-to-a-new-release-line" class="md-nav__link">
+  <a href="#from-a-release-candidate-splitting-env-once" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Upgrading to a new Release line
+        From a release candidate: splitting .env once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#from-v010-rc1-on-quadlet-installing-the-backup-units-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From v0.1.0-rc1 on Quadlet: installing the backup units once
       
     </span>
   </a>
@@ -1632,21 +1732,24 @@
 
 
 <h1 id="upgrading">Upgrading<a class="headerlink" href="#upgrading" title="Permanent link">&para;</a></h1>
+<p>An upgrade is three steps: back up, pull the image you pin, restart onto it.
+Nothing in it touches a deployment file. Once installed, the compose file,
+the units, the timers, the scripts, the env files and the Traefik config are
+yours, edits included, and no upgrade step overwrites one (#604).</p>
+<p>A release that changes one of those files says so in its release notes,
+under <strong>Operator action</strong>. Read the notes before you upgrade, and apply each
+action first, as <a href="#operator-actions">Operator actions</a> describes.</p>
 <h2 id="quick-self-host-compose">Quick self-host (Compose)<a class="headerlink" href="#quick-self-host-compose" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>./setup.sh<span class="w"> </span>upgrade
 </code></pre></div>
 <p>An upgrade runs <code>alembic upgrade head</code> against your live database, so this
 takes a backup first: <code>deploy/bin/kendo-backup.sh</code> writes the database dump and
-the uploads tarball to <code>~/backups</code> and says where. Then it pulls, refreshes the
-deployment bundle from the image it just pulled, and recreates the stack. The
-bundle holds the compose file, the <code>.example</code> config and the Quadlet units, so
-they always match the app they run. Any of those files that changed is listed,
-and your previous copy is kept as <code>.bak</code>. <code>.env</code> and your filled-in Traefik
-files are never touched.</p>
-<p>A file you edited yourself (a BYO certificate's mount in <code>docker-compose.yml</code>,
-say) is never overwritten. If this release also changed it, the new version is
-written next to it as <code>.new</code> and the upgrade stops before anything is
-recreated. Merge the two, re-run <code>./setup.sh upgrade</code>, and it carries on.</p>
+the uploads tarball to <code>~/backups</code> and says where. Then it pulls the image
+<code>KENDO_IMAGE</code> in <code>.env</code> names and recreates the stack on it. It changes none of
+your files.</p>
+<p>After it, <code>podman-compose logs migrate</code> names the schema revision the database
+started at and the one it is at now, with each revision applied in between
+(#606).</p>
 <p>If the upgrade or the migration fails, it prints the exact
 <code>kendo-restore.sh</code> command for the backup it just took. It also prints the
 digest of the image that was running, to pin back to. Restoring the data alone
@@ -1665,35 +1768,160 @@ Fix those rows, then run <code>./setup.sh upgrade</code> again.</p>
 podman-compose recreates a container only when the compose file changes, so a
 new image under the same <code>:0.1</code> tag never starts.</p>
 <h2 id="hardened-deployment-quadlet">Hardened deployment (Quadlet)<a class="headerlink" href="#hardened-deployment-quadlet" title="Permanent link">&para;</a></h2>
-<p><strong>When a Quadlet unit, the Traefik config or the env file changes upstream</strong>,
-the Upgrade command above is not enough — it pulls the image but reuses the
-units already in <code>~/.config/containers/systemd/</code>, the Traefik config already in
-<code>~/kendo/traefik/</code>, and it never touches <code>~/kendo/kendo-app.env</code>. Each is a
-copy made once at install time; pulling a new image updates neither.</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Re-extract the bundle from the tag you are pinned to — it ships inside the</span>
-<span class="c1"># image, so the units below match the app they start.</span>
-<span class="nb">cd</span><span class="w"> </span>~/src<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>ghcr.io/booji/kendodojomanagement:0.1<span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x
+<p><code>./setup.sh upgrade</code> is the Compose path only. On a Quadlet host, run these
+steps as <code>kendo</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Back up first: kendo-migrate runs `alembic upgrade head` against your live</span>
+<span class="c1"># database. This is the backup to restore if the upgrade fails — see</span>
+<span class="c1"># Backups § Restore.</span>
+systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-backup.service
 
-<span class="c1"># Units: re-run the copy from Hardened deployment §2-4, then daemon-reload so Quadlet regenerates.</span>
-cp<span class="w"> </span>deploy/quadlet/kendo-*.network<span class="w">   </span>~/.config/containers/systemd/
-cp<span class="w"> </span>deploy/quadlet/kendo-*.volume<span class="w">    </span>~/.config/containers/systemd/
-cp<span class="w"> </span>deploy/quadlet/kendo-*.container<span class="w"> </span>~/.config/containers/systemd/
-cp<span class="w"> </span>deploy/systemd/kendo-ip-retention.timer<span class="w"> </span>~/.config/systemd/user/
-systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
-<span class="c1"># Idempotent: enables the IP-retention timer if it is not already.</span>
-systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-ip-retention.timer
+<span class="c1"># Pull every image the three Release units pin. Restarting a unit never</span>
+<span class="c1"># fetches a newer image under the same tag, so without this nothing changes.</span>
+<span class="nv">u</span><span class="o">=</span>~/.config/containers/systemd
+sed<span class="w"> </span>-n<span class="w"> </span><span class="s1">'s/^Image=//p'</span><span class="w"> </span><span class="s2">"</span><span class="nv">$u</span><span class="s2">"</span>/kendo-app.container<span class="w"> </span><span class="s2">"</span><span class="nv">$u</span><span class="s2">"</span>/kendo-migrate.container<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"</span><span class="nv">$u</span><span class="s2">"</span>/kendo-ip-retention.container<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-u<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-n1<span class="w"> </span>podman<span class="w"> </span>pull
 
-<span class="c1"># Backup scripts: the timer runs the copies in ~/.local/bin, not the bundle's.</span>
-install<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span>deploy/bin/kendo-backup.sh<span class="w"> </span>deploy/bin/kendo-restore.sh<span class="w"> </span>~/.local/bin/
-
-<span class="c1"># Traefik dynamic config — keep your Host() rule, take the rest. Traefik</span>
-<span class="c1"># watches this directory, so no restart is needed once the file lands.</span>
-diff<span class="w"> </span>deploy/traefik/dynamic/kendo.yml<span class="w"> </span>~/kendo/traefik/dynamic/kendo.yml
-
+<span class="c1"># Restart onto it: kendo-migrate migrates, then the app starts.</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-migrate<span class="w"> </span>kendo-app
 </code></pre></div>
-<p>The env file is per-host and needs comparing rather than copying — see
-<a href="#refreshing-the-env-file-after-an-upgrade">Refreshing the env file</a>.</p>
+<p>Then, from your admin account, read what <code>kendo-migrate</code> did: the revision the
+schema started at, each one applied, and the one it is at now (#606). On a
+failure it says why. <code>kendo</code> cannot read the journal itself
+(<a href="../../deployment/#9-logs">Deployment § Logs</a>):</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>journalctl<span class="w"> </span><span class="nv">_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="w"> </span>kendo<span class="k">)</span><span class="w"> </span><span class="nv">_SYSTEMD_USER_UNIT</span><span class="o">=</span>kendo-migrate.service<span class="w"> </span>--since<span class="w"> </span><span class="s2">"1 hour ago"</span><span class="w"> </span>--no-pager
+</code></pre></div>
+<p>If it failed, restore the backup taken above — <a href="../backups/#restore">Backups § Restore</a>.</p>
+<p>Traefik and PostgreSQL run images their own units pin. A release that moves
+one of those pins says so as an Operator action. Once you have edited the
+unit, pull the new image and add <code>kendo-traefik</code> or <code>kendo-db</code> to the restart.</p>
+<h2 id="operator-actions">Operator actions<a class="headerlink" href="#operator-actions" title="Permanent link">&para;</a></h2>
+<p>Each release's notes list every change to a deployment file under <strong>Operator
+action</strong>, with a Compose heading and a Quadlet heading as each applies. Each
+says what to change, and what happens if you do not. A new setting that has a
+safe default needs no action. Apply them before the routine upgrade above, so
+that its restart picks them up.</p>
+<p>To see the release's version of a file, extract the release's bundle into a
+directory of its own. Never extract it over your install: the bundle's files
+would replace yours. Set <code>IMAGE</code> to the image you are upgrading to — what
+<code>Image=</code> in <code>kendo-app.container</code> names on Quadlet, or <code>KENDO_IMAGE</code> in <code>.env</code>
+on Compose:</p>
+<div class="highlight"><pre><span></span><code>podman<span class="w"> </span>pull<span class="w"> </span><span class="s2">"</span><span class="nv">$IMAGE</span><span class="s2">"</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>~/kendo-release
+podman<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span><span class="s2">"</span><span class="nv">$IMAGE</span><span class="s2">"</span><span class="w"> </span>init<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-x<span class="w"> </span>-C<span class="w"> </span>~/kendo-release
+</code></pre></div>
+<p>Compare the file the action names with your copy, and carry the change into
+yours, keeping your own edits — the firewalld ports of <a href="../../deployment/#12-allow-rootless-binding-of-ports-80443">Deployment §
+1.2</a> in
+<code>kendo-traefik.container</code>, say:</p>
+<table>
+<thead>
+<tr>
+<th>Bundle file</th>
+<th>Your copy on Compose</th>
+<th>Your copy on Quadlet</th>
+<th>Then</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deploy/quadlet/*</code></td>
+<td>—</td>
+<td><code>~/.config/containers/systemd/</code></td>
+<td><code>systemctl --user daemon-reload</code>, then restart the unit</td>
+</tr>
+<tr>
+<td><code>deploy/systemd/*</code></td>
+<td>—</td>
+<td><code>~/.config/systemd/user/</code></td>
+<td><code>systemctl --user daemon-reload</code>; <code>enable --now</code> a new timer</td>
+</tr>
+<tr>
+<td><code>deploy/bin/*</code></td>
+<td><code>deploy/bin/</code></td>
+<td><code>~/.local/bin/</code> (<code>install -m 755</code>)</td>
+<td>nothing: the next backup runs it</td>
+</tr>
+<tr>
+<td><code>docker-compose.yml</code></td>
+<td><code>docker-compose.yml</code></td>
+<td>—</td>
+<td>the routine upgrade recreates the stack</td>
+</tr>
+<tr>
+<td><code>setup.sh</code></td>
+<td><code>setup.sh</code></td>
+<td><code>~/src/setup.sh</code></td>
+<td>nothing: take it whole, it holds no setting of yours</td>
+</tr>
+<tr>
+<td><code>.env.example</code></td>
+<td><code>.env</code></td>
+<td>—</td>
+<td>the routine upgrade</td>
+</tr>
+<tr>
+<td><code>deploy/env/kendo-app.env.example</code></td>
+<td><code>kendo-app.env</code></td>
+<td><code>~/kendo/kendo-app.env</code></td>
+<td>the routine upgrade</td>
+</tr>
+<tr>
+<td><code>deploy/traefik/selfhost/</code></td>
+<td><code>deploy/traefik/selfhost/</code></td>
+<td>—</td>
+<td>Traefik reloads <code>dynamic/</code> by itself; restart the proxy for <code>traefik.yml</code></td>
+</tr>
+<tr>
+<td><code>deploy/traefik/</code></td>
+<td>—</td>
+<td><code>~/kendo/traefik/</code></td>
+<td>Traefik reloads <code>dynamic/</code> by itself; restart <code>kendo-traefik</code> for <code>traefik.yml</code></td>
+</tr>
+</tbody>
+</table>
+<p>A changed unit needs the <code>daemon-reload</code> before its restart: Quadlet generates
+the service from the file only then. An env file needs only the restart.</p>
+<h3 id="a-new-setting-in-the-env-file">A new setting in the env file<a class="headerlink" href="#a-new-setting-in-the-env-file" title="Permanent link">&para;</a></h3>
+<p>When a release adds a setting without a safe default, its Operator action
+names it. The app does not see a key that is absent from your env file: the
+unit and the compose file pass that one file and nothing else. To find every
+key the release's example has that yours lacks, compare <strong>keys</strong>, not lines.
+Values legitimately differ per host, so a plain <code>diff</code> is all noise. On
+Quadlet:</p>
+<div class="highlight"><pre><span></span><code>diff<span class="w"> </span>&lt;<span class="o">(</span>grep<span class="w"> </span>-oE<span class="w"> </span><span class="s1">'^[A-Z0-9_]+='</span><span class="w"> </span>~/kendo/kendo-app.env<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>&lt;<span class="o">(</span>grep<span class="w"> </span>-oE<span class="w"> </span><span class="s1">'^[A-Z0-9_]+='</span><span class="w"> </span>~/kendo-release/deploy/env/kendo-app.env.example<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span>
+</code></pre></div>
+<p>On Compose, compare <code>kendo-app.env</code> in the install directory instead. Empty
+output means nothing new. A <code>&gt;</code> line is a setting you lack: copy it across
+with its comment. Then, once the routine upgrade has restarted the app, check
+that the app received it. A restart proves the unit started, not that the
+value arrived:</p>
+<div class="highlight"><pre><span></span><code>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-app<span class="w"> </span>printenv<span class="w"> </span>APP_ENV<span class="w"> </span>JWT_EXPIRE_MINUTES<span class="w">   </span><span class="c1"># Quadlet</span>
+podman-compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>app<span class="w"> </span>printenv<span class="w"> </span>APP_ENV<span class="w"> </span>JWT_EXPIRE_MINUTES<span class="w"> </span><span class="c1"># Compose</span>
+<span class="c1"># APP_ENV=production</span>
+<span class="c1"># JWT_EXPIRE_MINUTES=480</span>
+</code></pre></div>
+<h2 id="pinning-a-version-and-rolling-back">Pinning a Version, and rolling back<a class="headerlink" href="#pinning-a-version-and-rolling-back" title="Permanent link">&para;</a></h2>
+<p>The units pin the Release line's moving tag, <code>:0.1</code>, so the routine upgrade
+takes each patch release. To run an exact Version instead, such as a release
+candidate or the one you ran before, edit the pin. Then run the routine
+upgrade, which pulls what the pin names.</p>
+<p>On Quadlet, the pin is <code>Image=</code> in <code>kendo-app.container</code>,
+<code>kendo-migrate.container</code> and <code>kendo-ip-retention.container</code>. Keep the three
+the same:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">TAG</span><span class="o">=</span><span class="m">0</span>.1.0-rc3<span class="w">   </span><span class="c1"># the tag to run</span>
+<span class="nb">cd</span><span class="w"> </span>~/.config/containers/systemd
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s2">"s|^Image=.*|Image=ghcr.io/booji/kendodojomanagement:</span><span class="nv">$TAG</span><span class="s2">|"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>kendo-app.container<span class="w"> </span>kendo-migrate.container<span class="w"> </span>kendo-ip-retention.container
+systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
+</code></pre></div>
+<p>On Compose, the pin is <code>KENDO_IMAGE</code> in <code>.env</code>: the image name, a colon and
+the tag.</p>
+<p>Rolling back is the same edit, back to the tag you ran before. A migration
+has to be undone too, so restore the backup the upgrade took, after the edit:
+<a href="../backups/#restore">Backups § Restore</a> ends by restarting <code>kendo-migrate</code>, on
+the image the pin now names. A failed <code>./setup.sh upgrade</code> prints these steps
+for you, with the digest of the image that was running.</p>
 <h2 id="checking-an-image-came-from-this-repository">Checking an image came from this repository<a class="headerlink" href="#checking-an-image-came-from-this-repository" title="Permanent link">&para;</a></h2>
 <p>Each release image is signed by the release workflow with
 <a href="https://docs.sigstore.dev/cosign/">cosign</a> keyless signing (#457). To check
@@ -1705,43 +1933,66 @@ the image you are about to run, with cosign installed:</p>
 <p>It fails unless the image's digest was signed by that workflow on a release
 tag. Podman does not check this by itself yet (#518). The signature is recorded in Sigstore's public transparency log,
 which names this repository, the workflow and the release tag.</p>
-<h2 id="refreshing-the-env-file-after-an-upgrade">Refreshing the env file after an upgrade<a class="headerlink" href="#refreshing-the-env-file-after-an-upgrade" title="Permanent link">&para;</a></h2>
-<p>Re-extracting the bundle updates <code>deploy/env/kendo-app.env.example</code> in
-<code>~/src</code>. It does not update <code>~/kendo/kendo-app.env</code> — that file is yours, per
-host, and nothing overwrites it except a deliberate re-run of <code>./setup.sh
---quadlet</code>, which rewrites it from the example (keeping the previous one as
-<code>kendo-app.env.bak</code>). That is the quickest way to pick up new keys, and it
-discards any local edit beyond the three domain values, so compare the two
-afterwards if you have any. When an upgrade adds a setting, the app silently runs without
-it: the Quadlet unit passes this one <code>EnvironmentFile</code> and nothing else, so a
-key absent from it is absent from the app's environment.</p>
-<p>Compare <strong>keys</strong>, not lines. Values legitimately differ per host, so a plain
-<code>diff</code> is all noise; the keys are what drift:</p>
-<div class="highlight"><pre><span></span><code>diff<span class="w"> </span>&lt;<span class="o">(</span>grep<span class="w"> </span>-oE<span class="w"> </span><span class="s1">'^[A-Z0-9_]+='</span><span class="w"> </span>~/kendo/kendo-app.env<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>&lt;<span class="o">(</span>grep<span class="w"> </span>-oE<span class="w"> </span><span class="s1">'^[A-Z0-9_]+='</span><span class="w"> </span>~/src/deploy/env/kendo-app.env.example<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span>
-</code></pre></div>
-<p>Empty output means nothing new upstream. A <code>&gt;</code> line is a setting you are
-missing — copy it across with its comment, then restart:</p>
-<div class="highlight"><pre><span></span><code>systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-app
-</code></pre></div>
-<p>A changed <code>EnvironmentFile</code> needs only a restart; a changed <em>unit</em> file needs
-re-copying and a <code>daemon-reload</code> first — <a href="#hardened-deployment-quadlet">Hardened deployment
-(Quadlet)</a> above has that sequence.</p>
-<p>Then verify the app actually received it — a restart proves the unit started,
-not that the value arrived:</p>
-<div class="highlight"><pre><span></span><code>podman<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>kendo-app<span class="w"> </span>printenv<span class="w"> </span>APP_ENV<span class="w"> </span>JWT_EXPIRE_MINUTES
-<span class="c1"># APP_ENV=production</span>
-<span class="c1"># JWT_EXPIRE_MINUTES=480</span>
-</code></pre></div>
 <h2 id="upgrading-to-a-new-release-line">Upgrading to a new Release line<a class="headerlink" href="#upgrading-to-a-new-release-line" title="Permanent link">&para;</a></h2>
-<p>Within a Release line (<code>:0.1</code>) every upgrade is the routine one above. The
-exception is a security fix that cannot avoid breaking: its release notes say
-so under a Security heading, and the upgrade stops until you have acted. Moving
-to the next (<code>:0.2</code>) is a <strong>Breaking change</strong>: it needs a step only you can
-take, or carries a migration that returning to the previous image cannot undo.
-Each one gets its own section here, headed "Upgrading to 0.Y", with the
-operator action its release notes list. Read it before you change the pin.</p>
+<p>Within a Release line (<code>:0.1</code>) every upgrade is the routine one above, plus
+any Operator actions its notes list. The exception is a security fix that
+cannot avoid breaking: its release notes say so under a Security heading, and
+the upgrade stops until you have acted. Moving to the next (<code>:0.2</code>) is a
+<strong>Breaking change</strong>: it needs a step only you can take, or carries a migration
+that returning to the previous image cannot undo. Each one gets its own
+section here, headed "Upgrading to 0.Y", with the operator action its release
+notes list. Read it before you change the pin.</p>
 <p>None yet: 0.1 is the first Release line.</p>
+<h2 id="from-a-release-candidate-splitting-env-once">From a release candidate: splitting <code>.env</code> once<a class="headerlink" href="#from-a-release-candidate-splitting-env-once" title="Permanent link">&para;</a></h2>
+<p>Quick self-host only, and only for a host set up with <code>v0.1.0-rc1</code> or
+<code>v0.1.0-rc2</code>. Those kept every app setting in <code>.env</code>. From <code>v0.1.0-rc3</code> the
+app reads its settings from <code>kendo-app.env</code> next to <code>docker-compose.yml</code>
+instead, written from <code>deploy/env/kendo-app.env.example</code>, the file the
+hardened deployment uses too (#603). <code>.env</code> keeps only the image pin, the db
+settings and the secrets. <code>./setup.sh upgrade</code> stops, before it backs up or
+changes anything, while <code>kendo-app.env</code> is missing.</p>
+<p><code>.env</code> pins the rc it was set up with, so first point <code>KENDO_IMAGE</code> at the
+release (<a href="#pinning-a-version-and-rolling-back">Pinning a Version</a>). Extract
+that release's bundle, as <a href="#operator-actions">Operator actions</a> describes.
+Then, in the directory that holds <code>.env</code>, take its <code>setup.sh</code>, compose file
+and env example, and create <code>kendo-app.env</code> once:</p>
+<div class="highlight"><pre><span></span><code>cp<span class="w"> </span>~/kendo-release/setup.sh<span class="w"> </span>setup.sh
+cp<span class="w"> </span>~/kendo-release/docker-compose.yml<span class="w"> </span>docker-compose.yml
+mkdir<span class="w"> </span>-p<span class="w"> </span>deploy/env
+cp<span class="w"> </span>~/kendo-release/deploy/env/kendo-app.env.example<span class="w"> </span>deploy/env/
+cp<span class="w"> </span>deploy/env/kendo-app.env.example<span class="w"> </span>kendo-app.env
+</code></pre></div>
+<p>The rc's own <code>setup.sh upgrade</code> would refresh the bundle itself and recreate
+the stack without <code>kendo-app.env</code>; the new one does neither.</p>
+<p>If you had edited <code>docker-compose.yml</code> (a BYO certificate's mount, say), make
+the same edit again in the new one.</p>
+<p>Then copy your own values from <code>.env</code> into <code>kendo-app.env</code>, key for key:
+<code>WEBAUTHN_RP_ID</code>, <code>WEBAUTHN_ORIGIN</code>, <code>CORS_ORIGINS</code> and <code>TZ</code> always, and any
+other app setting you changed from its default (<code>JWT_EXPIRE_MINUTES</code>,
+<code>SESSION_MAX_MINUTES</code>, the <code>*_MIN_DURATION_MS</code> floors and so on). A wrong
+<code>WEBAUTHN_*</code> value here makes every passkey ceremony fail, so check those
+three against your domain. Leave the secrets in <code>.env</code>: <code>DATABASE_URL</code>,
+<code>MIGRATION_DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>SETUP_TOKEN</code> and <code>POSTGRES_*</code> never
+go in <code>kendo-app.env</code>, because the app reads that file whole and must never
+see the superuser login (ADR-0007).</p>
+<p>The app settings left in <code>.env</code> are ignored from now on. Delete them, so that
+nobody tunes a value there that never reaches the app. Keep <code>KENDO_IMAGE</code>,
+<code>TZ</code> (the db's), <code>POSTGRES_*</code>, <code>MIGRATION_DATABASE_URL</code>, <code>DATABASE_URL</code>,
+<code>JWT_SECRET</code> and <code>SETUP_TOKEN</code>. Then upgrade as usual:</p>
+<div class="highlight"><pre><span></span><code>./setup.sh<span class="w"> </span>upgrade
+./setup.sh<span class="w"> </span>check
+</code></pre></div>
+<h2 id="from-v010-rc1-on-quadlet-installing-the-backup-units-once">From <code>v0.1.0-rc1</code> on Quadlet: installing the backup units once<a class="headerlink" href="#from-v010-rc1-on-quadlet-installing-the-backup-units-once" title="Permanent link">&para;</a></h2>
+<p>A Quadlet host set up with <code>v0.1.0-rc1</code> has no backup units: <code>setup.sh
+--quadlet</code> installs them from <code>v0.1.0-rc2</code> (#576). Without them the routine
+upgrade's first step fails. Install them once, as <code>kendo</code>, from the release's
+bundle extracted as <a href="#operator-actions">Operator actions</a> describes:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/kendo-release
+install<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span>deploy/bin/kendo-backup.sh<span class="w"> </span>deploy/bin/kendo-restore.sh<span class="w"> </span>~/.local/bin/
+cp<span class="w"> </span>deploy/systemd/kendo-backup.service<span class="w"> </span>deploy/systemd/kendo-backup.timer<span class="w"> </span>~/.config/systemd/user/
+systemctl<span class="w"> </span>--user<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span>--user<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>kendo-backup.timer
+</code></pre></div>
 
 
 

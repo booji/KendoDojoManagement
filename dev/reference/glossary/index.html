@@ -1820,7 +1820,7 @@ A <strong>Member's</strong> current standing: active, inactive, suspended or arc
 Setting a <strong>Member's</strong> <strong>Membership Status</strong> to inactive. The <strong>Member</strong> is kept, not removed.
 <em>Avoid</em>: Delete, remove, archive</p>
 <p><strong>Federation Number</strong>:
-A <strong>Member's</strong> identifier with a national kendo federation.
+A <strong>Member's</strong> identifier with a kendo federation: a national one, or a continental body such as the EKF, which numbers every European dan grade holder alongside their national federation.
 <em>Avoid</em>: Licence number, membership number</p>
 <p><strong>Federation Membership</strong>:
 A <strong>Member's</strong> registration with one federation: the federation, their <strong>Federation Number</strong>, and an optional renewal date.
@@ -1860,6 +1860,11 @@ A single scheduled training event at the dojo.
 <p><strong>Session Template</strong>:
 A recurring rule that generates <strong>Sessions</strong> on a fixed schedule.
 <em>Avoid</em>: Recurring session, schedule</p>
+<p><strong>Series</strong>:
+The <strong>Sessions</strong> one <strong>Session Template</strong> generates, taken together. A Series is extended or cancelled as a whole, through its template.
+<em>Avoid</em>: Recurring sessions</p>
+<p><strong>Slot</strong>:
+The date a <strong>Session Template</strong> generated a <strong>Session</strong> for. A Session keeps its Slot when it is moved to another date, so its <strong>Series</strong> still counts that date as covered.</p>
 <p><strong>Ad-hoc Session</strong>:
 A one-off <strong>Session</strong> created directly, not from a <strong>Session Template</strong>.
 <em>Avoid</em>: Extra session, special session</p>
@@ -1871,6 +1876,9 @@ An admin-configured label describing the nature of a <strong>Segment</strong>, s
 <em>Avoid</em>: Session category, class type</p>
 <p><strong>Cancellation</strong>:
 Marking a specific <strong>Session</strong> as not taking place.</p>
+<p><strong>Reinstatement</strong>:
+Undoing a <strong>Cancellation</strong>, so the <strong>Session</strong> takes place again. Reinstating one <strong>Session</strong> of a cancelled <strong>Series</strong> leaves the rest cancelled.
+<em>Avoid</em>: Uncancel, restore</p>
 <p><strong>Calendar Feed</strong>:
 The subscription of upcoming <strong>Sessions</strong>, without <strong>Cancellations</strong>, that anyone with its link can add to their own calendar app. Calendar apps show it under the dojo's name.
 <em>Avoid</em>: iCal, ICS feed</p>
@@ -1943,6 +1951,7 @@ A change an operator cannot take by the routine upgrade alone: it needs a manual
 <li>A <strong>Member</strong> holds exactly one current <strong>Grade</strong> and accumulates a <strong>Grade History</strong> over time.</li>
 <li><strong>Grades</strong> progress in strict order: Mukyū, 6-kyū to 1-kyū, then 1-dan to 8-dan.</li>
 <li>A <strong>Session</strong> is either generated from a <strong>Session Template</strong> or created as an <strong>Ad-hoc Session</strong>.</li>
+<li>A generated <strong>Session</strong> covers one <strong>Slot</strong> of its <strong>Series</strong>, and no two Sessions cover the same Slot.</li>
 <li>A <strong>Session</strong> has one or more <strong>Segments</strong>, and each <strong>Segment</strong> carries one or more <strong>Session Types</strong>, so one evening's keiko can be both Kihon and Keiko.</li>
 <li><strong>Attendance</strong> at a <strong>Session</strong> is a collection of <strong>Check-ins</strong> by <strong>Members</strong> and named <strong>Visitors</strong>.</li>
 <li>A <strong>Session</strong> has exactly one <strong>Check-in Link</strong>, and it never changes.</li>

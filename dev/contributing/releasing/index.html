@@ -1475,6 +1475,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#collect-the-operator-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collect the Operator actions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rehearse-a-release-candidate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1565,6 +1576,17 @@
     <span class="md-ellipsis">
       
         Cut the release branch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#collect-the-operator-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collect the Operator actions
       
     </span>
   </a>
@@ -1700,17 +1722,58 @@ every <code>breaking</code> PR in the release, under Compose and Quadlet heading
 applies. Replace the "None yet" line on the first one. A patch release needs no
 upgrading section.</p>
 <p>Commit those to the release branch and push it.</p>
+<h2 id="collect-the-operator-actions">Collect the Operator actions<a class="headerlink" href="#collect-the-operator-actions" title="Permanent link">&para;</a></h2>
+<p>Every release, patch or not. No upgrade step overwrites a deployment file
+(#604), so a change to one reaches an operator only through the release
+notes. Collect the <strong>Operator action</strong> section of every PR in the release
+that has one, breaking or not. Then check that every commit touching a
+deployment file came with one:</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>log<span class="w"> </span>--oneline<span class="w"> </span>origin/main..HEAD<span class="w"> </span>--<span class="w"> </span>deploy<span class="w"> </span>docker-compose.yml<span class="w"> </span>.env.example<span class="w"> </span>setup.sh
+</code></pre></div>
+<p>A PR missing its section gets one written now, from its diff. Keep the
+collected actions for the release notes (<a href="#release">Release</a>, step 3), under
+a Compose heading and a Quadlet heading.</p>
 <h2 id="rehearse-a-release-candidate">Rehearse a release candidate<a class="headerlink" href="#rehearse-a-release-candidate" title="Permanent link">&para;</a></h2>
-<p>Tag the release branch and push the tag:</p>
+<p>First refresh the bundled FIK affiliate list, which every instance syncs into
+its Federation catalogue on upgrade. From <code>backend/</code> on the release branch:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>scripts.update_fik_affiliates
+</code></pre></div>
+<p>It rewrites <code>backend/app/federations/fik_affiliates.json</code> from
+<a href="https://www.kendo-fik.org/organization/affiliate">https://www.kendo-fik.org/organization/affiliate</a>, or fails without writing
+if the page's layout has changed. Review the diff and land any change through
+a PR like any other fix; a new country heading fails the run until it is added
+to the script's ISO table.</p>
+<p>An affiliate that drops off the list is deactivated on upgrade, not deleted.
+One that later returns to the list stays inactive until an Admin re-activates
+it in Admin Settings: the Admin owns <code>is_active</code>, so the sync never turns it
+back on.</p>
+<p>Then tag the release branch and push the tag:</p>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>vX.Y.Z-rc1<span class="w"> </span>-m<span class="w"> </span>vX.Y.Z-rc1
 git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>vX.Y.Z-rc1
 </code></pre></div>
 <p>An rc tag runs the full suite (<code>tests.yml</code>) and publishes an image under its
 exact tag only, never the moving tags operators pin, and its docs publish
-nowhere. Rehearse on a clean host: install from the rc image with
-<a href="../../install/quick-self-host/">Quick self-host</a>, and upgrade a host running the
-previous release to it by following your own upgrading notes. A fix found
-here goes on the release branch, and the next rc is <code>-rc2</code>.</p>
+nowhere.</p>
+<p>The Release image's GHCR package must be public, or every operator's
+anonymous pull fails with <code>unauthorized</code>. A package is created private on its
+first push, and GitHub has no API to change that: if the package was ever
+recreated, make it public under its <strong>Package settings</strong>. Check with an
+anonymous pull before rehearsing, from the clean host (never logged in to
+<code>ghcr.io</code>):</p>
+<div class="highlight"><pre><span></span><code>podman<span class="w"> </span>pull<span class="w"> </span>ghcr.io/booji/kendodojomanagement:<span class="nv">$RC_TAG</span><span class="w">   </span><span class="c1"># e.g. RC_TAG=X.Y.Z-rc1</span>
+</code></pre></div>
+<p>Rehearse on a clean host: install from the rc image with
+<a href="../../install/quick-self-host/">Quick self-host</a>. Then upgrade a host running
+the previous release to it, the way an operator pins a Version
+(<a href="../../install/upgrading/#pinning-a-version-and-rolling-back">Upgrading § Pinning a Version</a>):
+apply the collected Operator actions, edit the pin to the rc tag, and run the
+routine upgrade. The pin is <code>Image=</code> in <code>kendo-app.container</code>,
+<code>kendo-migrate.container</code> and <code>kendo-ip-retention.container</code> on Quadlet, and
+<code>KENDO_IMAGE</code> in <code>.env</code> on Compose. Do not retag the rc image as <code>:0.1</code>: the
+rehearsal would then skip the pin edit an operator makes. Rehearse the
+rollback too, by editing the pin back to the previous release and restoring
+the backup the upgrade took.</p>
+<p>A fix found here goes on the release branch, and the next rc is <code>-rc2</code>.</p>
 <h2 id="release">Release<a class="headerlink" href="#release" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Open a PR from <code>release/X.Y.Z</code> into <code>main</code>. Merge it with a <strong>merge commit</strong>,
@@ -1728,8 +1791,10 @@ after.</p>
 </li>
 <li>
 <p>Publish the GitHub release from the tag with generated notes; they are
-   grouped by label, <code>breaking</code> first. On a new Release line, check the
-   operator actions are there and link the upgrading section.</p>
+   grouped by label, <code>breaking</code> first. Put the Operator actions you collected
+   above them, under an <strong>Operator action</strong> heading with Compose and Quadlet
+   subheadings, or write "None" there. On a new Release line, also link the
+   upgrading section.</p>
 </li>
 <li>Merge <code>main</code> back into <code>develop</code> with a PR (merge commit), so the release
    branch's commits reach <code>develop</code>.</li>
