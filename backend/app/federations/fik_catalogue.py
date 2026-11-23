@@ -9,8 +9,9 @@ A FIK row's fields have one owner each. The sync owns `name`, `website`,
 `continental_grouping`, `type` and `iso_code`, and overwrites them; the Admin
 owns `abbreviation`, `is_pinned` and `is_active`, which the sync only sets on
 insert. An affiliate that leaves the list is deactivated, never deleted:
-Federation Memberships still reference it. Rows the Admin added (`source`
-null) are never touched.
+Federation Memberships still reference it. One that returns to the list
+stays inactive until an Admin re-activates it, since the Admin owns
+`is_active`. Rows the Admin added (`source` null) are never touched.
 """
 
 from __future__ import annotations
