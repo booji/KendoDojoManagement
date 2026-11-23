@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
+import type { AccountClaims } from "@/api/auth"
 import { listPendingGrades, type PendingGradeEntry } from "@/api/grades"
 
 const POLL_MS = 60_000
 
 /** What is waiting for the user's action, derived live; nothing is stored. */
-export const useNotifications = (role: "admin" | "member") => {
+export const useNotifications = (role: AccountClaims["role"]) => {
   const [items, setItems] = useState<PendingGradeEntry[]>([])
   const { pathname } = useLocation()
   useEffect(() => {

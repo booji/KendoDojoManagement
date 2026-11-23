@@ -3,6 +3,7 @@
 import { driver, type Driver } from "driver.js"
 import "driver.js/dist/driver.css"
 import "./tour.css"
+import type { AccountClaims } from "@/api/auth"
 import { markTourSeen } from "./tourSeen"
 
 type Step = {
@@ -120,7 +121,7 @@ const waitForTarget = async (name: string): Promise<void> => {
 
 let active: Driver | null = null
 
-export const startTour = (role: "member" | "admin", navigate: (path: string) => void): void => {
+export const startTour = (role: AccountClaims["role"], navigate: (path: string) => void): void => {
   if (active !== null) return
   const steps = role === "admin" ? ADMIN_STEPS : MEMBER_STEPS
 

@@ -1,9 +1,10 @@
 import { useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import type { AccountClaims } from "@/api/auth"
 import { isTourSeen } from "@/lib/tourSeen"
 
 type GuidedTourProps = {
-  role: "member" | "admin"
+  role: AccountClaims["role"]
   // Held back while another dialog is open, so the two never stack.
   paused: boolean
 }
