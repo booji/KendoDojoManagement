@@ -1,11 +1,19 @@
 """Syncing the bundled FIK affiliate list into the Federation catalogue (#613)."""
 
+import uuid
+
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.guards import REQUIRE_ADMIN
+from app.auth.models import AccountClaims
 from app.federations import fik_catalogue
 from app.federations.db_models import Federation
+from app.main import app
+from app.member_federations.repository import SqlMemberFederationRepository
+from app.members.repository import SqlMemberRepository
 
 
 def _record(key: str = "JP", **overrides) -> dict:
@@ -102,6 +110,43 @@ async def test_two_affiliates_can_swap_names_in_one_sync(
     assert rows["Federation KR"].source_key == "JP"
     assert rows["Federation JP"].source_key == "KR"
     assert rows["Federation KR"].id == ids["Federation JP"]
+
+
+async def test_a_deactivated_affiliate_still_shows_on_its_federation_memberships(
+    session: AsyncSession, db_client: AsyncSession
+) -> None:
+    await fik_catalogue.sync(session, [_record("JP"), _record("KR")])
+    kr = (await _rows(session))["Federation KR"]
+    member = await SqlMemberRepository(session).add(
+        {
+            "email": f"{uuid.uuid4().hex[:8]}@dojo.test",
+            "first_name": "Ai",
+            "surname": "Sato",
+            "join_date": "2026-01-01",
+            "membership_status": "active",
+        }
+    )
+    await SqlMemberFederationRepository(session).add(
+        {"member_id": member["id"], "federation_id": kr.id, "member_number": "K-1"}
+    )
+
+    await fik_catalogue.sync(session, [_record("JP")])
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
+        sub=str(uuid.uuid4()), email="a@dojo.test", role="admin"
+    )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test/api"
+        ) as client:
+            response = await client.get(f"/members/{member['id']}/federations")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert kr.is_active is False
+    assert response.status_code == 200
+    assert [(m["federation_id"], m["member_number"]) for m in response.json()] == [
+        (kr.id, "K-1")
+    ]
 
 
 async def test_admin_added_federations_are_untouched(session: AsyncSession) -> None:
