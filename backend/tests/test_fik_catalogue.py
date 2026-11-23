@@ -87,6 +87,23 @@ async def test_an_affiliate_dropped_from_the_list_is_deactivated_not_deleted(
     assert rows["Federation JP"].is_active is True
 
 
+async def test_two_affiliates_can_swap_names_in_one_sync(
+    session: AsyncSession,
+) -> None:
+    await fik_catalogue.sync(session, [_record("JP"), _record("KR")])
+    ids = {n: r.id for n, r in (await _rows(session)).items()}
+
+    await fik_catalogue.sync(
+        session,
+        [_record("JP", name="Federation KR"), _record("KR", name="Federation JP")],
+    )
+
+    rows = await _rows(session)
+    assert rows["Federation KR"].source_key == "JP"
+    assert rows["Federation JP"].source_key == "KR"
+    assert rows["Federation KR"].id == ids["Federation JP"]
+
+
 async def test_admin_added_federations_are_untouched(session: AsyncSession) -> None:
     session.add(Federation(name="Dojo League", abbreviation="DL", type="Other"))
     await session.flush()

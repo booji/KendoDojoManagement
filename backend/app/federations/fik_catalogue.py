@@ -109,6 +109,17 @@ async def sync(session: AsyncSession, records: list[dict[str, Any]]) -> None:
     for key, row in owned.items():
         if key not in wanted:
             row.is_active = False
+    # Park renamed rows on a unique placeholder first, so two affiliates can
+    # swap names without tripping uq_federations_name mid-update.
+    renamed = [
+        row
+        for record in records
+        if (row := owned.get(record["source_key"])) and row.name != record["name"]
+    ]
+    for row in renamed:
+        row.name = f"fik-sync-{row.id}"
+    if renamed:
+        await session.flush()
     for record in records:
         fields = {f: record[f] for f in FIELDS}
         row = owned.get(record["source_key"])
