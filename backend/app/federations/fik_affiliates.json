@@ -1,0 +1,538 @@
+[
+  {
+    "source_key": "ZA",
+    "name": "South African Kendo Federation",
+    "iso_code": "ZA",
+    "continental_grouping": "Africa",
+    "website": "https://www.sakf.co.za",
+    "type": "National"
+  },
+  {
+    "source_key": "TN",
+    "name": "Association Sportive de Kendo",
+    "iso_code": "TN",
+    "continental_grouping": "Africa",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "US",
+    "name": "All United States Kendo Federation",
+    "iso_code": "US",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.auskf.org/",
+    "type": "National"
+  },
+  {
+    "source_key": "US-HI",
+    "name": "Hawaii Kendo Federation",
+    "iso_code": "US-HI",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.hawaiikendofederation.org",
+    "type": "National"
+  },
+  {
+    "source_key": "CA",
+    "name": "Canadian Kendo Federation",
+    "iso_code": "CA",
+    "continental_grouping": "Pan-Am",
+    "website": "https://kendo-canada.com/",
+    "type": "National"
+  },
+  {
+    "source_key": "MX",
+    "name": "Mexican Kendo Federation",
+    "iso_code": "MX",
+    "continental_grouping": "Pan-Am",
+    "website": "https://m.facebook.com/KendoMexico/?tsid=0.9959344977247454&source=result.",
+    "type": "National"
+  },
+  {
+    "source_key": "BR",
+    "name": "Brazilian Kendo Confederation",
+    "iso_code": "BR",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.cbkendo.com.br",
+    "type": "National"
+  },
+  {
+    "source_key": "AR",
+    "name": "Federacion Argentina de Kendo",
+    "iso_code": "AR",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.kendoargentina.org",
+    "type": "National"
+  },
+  {
+    "source_key": "VE",
+    "name": "Federacion Venezolana de Kendo",
+    "iso_code": "VE",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.facebook.com/FVK.KENDO.IAIDO.JODO/",
+    "type": "National"
+  },
+  {
+    "source_key": "AW",
+    "name": "Kendo Aruba/Bun Bu Itchi",
+    "iso_code": "AW",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.facebook.com/kendoaruba",
+    "type": "Special Status"
+  },
+  {
+    "source_key": "CL",
+    "name": "Chilean Kendo Federation",
+    "iso_code": "CL",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.facebook.com/Federacion-Chilena-de-Kendo-302733993086777/",
+    "type": "National"
+  },
+  {
+    "source_key": "DO",
+    "name": "Federation Dominicana de Kendo",
+    "iso_code": "DO",
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.fedoken.org",
+    "type": "National"
+  },
+  {
+    "source_key": "EC",
+    "name": "Asociacion Ecuatoriana de Kendo",
+    "iso_code": "EC",
+    "continental_grouping": "Pan-Am",
+    "website": "https://kendoecuador.org",
+    "type": "National"
+  },
+  {
+    "source_key": "CO",
+    "name": "Asociacion Colombiana de Kendo",
+    "iso_code": "CO",
+    "continental_grouping": "Pan-Am",
+    "website": "https://kendocolombia.org/",
+    "type": "National"
+  },
+  {
+    "source_key": "PE",
+    "name": "Federacion Deportiva Nacional de Kendo del Peru – FDNKP",
+    "iso_code": "PE",
+    "continental_grouping": "Pan-Am",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "UY",
+    "name": "ASOCIACION URUGUAYA DE KENDO – IAIDO – AUKI",
+    "iso_code": "UY",
+    "continental_grouping": "Pan-Am",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "lakc",
+    "name": "Latin American Kendo Confederation",
+    "iso_code": null,
+    "continental_grouping": "Pan-Am",
+    "website": "https://www.clakendo.org",
+    "type": "Regional Body"
+  },
+  {
+    "source_key": "fik",
+    "name": "International Kendo Federation",
+    "iso_code": null,
+    "continental_grouping": "Global",
+    "website": "https://www.kendo-fik.org",
+    "type": "Global Body"
+  },
+  {
+    "source_key": "JP",
+    "name": "All Japan Kendo Federation",
+    "iso_code": "JP",
+    "continental_grouping": "Asia",
+    "website": "https://www.kendo.or.jp",
+    "type": "National"
+  },
+  {
+    "source_key": "KR",
+    "name": "Korea Kumdo Association",
+    "iso_code": "KR",
+    "continental_grouping": "Asia",
+    "website": "https://www.kumdo.org",
+    "type": "National"
+  },
+  {
+    "source_key": "TW",
+    "name": "Republic of China Kendo Association",
+    "iso_code": "TW",
+    "continental_grouping": "Asia",
+    "website": "https://www.rocka.org.tw",
+    "type": "National"
+  },
+  {
+    "source_key": "HK",
+    "name": "The Kendo Association of Hong Kong, China Limited",
+    "iso_code": "HK",
+    "continental_grouping": "Asia",
+    "website": "https://www.hongkongkendo.com/",
+    "type": "National"
+  },
+  {
+    "source_key": "MY",
+    "name": "Malaysia Kendo Association",
+    "iso_code": "MY",
+    "continental_grouping": "Asia",
+    "website": "https://malaysiakendo.org/",
+    "type": "National"
+  },
+  {
+    "source_key": "SG",
+    "name": "Singapore Kendo Club",
+    "iso_code": "SG",
+    "continental_grouping": "Asia",
+    "website": "https://singaporekendo.org/",
+    "type": "National"
+  },
+  {
+    "source_key": "TH",
+    "name": "Thailand Kendo Club",
+    "iso_code": "TH",
+    "continental_grouping": "Asia",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "MO",
+    "name": "China-Macao Kendo Associations Union",
+    "iso_code": "MO",
+    "continental_grouping": "Asia",
+    "website": "https://macaukendo.org",
+    "type": "Special Status"
+  },
+  {
+    "source_key": "CN",
+    "name": "CKOU",
+    "iso_code": "CN",
+    "continental_grouping": "Asia",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "ID",
+    "name": "Indonesia Kendo Association",
+    "iso_code": "ID",
+    "continental_grouping": "Asia",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "MN",
+    "name": "Mongolian Kendo Federation",
+    "iso_code": "MN",
+    "continental_grouping": "Asia",
+    "website": "https://kendo.mn",
+    "type": "National"
+  },
+  {
+    "source_key": "PH",
+    "name": "United Kendo Federation of the Philippines",
+    "iso_code": "PH",
+    "continental_grouping": "Asia",
+    "website": "https://www.kendo.ph/",
+    "type": "National"
+  },
+  {
+    "source_key": "AU",
+    "name": "Australian Kendo Renmei Incorporated",
+    "iso_code": "AU",
+    "continental_grouping": "Oceania",
+    "website": "https://www.kendoaustralia.asn.au",
+    "type": "National"
+  },
+  {
+    "source_key": "NZ",
+    "name": "New Zealand Kendo Federation",
+    "iso_code": "NZ",
+    "continental_grouping": "Oceania",
+    "website": "https://www.kendo.org.nz",
+    "type": "National"
+  },
+  {
+    "source_key": "ekf",
+    "name": "European Kendo Federation",
+    "iso_code": null,
+    "continental_grouping": "Europe",
+    "website": "https://www.ekf-eu.com",
+    "type": "Regional Body"
+  },
+  {
+    "source_key": "GB",
+    "name": "British Kendo Association",
+    "iso_code": "GB",
+    "continental_grouping": "Europe",
+    "website": "https://www.britishkendoassociation.com",
+    "type": "National"
+  },
+  {
+    "source_key": "FR",
+    "name": "Comite National de Kendo/FFJDA",
+    "iso_code": "FR",
+    "continental_grouping": "Europe",
+    "website": "https://www.cnkendo-dr.com",
+    "type": "National"
+  },
+  {
+    "source_key": "SE",
+    "name": "Swedish Kendo Federation",
+    "iso_code": "SE",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendoforbundet.se",
+    "type": "National"
+  },
+  {
+    "source_key": "BE",
+    "name": "All Belgium Kendo Federation",
+    "iso_code": "BE",
+    "continental_grouping": "Europe",
+    "website": "https://www.abkfevents.be",
+    "type": "National"
+  },
+  {
+    "source_key": "NL",
+    "name": "Nederlandse Kendo Renmei",
+    "iso_code": "NL",
+    "continental_grouping": "Europe",
+    "website": "https://www.nkr.nl",
+    "type": "National"
+  },
+  {
+    "source_key": "CH",
+    "name": "Swiss Kendo and Iaido, SKI",
+    "iso_code": "CH",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.ch",
+    "type": "National"
+  },
+  {
+    "source_key": "DE",
+    "name": "Deutscher Kendobund e. V. (DKenB)",
+    "iso_code": "DE",
+    "continental_grouping": "Europe",
+    "website": "https://www.dkenb.de",
+    "type": "National"
+  },
+  {
+    "source_key": "ES",
+    "name": "Royal Spanish Judo and Associated Sports Federation",
+    "iso_code": "ES",
+    "continental_grouping": "Europe",
+    "website": "https://www.rfejudo.com",
+    "type": "National"
+  },
+  {
+    "source_key": "AT",
+    "name": "Austrian Kendo Association",
+    "iso_code": "AT",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo-austria.at",
+    "type": "National"
+  },
+  {
+    "source_key": "NO",
+    "name": "Norwegian Kendo Committee -Norweigan Martial Arts Federation",
+    "iso_code": "NO",
+    "continental_grouping": "Europe",
+    "website": "https://www.kampsport.no",
+    "type": "National"
+  },
+  {
+    "source_key": "DK",
+    "name": "Danish Kendo Federation",
+    "iso_code": "DK",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo-dkf.dk",
+    "type": "National"
+  },
+  {
+    "source_key": "FI",
+    "name": "Finnish Kendo Association",
+    "iso_code": "FI",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendoliitto.fi",
+    "type": "National"
+  },
+  {
+    "source_key": "IT",
+    "name": "Confederazione Italiana Kendo",
+    "iso_code": "IT",
+    "continental_grouping": "Europe",
+    "website": "https://www.confederazioneitalianakendo.it",
+    "type": "National"
+  },
+  {
+    "source_key": "HU",
+    "name": "Hungarian Kendo, Iaido & Jodo Federation",
+    "iso_code": "HU",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.hu",
+    "type": "National"
+  },
+  {
+    "source_key": "PL",
+    "name": "Polish Kendo Federation",
+    "iso_code": "PL",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.pl",
+    "type": "National"
+  },
+  {
+    "source_key": "RS",
+    "name": "Serbian Kendo Federation",
+    "iso_code": "RS",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.rs",
+    "type": "National"
+  },
+  {
+    "source_key": "CZ",
+    "name": "Czech Kendo Federation",
+    "iso_code": "CZ",
+    "continental_grouping": "Europe",
+    "website": "https://www.czech-kendo.cz",
+    "type": "National"
+  },
+  {
+    "source_key": "RO",
+    "name": "The Romanian Kendo Department, Federation of Contact Martial Arts",
+    "iso_code": "RO",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo-romania.ro",
+    "type": "National"
+  },
+  {
+    "source_key": "LU",
+    "name": "Shobukai Kendo Luxembourg",
+    "iso_code": "LU",
+    "continental_grouping": "Europe",
+    "website": "https://www.shobukai.lu",
+    "type": "National"
+  },
+  {
+    "source_key": "RU",
+    "name": "Russian Kendo Federation",
+    "iso_code": "RU",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo-russia.ru",
+    "type": "National"
+  },
+  {
+    "source_key": "PT",
+    "name": "Federação Portuguesa de Kendo – FPKIJ",
+    "iso_code": "PT",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.pt",
+    "type": "National"
+  },
+  {
+    "source_key": "IE",
+    "name": "Kendo na h-Eireann",
+    "iso_code": "IE",
+    "continental_grouping": "Europe",
+    "website": "https://www.irishkendofederation.org",
+    "type": "National"
+  },
+  {
+    "source_key": "BG",
+    "name": "Bulgarian Kendo Federation",
+    "iso_code": "BG",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.bg",
+    "type": "National"
+  },
+  {
+    "source_key": "GR",
+    "name": "Hellenic Kendo Iaido Naginata Federation",
+    "iso_code": "GR",
+    "continental_grouping": "Europe",
+    "website": "https://WWW.eokin.gr",
+    "type": "National"
+  },
+  {
+    "source_key": "IL",
+    "name": "Israel Kendo & Budo Federation",
+    "iso_code": "IL",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "ME",
+    "name": "Montenegrin Kendo Federation",
+    "iso_code": "ME",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "LV",
+    "name": "Latvian Kendo Federation",
+    "iso_code": "LV",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "LT",
+    "name": "Lithuanian Kendo Association",
+    "iso_code": "LT",
+    "continental_grouping": "Europe",
+    "website": "https://lka.kendo.lt/",
+    "type": "National"
+  },
+  {
+    "source_key": "HR",
+    "name": "Croatian Kendo Association",
+    "iso_code": "HR",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.hr",
+    "type": "National"
+  },
+  {
+    "source_key": "SI",
+    "name": "Kendo zveza Slovenije/Kendo Federation of Slovenia",
+    "iso_code": "SI",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo-zveza.si",
+    "type": "National"
+  },
+  {
+    "source_key": "TR",
+    "name": "Turkish Kendo Association",
+    "iso_code": "TR",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "MT",
+    "name": "Maltese Kendo Federation",
+    "iso_code": "MT",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  },
+  {
+    "source_key": "MK",
+    "name": "Macedonian Kendo – Iaido Federation",
+    "iso_code": "MK",
+    "continental_grouping": "Europe",
+    "website": "https://www.kendo.mk",
+    "type": "National"
+  },
+  {
+    "source_key": "UA",
+    "name": "Ukrainian Kendo Federation",
+    "iso_code": "UA",
+    "continental_grouping": "Europe",
+    "website": null,
+    "type": "National"
+  }
+]
