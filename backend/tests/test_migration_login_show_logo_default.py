@@ -7,7 +7,7 @@ import uuid
 
 from tests.migration_support import sql, upgrade
 
-_BEFORE = "a7b8c9d0e1f3"
+_BEFORE = "b1c2d3e4f5a6"
 _AFTER = "b8c9d0e1f2a4"
 
 
