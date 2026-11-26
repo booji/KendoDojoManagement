@@ -1796,10 +1796,22 @@ after.</p>
    subheadings, or write "None" there. On a new Release line, also link the
    upgrading section.</p>
 </li>
-<li>Merge <code>main</code> back into <code>develop</code> with a PR (merge commit), so the release
-   branch's commits reach <code>develop</code>.</li>
-<li>Delete <code>release/X.Y.Z</code>.</li>
+<li>
+<p>Merge <code>main</code> back into <code>develop</code> with a PR (merge commit), so the release
+   branch's commits reach <code>develop</code>. Open it from a copy of <code>main</code>, so the
+   repository's "automatically delete head branches" setting removes the copy
+   on merge:</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>origin/main:refs/heads/chore/backmerge-X.Y.Z
+gh<span class="w"> </span>pr<span class="w"> </span>create<span class="w"> </span>--base<span class="w"> </span>develop<span class="w"> </span>--head<span class="w"> </span>chore/backmerge-X.Y.Z
+</code></pre></div>
+</li>
 </ol>
+<p>A back-merge from the release branch during the rc phase works the same
+   way, from a copy of <code>release/X.Y.Z</code>.
+5. Delete <code>release/X.Y.Z</code> by hand, with <code>git push origin --delete
+   release/X.Y.Z</code>. The ruleset blocks deletion of release branches, so
+   auto-delete skips the branch after the merge in step 1. The maintainer's
+   bypass allows this deletion.</p>
 <h2 id="hotfix">Hotfix<a class="headerlink" href="#hotfix" title="Permanent link">&para;</a></h2>
 <p>A fix that cannot wait for <code>develop</code>, usually a security fix:</p>
 <ol>
