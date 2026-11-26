@@ -164,8 +164,10 @@ def test_backend_workflow_runs_on_pull_requests():
     PR into develop only gets CI from a pull_request trigger (#549)."""
     triggers = _load(BACKEND_WORKFLOW)[True]
     assert "pull_request" in triggers, triggers
-    paths_ignore = (triggers["pull_request"] or {}).get("paths-ignore", [])
-    assert "**.md" in paths_ignore and "docs/**" in paths_ignore, paths_ignore
+    # It is a required check on develop and main (#553): a path filter that
+    # skips it leaves the check unreported, so a docs-only PR could never merge.
+    pr_trigger = triggers["pull_request"] or {}
+    assert "paths" not in pr_trigger and "paths-ignore" not in pr_trigger, pr_trigger
 
 
 def test_full_suite_workflow_runs_on_release_candidates_and_prs_into_main():

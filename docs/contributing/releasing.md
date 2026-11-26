@@ -157,8 +157,21 @@ A fix found here goes on the release branch, and the next rc is `-rc2`.
    subheadings, or write "None" there. On a new Release line, also link the
    upgrading section.
 4. Merge `main` back into `develop` with a PR (merge commit), so the release
-   branch's commits reach `develop`.
-5. Delete `release/X.Y.Z`.
+   branch's commits reach `develop`. Open it from a copy of `main`, so the
+   repository's "automatically delete head branches" setting removes the copy
+   on merge:
+
+    ```bash
+    git push origin origin/main:refs/heads/chore/backmerge-X.Y.Z
+    gh pr create --base develop --head chore/backmerge-X.Y.Z
+    ```
+
+   A back-merge from the release branch during the rc phase works the same
+   way, from a copy of `release/X.Y.Z`.
+5. Delete `release/X.Y.Z` by hand, with `git push origin --delete
+   release/X.Y.Z`. The ruleset blocks deletion of release branches, so
+   auto-delete skips the branch after the merge in step 1. The maintainer's
+   bypass allows this deletion.
 
 ## Hotfix
 

@@ -13,6 +13,23 @@ and pull request rules.
 - Feature pull requests are squash-merged, so the pull request title becomes
   the commit on `develop`.
 
+### What GitHub enforces
+
+Repository rulesets (#553) back these rules. A push the rules refuse fails
+with `GH013: Repository rule violations`.
+
+| Ref | Rules | Who can bypass |
+|---|---|---|
+| `develop` | Changes land only through a pull request, merged by squash or merge commit. `Backend suite (pytest, no e2e)` and `Frontend checks (eslint, tsc, vitest)` must pass. No force push, no deletion. | nobody |
+| `main` | Changes land only through a pull request, merged with a merge commit. The two checks above, plus `Full suite (pytest + Playwright)`, must pass. No force push, no deletion. | nobody |
+| `release/*`, `hotfix/*` | Changes land through a pull request. No force push, no deletion. | the maintainer |
+| `v*` tags | Only the maintainer creates, moves or deletes one. | the maintainer |
+
+Every change, the maintainer's included, reaches `develop` or `main` as a
+green pull request. No approval count is required: only accounts with write
+access can merge, and a first-time contributor's fork PR runs its checks only
+after the maintainer approves it.
+
 ## Pull request titles
 
 Use a [Conventional Commits](https://www.conventionalcommits.org/) title:
