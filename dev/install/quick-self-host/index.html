@@ -1555,7 +1555,8 @@ use <code>podman-compose down</code> to keep the stack stopped.</p>
 that otherwise surface as a browser error or a certificate that never arrives:
 placeholder domains, emails or secrets left in <code>.env</code>, <code>kendo-app.env</code> or the Traefik files, a
 Traefik <code>Host()</code> rule that no longer matches <code>WEBAUTHN_RP_ID</code>, TLS skipped or a
-bring-your-own certificate not in place, the domain not resolving to this host,
+bring-your-own certificate not in place, on an SELinux host a bind mount in
+<code>docker-compose.yml</code> with no <code>z</code> relabel, the domain not resolving to this host,
 something else already on 80/443, and the five host prerequisites. Each <code>FAIL</code>
 names its fix; it changes nothing and exits non-zero on any <code>FAIL</code>. A <code>warn</code>
 is something it cannot decide from here — DNS pointing at a router's public
