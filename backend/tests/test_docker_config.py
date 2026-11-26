@@ -19,6 +19,7 @@ from tests.deploy_contract import (
     RELEASE_PIN,
     SECRETS,
     container_env,
+    names_a_registry,
     read_env_file,
 )
 
@@ -769,6 +770,28 @@ def test_compose_runs_the_published_image_and_never_builds(service: str):
     spec = load_compose()["services"][service]
     assert "build" not in spec, spec
     assert spec["image"] == f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", spec["image"]
+
+
+@pytest.mark.parametrize(
+    "image, qualified",
+    [
+        ("postgres:16-alpine", False),
+        ("library/postgres:16-alpine", False),
+        ("${KENDO_IMAGE:-kendodojo:latest}", False),
+        ("docker.io/library/postgres:16-alpine", True),
+        ("localhost/kendodojo:latest", True),
+        (f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", True),
+    ],
+)
+def test_names_a_registry_rejects_short_names(image: str, qualified: bool):
+    assert names_a_registry(image) is qualified
+
+
+def test_every_compose_image_names_its_registry():
+    """A short name resolves through the host's search registries, and on
+    RHEL-family hosts that is registry.access.redhat.com first (#634)."""
+    images = {name: spec["image"] for name, spec in load_compose()["services"].items()}
+    assert all(names_a_registry(i) for i in images.values()), images
 
 
 def test_env_example_pins_the_same_image_as_the_compose_default():
