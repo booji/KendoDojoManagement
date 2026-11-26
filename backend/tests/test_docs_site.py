@@ -10,11 +10,20 @@ Everything here inspects files on disk — no MkDocs, no GitHub API.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
+
+from tests.deploy_contract import (
+    COMPOSE_IMAGE_PIN,
+    DEPLOYMENT_FILES,
+    IMAGE_PIN_UNITS,
+    PUBLISHED_IMAGE,
+    RELEASE_PIN,
+)
 
 ROOT = (
     Path(os.environ["REPO_ROOT"])
@@ -52,10 +61,16 @@ def _version_for(ref: str, tmp_path: Path) -> str:
     [
         ("refs/tags/v1.4.0", "1.x"),
         ("refs/tags/v2.0.0", "2.x"),
-        ("refs/heads/main", "dev"),
+        # Before 1.0 the image pin is :0.Y (ADR-0009), so the docs are too.
+        ("refs/tags/v0.3.1", "0.3.x"),
+        ("refs/tags/v0.1.0", "0.1.x"),
+        # dev tracks the integration branch; main only moves on a release.
+        ("refs/heads/develop", "dev"),
+        ("refs/heads/main", ""),
         # A release candidate's image gets only its exact tag, never :1 — so
         # there is no 1.x for its docs to update either.
         ("refs/tags/v1.0.0-rc1", ""),
+        ("refs/tags/v0.1.0-rc1", ""),
     ],
 )
 def test_each_ref_publishes_the_docs_version_its_image_tag_implies(
@@ -73,6 +88,17 @@ def test_a_pull_request_builds_strict_and_never_deploys():
             assert "github.event_name == 'push'" in job.get("if", ""), name
 
 
+def test_dev_docs_publish_from_develop():
+    workflow = _workflow()
+    assert workflow[True]["push"]["branches"] == ["develop"]
+    [deploy] = [
+        job
+        for job in workflow["jobs"].values()
+        if any("mike" in s.get("run", "") for s in job["steps"])
+    ]
+    assert "refs/heads/main" not in deploy["if"], deploy["if"]
+
+
 def _nav_pages(nav) -> list[str]:
     if isinstance(nav, str):
         return [nav]
@@ -87,3 +113,96 @@ def test_every_page_in_the_nav_exists():
     assert pages
     missing = [p for p in pages if not (ROOT / "docs" / p).is_file()]
     assert not missing, missing
+
+
+def test_operator_docs_name_only_the_current_pin():
+    """Every page names the pin the bundle does: a new Release line moves it
+    everywhere at once, so the docs published for each line show that line's
+    pin (ADR-0009)."""
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    pins = {
+        (page.relative_to(ROOT).as_posix(), f"{PUBLISHED_IMAGE}:{tag}")
+        for page in pages
+        for tag in re.findall(
+            rf"{re.escape(PUBLISHED_IMAGE)}:([\w.-]+)", page.read_text()
+        )
+    }
+    assert pins
+    assert {pin for _, pin in pins} == {RELEASE_PIN}, sorted(pins)
+
+
+def test_every_machinectl_shell_names_the_shell_to_run():
+    """`kendo` logs in to /usr/sbin/nologin, on purpose, and `machinectl shell`
+    starts the login shell unless told otherwise: a bare `machinectl shell
+    kendo@` ends at once with "This account is currently not available" (#576).
+    """
+    sources = [ROOT / "README.md", ROOT / "setup.sh", *(ROOT / "docs").rglob("*.md")]
+    bare = [
+        (src.relative_to(ROOT).as_posix(), line.strip())
+        for src in sources
+        for line in src.read_text().splitlines()
+        if re.search(r"machinectl shell kendo@(?! /bin/bash)", line)
+    ]
+    assert not bare, bare
+
+
+def test_every_deployment_file_change_asks_for_an_operator_action():
+    """No upgrade step overwrites a deployment file (#604), so a change to one
+    reaches a host only through the Operator action its PR writes, breaking
+    or not. The rule names every such file, where a contributor reads it."""
+    for page in (ROOT / "CONTRIBUTING.md", ROOT / ".github/pull_request_template.md"):
+        text = page.read_text()
+        assert "Operator action" in text, page
+        missing = [f for f in DEPLOYMENT_FILES if f"`{f}`" not in text]
+        assert not missing, (page, missing)
+
+
+def test_releasing_collects_operator_actions_for_every_release():
+    """Not only the `breaking` ones: a non-breaking unit change is still one
+    no upgrade step delivers (#604)."""
+    text = (ROOT / "docs/contributing/releasing.md").read_text().replace("\n", " ")
+    assert "**Operator action** section of every PR in the release" in text
+    assert "--label breaking" in text  # the version bump still reads it
+
+
+def test_releasing_lists_the_prs_that_changed_any_deployment_file():
+    """The `git log -- <paths>` that finds the PRs owing an Operator action
+    covers every deployment file, or one slips out of the notes (#604)."""
+    text = (ROOT / "docs/contributing/releasing.md").read_text()
+    log = re.search(r"git log --oneline origin/main\.\.HEAD -- ([^\n]*)", text)
+    assert log, "no git log over the deployment files"
+    paths = log.group(1).split()
+    missed = [
+        f
+        for f in DEPLOYMENT_FILES
+        if not any(f == p or f.startswith(f"{p}/") for p in paths)
+    ]
+    assert not missed, missed
+
+
+def test_an_rc_is_rehearsed_by_editing_the_image_pin():
+    """An rc image publishes only its exact tag, never :0.1 (#604), so the
+    rehearsal pins it where an operator would, and rolls back the same way."""
+    for page in ("docs/contributing/releasing.md", "docs/install/upgrading.md"):
+        text = (ROOT / page).read_text()
+        missing = [u for u in [*IMAGE_PIN_UNITS, COMPOSE_IMAGE_PIN] if u not in text]
+        assert not missing, (page, missing)
+    assert "podman tag" not in (ROOT / "docs/contributing/releasing.md").read_text()
+
+
+def test_no_step_reads_the_journal_as_kendo():
+    """`kendo` cannot read its own journal on a default AlmaLinux/RHEL host:
+    without persistent storage there is no per-user journal file, and the
+    system journal is readable only by root and the `systemd-journal`/`adm`/
+    `wheel` groups. `journalctl --user ...` as `kendo` prints "No journal files
+    were opened due to insufficient permissions" (#605). Read it from the
+    admin account, by `kendo`'s UID: `--user-unit` under sudo would match
+    root's UID instead."""
+    sources = [ROOT / "README.md", ROOT / "setup.sh", *(ROOT / "docs").rglob("*.md")]
+    as_kendo = [
+        (src.relative_to(ROOT).as_posix(), line.strip())
+        for src in sources
+        for line in src.read_text().splitlines()
+        if re.search(r"journalctl\b(?![^`\"]*_UID=)[^`\"]*--user", line)
+    ]
+    assert not as_kendo, as_kendo

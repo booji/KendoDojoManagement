@@ -50,9 +50,10 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<your-domain>/api/setup
 # a closed window; fix the request and re-run before you believe it.
 ```
 
-The claimed guard counts *passkey credentials*, not users: an abandoned
-ceremony leaves a user row with no credential and deliberately does **not**
-count, so an operator whose browser died mid-ceremony is never locked out.
+The instance is claimed once an Admin Account exists, and stays claimed even
+if that Admin later deletes every passkey. An abandoned ceremony leaves only a
+member Account, which does **not** count, so an operator whose browser died
+mid-ceremony is never locked out.
 
 **Lost the token?** Rotate it — nothing in the database has to change:
 

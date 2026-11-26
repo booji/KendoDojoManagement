@@ -323,7 +323,8 @@ async def test_prepare_database_produces_head_schema_from_legacy_populated_datab
                     "INSERT INTO federations (id, name, is_pinned, is_active) "
                     "VALUES (:id, :name, false, true)"
                 ),
-                {"id": federation_id, "name": "European Kendo Federation"},
+                # Not a FIK affiliate's name: the sync would refuse it (#613).
+                {"id": federation_id, "name": "Regional Kendo League"},
             )
 
         await prepare_database(
@@ -340,6 +341,6 @@ async def test_prepare_database_produces_head_schema_from_legacy_populated_datab
             )
             row = result.first()
         assert row is not None, "prepare_database lost existing data"
-        assert row[0] == "European Kendo Federation"
+        assert row[0] == "Regional Kendo League"
     finally:
         await engine.dispose()

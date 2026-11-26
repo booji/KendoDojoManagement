@@ -1,8 +1,6 @@
-import os
 import uuid
 from typing import Annotated, Any, Literal
 
-import bcrypt
 from fastapi import (
     APIRouter,
     Cookie,
@@ -13,8 +11,9 @@ from fastapi import (
     Response,
     status,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from app import config
 from app.auth.accounts import (
     account_for_email,
     account_for_member,
@@ -79,13 +78,14 @@ from app.auth.recovery_repository import (
     AbstractRecoveryRepository,
 )
 from app.auth.recovery_service import (
+    MAX_SECRET_BYTES,
     admin_token_expiry,
-    check_admin_token,
     generate_admin_token_plaintext,
     generate_recovery_codes,
     hash_admin_token,
     hash_codes,
     is_admin_token_valid,
+    match_secret,
 )
 from app.auth.session_cookie import (
     clear_session_cookie,
@@ -98,8 +98,6 @@ from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-_ALLOW_TEST_AUTH = os.getenv("ALLOW_TEST_AUTH", "false").lower() == "true"
 
 
 @router.post("/logout", status_code=200)
@@ -279,29 +277,31 @@ async def list_passkeys(
 
 @router.patch("/passkeys/{passkey_id}")
 async def update_passkey_label(
-    passkey_id: str,
+    passkey_id: uuid.UUID,
     payload: _LabelUpdate,
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
-    record = await repo.get(passkey_id)
+    record = await repo.get(str(passkey_id))
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = await repo.update_label(passkey_id, claims.sub, payload.label)
+    updated = await repo.update_label(str(passkey_id), claims.sub, payload.label)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await uow.commit()
-    return _passkey_to_response(updated)  # type: ignore[arg-type]
+    return _passkey_to_response(updated)
 
 
 @router.delete("/passkeys/{passkey_id}", status_code=204)
 async def delete_passkey(
-    passkey_id: str,
+    passkey_id: uuid.UUID,
     claims: Annotated[AccountClaims, Depends(REQUIRE_MEMBER)],
     repo: Annotated[AbstractPasskeyRepository, Depends(get_passkey_repo)],
     recovery_repo: Annotated[AbstractRecoveryRepository, Depends(get_recovery_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> None:
-    record = await repo.get(passkey_id)
+    record = await repo.get(str(passkey_id))
     if record is None or record["user_id"] != claims.sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     count = await repo.count_for_user(claims.sub)
@@ -313,7 +313,7 @@ async def delete_passkey(
                 detail="Cannot delete your only passkey without recovery codes",
             )
     # The Auth Sessions this passkey signed in go with it (FK cascade).
-    await repo.delete(passkey_id, claims.sub)
+    await repo.delete(str(passkey_id), claims.sub)
     await uow.commit()
     log_security_event("passkey_deleted", "success", user_id=claims.sub)
 
@@ -330,7 +330,7 @@ async def generate_codes(
             detail="Recovery codes already exist. Use regenerate to replace them.",
         )
     codes = generate_recovery_codes()
-    hashes = hash_codes(codes)
+    hashes = await hash_codes(codes)
     set_id = str(uuid.uuid4())
     await recovery_repo.create_codes(claims.sub, hashes, set_id)
     await uow.commit()
@@ -345,7 +345,7 @@ async def regenerate_codes(
 ) -> dict[str, Any]:
     await recovery_repo.invalidate_all(claims.sub)
     codes = generate_recovery_codes()
-    hashes = hash_codes(codes)
+    hashes = await hash_codes(codes)
     set_id = str(uuid.uuid4())
     await recovery_repo.create_codes(claims.sub, hashes, set_id)
     await uow.commit()
@@ -364,7 +364,14 @@ async def recovery_codes_status(
 
 class _RedeemRequest(BaseModel):
     email: LenientEmail
-    code: str = Field(..., min_length=1, max_length=128)
+    code: str = Field(..., min_length=1)
+
+    @field_validator("code")
+    @classmethod
+    def _fits_bcrypt(cls, code: str) -> str:
+        if len(code.encode()) > MAX_SECRET_BYTES:
+            raise ValueError(f"code must be at most {MAX_SECRET_BYTES} bytes")
+        return code
 
 
 @router.post("/recovery/redeem", status_code=200)
@@ -385,52 +392,42 @@ async def redeem_recovery_code(
     ip = client_ip(request)
 
     user = await account_for_email(uow.session, payload.email)
-    if user is None or not await may_sign_in(uow.session, user.id):
+    if user is not None and not await may_sign_in(uow.session, user.id):
+        user = None
+    # An unknown or barred email has nothing to check, and a locked-out
+    # Account only its live admin tokens -- too long to guess, so nothing a
+    # lockout guards (#580) -- but each checks the code all the same: it
+    # costs and answers as a bad code does, so none of them says the email
+    # has an Account (#588).
+    locked = user is not None and await attempt_repo.is_locked_out(user.id)
+    codes: list[dict[str, Any]] = []
+    admin_tokens: list[dict[str, Any]] = []
+    if user is not None:
+        admin_tokens = await admin_token_repo.get_live_admin_tokens_for_account(user.id)
+    if user is not None and not locked:
+        codes = await recovery_repo.get_unused_codes_with_hash(user.id)
+    match = await match_secret(payload.code, codes, admin_tokens)
+
+    if user is None or (locked and match is None):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    failures = await attempt_repo.count_failures_since_last_success(user.id)
-    if failures >= 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
-
-    # Try recovery codes first
-    codes = await recovery_repo.get_unused_codes_with_hash(user.id)
-    matched_id: str | None = None
-    for record in codes:
-        if bcrypt.checkpw(payload.code.encode(), record["code_hash"].encode()):
-            matched_id = record["id"]
-            break
-
-    if matched_id is not None:
-        await recovery_repo.mark_used(matched_id)
-        await attempt_repo.log_attempt(user.id, ip, success=True)
-        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
+    # No match: kind None falls through to the failure branch, never reading record.
+    kind, record = match or (None, {})
+    if kind == "code":
+        await recovery_repo.mark_used(record["id"])
+    elif kind == "admin_token" and is_admin_token_valid(record):
+        await admin_token_repo.mark_admin_token_used(record["id"])
+    else:
+        await attempt_repo.log_attempt(user.id, ip, success=False)
         await uow.commit()
-        log_security_event("recovery_redeem", "success", user_id=user.id)
-        return {"access_token": token, "token_type": "bearer"}
+        log_security_event("recovery_redeem", "failure", user_id=user.id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    # Try admin tokens
-    admin_tokens = await admin_token_repo.get_unused_admin_tokens_for_user(user.id)
-    matched_admin_id: str | None = None
-    for record in admin_tokens:
-        if check_admin_token(payload.code, record["token_hash"]):
-            if is_admin_token_valid(record):
-                matched_admin_id = record["id"]
-            break
-
-    if matched_admin_id is not None:
-        await admin_token_repo.mark_admin_token_used(matched_admin_id)
-        await attempt_repo.log_attempt(user.id, ip, success=True)
-        token = await start_auth_session(auth_sessions, user.id, kind="recovery")
-        await uow.commit()
-        log_security_event("recovery_redeem", "success", user_id=user.id)
-        return {"access_token": token, "token_type": "bearer"}
-
-    await attempt_repo.log_attempt(user.id, ip, success=False)
+    await attempt_repo.log_attempt(user.id, ip, success=True)
+    token = await start_auth_session(auth_sessions, user.id, kind="recovery")
     await uow.commit()
-    log_security_event("recovery_redeem", "failure", user_id=user.id)
-    if failures + 1 >= 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS)
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    log_security_event("recovery_redeem", "success", user_id=user.id)
+    return {"access_token": token, "token_type": "bearer"}
 
 
 class _AdminTokenRequest(BaseModel):
@@ -473,7 +470,7 @@ async def generate_admin_token(
         )
 
     plaintext = generate_admin_token_plaintext()
-    token_hash = hash_admin_token(plaintext)
+    token_hash = await hash_admin_token(plaintext)
     expires_at = admin_token_expiry()
 
     await admin_token_repo.create_admin_token(
@@ -524,18 +521,20 @@ async def list_invites_route(
 
 @router.post("/admin/invites/{invite_id}/revoke")
 async def revoke_invite_route(
-    invite_id: str,
+    invite_id: uuid.UUID,
     claims: Annotated[AccountClaims, Depends(REQUIRE_ADMIN)],
     repo: Annotated[AbstractInviteRepository, Depends(get_invite_repo)],
     uow: Annotated[AbstractUnitOfWork, Depends(get_uow)],
 ) -> dict[str, Any]:
-    existing = await repo.get(invite_id)
+    existing = await repo.get(str(invite_id))
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = await repo.mark_revoked(invite_id)
+    updated = await repo.mark_revoked(str(invite_id))
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await uow.commit()
     log_security_event("invite_revoked", "success", user_id=claims.sub)
-    return {"id": updated["id"], "status": invite_status(updated)}  # type: ignore[index]
+    return {"id": updated["id"], "status": invite_status(updated)}
 
 
 @router.post("/invites/redeem/begin")
@@ -570,7 +569,7 @@ async def invite_redeem_complete_route(
 # future refactor of the handler body can turn it back into an auth bypass.
 # ---------------------------------------------------------------------------
 
-if _ALLOW_TEST_AUTH:
+if config.ALLOW_TEST_AUTH:
 
     class _TestLoginRequest(BaseModel):
         email: LenientEmail

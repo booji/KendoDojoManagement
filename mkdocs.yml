@@ -1,6 +1,6 @@
 # The docs site (#415): MkDocs Material, built by .github/workflows/docs.yml and
-# served on GitHub Pages, one version per major image tag via mike — an
-# operator on :1 reads the 1.x docs. The pages are the files in docs/, so docs
+# served on GitHub Pages, one version per Release line via mike — an
+# operator on :0.1 reads the 0.1.x docs (ADR-0009). The pages are the files in docs/, so docs
 # stay reviewable in the same PR as the code they describe.
 #
 # Its pins are backend/pyproject.toml's `docs` dependency group:
@@ -11,7 +11,7 @@ site_description: Self-hosted member, session and attendance management for a ke
 site_url: https://booji.github.io/KendoDojoManagement/
 repo_url: https://github.com/booji/KendoDojoManagement
 repo_name: booji/KendoDojoManagement
-edit_uri: edit/main/docs/
+edit_uri: edit/develop/docs/
 
 # Grouped by task rather than by audience: an operator should not need to know
 # the word "contributor" to find Install.
@@ -40,11 +40,14 @@ nav:
           - adr/0005-session-templates-and-instances-stay-separate-tables.md
           - adr/0006-accounts-and-members-stay-separate-tables.md
           - adr/0007-the-app-connects-as-a-least-privilege-database-user.md
+          - adr/0008-auth-sessions-are-opaque-server-side-rows.md
+          - adr/0009-pre-1-0-releases-pin-by-minor.md
   - Contributing:
       - Dev stack: contributing/dev-stack.md
       - Make targets: contributing/make-targets.md
       - Running tests: contributing/tests.md
       - TDD workflow: contributing/tdd.md
+      - Releasing: contributing/releasing.md
 
 # Strict builds (CI) fail on a link to a missing page or heading, not only on
 # a missing page: a moved section is the common way docs rot.

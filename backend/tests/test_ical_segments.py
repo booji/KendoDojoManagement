@@ -145,7 +145,9 @@ def test_description_contains_per_segment_breakdown_then_info() -> None:
     sessions = [_segmented_session()]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     assert "09:00" in description_line
     assert "10:00" in description_line
@@ -171,7 +173,9 @@ def test_description_segment_breakdown_uses_time_range_and_comma_joined_types() 
     ]
     result = build_ical(sessions)
     description_line = next(
-        line for line in result.split("\r\n") if line.startswith("DESCRIPTION:")
+        line
+        for line in result.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
     )
     assert "09:00" in description_line and "10:00" in description_line
     # RFC 5545 escapes the comma in the joined type list to "\,"; clients

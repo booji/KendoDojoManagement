@@ -23,6 +23,13 @@ export const getDojoSettings = async (): Promise<DojoSettings> => {
   return request<DojoSettings>("/api/settings/dojo", { errorMessage: "Failed to fetch dojo settings" })
 }
 
+// Admin-only: the Version the server is running, `dev` outside a release (#556).
+export type ServerVersion = { version: string }
+
+export const getVersion = async (): Promise<ServerVersion> => {
+  return request<ServerVersion>("/api/settings/version", { errorMessage: "Failed to fetch version" })
+}
+
 export const getBranding = async (): Promise<DojoBranding> => {
   return request<DojoBranding>("/api/settings/branding", { errorMessage: "Failed to fetch branding" })
 }

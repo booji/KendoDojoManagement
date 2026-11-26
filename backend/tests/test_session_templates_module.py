@@ -109,7 +109,16 @@ async def test_rescheduling_leaves_an_edited_instance_on_a_covered_date_alone() 
 
 async def test_rescheduling_onto_another_weekday_moves_the_instances() -> None:
     template_repo, instance_repo = _repos()
-    template = await templates.create(_template_data(), template_repo, instance_repo)
+    # Next Monday: only today onwards is reconciled (#578).
+    start = date.today() + timedelta(days=7 - date.today().weekday())
+    template = await templates.create(
+        _template_data(
+            start_date=start.isoformat(),
+            end_date=(start + timedelta(weeks=4)).isoformat(),
+        ),
+        template_repo,
+        instance_repo,
+    )
 
     await templates.reschedule(
         template["id"], {"recurrence_days": [2]}, template_repo, instance_repo

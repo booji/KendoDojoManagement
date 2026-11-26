@@ -1,19 +1,21 @@
 name: Backend tests
 
-# The full suite (see tests.yml) is ~15 minutes, almost all of it Playwright,
-# and this repository is private so Actions minutes are metered. This is the
-# fast half — no frontend install, no Vite, no browsers — cheap enough to run
-# on every push, which is where most regressions are caught. It is advisory:
-# no branch protection depends on it (#336).
+# The full suite (see tests.yml) is ~15 minutes, almost all of it Playwright.
+# This is the fast half — no frontend install, no Vite, no browsers — cheap
+# enough to run on every push and pull request, which is where most regressions
+# are caught (#336). It is the required check on develop (#548).
 on:
   push:
     # Branches only. Without this, a `v*-rc*` tag push would fire this job as
     # well as the full suite in tests.yml and bill for both.
     branches:
       - '**'
-    paths-ignore:
+    paths-ignore: &paths-ignore
       - '**.md'
       - 'docs/**'
+  # A fork's pushes never reach this repository's Actions; its PR does (#549).
+  pull_request:
+    paths-ignore: *paths-ignore
   workflow_dispatch:
 
 # Least privilege: the suite only ever needs to read the checked-out tree.
@@ -41,6 +43,18 @@ jobs:
           spec="$(grep -oE 'ruff==[0-9.]+' pyproject.toml)"
           pipx run --spec "$spec" ruff check .
           pipx run --spec "$spec" ruff format --check .
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # Same uv as the Dockerfile, so the lock it reads and writes matches.
+          version: "0.11.7"
+
+      - name: Type check (ty)
+        # Unlike ruff, ty must import the app's dependencies to resolve their
+        # types, so it runs from the locked venv rather than pipx. The ty
+        # version is the one pinned in pyproject.toml's dev group.
+        working-directory: backend
+        run: uv run --frozen ty check app
 
       - name: Run the backend tests
         # The test-backend service builds the backend-dev-deps stage and runs

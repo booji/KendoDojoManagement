@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,8 @@ from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
+from app.federations.dependencies import get_federation_repo
+from app.federations.repository import AbstractFederationRepository
 from app.member_federations.dependencies import get_member_federation_repo
 from app.member_federations.repository import (
     AbstractMemberFederationRepository,
@@ -28,6 +31,7 @@ _MfRepo = Annotated[
     AbstractMemberFederationRepository, Depends(get_member_federation_repo)
 ]
 _MemberRepo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
+_FedRepo = Annotated[AbstractFederationRepository, Depends(get_federation_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Admin = Annotated[AccountClaims, Depends(REQUIRE_ADMIN)]
 _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
@@ -44,6 +48,25 @@ def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
     )
 
 
+async def _add_federation_membership(
+    member_id: str,
+    payload: MemberFederationCreate,
+    fed_repo: AbstractFederationRepository,
+    mf_repo: AbstractMemberFederationRepository,
+) -> MemberFederationRecord:
+    # Checked here rather than left to the foreign key, whose violation would
+    # surface as an unmapped 500 (#586). A 422, not a 404: the federation is
+    # named in the body, not the path.
+    if await fed_repo.get(str(payload.federation_id)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Federation not found",
+        )
+    data = payload.model_dump(mode="json")
+    data["member_id"] = member_id
+    return await mf_repo.add(data)
+
+
 # ===========================================================================
 # Admin endpoints — /members/{member_id}/federations
 # ===========================================================================
@@ -51,63 +74,63 @@ def _to_response(record: MemberFederationRecord) -> MemberFederationResponse:
 
 @router.get("/members/{member_id}/federations")
 async def admin_list_member_federations(
-    member_id: str,
+    member_id: uuid.UUID,
     _claims: _Admin,
     member_repo: _MemberRepo,
     mf_repo: _MfRepo,
 ) -> list[MemberFederationResponse]:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    records = await mf_repo.get_for_member(member_id)
+    records = await mf_repo.get_for_member(str(member_id))
     return [_to_response(r) for r in records]
 
 
 @router.post("/members/{member_id}/federations", status_code=status.HTTP_201_CREATED)
 async def admin_add_member_federation(
-    member_id: str,
+    member_id: uuid.UUID,
     payload: MemberFederationCreate,
     _claims: _Admin,
     member_repo: _MemberRepo,
+    fed_repo: _FedRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    data = payload.model_dump()
-    data["member_id"] = member_id
-    record = await mf_repo.add(data)
+    record = await _add_federation_membership(
+        str(member_id), payload, fed_repo, mf_repo
+    )
     await uow.commit()
     return _to_response(record)
 
 
 @router.put("/members/{member_id}/federations/{mf_id}")
 async def admin_update_member_federation(
-    member_id: str,
-    mf_id: str,
+    member_id: uuid.UUID,
+    mf_id: uuid.UUID,
     payload: MemberFederationUpdate,
     _claims: _Admin,
     member_repo: _MemberRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    existing = await mf_repo.get(mf_id)
-    if existing is None or existing.member_id != member_id:
+    existing = await mf_repo.get(str(mf_id))
+    if existing is None or existing.member_id != str(member_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await mf_repo.update(mf_id, data)
+    record = await mf_repo.update(str(mf_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
@@ -122,24 +145,24 @@ async def admin_update_member_federation(
     response_model=None,
 )
 async def admin_remove_member_federation(
-    member_id: str,
-    mf_id: str,
+    member_id: uuid.UUID,
+    mf_id: uuid.UUID,
     _claims: _Admin,
     member_repo: _MemberRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> None:
-    member = await member_repo.get(member_id)
+    member = await member_repo.get(str(member_id))
     if member is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
-    existing = await mf_repo.get(mf_id)
-    if existing is None or existing.member_id != member_id:
+    existing = await mf_repo.get(str(mf_id))
+    if existing is None or existing.member_id != str(member_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    await mf_repo.remove(mf_id)
+    await mf_repo.remove(str(mf_id))
     await uow.commit()
 
 
@@ -175,20 +198,19 @@ async def me_add_federation(
     payload: MemberFederationCreate,
     claims: _Member,
     member_repo: _MemberRepo,
+    fed_repo: _FedRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> MemberFederationResponse:
     member = await _get_member_by_user(claims.sub, member_repo)
-    data = payload.model_dump()
-    data["member_id"] = member["id"]
-    record = await mf_repo.add(data)
+    record = await _add_federation_membership(member["id"], payload, fed_repo, mf_repo)
     await uow.commit()
     return _to_response(record)
 
 
 @router.put("/accounts/me/federations/{mf_id}")
 async def me_update_federation(
-    mf_id: str,
+    mf_id: uuid.UUID,
     payload: MemberFederationUpdate,
     claims: _Member,
     member_repo: _MemberRepo,
@@ -196,13 +218,12 @@ async def me_update_federation(
     uow: _UoW,
 ) -> MemberFederationResponse:
     member = await _get_member_by_user(claims.sub, member_repo)
-    existing = await mf_repo.get(mf_id)
+    existing = await mf_repo.get(str(mf_id))
     if existing is None or existing.member_id != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await mf_repo.update(mf_id, data)
+    record = await mf_repo.update(str(mf_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
@@ -217,17 +238,17 @@ async def me_update_federation(
     response_model=None,
 )
 async def me_remove_federation(
-    mf_id: str,
+    mf_id: uuid.UUID,
     claims: _Member,
     member_repo: _MemberRepo,
     mf_repo: _MfRepo,
     uow: _UoW,
 ) -> None:
     member = await _get_member_by_user(claims.sub, member_repo)
-    existing = await mf_repo.get(mf_id)
+    existing = await mf_repo.get(str(mf_id))
     if existing is None or existing.member_id != member["id"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
         )
-    await mf_repo.remove(mf_id)
+    await mf_repo.remove(str(mf_id))
     await uow.commit()

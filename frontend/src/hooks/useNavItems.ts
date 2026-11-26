@@ -4,7 +4,6 @@ import {
   ClipboardListIcon,
   UserIcon,
   UsersIcon,
-  AwardIcon,
   BarChartIcon,
   SettingsIcon,
   type LucideIcon,
@@ -14,6 +13,8 @@ import {
 
 export type NavItem = {
   label: string
+  /** Shorter text for the 375px bottom tab bar; its accessible name stays label. */
+  tabLabel?: string
   href: string
   icon: LucideIcon
 }
@@ -21,7 +22,7 @@ export type NavItem = {
 const MEMBER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
   { label: "Sessions", href: "/sessions", icon: CalendarDaysIcon },
-  { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
+  { label: "My Attendance", tabLabel: "Attendance", href: "/attendance", icon: ClipboardListIcon },
   { label: "My Profile", href: "/profile", icon: UserIcon },
 ]
 
@@ -29,8 +30,7 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboardIcon },
   { label: "Members", href: "/members", icon: UsersIcon },
   { label: "Sessions", href: "/sessions", icon: CalendarDaysIcon },
-  { label: "Attendance", href: "/attendance", icon: ClipboardListIcon },
-  { label: "Grades", href: "/grades", icon: AwardIcon },
+  { label: "My Attendance", tabLabel: "Attendance", href: "/attendance", icon: ClipboardListIcon },
   { label: "Reports", href: "/reports", icon: BarChartIcon },
   { label: "Settings", href: "/settings", icon: UserIcon },
   { label: "Admin Settings", href: "/admin/settings", icon: SettingsIcon },

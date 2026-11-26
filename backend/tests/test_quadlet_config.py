@@ -16,7 +16,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, QUADLET_UNITS, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    IMAGE_PIN_UNITS,
+    PUBLISHED_IMAGE,
+    QUADLET_UNITS,
+    SECRETS,
+    names_a_registry,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -92,6 +99,18 @@ def _all_container_files() -> list[str]:
 # ---------------------------------------------------------------------------
 # 1 & 2 & 3 — network segmentation
 # ---------------------------------------------------------------------------
+
+
+def test_every_quadlet_image_names_its_registry():
+    """No short names: Podman would resolve them through the host's search
+    registries (#634)."""
+    images = {
+        name: unit["Container"]["Image"]
+        for name, unit in load_units().items()
+        if "Image" in unit.get("Container", {})
+    }
+    assert images, "no Image= found in deploy/quadlet"
+    assert all(names_a_registry(i) for v in images.values() for i in v), images
 
 
 def test_db_is_only_on_the_backend_network():
@@ -576,3 +595,117 @@ def test_unit_settings_carry_no_inline_comment(path: Path):
     assert not offenders, (
         f"{path.name}: move the comment onto its own line: {offenders}"
     )
+
+
+# ---------------------------------------------------------------------------
+# ALLOW_TEST_AUTH stays in the test-only files (#590)
+# ---------------------------------------------------------------------------
+
+# The only files that may set ALLOW_TEST_AUTH, which registers a route that
+# signs anyone in as an admin with no credential. Every other compose,
+# Quadlet and env file in the repo ships to someone.
+TEST_ONLY_FILES = (".env.test", "docker-compose.test.yml")
+
+
+def _shipped_config_files() -> list[Path]:
+    candidates = [
+        *ROOT.glob("docker-compose*.yml"),
+        *ROOT.glob(".env.*"),
+        *QUADLET_DIR.iterdir(),
+        *(ROOT / "deploy" / "env").iterdir(),
+    ]
+    return sorted(
+        p for p in candidates if p.is_file() and p.name not in TEST_ONLY_FILES
+    )
+
+
+def test_no_shipped_file_sets_allow_test_auth():
+    """A shipped file that sets it hands the operator who copies it an
+    unauthenticated admin sign-in. validate_startup_config() refuses it in
+    production; this keeps it out of every deploy file in the first place."""
+    files = _shipped_config_files()
+    assert any(p.name == "docker-compose.yml" for p in files)
+    offenders = [
+        str(p.relative_to(ROOT))
+        for p in files
+        if re.search(r"^[^#\n]*\bALLOW_TEST_AUTH\b", p.read_text(), re.MULTILINE)
+    ]
+    assert offenders == [], (
+        f"ALLOW_TEST_AUTH is set in {offenders}. Only {list(TEST_ONLY_FILES)} "
+        "may set it."
+    )
+
+
+def test_host_preparation_needs_nothing_from_the_bundle():
+    """Section 1 runs from the admin account before section 2 extracts the
+    bundle into kendo's home, so no step in it can name a bundle file (#576)."""
+    doc = DEPLOYMENT_DOC.read_text()
+    section_1 = doc[doc.index("\n## 1.") : doc.index("\n## 2")]
+    assert not re.findall(r"\bdeploy/\S+", section_1)
+
+
+def _quadlet_upgrade_section() -> str:
+    doc = (ROOT / "docs" / "install" / "upgrading.md").read_text()
+    return doc.split("## Hardened deployment (Quadlet)", 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_pinned_units_run_one_image():
+    """The routine upgrade pulls the images these units name and restarts
+    onto them, so every unit running the Release image must name the
+    same one: a pin edited in one unit only would migrate with another."""
+    units = load_units()
+    pinned = {
+        name: unit["Container"]["Image"]
+        for name, unit in units.items()
+        if any(
+            i.startswith(PUBLISHED_IMAGE)
+            for i in unit.get("Container", {}).get("Image", [])
+        )
+    }
+    assert sorted(pinned) == sorted(IMAGE_PIN_UNITS)
+    assert len({tuple(images) for images in pinned.values()}) == 1, pinned
+
+
+def test_quadlet_upgrade_pulls_the_pinned_image_before_the_restart():
+    """Restarting a unit never fetches a newer image under the same tag, so a
+    patch release lands only after a pull (#583). The pull reads the pin from
+    the installed unit, so a host pinned to an exact Version (an rc rehearsal,
+    a rollback) pulls what it runs, not :0.1 (#604). It reads every unit that
+    pins one: a unit edited alone must not restart onto a stale image."""
+    # One command over several lines.
+    section = _quadlet_upgrade_section().replace("\\\n", " ")
+    restart = re.search(r"systemctl --user restart ([^\n]*)", section)
+    assert restart and restart.group(1).split() == ["kendo-migrate", "kendo-app"]
+    pull = re.search(r"^[^#\n]*Image=[^\n]*podman pull[^\n]*$", section, re.M)
+    assert pull and pull.start() < restart.start()
+    missing = [u for u in IMAGE_PIN_UNITS if u not in pull.group(0)]
+    assert not missing, missing
+
+
+# A command that writes over an installed file. The pull reads a unit with
+# `sed -n`, which is not one.
+_WRITES = re.compile(
+    r"^\s*(cp|install|mv|tee|tar|rsync)\b|\binit\s*\||sed -i|setup\.sh --quadlet"
+)
+
+
+def _commands(markdown: str) -> list[str]:
+    blocks = re.findall(r"```bash\n(.*?)```", markdown, re.DOTALL)
+    return [
+        line
+        for block in blocks
+        for line in block.replace("\\\n", " ").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def test_no_routine_upgrade_step_overwrites_an_installed_file():
+    """Once installed, units, timers, scripts and config are the operator's: a
+    re-copy reverted the Traefik unit's firewalld ports (Deployment § 1.2) and
+    crash-looped it (#604). A release that changes one lists an Operator
+    action instead."""
+    doc = (ROOT / "docs" / "install" / "upgrading.md").read_text()
+    compose = doc.split("## Quick self-host (Compose)", 1)[1].split("\n## ", 1)[0]
+    commands = _commands(compose) + _commands(_quadlet_upgrade_section())
+    assert any("podman pull" in c for c in commands)
+    assert [c for c in commands if _WRITES.search(c)] == []

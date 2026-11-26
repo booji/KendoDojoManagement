@@ -14,6 +14,8 @@ import { performPasskeyLogin } from "@/api/auth"
 import { errorMessage } from "@/api/client"
 import { getBranding } from "@/api/settings"
 import type { DojoBranding } from "@/api/settings"
+import { setTabTitle } from "@/lib/tabTitle"
+import { noteSignInAttachment } from "@/lib/devicePasskeyOffer"
 
 const LoginPage = () => {
   const [email, setEmail] = useState("")
@@ -29,6 +31,12 @@ const LoginPage = () => {
       })
   }, [])
 
+  // Always set, even to the fallback: a client-side sign-out arrives here
+  // with the signed-in dojo name still in the tab.
+  useEffect(() => {
+    setTabTitle(branding?.dojo_name ?? null)
+  }, [branding])
+
   const handlePasskeyLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
@@ -40,7 +48,8 @@ const LoginPage = () => {
 
     setLoading(true)
     try {
-      await performPasskeyLogin(email)
+      const { authenticatorAttachment } = await performPasskeyLogin(email)
+      noteSignInAttachment(authenticatorAttachment)
       // A full load, not navigate(): login has just issued the theme cookie,
       // and only a fresh document lets the pre-paint script in index.html read
       // it. A client-side transition would keep the pre-login theme until the
@@ -115,6 +124,12 @@ const LoginPage = () => {
               <Button type="submit" size="lg" disabled={loading} className="w-full">
                 {loading ? "Signing in…" : "Sign in with passkey"}
               </Button>
+              {/* Generic wording: each browser and OS labels the hybrid
+                  (QR) option differently (#612). */}
+              <p className="text-center text-sm text-muted-foreground">
+                Your passkey is on your phone? Choose the option to use a phone or
+                tablet, then scan the QR code.
+              </p>
               <p className="text-center text-sm text-muted-foreground">
                 No account yet?{" "}
                 <Link to="/register" className="text-primary underline-offset-4 hover:underline">

@@ -54,7 +54,11 @@ def _session_with_segment(**seg_overrides):
 
 
 def _description_line(ical: str) -> str:
-    return next(line for line in ical.split("\r\n") if line.startswith("DESCRIPTION:"))
+    return next(
+        line
+        for line in ical.replace("\r\n ", "").split("\r\n")
+        if line.startswith("DESCRIPTION:")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +119,7 @@ def _segment_kwargs(**overrides):
     base = {
         "start_time": "19:00",
         "duration_minutes": 60,
-        "type_ids": ["t1"],
+        "type_ids": [str(uuid.uuid4())],
     }
     base.update(overrides)
     return base

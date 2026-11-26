@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
-import { useOutletContext } from "react-router-dom"
 import { issueInvite, listInvites, revokeInvite } from "@/api/invites"
 import type { InviteListItem, InviteMintResponse, InviteStatus } from "@/api/invites"
 import { isApiError } from "@/api/auth"
-import type { AccountClaims } from "@/api/auth"
 import CopyButton from "@/components/CopyButton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PageHeader } from "@/components/ui/page-header"
+import { Section } from "@/components/ui/section"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   Table,
@@ -21,8 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-
-type LayoutContext = { user: AccountClaims }
 
 const STATUS_LABEL: Record<InviteStatus, string> = {
   pending: "Pending",
@@ -280,28 +276,11 @@ export const InviteManagementSection = () => {
   )
 }
 
-// Standalone page at /settings/invites. Non-admins get a forbidden state
-// rather than the issuance form — checked here rather than relying solely on
-// route-level gating so the page itself is safe to link to directly.
-const AdminInvitesPage = () => {
-  const { user } = useOutletContext<LayoutContext>()
-
-  if (user.role !== "admin") {
-    return (
-      <div className="px-4 py-6">
-        <p data-testid="forbidden" role="alert" className="text-sm text-destructive">
-          You don&apos;t have permission to view this page.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="px-4 py-6 space-y-6">
-      <PageHeader title="Invites" />
-      <InviteManagementSection />
-    </div>
-  )
-}
+// Admin Settings sub-page at /admin/settings/invites; RequireAdmin guards it (#610).
+const AdminInvitesPage = () => (
+  <Section heading="Invites">
+    <InviteManagementSection />
+  </Section>
+)
 
 export default AdminInvitesPage

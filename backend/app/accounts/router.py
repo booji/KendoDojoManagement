@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
 from app.accounts.dependencies import get_account_prefs_repo
-from app.accounts.preferences_repository import AbstractAccountPrefsRepo
+from app.accounts.preferences_repository import AbstractAccountPrefsRepo, Theme
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
 from app.auth.session_cookie import set_theme_cookie
@@ -19,17 +19,6 @@ from app.members.router import _to_response
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
-# Self-service fields a member may clear on their own record by sending an
-# explicit null. first_name and surname are required-by-domain on this route,
-# so a null there means "leave alone" rather than "wipe" — mirrors
-# app.members.router._CLEARABLE_FIELDS for the admin-facing update route.
-_CLEARABLE_FIELDS = (
-    "display_name",
-    "dob",
-    "emergency_contact_name",
-    "emergency_contact_phone",
-)
-
 _Repo = Annotated[AbstractMemberRepository, Depends(get_member_repo)]
 _UoW = Annotated[AbstractUnitOfWork, Depends(get_uow)]
 _Member = Annotated[AccountClaims, Depends(REQUIRE_MEMBER)]
@@ -37,11 +26,11 @@ _PrefsRepo = Annotated[AbstractAccountPrefsRepo, Depends(get_account_prefs_repo)
 
 
 class _PreferencesResponse(BaseModel):
-    theme: Literal["light", "dark", "system"]
+    theme: Theme
 
 
 class _PreferencesUpdate(BaseModel):
-    theme: Literal["light", "dark", "system"]
+    theme: Theme
 
 
 # ---------------------------------------------------------------------------
@@ -75,9 +64,7 @@ async def put_my_member(
     repo: _Repo,
     uow: _UoW,
 ) -> MemberResponse:
-    data: dict[str, Any] = {
-        k: v for k, v in payload.model_dump().items() if v is not None
-    }
+    data = payload.changes()
 
     record = await repo.get_by_user_id(claims.sub)
 
@@ -90,17 +77,14 @@ async def put_my_member(
             detail="No member record linked to this account",
         )
 
-    # The optional PII fields are nullable-by-design: an explicitly provided
-    # None clears the stored value, so it must survive the generic not-None
-    # filter above (which otherwise treats missing and None alike — the
-    # correct reading for first_name/surname, required-by-domain here).
-    explicitly_set = payload.model_dump(exclude_unset=True)
-    for key in _CLEARABLE_FIELDS:
-        if key in explicitly_set:
-            data[key] = explicitly_set[key]
     record = await repo.update(record["id"], data)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No member record linked to this account",
+        )
     await uow.commit()
-    return _to_response(record)  # type: ignore[arg-type]
+    return _to_response(record)
 
 
 # ---------------------------------------------------------------------------

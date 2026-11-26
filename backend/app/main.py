@@ -62,6 +62,10 @@ _CONSTRAINT_CONFLICTS = {
         "This member already belongs to that federation"
     ),
     "uq_federations_name": "A federation with that name already exists",
+    # Two concurrent extends of one series both generating a slot (#578).
+    "uq_session_instances_template_slot": (
+        "The series was changed at the same time; try again"
+    ),
 }
 
 
@@ -134,8 +138,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(title="KendoDojoManagement", lifespan=lifespan)
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_exception_handler(IntegrityError, _constraint_conflict_handler)
+# Starlette calls each handler only with its registered class: narrowing is safe.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty: ignore[invalid-argument-type]
+app.add_exception_handler(IntegrityError, _constraint_conflict_handler)  # ty: ignore[invalid-argument-type]
 app.add_middleware(ClientIPMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)

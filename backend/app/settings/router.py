@@ -6,10 +6,11 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, field_validator
+from pydantic import field_validator
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.core.partial_update import PartialUpdate
 from app.core.security_logger import changed_fields, log_admin_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -57,7 +58,19 @@ def _reject_if_not_an_image(contents: bytes) -> None:
         )
 
 
-class DojoSettingsUpdate(BaseModel):
+class DojoSettingsUpdate(PartialUpdate):
+    not_null = frozenset(
+        {
+            "dojo_name",
+            "primary_colour",
+            "checkin_window_before_minutes",
+            "checkin_window_after_minutes",
+            "login_show_background",
+            "login_show_logo",
+            "login_show_name",
+        }
+    )
+
     dojo_name: str | None = None
     primary_colour: str | None = None
     checkin_window_before_minutes: int | None = None
@@ -120,20 +133,7 @@ async def update_dojo_settings(
     # *hue* and derives per-theme AA-legible --primary shades from it (issue
     # #223), so the colour itself no longer has to clear contrast against a
     # single background. Format is still enforced by the field validator.
-    fields_set = payload.model_fields_set
-    data: dict[str, Any] = {}
-    for field in (
-        "dojo_name",
-        "primary_colour",
-        "checkin_window_before_minutes",
-        "checkin_window_after_minutes",
-        "background_image_url",
-        "login_show_background",
-        "login_show_logo",
-        "login_show_name",
-    ):
-        if field in fields_set:
-            data[field] = getattr(payload, field)
+    data = payload.changes()
     before = await repo.get()
     settings = await repo.update(data)
     # Before the commit: a write that commits always gets its event.
@@ -151,6 +151,16 @@ async def update_dojo_settings(
         "login_show_logo": settings["login_show_logo"],
         "login_show_name": settings["login_show_name"],
     }
+
+
+@router.get("/version")
+async def get_version(claims: _Admin) -> dict[str, str]:
+    """The Version this server is running: the release image's exact tag from
+    KENDO_VERSION, or `dev` for any other build (#556).
+
+    Admin-only: the exact Version would help an attacker pick known holes.
+    """
+    return {"version": os.environ.get("KENDO_VERSION") or "dev"}
 
 
 @router.get("/branding")

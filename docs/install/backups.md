@@ -11,13 +11,18 @@ Uploaded images live on a volume, not in the database, so the dump alone does no
 
 The Quick self-host (Compose) stack has no nightly timer. It takes a backup to `~/backups` on every `./setup.sh upgrade`, and the backup key and off-site settings below apply to it too — run `./setup.sh backup-key` without `--quadlet`.
 
+`./setup.sh --quadlet` installs `kendo-backup.service` and `kendo-backup.timer` in `~/.config/systemd/user/` and enables the timer: the first backup runs at the timer's next `OnCalendar=` (02:30 as shipped). Without `setup.sh`, the same by hand:
+
 ```bash
 cp deploy/systemd/kendo-backup.service ~/.config/systemd/user/
 cp deploy/systemd/kendo-backup.timer   ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now kendo-backup.timer
+```
 
-# Verify schedule + run once now
+Either way, check the schedule and take one now:
+
+```bash
 systemctl --user list-timers kendo-backup.timer --no-pager
 systemctl --user start kendo-backup.service
 ls -lh ~/backups
@@ -58,6 +63,9 @@ systemctl --user stop kendo-app
   ~/backups/kendo-YYYYmmdd-HHMMSS.dump.age \
   ~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
 systemctl --user restart kendo-migrate kendo-app
+# Stopping kendo-app stopped Traefik too, which needs it (Requires=); restarting
+# the app does not bring it back, so start it (#628).
+systemctl --user start kendo-traefik
 ```
 
 On the Compose stack, from the install directory. Its database container and uploads volume are project-scoped, so name them (a failed `setup.sh upgrade` prints this command with them filled in):
@@ -78,7 +86,7 @@ Both end by re-running migrate, as the restore prints when it finishes: the app'
 
 Plaintext backups (`.dump`, `.tar`, from before a key was set) restore with the same command.
 
-For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
+For an encrypted backup it asks for the key at a hidden prompt: paste the whole `AGE-SECRET-KEY-1…` line. This works inside `sudo machinectl shell kendo@ /bin/bash`. The key is never written to disk, and neither is anything it decrypts — it streams straight into `pg_restore` and the uploads volume.
 
 The key is checked against every file before anything is changed, so a wrong key leaves the database untouched:
 
@@ -119,14 +127,14 @@ KENDO_BACKUP_REMOTE_KEEP_DAYS=90
 
 - Encrypted (`.age`) files from the last 7 days that the remote does not have yet are copied, so a copy that failed one night goes up with the next. **Plaintext never leaves the host:** with no backup key, the copy is skipped and the log says why, and plaintext backups from before the key are never copied.
 - `KENDO_BACKUP_REMOTE_KEEP_DAYS` deletes `kendo-*.age` files older than that many days, in that folder only. About 90 is a good value: it also limits how long an erased Member's data survives in backups. Leave it unset if the credential cannot delete (see below).
-- If the copy fails, the local backup is kept, the run shows as failed in `systemctl --user status kendo-backup`, and `./setup.sh upgrade` carries on regardless.
+- If the copy fails, the local backup is kept, the run shows as failed in `systemctl --user status kendo-backup` (as `kendo`), and `./setup.sh upgrade` carries on regardless. The reason is in the unit's log, read from your admin account: `sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-backup.service --no-pager` ([Deployment § Logs](../deployment.md#9-logs)).
 - Each rclone call is stopped after an hour, so a stalled upload cannot block the next night's backup. On a slow link, raise it with `KENDO_BACKUP_REMOTE_TIMEOUT=2h` (or `30m`, `90s`).
 
 rclone runs as `kendo`, with `kendo`'s own config. Install it and add a remote from a `machinectl` shell:
 
 ```bash
 sudo dnf install -y rclone   # or: sudo apt install -y rclone
-sudo machinectl shell kendo@
+sudo machinectl shell kendo@ /bin/bash
 rclone config
 ```
 

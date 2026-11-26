@@ -1,0 +1,52 @@
+name: Frontend checks
+
+# Lint, typecheck and unit tests for the frontend (#584). The e2e suite runs
+# against Vite dev, which never typechecks, so without this the first `tsc -b`
+# anywhere is the prod image build in release.yml, after a tag is public. Meant
+# to be a required check on develop (#584).
+on:
+  push:
+    # Branches only, as in backend-tests.yml: tag pushes belong to release.yml.
+    branches:
+      - '**'
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  # A fork's pushes never reach this repository's Actions; its PR does (#549).
+  # No path filter here: it is meant to be a required check, and a required
+  # check that a filter skips never reports, so it would block every
+  # backend-only PR.
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: the checks only ever need to read the checked-out tree.
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend checks (eslint, tsc, vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Matches the Dockerfile's frontend stages (node:22-slim).
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test

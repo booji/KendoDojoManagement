@@ -8,6 +8,9 @@ import { getMyMember } from "@/api/accounts"
 import { ThemeProvider } from "@/contexts/ThemeProvider"
 import { DojoSettingsProvider, useDojoSettings } from "@/contexts/DojoSettingsProvider"
 import AppShell from "@/components/AppShell"
+import DevicePasskeyPrompt from "@/components/DevicePasskeyPrompt"
+import GuidedTour from "@/components/GuidedTour"
+import { isDevicePasskeyOffered } from "@/lib/devicePasskeyOffer"
 import HomePage from "@/pages/HomePage"
 import LoginPage from "@/pages/LoginPage"
 import RegisterPage from "@/pages/RegisterPage"
@@ -20,6 +23,9 @@ import GradesPage from "@/pages/GradesPage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
 import AdminSettingsPage from "@/pages/AdminSettingsPage"
+import AdminGeneralSettingsPage from "@/pages/AdminGeneralSettingsPage"
+import AdminSessionTypesPage from "@/pages/AdminSessionTypesPage"
+import AdminFederationsPage from "@/pages/AdminFederationsPage"
 import AdminInvitesPage from "@/pages/AdminInvitesPage"
 import InviteLandingPage from "@/pages/InviteLandingPage"
 import SessionCheckinPage from "@/pages/SessionCheckinPage"
@@ -29,7 +35,7 @@ import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 import SessionDetailPage from "@/pages/SessionDetailPage"
 import OnboardingPage from "@/pages/OnboardingPage"
 
-type LayoutContext = { user: AccountClaims }
+type LayoutContext = { user: AccountClaims; offerOpen: boolean }
 
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
@@ -37,6 +43,8 @@ const AuthenticatedLayout = () => {
   const { refresh } = useDojoSettings()
   const navigate = useNavigate()
   const [user, setUser] = useState<AccountClaims | null>(null)
+  // The tour waits for the device passkey offer (#612) to close.
+  const [offerOpen, setOfferOpen] = useState(isDevicePasskeyOffered)
 
   useEffect(() => {
     getMe()
@@ -65,20 +73,21 @@ const AuthenticatedLayout = () => {
 
   return (
     <AppShell role={user.role}>
-      <Outlet context={{ user } satisfies LayoutContext} />
+      <Outlet context={{ user, offerOpen } satisfies LayoutContext} />
+      <DevicePasskeyPrompt onClose={() => setOfferOpen(false)} />
     </AppShell>
   )
 }
 
 // Wraps admin-only routes — redirects non-admins to /.
 const RequireAdmin = () => {
-  const { user } = useOutletContext<LayoutContext>()
-  return user.role === "admin" ? <Outlet context={{ user } satisfies LayoutContext} /> : <Navigate to="/" replace />
+  const context = useOutletContext<LayoutContext>()
+  return context.user.role === "admin" ? <Outlet context={context} /> : <Navigate to="/" replace />
 }
 
 // Wraps profile-required routes — redirects to /onboarding if profile is incomplete.
 const RequireProfile = () => {
-  const { user } = useOutletContext<LayoutContext>()
+  const context = useOutletContext<LayoutContext>()
   const [ready, setReady] = useState(false)
   const [redirect, setRedirect] = useState(false)
 
@@ -101,7 +110,13 @@ const RequireProfile = () => {
 
   if (!ready) return null
   if (redirect) return <Navigate to="/onboarding" replace />
-  return <Outlet context={{ user } satisfies LayoutContext} />
+  // The tour starts only past the profile gate, never over onboarding (#636).
+  return (
+    <>
+      <Outlet context={context} />
+      <GuidedTour role={context.user.role} paused={context.offerOpen} />
+    </>
+  )
 }
 
 const App = () => (
@@ -122,10 +137,6 @@ const App = () => (
             {/* Onboarding: authenticated but NOT profile-gated */}
             <Route path="/onboarding" element={<OnboardingPage />} />
 
-            {/* Invite management: authenticated but not profile-gated — checks
-                admin role itself and renders a forbidden state for members */}
-            <Route path="/settings/invites" element={<AdminInvitesPage />} />
-
             {/* Profile-required routes */}
             <Route element={<RequireProfile />}>
               <Route path="/" element={<HomePage />} />
@@ -140,9 +151,15 @@ const App = () => (
               <Route element={<RequireAdmin />}>
                 <Route path="/members" element={<MembersPage />} />
                 <Route path="/members/:id" element={<MemberDetailPage />} />
-                <Route path="/grades" element={<GradesPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                <Route path="/admin/settings" element={<AdminSettingsPage />}>
+                  <Route index element={<Navigate to="general" replace />} />
+                  <Route path="general" element={<AdminGeneralSettingsPage />} />
+                  <Route path="session-types" element={<AdminSessionTypesPage />} />
+                  <Route path="federations" element={<AdminFederationsPage />} />
+                  <Route path="invites" element={<AdminInvitesPage />} />
+                  <Route path="grades" element={<GradesPage />} />
+                </Route>
               </Route>
             </Route>
           </Route>

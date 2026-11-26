@@ -5,7 +5,7 @@ set -e
 # compose file, .example config, Quadlet units, backup scripts — so an operator
 # configures a deployment without cloning the repository (ADR-0004):
 #
-#   podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+#   podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 #
 # Bundle and app ship as one artefact, so the config always matches the image
 # it configures. Writes nothing, needs no mounts, and is unreachable once the

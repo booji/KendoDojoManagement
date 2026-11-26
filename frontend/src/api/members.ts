@@ -2,6 +2,14 @@ import { apiFetch, throwApiError } from "@/api/client"
 
 export type MembershipStatus = "active" | "inactive" | "suspended" | "archived"
 
+/** Every Membership Status with its label, in display order. */
+export const MEMBERSHIP_STATUSES: readonly { value: MembershipStatus; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+  { value: "archived", label: "Archived" },
+]
+
 export type MemberResponse = {
   id: string
   email: string
@@ -47,6 +55,10 @@ export type UpdateMemberRequest = {
   emergency_contact_phone?: string | null
 }
 
+/** A row of GET /api/members: the Member plus their current Grade's display
+ * name, null for a Member with no confirmed Promotion. */
+export type MemberListItem = MemberResponse & { current_grade_name: string | null }
+
 export type ListMembersParams = {
   status?: MembershipStatus
   search?: string
@@ -54,7 +66,7 @@ export type ListMembersParams = {
 
 export const listMembers = async (
   params?: ListMembersParams
-): Promise<MemberResponse[]> => {
+): Promise<MemberListItem[]> => {
   const url = new URL("/api/members", window.location.origin)
   if (params?.status !== undefined) url.searchParams.set("status", params.status)
   if (params?.search !== undefined) url.searchParams.set("search", params.search)
@@ -68,7 +80,7 @@ export const listMembers = async (
     await throwApiError(res, "Failed to load members")
   }
 
-  return res.json() as Promise<MemberResponse[]>
+  return res.json() as Promise<MemberListItem[]>
 }
 
 export const getMember = async (id: string): Promise<MemberResponse> => {

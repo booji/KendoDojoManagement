@@ -42,6 +42,8 @@ import SessionCardList from "@/components/SessionCardList"
 import CalendarView from "@/components/CalendarView"
 import SessionsTable from "@/components/SessionsTable"
 import { PageHeader } from "@/components/ui/page-header"
+import { useDojoSettings } from "@/contexts/DojoSettingsProvider"
+import { calendarFeedUrl } from "@/lib/calendarFeed"
 
 // ── Markdown preview field ─────────────────────────────────────────────────────
 
@@ -290,7 +292,7 @@ const CreateSessionDialog = ({ sessionTypes, onCreated, onRefresh }: CreateDialo
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
-      <DialogTrigger render={<Button size="sm" />}>
+      <DialogTrigger render={<Button size="sm" data-tour="create-session" />}>
         Create Session
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
@@ -454,7 +456,7 @@ type ICalButtonProps = {
 const ICalButton = ({ icalUrl }: ICalButtonProps) => {
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Subscribe to iCal feed" className="shrink-0" />}>
+      <PopoverTrigger render={<Button variant="outline" size="sm" aria-label="Subscribe to iCal feed" data-tour="calendar-feed" className="shrink-0" />}>
         <CalendarIcon className="h-4 w-4" />
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">
@@ -491,6 +493,7 @@ const SessionsPage = () => {
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([])
   const [typeMap, setTypeMap] = useState<Map<string, SessionType>>(new Map())
   const [role, setRole] = useState<"admin" | "member" | null>(null)
+  const { dojoName, loaded: dojoSettingsLoaded } = useDojoSettings()
   const [error, setError] = useState<string | null>(null)
   const [pageView, setPageView] = useState<PageView>("list")
 
@@ -527,7 +530,7 @@ const SessionsPage = () => {
     })
   }
 
-  const icalUrl = `${window.location.origin}/api/sessions/ical`
+  const icalUrl = calendarFeedUrl(window.location.origin, dojoName)
 
   if (error !== null) {
     return (
@@ -578,7 +581,7 @@ const SessionsPage = () => {
                   Calendar
                 </Button>
               </div>
-              {role !== null && <ICalButton icalUrl={icalUrl} />}
+              {role !== null && dojoSettingsLoaded && <ICalButton icalUrl={icalUrl} />}
               {isAdmin && (
                 <CreateSessionDialog
                   sessionTypes={sessionTypes}

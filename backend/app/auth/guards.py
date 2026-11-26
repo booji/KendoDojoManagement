@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -15,7 +16,7 @@ from app.dependencies import get_uow
 @lru_cache(maxsize=8)
 def require_role(
     role: Literal["admin", "member"] | None = None,
-) -> type:
+) -> Callable[..., Awaitable[AccountClaims]]:
     """
     Returns a stable callable (cached per role) usable as a FastAPI dependency.
     Use module-level constants REQUIRE_MEMBER / REQUIRE_ADMIN for test overrides.

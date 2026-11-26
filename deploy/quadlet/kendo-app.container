@@ -21,11 +21,11 @@ After=kendo-migrate.service
 
 [Container]
 ContainerName=kendo-app
-# Published release image pinned by major tag (ADR-0004): `:1` takes fixes and
-# features but no migration that needs a restore to undo. Moving to `:2` is a
+# Published Release image pinned by its Release line (ADR-0004, ADR-0009):
+# `:0.1` takes fixes and features but no Breaking change. Moving to `:0.2` is a
 # deliberate edit here. `podman build -t localhost/kendodojo:latest .` still
 # works — point this line at it to run your own build.
-Image=ghcr.io/booji/kendodojomanagement:1
+Image=ghcr.io/booji/kendodojomanagement:0.1
 Network=kendo-edge.network
 Network=kendo-backend.network
 EnvironmentFile=%h/kendo/kendo-app.env

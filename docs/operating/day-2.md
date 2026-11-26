@@ -1,19 +1,20 @@
 # Day-2 operations
 
-| Task | Command (as `kendo` via `machinectl shell kendo@`) |
+| Task | Command (as `kendo` via `machinectl shell kendo@ /bin/bash`) |
 |------|----|
 | Status | `systemctl --user status kendo-app --no-pager` |
 | Logs | `podman logs -f kendo-app` |
+| A unit's journal (why it failed) | From your **admin account**, not `kendo`, which cannot read the journal: `sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service --no-pager`; swap in any unit. See [Deployment § Logs](../deployment.md#9-logs) |
 | Restart app | `systemctl --user restart kendo-app` |
-| **Upgrade** — the full procedure is [Upgrading](../install/upgrading.md#hardened-deployment-quadlet) | `podman pull ghcr.io/booji/kendodojomanagement:1 && systemctl --user restart kendo-migrate kendo-app` |
-| Stop all | `systemctl --user stop kendo-ip-retention.timer kendo-traefik kendo-app kendo-migrate kendo-db` — the timer first, or its daily run starts `kendo-db` again |
+| **Upgrade** | Follow [Upgrading § Hardened deployment](../install/upgrading.md#hardened-deployment-quadlet): back up, pull the pinned image, restart — a restart without the pull is not a patch. Apply the release notes' Operator actions first |
+| Stop all | `systemctl --user stop kendo-ip-retention.timer kendo-backup.timer kendo-traefik kendo-app kendo-migrate kendo-db` — the timers first, or their next run starts `kendo-db` again |
 | Back up now | `systemctl --user start kendo-backup.service` |
 | New backup key — see [Backups](../install/backups.md#lost-or-leaked-key) | `./setup.sh backup-key --quadlet` (from the deployment bundle) |
 | Break-glass recovery | `podman exec kendo-app python -m app.cli create-recovery-token <email>` |
 
 > The pin is the `Image=` line in the three app-image Quadlet units (`kendo-app`,
 > `kendo-migrate`, `kendo-ip-retention`), and the documented
-> value is the **major** tag `:1` — fixes and features, but no migration that
-> needs a restore from backup to undo. Moving to `:2` is a deliberate edit made
-> after reading the release notes. Building from source still works
+> value is the **Release line** tag `:0.1` — fixes and features, but no
+> Breaking change. Moving to `:0.2` is a deliberate edit made after reading its
+> section in [Upgrading](../install/upgrading.md). Building from source still works
 > (`podman build -t localhost/kendodojo:latest .`); point `Image=` at it.

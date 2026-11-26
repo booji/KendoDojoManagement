@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { getMyMember, updateMyMember } from "@/api/members"
+import { formatMemberName, getMyMember, updateMyMember } from "@/api/members"
 import type { MemberResponse, MyMemberUpdateRequest } from "@/api/members"
 import { isApiError, getMe, performPasskeyAdd, signOutEverywhere } from "@/api/auth"
 import { errorMessage } from "@/api/client"
@@ -34,6 +34,7 @@ import {
 import { Pencil, Trash2, Check, X, ShieldAlert } from "lucide-react"
 import { formatMemberDate } from "@/lib/date"
 import { PageHeader } from "@/components/ui/page-header"
+import { resetTour } from "@/lib/tourSeen"
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -129,11 +130,6 @@ const ProfileSummary = ({
     </Card>
   )
 }
-
-// ── Name formatting ───────────────────────────────────────────────────────────
-
-const formatMemberName = (m: MemberResponse): string =>
-  m.display_name ?? `${m.first_name} ${m.surname}`
 
 // ── Passkey row ───────────────────────────────────────────────────────────────
 
@@ -473,7 +469,7 @@ const SecurityCard = () => {
 
   return (
     <>
-      <Card>
+      <Card data-tour="security">
         <CardHeader>
           <CardTitle>Security</CardTitle>
         </CardHeader>
@@ -647,6 +643,7 @@ type LoadState =
 
 const SettingsPage = () => {
   const { theme, setTheme } = useThemeContext()
+  const navigate = useNavigate()
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" })
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editing, setEditing] = useState(false)
@@ -735,7 +732,20 @@ const SettingsPage = () => {
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <PageHeader title="Settings" />
+      <PageHeader
+        title="Settings"
+        action={
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetTour()
+              navigate("/")
+            }}
+          >
+            Take the tour
+          </Button>
+        }
+      />
 
       {!editing ? (
         <ProfileSummary member={loadState.member} onEdit={handleEdit} />

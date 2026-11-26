@@ -49,11 +49,10 @@ podman --version             # confirm >= 4.4 (Quadlet); 5.x expected
 
 ### 1.2 Allow rootless binding of ports 80/443
 
-Rootless containers can't bind ports <1024 by default. Install the provided sysctl drop-in:
+Rootless containers can't bind ports <1024 by default. Write the one-line sysctl drop-in:
 
 ```bash
-sudo install -m 0644 deploy/sysctl-99-kendo-rootless-ports.conf \
-  /etc/sysctl.d/99-kendo-rootless-ports.conf
+echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf
 sudo sysctl --system
 ```
 
@@ -91,9 +90,13 @@ sudo loginctl enable-linger kendo
 Always use `machinectl` — it sets up a proper session bus and `XDG_RUNTIME_DIR`, so `systemctl --user` works. (`su - kendo` does **not** and will leave `systemctl --user` broken.)
 
 ```bash
-sudo machinectl shell kendo@
+sudo machinectl shell kendo@ /bin/bash
 # You are now kendo, with a working user systemd session.
 ```
+
+Name the shell: `kendo`'s login shell is `nologin`, so it can never be logged
+into directly, and without one `machinectl shell` ends at once with *This
+account is currently not available*.
 
 Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**.
 
@@ -106,7 +109,7 @@ Everything from here (sections 2–6) runs **as `kendo` via `machinectl shell`**
 # The bundle ships inside the image it configures, so the units below and the
 # app they start are one artefact (ADR-0004).
 mkdir -p ~/src && cd ~/src
-podman run --rm ghcr.io/booji/kendodojomanagement:1 init | tar -x
+podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 
 ./setup.sh --quadlet
 ```
@@ -132,11 +135,14 @@ transcription here:
   Plus `~/backups` and the backup/restore scripts in `~/.local/bin`.
 - **the Quadlet units** — copied into `~/.config/containers/systemd/`, pinned
   to the tag the bundle was extracted from, then `systemctl --user
-  daemon-reload`. Plus `kendo-ip-retention.timer` in `~/.config/systemd/user/`,
-  enabled — see [IP retention](#ip-retention) below.
+  daemon-reload`. Plus `kendo-ip-retention.timer` and `kendo-backup.timer` in
+  `~/.config/systemd/user/`, enabled — see [IP retention](#ip-retention) below
+  and [Backups](install/backups.md).
 
 It never escalates: the host prerequisites from section 1 are detected and the
-exact `sudo` command printed for you to run.
+exact `sudo` command printed for you to run from your admin account (`kendo`
+has no sudo). Run as `kendo`, it cannot read the firewall rules either, so it
+asks you to check those yourself rather than failing.
 
 `./setup.sh check --quadlet` is the preflight, and is safe to run at any time —
 after an upgrade, after a domain change, or pasted into a bug report. It checks
@@ -228,12 +234,13 @@ cp deploy/quadlet/kendo-*.container ~/.config/containers/systemd/
 # Quadlet generates systemd units from these files on daemon-reload.
 systemctl --user daemon-reload
 
-# Quadlet generates no timers, so the daily IP-retention trigger is a plain
-# user unit (see IP retention below).
+# Quadlet generates no timers, so the daily IP-retention trigger and the
+# nightly backup are plain user units (see IP retention below).
 mkdir -p ~/.config/systemd/user
 cp deploy/systemd/kendo-ip-retention.timer ~/.config/systemd/user/
+cp deploy/systemd/kendo-backup.service deploy/systemd/kendo-backup.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now kendo-ip-retention.timer
+systemctl --user enable --now kendo-ip-retention.timer kendo-backup.timer
 ```
 
 </details>
@@ -261,7 +268,13 @@ Migrations run as their own unit: `kendo-migrate.service` runs `alembic
 upgrade head` and exits, and `kendo-app` is ordered after it, so the app
 never serves against a half-migrated schema and a failed migration shows up
 as a failed `kendo-migrate.service` rather than as an app crash (#391).
-`systemctl --user status kendo-migrate --no-pager` shows the last run.
+`systemctl --user status kendo-migrate --no-pager` (as `kendo`) shows whether
+the last run failed; its log, with the reason, is read from the admin account
+(see [Logs](#9-logs)):
+
+```bash
+sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-migrate.service --no-pager
+```
 
 ### IP retention
 
@@ -275,7 +288,7 @@ the timer is not installed or not enabled.
 
 ```bash
 systemctl --user list-timers kendo-ip-retention.timer --no-pager
-systemctl --user status kendo-ip-retention --no-pager   # the last run
+systemctl --user status kendo-ip-retention --no-pager   # did the last run fail? its log: see Logs
 ```
 
 The Compose stack has no timer: there the clear runs only when the app starts.
@@ -288,7 +301,7 @@ what it writes, for a deployment configured by hand or changed later.
 
 - **HTTP-01 (default).** Needs inbound port 80. Nothing beyond the `httpChallenge` block already in `traefik.yml`.
 - **TLS-ALPN-01.** Inbound 443 only — the answer when an ISP blocks 80. Replace the `httpChallenge` block with `tlsChallenge: {}`.
-- **DNS-01.** No inbound ports at all (e.g. UAT on a local network). Replace the `httpChallenge` block with a `dnsChallenge` naming your [lego provider](https://go-acme.github.io/lego/dns/), and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives re-copying the unit on upgrade:
+- **DNS-01.** No inbound ports at all (e.g. UAT on a local network). Replace the `httpChallenge` block with a `dnsChallenge` naming your [lego provider](https://go-acme.github.io/lego/dns/), and give Traefik the credentials as a drop-in — the unit itself stays provider-neutral, and a drop-in survives taking a new unit from a release:
 
   ```bash
   printf '%s' 'REPLACE-with-provider-token' | podman secret create kendo_dns_token -
@@ -318,7 +331,7 @@ The SPA is served **same-origin** with the API (both under `https://<your-domain
 
 `kendo-app`, `kendo-migrate`, `kendo-ip-retention` and `kendo-traefik` assume they may be breached (#458): a read-only root filesystem (`/tmp` and the volumes are the only writable paths), every capability dropped (Traefik keeps `NET_BIND_SERVICE` for 80/443), `NoNewPrivileges=true`, and a cap of 256 pids and 512 MiB memory each. `kendo-db` is not hardened yet.
 
-The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives re-copying the unit on upgrade:
+The limits are fixed defaults in the units. To change one on a small or busy host, add a drop-in. A later `PodmanArgs=` flag wins over the unit's own, and the drop-in survives taking a new unit from a release:
 
 ```bash
 d=~/.config/containers/systemd/kendo-app.container.d && mkdir -p "$d"
@@ -336,14 +349,25 @@ log driver hands them to the `kendo` user's journal, tagged with the
 written to a log file inside the container (the root filesystem is read-only).
 
 ```bash
-podman logs kendo-app                    # this container's output since it started
-journalctl --user-unit kendo-app         # the unit's history, across restarts
+# as kendo: this container's output since it started
+podman logs kendo-app
+
+# as your admin account (sudo): the unit's history, across restarts
+sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service --no-pager
 ```
 
-Use `--user-unit`, not `--user -u`. `--user` reads only the per-user journal
-file, which journald creates only when journal storage is persistent. On a host
-without it, everything is in the system journal and `--user -u` shows nothing.
-`--user-unit` works either way.
+`kendo` cannot read the journal itself on a default AlmaLinux/RHEL host:
+as `kendo`, `journalctl` prints "No journal files were opened due to
+insufficient permissions". There is no per-user journal file unless journal
+storage is persistent, and the system journal is readable only by root and the
+`systemd-journal`, `adm` and `wheel` groups. So read it from the admin account,
+by `kendo`'s UID. Do not use `--user-unit` under `sudo`: it matches root's UID
+and shows nothing.
+
+The same command reads any unit's log: swap in `kendo-migrate`, `kendo-backup`,
+`kendo-traefik` or `kendo-ip-retention`. Add `--since "1 hour ago"` (or a time,
+`--since "11:06"`) to start at a failure. `systemctl --user status` shows only
+the last few lines, so it usually cuts off why a unit failed.
 
 ### Security events
 
@@ -389,9 +413,10 @@ logged. Reading data is not logged.
 To see only these lines:
 
 ```bash
-journalctl --user-unit kendo-app -o cat --grep '"event_type"'
+# as your admin account (sudo)
+sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service -o cat --grep '"event_type"'
 # or pretty-print them, if jq is installed
-journalctl --user-unit kendo-app -o cat --grep '"event_type"' | jq .
+sudo journalctl _UID=$(id -u kendo) _SYSTEMD_USER_UNIT=kendo-app.service -o cat --grep '"event_type"' | jq .
 ```
 
 ### How long they survive

@@ -45,6 +45,22 @@ class Grade(StrEnum):
     def display_name(self) -> str:
         return _DISPLAY_NAMES[self.value]
 
+    @property
+    def short_name(self) -> str:
+        """display_name without its bracketed helper: "Shodan", "Mukyū"."""
+        return self.display_name.split(" (")[0]
+
+    @property
+    def number(self) -> int:
+        """A sortable number: kyu negative, dan positive, Mukyū below 6-kyu.
+
+        Mukyū -7, Rokkyū -6 … Ikkyū -1, Shodan 1 … Hachidan 8. Read off the
+        enum's order, which is the Grade order.
+        """
+        index = list(Grade).index(self)
+        shodan = list(Grade).index(Grade.SHODAN)
+        return index - shodan if index < shodan else index - shodan + 1
+
 
 class GradeHistoryEntry(BaseModel):
     id: str

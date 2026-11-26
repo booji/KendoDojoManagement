@@ -1,5 +1,7 @@
 # Deployments run a published image pinned by major tag
 
+> Amended by [ADR-0009](0009-pre-1-0-releases-pin-by-minor.md): before 1.0, the pin is `:0.Y`.
+
 Tagged releases build the `prod` stage and push to GHCR as
 `ghcr.io/booji/kendodojomanagement` with `1.0.0`, `1.0`, `1` and `latest`. Both
 deployment paths reference that image — `docker-compose.yml` in place of
@@ -114,3 +116,8 @@ operators at that tag, so the dev-only paths (`deploy/certs/`,
 release rather than the moment it merges. `setup.sh upgrade` re-extracts the
 bundle and reports what changed instead of overwriting an operator's filled-in
 files.
+
+*Amended by #604:* no upgrade re-extracts the bundle any more. Once
+installed, its files are the operator's; the upgrade is back up, pull,
+restart, and a release that changes a deployment file lists the change as an
+Operator action in its notes.

@@ -13,11 +13,13 @@ from __future__ import annotations
 import datetime
 import json
 import uuid
+from urllib.parse import quote
 
 import httpx
 from playwright.sync_api import Page, expect
 
 from app.auth.models import AccountClaims
+from app.sessions.ical import feed_url_name
 from tests.e2e_support import (
     complete_onboarding,
     login_as,
@@ -405,9 +407,14 @@ def test_ical_feed_produces_one_vevent_with_envelope_and_segment_description() -
     assert create_resp.status_code == 201
     session_id = create_resp.json()["id"]
 
-    ical_resp = httpx.get(f"{API_URL}/sessions/ical")
+    dojo_name = httpx.get(f"{API_URL}/settings/dojo", headers=headers).json()[
+        "dojo_name"
+    ]
+    ical_resp = httpx.get(
+        f"{API_URL}/sessions/ical/{quote(feed_url_name(dojo_name), safe='')}"
+    )
     assert ical_resp.status_code == 200
-    body = ical_resp.text
+    body = ical_resp.text.replace("\r\n ", "")
 
     # Exactly one VEVENT for this session.
     vevent_blocks = [

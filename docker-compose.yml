@@ -1,6 +1,7 @@
-# Production stack (app + PostgreSQL). Config comes from a .env file next to
-# this one, and secrets from the files in ./secrets — run ./setup.sh, which
-# writes both, before `up`. For the Podman/Quadlet + Traefik deployment
+# Production stack (app + PostgreSQL). App settings come from kendo-app.env
+# next to this one; .env holds only what this file interpolates (the image pin,
+# the db's settings) and the secrets, which reach the containers as the files in
+# ./secrets — run ./setup.sh, which writes all three, before `up` (#603). For the Podman/Quadlet + Traefik deployment
 # instead, see deploy/ and docs/deployment.md.
 # Explicit project name so the prod, dev and test stacks never share
 # containers, networks or volumes. Without it Compose falls back to the
@@ -31,24 +32,28 @@ x-hardening: &hardening
 services:
   app:
     <<: *hardening
-    # Published release image, pinned by major tag (ADR-0004): `:1` means fixes
-    # and features but no migration that needs a restore to undo. Override
+    # Back after a crash or an OOM kill at mem_limit; after a reboot, only once
+    # podman-restart.service is enabled — `./setup.sh` enables it, check verifies (#582).
+    # `always`, not `unless-stopped`: an older Podman's podman-restart.service
+    # starts only `always` containers at boot. Same on proxy and db.
+    restart: always
+    # Published Release image, pinned by its Release line (ADR-0004, ADR-0009):
+    # `:0.1` means fixes and features but no Breaking change. Override
     # KENDO_IMAGE in .env to move the pin deliberately, or to run an image you
     # built yourself (`make build` produces localhost/kendodojo:latest).
-    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:1}
+    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:0.1}
     networks:
       - edge
       - backend
+    # Every app setting comes from kendo-app.env, which ./setup.sh writes from
+    # deploy/env/kendo-app.env.example, the file the Quadlet unit reads too
+    # (#603). A key added there reaches the app with no change here. It holds
+    # no secret and no superuser login: those stay in .env, which only this
+    # file reads, so .env as a whole never reaches the app (ADR-0007).
+    env_file: kendo-app.env
     environment:
-      TZ: ${TZ:-UTC}
-      # This is the production stack, so production is the default rather than
-      # something an operator has to remember to opt into. It switches on the
-      # startup checks that refuse to boot with the localhost WEBAUTHN_*
-      # defaults still in place — a misconfiguration that otherwise produces a
-      # healthy-looking deploy that rejects every passkey ceremony.
-      APP_ENV: ${APP_ENV:-production}
-      # Secrets are files mounted from ./secrets (see `secrets:` below), named
-      # here by <NAME>_FILE — never values in the environment (#462).
+      # Secrets are files bind-mounted from ./secrets (see `volumes:` below),
+      # named here by <NAME>_FILE — never values in the environment (#462).
       # DATABASE_URL is the restricted app user's login (ADR-0007), never the
       # superuser's: the app refuses to start as a superuser, and
       # migration_database_url is given to `migrate` alone so its password
@@ -57,43 +62,24 @@ services:
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       SETUP_TOKEN_FILE: /run/secrets/setup_token
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
-      SESSION_MAX_MINUTES: ${SESSION_MAX_MINUTES:-10080}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      # Passkeys are bound to the public domain: WEBAUTHN_RP_ID is the bare
-      # host, WEBAUTHN_ORIGIN the full scheme+host the browser sees. Wrong
-      # values mean registration and login ceremonies are rejected.
-      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID}
-      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN}
-      WEBAUTHN_CHALLENGE_TTL_SECONDS: ${WEBAUTHN_CHALLENGE_TTL_SECONDS:-300}
-      # Keep pinned to the single canonical origin — never "*" (auth is
-      # cookie-based). Defaults to WEBAUTHN_ORIGIN inside the app if empty.
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      # Minimum wall-clock time (ms) the passkey begin endpoints take,
-      # regardless of whether the email is known or not — closes a timing
-      # side channel that would otherwise enumerate registered emails. Only
-      # masks it while the real path finishes underneath it. 100ms is measured
-      # against PostgreSQL (real-path p99 16.8ms, worst observed 27.9ms) plus
-      # headroom for slower storage — see docs/auth-timing-calibration.md.
-      AUTH_BEGIN_MIN_DURATION_MS: ${AUTH_BEGIN_MIN_DURATION_MS:-100}
-      # Safe by construction, and only because `app` publishes no host port:
-      # every request reaches it through the proxy below, and Traefik overwrites
-      # X-Forwarded-For with the address it observed rather than passing a
-      # client-supplied value through. Re-publishing the app's port and leaving
-      # this true would let a client spoof its IP past rate limiting and lockout
-      # — the two changes are one unit.
-      TRUST_PROXY_XFF: ${TRUST_PROXY_XFF:-true}
-      # Upload targets, backed by the static_uploads volume below. Deliberately
-      # not configurable via .env: the paths must match the volume mount, and
-      # they live outside /app/static so they cannot shadow the built SPA.
+      # Upload targets, backed by the static_uploads volume below. Set here,
+      # over kendo-app.env, so an edit there cannot move them: the paths must
+      # match the volume mount, and they live outside /app/static so they
+      # cannot shadow the built SPA.
       STATIC_DIR: /app/uploads/logos
       STATIC_BACKGROUNDS_DIR: /app/uploads/backgrounds
-    secrets:
-      - database_url
-      - jwt_secret
-      - setup_token
+    # Secrets as read-only bind mounts, not a top-level `secrets:` block:
+    # that takes no SELinux relabel option, and on an enforcing host the
+    # container cannot read a file setup.sh wrote (#635). `z`, not `Z`:
+    # migrate reads database_url too. The files are 0644 in a 0700 directory:
+    # a bind mount keeps its host mode, and the app's uid 1001 is not the host
+    # user who owns them. ./setup.sh writes them from .env, on every run and on
+    # `./setup.sh upgrade`; edit .env and re-run it rather than editing them.
     volumes:
       - static_uploads:/app/uploads
+      - ./secrets/database_url:/run/secrets/database_url:ro,z
+      - ./secrets/jwt_secret:/run/secrets/jwt_secret:ro,z
+      - ./secrets/setup_token:/run/secrets/setup_token:ro,z
     depends_on:
       db:
         condition: service_healthy
@@ -116,16 +102,18 @@ services:
     <<: *hardening
     # Same image as `app` — the migration chain and the code that runs against
     # it must come from one artefact.
-    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:1}
+    image: ${KENDO_IMAGE:-ghcr.io/booji/kendodojomanagement:0.1}
     networks:
       - backend
+    # The app's settings too, as kendo-migrate.container has them: one image,
+    # one configuration.
+    env_file: kendo-app.env
     environment:
-      TZ: ${TZ:-UTC}
       DATABASE_URL_FILE: /run/secrets/database_url
       MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
-    secrets:
-      - database_url
-      - migration_database_url
+    volumes:
+      - ./secrets/database_url:/run/secrets/database_url:ro,z
+      - ./secrets/migration_database_url:/run/secrets/migration_database_url:ro,z
     entrypoint: ["python", "-m", "app.db.bootstrap"]
     restart: "no"
     depends_on:
@@ -139,6 +127,7 @@ services:
   # create empty directories where Traefik expects its config.
   proxy:
     <<: *hardening
+    restart: always
     image: docker.io/library/traefik:v3.3
     # The one capability back: binding 80/443 inside its own namespace.
     cap_add:
@@ -147,13 +136,15 @@ services:
     networks:
       - edge
     # Rootless Podman needs net.ipv4.ip_unprivileged_port_start=80 to bind
-    # these; see deploy/sysctl-99-kendo-rootless-ports.conf.
+    # these: `./setup.sh check` prints the one-liner. Or publish 8080/8443 and
+    # add the firewalld redirect (docs/deployment.md §1.2).
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/selfhost/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro
+      # `z` relabels them for SELinux, as on every bind mount here (#635).
+      - ./deploy/traefik/selfhost/traefik.yml:/etc/traefik/traefik.yml:ro,z
+      - ./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro,z
       - traefik_acme:/acme
       # No container runtime socket: the file provider needs none, and the
       # label provider's socket mount is what deploy/quadlet deliberately
@@ -162,12 +153,13 @@ services:
       - app
 
   db:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
+    restart: always
     # Backend network only: no published ports and no outbound route.
     networks:
       - backend
     environment:
-      TZ: ${TZ:-UTC}
+      TZ: ${TZ:-Europe/London}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -202,22 +194,6 @@ networks:
   backend:
     driver_opts:
       isolate: "true"
-
-# Mounted read-only at /run/secrets/<name> in the services that list them, so
-# no secret sits in a container's environment (#462). ./setup.sh writes these
-# files from .env, on every run and on `./setup.sh upgrade`; edit .env and
-# re-run it rather than editing them. The directory is 0700 and the files
-# 0644: a file-backed secret is a bind mount that keeps its host mode, and the
-# app's uid 1001 is not the host user who owns it.
-secrets:
-  database_url:
-    file: ./secrets/database_url
-  migration_database_url:
-    file: ./secrets/migration_database_url
-  jwt_secret:
-    file: ./secrets/jwt_secret
-  setup_token:
-    file: ./secrets/setup_token
 
 volumes:
   postgres_data:

@@ -11,7 +11,7 @@ Acceptance criteria exercised:
   AC1. admin_recovery_tokens table exists with correct fields
   AC2. POST /auth/recovery/admin-token (admin only) generates token, stores hash, returns plaintext
   AC3. POST /auth/recovery/redeem accepts admin tokens; expired/used tokens rejected
-  AC6. 5-attempt lockout applies to admin token redemption
+  AC6. 5-attempt lockout refuses recovery codes, not an unused admin token
   AC7. Unit: valid redeems+marked used; expired rejected; used rejected; non-admin blocked
 """
 
@@ -34,6 +34,7 @@ from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
 from tests.account_support import seed_account, seed_member
+from tests.e2e_support import leaves_members_as_found
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER = AccountClaims(sub=str(uuid.uuid4()), email="member@dojo.test", role="member")
@@ -59,7 +60,10 @@ async def db_client(database_url: str):
             yield uow
 
     app.dependency_overrides[get_uow] = _override
-    yield engine
+    # Real commits: remove what each test seeded, or its Admin Accounts would
+    # claim the instance for test_setup.py (#589).
+    with leaves_members_as_found():
+        yield engine
     await engine.dispose()
 
 
@@ -474,6 +478,37 @@ async def test_admin_token_malformed_member_id_returns_422(db_client) -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_a_new_admin_token_retires_the_accounts_older_one(db_client) -> None:
+    """At most one admin token per Account is live, so a redeem never runs
+    more bcrypt comparisons than the padded floor (#594)."""
+    admin_id, target_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    target_email = await _seed_user(db_client, target_id)
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+    member_id = await _member_of(db_client, target_id)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        older = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": member_id}
+        )
+        newer = await c.post(
+            "/auth/recovery/admin-token", json={"member_id": member_id}
+        )
+
+        async def redeem(token: str) -> int:
+            response = await c.post(
+                "/auth/recovery/redeem", json={"email": target_email, "code": token}
+            )
+            return response.status_code
+
+        assert await redeem(older.json()["token"]) == 401
+        assert await redeem(newer.json()["token"]) == 200
+
+
 # ── AC3 — POST /auth/recovery/redeem accepts admin tokens ─────────────────────
 
 
@@ -605,27 +640,107 @@ async def test_redeem_admin_token_twice_second_is_401(db_client) -> None:
     assert r2.status_code == 401
 
 
-# ── AC6 — 5-attempt lockout applies to admin token redemption ─────────────────
+# ── AC6 — a lockout refuses recovery codes, never an issued admin token ──────
 
 
 @pytest.mark.asyncio
-async def test_fifth_failed_admin_token_attempt_returns_429(db_client) -> None:
-    """After 4 prior failures, a 5th bad attempt at admin token redeem returns 429."""
+async def test_junk_redeems_after_a_token_is_issued_do_not_lock_it_out(
+    db_client,
+) -> None:
+    """Five junk redeems after the admin issues a token lock the Account's
+    recovery codes again, but not the token: too long to guess, it has
+    nothing to fear from the lockout (#580)."""
+    from app.auth.db_models import RecoveryCode
+
+    admin_id = str(uuid.uuid4())
+    target_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    target_email = await _seed_user(db_client, target_id)
+    code = "abcd-efgh-ijkl"
+    async with db_client.begin() as conn:
+        await conn.execute(
+            insert(RecoveryCode).values(
+                id=str(uuid.uuid4()),
+                user_id=target_id,
+                code_hash=bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode(),
+                set_id=str(uuid.uuid4()),
+                created_at=datetime.now(UTC),
+            )
+        )
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        issued = await c.post(
+            "/auth/recovery/admin-token",
+            json={"member_id": await _member_of(db_client, target_id)},
+        )
+
+        async def redeem(secret: str) -> int:
+            response = await c.post(
+                "/auth/recovery/redeem",
+                json={"email": target_email, "code": secret},
+            )
+            return response.status_code
+
+        junk = [await redeem("wrong-token-xxxx") for _ in range(5)]
+        valid_code = await redeem(code)
+        token = await redeem(issued.json()["token"])
+
+    assert (junk, valid_code, token) == ([401] * 5, 401, 200)
+
+
+@pytest.mark.asyncio
+async def test_a_lockout_still_refuses_an_expired_admin_token(db_client) -> None:
     target_id = str(uuid.uuid4())
     target_email = await _seed_user(db_client, target_id)
     plaintext = "admn-tok1-abcd"
-    await _seed_admin_token(db_client, target_id, plaintext)
-    await _seed_failed_attempt(db_client, target_id, count=4)
+    await _seed_admin_token(
+        db_client,
+        target_id,
+        plaintext,
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    await _seed_failed_attempt(db_client, target_id, count=5)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.post(
             "/auth/recovery/redeem",
-            json={"email": target_email, "code": "wrong-token-xxxx"},
+            json={"email": target_email, "code": plaintext},
         )
 
-    assert response.status_code == 429
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_issuing_an_admin_token_lifts_a_recovery_lockout(db_client) -> None:
+    """Five failures lock recovery, but a token the admin issues afterwards
+    still redeems: issuing it clears the Account's failures (#580)."""
+    admin_id = str(uuid.uuid4())
+    target_id = str(uuid.uuid4())
+    await _seed_user(db_client, admin_id, role="admin")
+    target_email = await _seed_user(db_client, target_id)
+    await _seed_failed_attempt(db_client, target_id, count=5)
+    claims = AccountClaims(sub=admin_id, email="admin@dojo.test", role="admin")
+    app.dependency_overrides[REQUIRE_ADMIN] = lambda: claims
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        issued = await c.post(
+            "/auth/recovery/admin-token",
+            json={"member_id": await _member_of(db_client, target_id)},
+        )
+        response = await c.post(
+            "/auth/recovery/redeem",
+            json={"email": target_email, "code": issued.json()["token"]},
+        )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

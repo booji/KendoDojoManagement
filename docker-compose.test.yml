@@ -25,8 +25,8 @@ services:
   # The fast half of the suite (#336): same script, same per-run throwaway
   # database, but BACKEND_ONLY=1 skips the frontend install, Vite and the e2e
   # files — and the lighter build target skips Node and Playwright's chromium
-  # download entirely. CI runs this on every push; the full `test` service
-  # above stays on release candidates.
+  # download entirely. CI runs this on every push and pull request; the full
+  # `test` service above runs on PRs into main and release candidates.
   test-backend:
     build:
       context: .

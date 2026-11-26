@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,14 +27,14 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         "checkin_window_after_minutes": 120,
         "background_image_url": None,
         "login_show_background": False,
-        "login_show_logo": False,
+        "login_show_logo": True,
         "login_show_name": False,
     }
 
     def __init__(self) -> None:
         self._store: dict[str, Any] = {
             "id": str(uuid.uuid4()),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
             **self._DEFAULTS,
         }
 
@@ -47,7 +47,7 @@ class StubDojoSettingsRepository(AbstractDojoSettingsRepository):
         # from `data` are left untouched.
         for key, value in data.items():
             self._store[key] = value
-        self._store["updated_at"] = datetime.utcnow().isoformat()
+        self._store["updated_at"] = datetime.now(UTC).isoformat()
         return dict(self._store)
 
 
@@ -72,7 +72,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
                 "checkin_window_after_minutes": 120,
                 "background_image_url": None,
                 "login_show_background": False,
-                "login_show_logo": False,
+                "login_show_logo": True,
                 "login_show_name": False,
                 "updated_at": None,
             }
@@ -106,7 +106,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
         for key, value in data.items():
             if hasattr(row, key):
                 setattr(row, key, value)
-        row.updated_at = datetime.utcnow()
+        row.updated_at = datetime.now(UTC)
         await self._session.flush()
         return {
             "id": row.id,

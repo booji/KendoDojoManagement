@@ -3,7 +3,7 @@
 # purchased wildcard).
 #
 # To use: rename to byo-cert.yml, drop cert.pem/key.pem into deploy/certs/, add
-#     - ./deploy/certs:/etc/traefik/certs:ro
+#     - ./deploy/certs:/etc/traefik/certs:ro,z
 # to the proxy service's volumes in docker-compose.yml, and in kendo.yml replace
 # the router's `tls: {certResolver: letsencrypt}` with just `tls: {}` so Traefik
 # serves the default certificate defined below.

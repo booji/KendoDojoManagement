@@ -1,4 +1,4 @@
-"""In-memory fakes for the session, attendance, member and Auth Session
+"""In-memory fakes for the session, attendance, member, Auth Session and grade
 repository interfaces.
 
 These are *fakes*, not stubs: a working implementation of the whole interface,
@@ -45,6 +45,7 @@ from typing import Any
 # guarantee that without a second copy of it drifting.
 from sqlalchemy.exc import IntegrityError
 
+from app.grades.repository import AbstractGradeRepository
 from app.sessions.repository import _minutes_between, _segments_envelope
 
 # ---------------------------------------------------------------------------
@@ -273,6 +274,8 @@ class InMemorySessionInstanceRepository:
         "title": "Session",
         "date": None,
         "template_id": None,
+        "original_date": None,
+        "edited": False,
         "cancelled": False,
         "location": None,
         "info": None,
@@ -333,10 +336,18 @@ class InMemorySessionInstanceRepository:
         ]
 
     async def cancel(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, True)
+
+    async def reinstate(self, instance_id: str) -> dict[str, Any] | None:
+        return self._set_cancelled(instance_id, False)
+
+    def _set_cancelled(
+        self, instance_id: str, cancelled: bool
+    ) -> dict[str, Any] | None:
         row = self._store.get(instance_id)
         if row is None:
             return None
-        row["cancelled"] = True
+        row["cancelled"] = cancelled
         return _instance_record(row)
 
     async def update(
@@ -348,9 +359,11 @@ class InMemorySessionInstanceRepository:
         updates = _row(self._DEFAULTS, data) if data else {}
         for key, value in data.items():
             row[key] = _segments(value) if key == "segments" else updates[key]
+        row["edited"] = True
         return _instance_record(row)
 
-    async def delete(self, instance_id: str) -> dict[str, Any] | None:
+    async def delete_unattended(self, instance_id: str) -> dict[str, Any] | None:
+        # No Attendance lives here: the in-memory attendance fake is separate.
         row = self._store.pop(instance_id, None)
         return _instance_record(row) if row else None
 
@@ -368,19 +381,6 @@ class InMemorySessionInstanceRepository:
                 row["cancelled"] = True
                 cancelled.append(_instance_record(row))
         return cancelled
-
-    async def delete_future_for_template(
-        self, template_id: str, as_of_date: date
-    ) -> int:
-        as_of = as_of_date.isoformat()
-        doomed = [
-            row_id
-            for row_id, row in self._store.items()
-            if row["template_id"] == template_id and row["date"] >= as_of
-        ]
-        for row_id in doomed:
-            del self._store[row_id]
-        return len(doomed)
 
 
 def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
@@ -405,6 +405,8 @@ def _instance_record(row: dict[str, Any]) -> dict[str, Any]:
         "duration_minutes": _minutes_between(start_time, end_time) if segments else 0,
         "location": row["location"],
         "template_id": row["template_id"],
+        "original_date": row["original_date"],
+        "edited": row["edited"],
         "status": "cancelled" if row["cancelled"] else "scheduled",
         "date": row["date"],
         "cancelled": row["cancelled"],
@@ -541,7 +543,13 @@ class InMemoryAttendanceRepository:
         )
 
     async def list_for_member(self, member_id: str) -> list[dict[str, Any]]:
-        return [dict(r) for r in self._store if r["member_id"] == member_id]
+        # ponytail: stands in for the SQL join against Session with blanks;
+        # test_member_attendance_history_db.py covers the real values.
+        return [
+            {**r, "session_title": "", "session_date": ""}
+            for r in self._store
+            if r["member_id"] == member_id
+        ]
 
     async def summary_for_sessions(
         self, session_ids: list[str], member_id: str | None
@@ -761,3 +769,141 @@ class InMemoryAuthSessionRepository:
         self._store = {
             h: row for h, row in self._store.items() if row["expires_at"] > now
         }
+
+
+# ---------------------------------------------------------------------------
+# Grades
+# ---------------------------------------------------------------------------
+
+
+class InMemoryGradeRepository(AbstractGradeRepository):
+    """In-memory implementation of ``AbstractGradeRepository``.
+
+    ``member_names`` stands in for the members join ``list_pending`` makes:
+    member id -> the name it reports.
+    """
+
+    _DEFAULTS: dict[str, Any] = {
+        "id": None,
+        "member_id": None,
+        "grade": None,
+        "display_name": None,
+        "promoted_at": None,
+        "assigned_by": None,
+        "status": "confirmed",
+    }
+
+    def __init__(
+        self,
+        records: list[dict[str, Any]] | None = None,
+        member_names: dict[str, str] | None = None,
+    ) -> None:
+        self._store: list[dict[str, Any]] = []
+        self._member_names = member_names or {}
+        for record in records or []:
+            self._insert(record)
+
+    def _insert(self, data: dict[str, Any]) -> dict[str, Any]:
+        row = _row(self._DEFAULTS, data)
+        row["id"] = row["id"] or str(uuid.uuid4())
+        self._store.append(row)
+        return dict(row)
+
+    def _by_date(self, member_id: str | None = None) -> list[dict[str, Any]]:
+        return sorted(
+            (r for r in self._store if member_id in (None, r["member_id"])),
+            key=lambda r: r["promoted_at"],
+        )
+
+    def _find(self, member_id: str, entry_id: str) -> dict[str, Any]:
+        for row in self._store:
+            if row["id"] == entry_id and row["member_id"] == member_id:
+                return row
+        raise KeyError(f"Entry {entry_id} not found")
+
+    async def get_current_grades(
+        self, member_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            r["member_id"]: dict(r)
+            for r in self._by_date()
+            if r["member_id"] in member_ids and r["status"] == "confirmed"
+        }
+
+    async def add_promotion(
+        self,
+        member_id: str,
+        grade: str,
+        display_name: str,
+        assigned_by: str | None,
+        promoted_at: str,
+        status: str = "confirmed",
+    ) -> dict[str, Any]:
+        return self._insert(
+            {
+                "member_id": member_id,
+                "grade": grade,
+                "display_name": display_name,
+                "assigned_by": assigned_by,
+                "promoted_at": promoted_at,
+                "status": status,
+            }
+        )
+
+    async def get_history(self, member_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._by_date(member_id)]
+
+    async def approve_entry(
+        self, member_id: str, entry_id: str, approved_by: str
+    ) -> dict[str, Any]:
+        row = self._find(member_id, entry_id)
+        if row["status"] != "pending":
+            raise ValueError("Entry is not pending")
+        row["status"] = "confirmed"
+        row["assigned_by"] = approved_by
+        return dict(row)
+
+    async def delete_entry(self, member_id: str, entry_id: str) -> None:
+        row = self._find(member_id, entry_id)
+        if row["status"] != "pending":
+            raise ValueError("Only pending entries may be deleted")
+        self._store.remove(row)
+
+    async def list_pending(self) -> list[dict[str, Any]]:
+        return [
+            {**r, "member_name": self._member_names.get(r["member_id"])}
+            for r in self._by_date()
+            if r["status"] == "pending"
+        ]
+
+
+# ---------------------------------------------------------------------------
+# Unit of work
+# ---------------------------------------------------------------------------
+
+
+class _InertSession:
+    """Accepts the raw statements a route runs and does nothing with them."""
+
+    async def execute(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+class RecordingUnitOfWork:
+    """Counts commits, so a test can show a failed write committed nothing."""
+
+    def __init__(self) -> None:
+        self.session = _InertSession()
+        self.commits = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        return None
+
+    async def __aenter__(self) -> RecordingUnitOfWork:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None

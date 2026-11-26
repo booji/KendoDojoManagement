@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 from app.sessions.envelope import session_time_envelope
 
@@ -31,6 +35,75 @@ _PUBLIC_SEGMENT_FIELDS = frozenset(
 )
 
 
+# Session info is markdown. js-default matches the frontend's remark-gfm
+# closely (tables, strikethrough) and has html=False: raw HTML in info is
+# escaped as text, never passed through. Its link validation drops
+# javascript: and similar URLs.
+_markdown = MarkdownIt("js-default")
+
+
+def _inline_text(children: list[Token]) -> str:
+    parts: list[str] = []
+    link_start, href = 0, ""
+    for tok in children:
+        if tok.type in ("text", "code_inline", "image"):
+            parts.append(tok.content)
+        elif tok.type in ("softbreak", "hardbreak"):
+            parts.append("\n")
+        elif tok.type == "link_open":
+            link_start, href = len(parts), str(tok.attrGet("href") or "")
+        elif tok.type == "link_close":
+            label = "".join(parts[link_start:])
+            if href and href not in (label, f"mailto:{label}"):
+                parts.append(f" ({href})")
+    return "".join(parts)
+
+
+def _markdown_to_text(source: str) -> str:
+    """Render markdown as readable plain text: markers dropped, list items
+    bulleted or numbered, links as "text (url)"."""
+    blocks: list[tuple[int, str]] = []  # (list depth, text)
+    depth, prefix = 0, ""
+    for tok in _markdown.parse(source):
+        if tok.type in ("bullet_list_open", "ordered_list_open"):
+            depth += 1
+        elif tok.type in ("bullet_list_close", "ordered_list_close"):
+            depth -= 1
+        elif tok.type == "list_item_open":
+            marker = f"{tok.info}{tok.markup}" if tok.info else "•"
+            prefix = f"{'  ' * (depth - 1)}{marker} "
+        elif tok.type == "inline":
+            # ponytail: table cells come out one block each, readable but not
+            # a grid; lay out rows if dojos start putting tables in info.
+            blocks.append((depth, prefix + _inline_text(tok.children or [])))
+            prefix = ""
+        elif tok.type in ("fence", "code_block"):
+            blocks.append((depth, tok.content.rstrip("\n")))
+    text = ""
+    for i, (block_depth, block) in enumerate(blocks):
+        if i:
+            # Items of one list sit on consecutive lines; anything else is a
+            # paragraph of its own.
+            text += "\n" if block_depth and blocks[i - 1][0] else "\n\n"
+        text += block
+    return text
+
+
+def _display_name(dojo_name: str | None) -> str:
+    # Same fallback as the browser tab title (frontend/src/lib/tabTitle.ts).
+    return (dojo_name or "").strip() or "Kendo Dojo Management"
+
+
+def feed_url_name(dojo_name: str | None) -> str:
+    """The dojo name as the Calendar Feed URL's last segment (decoded).
+
+    Thunderbird and GNOME Calendar name a subscription after that segment and
+    ignore X-WR-CALNAME. "/" becomes "-" so the name stays one segment.
+    frontend/src/lib/calendarFeed.ts applies the same rule.
+    """
+    return _display_name(dojo_name).replace("/", "-")
+
+
 def _dt_to_ical(dt: datetime) -> str:
     """Format a naive datetime as YYYYMMDDTHHMMSS (local / floating time)."""
     return dt.strftime("%Y%m%dT%H%M%S")
@@ -45,6 +118,22 @@ def _escape_text(value: str) -> str:
     value = value.replace(";", "\\;").replace(",", "\\,")
     value = value.replace("\r\n", "\\n").replace("\r", "\\n").replace("\n", "\\n")
     return value
+
+
+def _fold(line: str) -> str:
+    """Fold a content line at 75 octets (RFC 5545 §3.1). Each continuation
+    starts with a space, which counts toward its 75, and a fold never splits
+    a multi-byte UTF-8 character."""
+    chunks, current, size = [], "", 0
+    for char in line:
+        octets = len(char.encode())
+        if size + octets > 75:
+            chunks.append(current)
+            current, size = "", 1
+        current += char
+        size += octets
+    chunks.append(current)
+    return "\r\n ".join(chunks)
 
 
 def _segment_breakdown_line(segment: dict[str, Any]) -> str:
@@ -65,25 +154,33 @@ def _segment_breakdown_line(segment: dict[str, Any]) -> str:
     return " - ".join(parts)
 
 
-def _build_description(session: dict[str, Any]) -> str | None:
+def _build_descriptions(session: dict[str, Any]) -> tuple[str, str] | None:
+    """The event description as (plain text, HTML), or None when empty: the
+    check-in link, then the segment breakdown, then the session's info."""
     segments = session.get("segments") or []
     breakdown_lines = [
         _segment_breakdown_line({k: s.get(k) for k in _PUBLIC_SEGMENT_FIELDS})
         for s in segments
     ]
     info = session.get("info")
-    parts = list(breakdown_lines)
-    if info:
-        parts.append(info)
-    body = "\n".join(parts)
-
     checkin_link = session.get("checkin_link")
-    if checkin_link:
-        checkin_line = f"Check in: {checkin_link}"
-        return f"{checkin_line}\n\n{body}" if body else checkin_line
-    if not parts:
+    if not (breakdown_lines or info or checkin_link):
         return None
-    return body
+
+    text_parts: list[str] = []
+    html_parts: list[str] = []
+    if checkin_link:
+        text_parts.append(f"Check in: {checkin_link}")
+        link = escape(checkin_link)
+        html_parts.append(f'<p>Check in: <a href="{link}">{link}</a></p>')
+    body = "\n".join(breakdown_lines + ([_markdown_to_text(info)] if info else []))
+    if body:
+        text_parts.append(body)
+    if breakdown_lines:
+        html_parts.append(f"<p>{'<br>'.join(map(escape, breakdown_lines))}</p>")
+    if info:
+        html_parts.append(_markdown.render(info))
+    return "\n\n".join(text_parts), f"<html><body>{''.join(html_parts)}</body></html>"
 
 
 def _event_bounds(session: dict[str, Any]) -> tuple[datetime, datetime]:
@@ -125,9 +222,13 @@ def _build_vevent(session: dict[str, Any], tz_name: str | None = None) -> str:
     if location:
         lines.append(f"LOCATION:{_escape_text(location)}")
 
-    description = _build_description(session)
-    if description:
-        lines.append(f"DESCRIPTION:{_escape_text(description)}")
+    descriptions = _build_descriptions(session)
+    if descriptions:
+        text, html = descriptions
+        lines.append(f"DESCRIPTION:{_escape_text(text)}")
+        # Plain-text DESCRIPTION is what Apple and Google show; Outlook
+        # renders the HTML alternative.
+        lines.append(f"X-ALT-DESC;FMTTYPE=text/html:{_escape_text(html)}")
 
     lines.append("END:VEVENT")
     return "\r\n".join(lines)
@@ -224,7 +325,11 @@ def _build_vtimezone(tz_name: str, moments: list[datetime]) -> str:
     return "\r\n".join(lines)
 
 
-def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> str:
+def build_ical(
+    sessions: list[dict[str, Any]],
+    tz_name: str | None = None,
+    calendar_name: str | None = None,
+) -> str:
     """Return a valid RFC 5545 iCal string for the given session dicts.
 
     Cancelled sessions are excluded. Only _PUBLIC_FIELDS (and, within each
@@ -241,6 +346,8 @@ def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> st
     tagged with TZID and a matching VTIMEZONE component is emitted so clients
     resolve them to the correct, DST-aware instant. Without it, times are
     floating (legacy behaviour).
+
+    calendar_name (the dojo name) is what calendar apps show the feed as.
     """
     public = []
     for s in sessions:
@@ -253,6 +360,7 @@ def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> st
         public.append(entry)
 
     non_cancelled = [s for s in public if not s.get("cancelled", False)]
+    name = _escape_text(_display_name(calendar_name))
 
     header = "\r\n".join(
         [
@@ -260,6 +368,10 @@ def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> st
             "VERSION:2.0",
             "PRODID:-//KendoDojoManagement//EN",
             "CALSCALE:GREGORIAN",
+            # NAME is RFC 7986; X-WR-CALNAME is the older property most
+            # calendar apps still read. Without either they show the URL.
+            f"X-WR-CALNAME:{name}",
+            f"NAME:{name}",
         ]
     )
 
@@ -274,4 +386,5 @@ def build_ical(sessions: list[dict[str, Any]], tz_name: str | None = None) -> st
         parts.append(events)
     parts.append("END:VCALENDAR")
 
-    return "\r\n".join(parts) + "\r\n"
+    lines = "\r\n".join(parts).split("\r\n")
+    return "\r\n".join(map(_fold, lines)) + "\r\n"

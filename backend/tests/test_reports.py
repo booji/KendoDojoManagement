@@ -6,13 +6,16 @@ app.dependency_overrides to inject in-memory stubs.
 
 Acceptance criteria exercised here:
   1. GET /reports/attendance returns sessions in date range with headcount and member rates
-  2. GET /reports/members returns all members with current grade and join date
+  2. GET /reports/members/csv lists every member with current grade and join
+     date; the JSON GET /reports/members is gone (#571)
   3. GET /reports/attendance/csv and GET /reports/members/csv return valid CSV files
   5. Reports are accessible to admins only (401/403 guards)
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from typing import Any
 
@@ -21,6 +24,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
+from app.grades.models import Grade
 from app.main import app
 from tests.auth_support import sign_in
 
@@ -93,28 +97,33 @@ class StubReportRepository:
         return record
 
     def seed_grade(
-        self, member_id: str, grade: str, promoted_at: str
+        self, member_id: str, grade: str, promoted_at: str, status: str = "confirmed"
     ) -> dict[str, Any]:
         record = {
             "id": str(uuid.uuid4()),
             "member_id": member_id,
             "grade": grade,
             "promoted_at": promoted_at,
+            "status": status,
         }
         self._grades.append(record)
         return record
+
+    def _held(self, date_from: str, date_to: str) -> list[dict[str, Any]]:
+        return [
+            s
+            for s in self._sessions
+            if date_from <= s["date"] <= date_to and not s["cancelled"]
+        ]
 
     # --- Report query methods (will be called by the router) ---
 
     async def attendance_report(
         self, date_from: str, date_to: str
     ) -> list[dict[str, Any]]:
-        """Return sessions in range with headcount."""
-        sessions_in_range = [
-            s for s in self._sessions if date_from <= s["date"] <= date_to
-        ]
+        """Return held Sessions in range with headcount."""
         result = []
-        for session in sessions_in_range:
+        for session in self._held(date_from, date_to):
             attendance = [
                 a for a in self._attendance if a["session_id"] == session["id"]
             ]
@@ -130,40 +139,45 @@ class StubReportRepository:
     async def member_attendance_rates(
         self, date_from: str, date_to: str
     ) -> list[dict[str, Any]]:
-        """Return per-member attendance rate for the given date range."""
-        sessions_in_range = [
-            s for s in self._sessions if date_from <= s["date"] <= date_to
-        ]
-        total = len(sessions_in_range)
-        session_ids = {s["id"] for s in sessions_in_range}
-
-        # Group attendance by member
-        member_counts: dict[str, int] = {}
-        for a in self._attendance:
-            if a["session_id"] in session_ids and a["member_id"] is not None:
-                member_counts[a["member_id"]] = member_counts.get(a["member_id"], 0) + 1
-
-        return [
-            {
-                "member_id": mid,
-                "sessions_attended": count,
-                "total_sessions": total,
-                "attendance_rate": round(count / total, 4) if total > 0 else 0.0,
+        """Attendance Rate (GLOSSARY.md), as SqlReportRepository serves it:
+        Members who attended, plus active Members who did not, each counted
+        over held Sessions from the later of date_from and their join date.
+        """
+        result = []
+        for member in self._members:
+            held = {
+                s["id"]
+                for s in self._held(max(date_from, member["join_date"]), date_to)
             }
-            for mid, count in member_counts.items()
-        ]
+            count = sum(
+                1
+                for a in self._attendance
+                if a["member_id"] == member["id"] and a["session_id"] in held
+            )
+            if not held or (count == 0 and member["membership_status"] != "active"):
+                continue
+            result.append(
+                {
+                    "member_id": member["id"],
+                    "display_name": member["display_name"],
+                    "sessions_attended": count,
+                    "total_sessions": len(held),
+                    "attendance_rate": round(count / len(held), 4),
+                }
+            )
+        return result
 
     async def members_report(self) -> list[dict[str, Any]]:
         """Return all members with current grade and join date."""
         result = []
         for member in self._members:
-            # Current grade = most recent grade history entry
-            member_grades = [g for g in self._grades if g["member_id"] == member["id"]]
-            current_grade = (
-                max(member_grades, key=lambda g: g["promoted_at"])["grade"]
-                if member_grades
-                else None
-            )
+            confirmed = [
+                g
+                for g in self._grades
+                if g["member_id"] == member["id"] and g["status"] == "confirmed"
+            ]
+            current = max(confirmed, key=lambda g: g["promoted_at"], default=None)
+            current_grade = Grade(current["grade"]).short_name if current else None
             result.append(
                 {
                     "member_id": member["id"],
@@ -233,10 +247,11 @@ async def test_attendance_report_returns_sessions_in_range(
 async def test_attendance_report_excludes_sessions_outside_range(
     report_repo: StubReportRepository,
 ) -> None:
-    """Sessions outside the date range are excluded."""
+    """Sessions outside the date range, and cancelled ones, are excluded."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     report_repo.seed_session("2024-12-31")  # before range
     in_range = report_repo.seed_session("2025-01-15")
+    report_repo.seed_session("2025-01-22", cancelled=True)
     report_repo.seed_session("2025-02-01")  # after range
 
     async with AsyncClient(
@@ -285,12 +300,17 @@ async def test_attendance_report_includes_member_rates(
 ) -> None:
     """Response includes per-member attendance rates for the date range."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    m1 = report_repo.seed_member("Alice Kendo")
+    m2 = report_repo.seed_member("Bob Kendo")
+    m3 = report_repo.seed_member("Chie Kendo")
     s1 = report_repo.seed_session("2025-01-10")
     s2 = report_repo.seed_session("2025-01-17")
-    # member-1 attended both; member-2 attended only s1
-    report_repo.seed_attendance(s1["id"], "member-1")
-    report_repo.seed_attendance(s2["id"], "member-1")
-    report_repo.seed_attendance(s1["id"], "member-2")
+    report_repo.seed_session("2025-01-24", cancelled=True)
+    # member-1 attended both; member-2 attended only s1; member-3 neither
+    report_repo.seed_attendance(s1["id"], m1["id"])
+    report_repo.seed_attendance(s2["id"], m1["id"])
+    report_repo.seed_attendance(s1["id"], m2["id"])
+    report_repo.seed_attendance(s1["id"], None)  # a Visitor
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
@@ -303,17 +323,20 @@ async def test_attendance_report_includes_member_rates(
     assert response.status_code == 200
     body = response.json()
     assert "member_rates" in body
-    rates_by_member = {r["member_id"]: r for r in body["member_rates"]}
-
-    assert "member-1" in rates_by_member
-    assert rates_by_member["member-1"]["sessions_attended"] == 2
-    assert rates_by_member["member-1"]["total_sessions"] == 2
-    assert rates_by_member["member-1"]["attendance_rate"] == 1.0
-
-    assert "member-2" in rates_by_member
-    assert rates_by_member["member-2"]["sessions_attended"] == 1
-    assert rates_by_member["member-2"]["total_sessions"] == 2
-    assert rates_by_member["member-2"]["attendance_rate"] == 0.5
+    rates = {
+        r["member_id"]: (
+            r["display_name"],
+            r["sessions_attended"],
+            r["total_sessions"],
+            r["attendance_rate"],
+        )
+        for r in body["member_rates"]
+    }
+    assert rates == {
+        m1["id"]: ("Alice Kendo", 2, 2, 1.0),
+        m2["id"]: ("Bob Kendo", 1, 2, 0.5),
+        m3["id"]: ("Chie Kendo", 0, 2, 0.0),
+    }
 
 
 async def test_attendance_report_missing_date_params_returns_422(
@@ -331,72 +354,46 @@ async def test_attendance_report_missing_date_params_returns_422(
 
 
 # ---------------------------------------------------------------------------
-# AC2 — GET /reports/members
+# AC2 — the Members report: GET /reports/members/csv only (#571)
 # ---------------------------------------------------------------------------
 
 
-async def test_members_report_returns_all_members(
+async def test_members_report_json_endpoint_is_gone(
     report_repo: StubReportRepository,
 ) -> None:
-    """Members report lists all members with join_date."""
+    """The Members tab left /reports (#571); its JSON endpoint went with it."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m1 = report_repo.seed_member("Alice Kendo", "2023-04-01")
-    m2 = report_repo.seed_member("Bob Kendo", "2024-09-01")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get("/reports/members")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body, list)
-    assert len(body) == 2
-    member_ids = {m["member_id"] for m in body}
-    assert m1["id"] in member_ids
-    assert m2["id"] in member_ids
-    for entry in body:
-        assert "display_name" in entry
-        assert "join_date" in entry
-        assert "current_grade" in entry
+    assert response.status_code == 404
 
 
-async def test_members_report_current_grade_none_when_no_history(
+async def test_members_csv_lists_every_member_with_current_grade(
     report_repo: StubReportRepository,
 ) -> None:
-    """current_grade is None for a member with no grade history."""
+    """One row per Member; current_grade is the latest *confirmed* Promotion
+    (#565), blank for a Member with none."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m = report_repo.seed_member("New Member", "2025-01-01")
+    graded = report_repo.seed_member("Graded Member", "2022-06-01")
+    report_repo.seed_grade(graded["id"], "ROKKYUU", "2023-01-01T10:00:00")
+    report_repo.seed_grade(graded["id"], "GOKYUU", "2024-01-01T10:00:00")
+    report_repo.seed_grade(graded["id"], "YONKYUU", "2025-01-01T10:00:00", "pending")
+    ungraded = report_repo.seed_member("New Member", "2025-01-01")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
-        response = await c.get("/reports/members")
+        response = await c.get("/reports/members/csv")
 
     assert response.status_code == 200
-    body = response.json()
-    entry = next(e for e in body if e["member_id"] == m["id"])
-    assert entry["current_grade"] is None
-
-
-async def test_members_report_shows_current_grade(
-    report_repo: StubReportRepository,
-) -> None:
-    """current_grade reflects the most recent grade history entry."""
-    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
-    m = report_repo.seed_member("Graded Member", "2022-06-01")
-    report_repo.seed_grade(m["id"], "ROKKYUU", "2023-01-01T10:00:00")
-    report_repo.seed_grade(m["id"], "GOKYUU", "2024-01-01T10:00:00")  # most recent
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.get("/reports/members")
-
-    assert response.status_code == 200
-    body = response.json()
-    entry = next(e for e in body if e["member_id"] == m["id"])
-    assert entry["current_grade"] == "GOKYUU"
+    rows = {r["member_id"]: r for r in csv.DictReader(io.StringIO(response.text))}
+    assert rows[graded["id"]]["current_grade"] == "Gokyū"
+    assert rows[ungraded["id"]]["current_grade"] == ""
+    assert len(rows) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -521,25 +518,14 @@ async def test_attendance_report_member_returns_403(
     assert response.status_code == 403
 
 
-async def test_members_report_unauthenticated_returns_401(
-    report_repo: StubReportRepository,
-) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test/api"
-    ) as c:
-        response = await c.get("/reports/members")
-
-    assert response.status_code == 401
-
-
-async def test_members_report_member_returns_403(
+async def test_members_csv_member_returns_403(
     report_repo: StubReportRepository,
 ) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test/api"
     ) as c:
         response = await c.get(
-            "/reports/members",
+            "/reports/members/csv",
             cookies={"access_token": _member_token()},
         )
 

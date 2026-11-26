@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { getMember, getMyMember, updateMember, eraseMember, formatMemberName } from "@/api/members"
+import {
+  getMember,
+  getMyMember,
+  updateMember,
+  eraseMember,
+  formatMemberName,
+  MEMBERSHIP_STATUSES,
+} from "@/api/members"
 import type { MemberResponse, MembershipStatus, UpdateMemberRequest } from "@/api/members"
 import { getMe, isApiError } from "@/api/auth"
 import type { AccountClaims } from "@/api/auth"
-import { setMemberGrade, proposeGrade, getGradeHistory, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
+import { setMemberGrade, proposeGrade, getGradeHistory, getCurrentGrade, approveGrade, rejectGrade, ASSIGNABLE_GRADES } from "@/api/grades"
 import type { GradeHistoryEntry } from "@/api/grades"
-import { getMemberAttendanceHistory } from "@/api/attendance"
-import type { AttendanceRecord } from "@/api/attendance"
 import { formatMemberDate } from "@/lib/date"
 import { memberFederationMemberships } from "@/api/federations"
 import CopyButton from "@/components/CopyButton"
+import AttendanceHistoryCard from "@/components/AttendanceHistoryCard"
 import FederationMembershipsCard from "@/components/FederationMembershipsCard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -199,10 +205,11 @@ const EditForm = ({ form, saving, error, onSubmit, onChange, onCancel }: EditFor
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="suspended">Suspended</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
+            {MEMBERSHIP_STATUSES.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -308,20 +315,24 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
 
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
 
+  // The server owns the current-Grade rule (#565): no current Grade is Mukyū.
+  const [currentGrade, setCurrentGrade] = useState<string | null>(null)
+
+  const loadCurrentGrade = async () => {
+    const current = await getCurrentGrade(memberId)
+    setCurrentGrade(current?.display_name ?? "Mukyū")
+  }
+
   useEffect(() => {
-    getGradeHistory(memberId)
-      .then(setHistory)
+    Promise.all([getGradeHistory(memberId), getCurrentGrade(memberId)])
+      .then(([entries, current]) => {
+        setHistory(entries)
+        setCurrentGrade(current?.display_name ?? "Mukyū")
+      })
       .catch((err: unknown) => {
         setHistoryError(isApiError(err) ? err.message : "Failed to load grade history")
       })
   }, [memberId])
-
-  const confirmedHistory = history !== null ? history.filter((e) => e.status === "confirmed") : null
-
-  const currentGrade =
-    confirmedHistory !== null && confirmedHistory.length > 0
-      ? confirmedHistory.at(-1)!.display_name
-      : "Mukyū"
 
   const openEditDialog = () => {
     setSelectedGrade("")
@@ -348,6 +359,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
       // Refetch full history to keep the list accurate
       const updated = await getGradeHistory(memberId)
       setHistory(updated)
+      await loadCurrentGrade()
       // If refetch somehow fails, at least append the new entry
       void result
       setEditOpen(false)
@@ -384,6 +396,7 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
       setHistory((prev) =>
         prev === null ? null : prev.map((e) => (e.id === updated.id ? updated : e))
       )
+      await loadCurrentGrade()
     } catch {
       // silently ignore — the button will re-enable
     } finally {
@@ -625,79 +638,6 @@ const GradeCard = ({ memberId, isAdmin, isOwnProfile }: GradeCardProps) => {
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-// ── Attendance history card ───────────────────────────────────────────────────
-
-type AttendanceHistoryCardProps = {
-  memberId: string
-}
-
-const AttendanceHistoryCard = ({ memberId }: AttendanceHistoryCardProps) => {
-  const [records, setRecords] = useState<AttendanceRecord[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    getMemberAttendanceHistory(memberId)
-      .then(setRecords)
-      .catch((err: unknown) => {
-        setError(isApiError(err) ? err.message : "Failed to load attendance history")
-      })
-  }, [memberId])
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Attendance History</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {error !== null ? (
-          <p className="text-sm text-destructive" role="alert">{error}</p>
-        ) : records === null ? (
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-3/4" />
-          </div>
-        ) : records.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No attendance records yet</p>
-        ) : (
-          <div>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setOpen((o) => !o)}
-              aria-expanded={open}
-              aria-controls="attendance-history-list"
-            >
-              {open ? (
-                <ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
-              ) : (
-                <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
-              )}
-              {open ? "Hide" : "Show"} attendance ({records.length} sessions)
-            </button>
-
-            {open && (
-              <ol
-                id="attendance-history-list"
-                className="mt-2 space-y-1 border-l-2 border-border pl-3"
-              >
-                {records.map((record) => (
-                  <li key={record.id} className="text-sm">
-                    <span className="font-mono text-xs">{record.session_id.slice(0, 8)}…</span>
-                    <span className="text-muted-foreground ml-2 text-xs">
-                      {formatMemberDate(record.checked_in_at)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -1074,7 +1014,7 @@ const MemberDetailPage = () => {
             <FederationMembershipsCard store={federationStore} />
           )}
 
-          <AttendanceHistoryCard memberId={member.id} />
+          <AttendanceHistoryCard memberId={member.id} collapsible />
 
           {isAdmin && (
             <RecoveryTokenCard memberId={member.id} memberName={formatMemberName(member)} />

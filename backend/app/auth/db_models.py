@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from sqlalchemy import (
     Boolean,
@@ -27,8 +28,12 @@ class Account(UUIDBase):
         ForeignKey("members.id", name="fk_accounts_member_id", ondelete="RESTRICT"),
         nullable=False,
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
-    theme: Mapped[str] = mapped_column(String(10), nullable=False, default="system")
+    role: Mapped[Literal["admin", "member"]] = mapped_column(
+        String(20), nullable=False, default="member"
+    )
+    theme: Mapped[Literal["light", "dark", "system"]] = mapped_column(
+        String(10), nullable=False, default="system"
+    )
     # One WebAuthn ceremony in flight per Account: a second concurrent
     # registration or login for the same Account overwrites the challenge, and
     # the first then fails. Accepted at dojo scale (#418, #435).
@@ -137,8 +142,9 @@ class AdminRecoveryToken(UUIDBase):
     user_id: Mapped[str] = mapped_column(
         UUIDType(), ForeignKey("accounts.id"), nullable=False, index=True
     )
+    # SET NULL: erasing the issuer leaves the token usable by its target (#570).
     created_by_id: Mapped[str | None] = mapped_column(
-        UUIDType(), ForeignKey("accounts.id"), nullable=True
+        UUIDType(), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(

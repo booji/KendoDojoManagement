@@ -63,6 +63,7 @@ from app.auth.models import AccountClaims
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account, seed_member
+from tests.fake_repositories import RecordingUnitOfWork
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="admin@dojo.test", role="admin")
 _MEMBER_CLAIMS = AccountClaims(
@@ -488,6 +489,40 @@ async def test_revoke_unknown_invite_returns_404(invite_repo) -> None:
     ) as c:
         response = await c.post(f"/auth/admin/invites/{uuid.uuid4()}/revoke")
     assert response.status_code == 404
+
+
+class _VanishingInviteRepo(StubInviteRepo):
+    """The invite is found, then deleted by someone else before the revoke."""
+
+    async def mark_revoked(self, invite_id: str) -> dict[str, Any] | None:
+        return None
+
+
+async def test_revoke_invite_gone_before_the_revoke_returns_404() -> None:
+    from app.auth.dependencies import get_invite_repo
+    from app.dependencies import get_uow
+
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    repo = _VanishingInviteRepo()
+    record = await repo.add(
+        {
+            "email": "vanishing@dojo.test",
+            "first_name": "Test",
+            "surname": "Invitee",
+            "token_hash": _hash_token("plain-vanishing"),
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+            "issued_by": _ADMIN.sub,
+        }
+    )
+    app.dependency_overrides[get_invite_repo] = lambda: repo
+    uow = RecordingUnitOfWork()
+    app.dependency_overrides[get_uow] = lambda: uow
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.post(f"/auth/admin/invites/{record['id']}/revoke")
+    assert response.status_code == 404
+    assert uow.commits == 0
 
 
 # ===========================================================================
@@ -944,9 +979,9 @@ def test_invite_redeem_begin_is_registered_as_constant_time_path() -> None:
     ConstantTimeAuthMiddleware path set (app.core.middleware) rather than
     growing its own ad hoc timing protection."""
     from app.config import API_PREFIX
-    from app.core.middleware import _CONSTANT_TIME_PATHS
+    from app.core.middleware import _CONSTANT_TIME_FLOORS
 
-    assert f"{API_PREFIX}/auth/invites/redeem/begin" in _CONSTANT_TIME_PATHS
+    assert f"{API_PREFIX}/auth/invites/redeem/begin" in _CONSTANT_TIME_FLOORS
 
 
 @pytest.mark.asyncio

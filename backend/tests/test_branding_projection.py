@@ -184,3 +184,25 @@ def test_all_toggles_off_even_when_underlying_values_present() -> None:
     assert result.get("dojo_name") is None
     assert result.get("logo_url") is None
     assert result.get("background_image_url") is None
+
+
+# ---------------------------------------------------------------------------
+# Default logo fallback (#615)
+# ---------------------------------------------------------------------------
+
+
+def test_logo_url_falls_back_to_app_logo_when_none_uploaded() -> None:
+    result = project_branding(_raw(logo_url=None, login_show_logo=True))
+    assert result.get("logo_url") == "/logo.svg"
+
+
+def test_uploaded_logo_wins_over_app_logo() -> None:
+    result = project_branding(
+        _raw(logo_url="/static/logos/abc.png", login_show_logo=True)
+    )
+    assert result.get("logo_url") == "/static/logos/abc.png"
+
+
+def test_app_logo_hidden_when_login_show_logo_off() -> None:
+    result = project_branding(_raw(logo_url=None, login_show_logo=False))
+    assert result.get("logo_url") is None

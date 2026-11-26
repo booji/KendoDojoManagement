@@ -1,11 +1,16 @@
 name: Tests
 
-# Single-developer repo: day-to-day changes are verified on-device, so the
-# suite is reserved for release candidates rather than every push or PR.
+# The full suite is ~15 minutes, almost all Playwright, so it runs where a
+# release is cut rather than on every push: release candidates, and PRs into
+# main (release and hotfix branches under git-flow), where it is the required
+# check. Day-to-day PRs into develop get the backend-only job
+# (backend-tests.yml); run the full suite locally before opening one.
 on:
   push:
     tags:
       - 'v*-rc*'
+  pull_request:
+    branches: [main]
   release:
     types: [prereleased, published]
   workflow_dispatch:

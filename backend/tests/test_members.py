@@ -30,9 +30,10 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.grades.dependencies import get_grade_repo
 from app.main import app
 from app.members.dependencies import get_member_repo  # noqa: F401 — will fail (red)
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryGradeRepository, InMemoryMemberRepository
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -84,6 +85,14 @@ def clear_overrides():
 def member_repo() -> InMemoryMemberRepository:
     repo = InMemoryMemberRepository()
     app.dependency_overrides[get_member_repo] = lambda: repo
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def grade_repo() -> InMemoryGradeRepository:
+    """GET /members reads current Grades: keep it off the database."""
+    repo = InMemoryGradeRepository()
+    app.dependency_overrides[get_grade_repo] = lambda: repo
     return repo
 
 
@@ -248,6 +257,22 @@ async def test_create_duplicate_member_email_returns_409(member_repo) -> None:
         await c.post("/members", json=_valid_member_payload())
         response = await c.post("/members", json=_valid_member_payload())
     assert response.status_code == 409
+
+
+async def test_emails_differing_only_by_case_are_duplicates(member_repo) -> None:
+    # #592: the part before the @ is case-folded too, not just the domain.
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        first = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "Taro@Dojo.test"}
+        )
+        second = await c.post(
+            "/members", json={**_valid_member_payload(), "email": "taro@dojo.test"}
+        )
+    assert first.json()["email"] == "taro@dojo.test"
+    assert second.status_code == 409
 
 
 # ---------------------------------------------------------------------------
@@ -569,8 +594,8 @@ async def test_put_omitted_field_is_left_untouched(member_repo) -> None:
 
 
 async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> None:
-    """first_name is required-by-domain: an explicit null must be ignored,
-    preserving the existing behaviour for required fields."""
+    """first_name is required-by-domain: an explicit null is refused with 422
+    (#585) and the stored value stays."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
         _valid_member_payload(email="keep-first-name@dojo.test", first_name="Taro")
@@ -583,15 +608,14 @@ async def test_put_null_first_name_does_not_wipe_stored_value(member_repo) -> No
     ) as c:
         response = await c.put(f"/members/{member_id}", json={"first_name": None})
 
-    assert response.status_code == 200
-    assert response.json()["first_name"] == "Taro"
-    assert "first_name" not in calls[-1]
+    assert response.status_code == 422
+    assert calls == []
 
 
 async def test_put_null_membership_status_does_not_wipe_stored_value(
     member_repo,
 ) -> None:
-    """membership_status is required-by-domain: explicit null must be ignored."""
+    """membership_status is required-by-domain: explicit null is refused (#585)."""
     app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
     created = await member_repo.add(
         _valid_member_payload(email="keep-status@dojo.test", membership_status="active")
@@ -606,9 +630,8 @@ async def test_put_null_membership_status_does_not_wipe_stored_value(
             f"/members/{member_id}", json={"membership_status": None}
         )
 
-    assert response.status_code == 200
-    assert response.json()["membership_status"] == "active"
-    assert "membership_status" not in calls[-1]
+    assert response.status_code == 422
+    assert calls == []
 
 
 async def test_put_clearable_field_still_accepts_real_value(member_repo) -> None:
@@ -665,6 +688,35 @@ async def test_get_members_returns_all_for_admin(member_repo) -> None:
         response = await c.get("/members")
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+async def test_get_members_shows_each_members_current_grade(
+    member_repo, grade_repo
+) -> None:
+    """The list carries each Member's current Grade (#571): their latest
+    confirmed Promotion, never a pending one; None for a Member with none."""
+    app.dependency_overrides[REQUIRE_ADMIN] = _admin_override
+    graded = await member_repo.add(_valid_member_payload(email="g@dojo.test"))
+    ungraded = await member_repo.add(_valid_member_payload(email="u@dojo.test"))
+    await grade_repo.add_promotion(
+        graded["id"], "SHODAN", "Shodan (1-dan)", None, "2024-01-01T10:00:00+00:00"
+    )
+    await grade_repo.add_promotion(
+        graded["id"],
+        "NIDAN",
+        "Nidan (2-dan)",
+        None,
+        "2025-01-01T10:00:00+00:00",
+        status="pending",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/members")
+    assert response.status_code == 200
+    grades = {m["id"]: m["current_grade_name"] for m in response.json()}
+    assert grades == {graded["id"]: "Shodan (1-dan)", ungraded["id"]: None}
 
 
 async def test_get_members_filter_by_active_status(member_repo) -> None:

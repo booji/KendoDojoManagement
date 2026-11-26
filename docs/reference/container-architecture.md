@@ -6,7 +6,8 @@
 | `docker-compose.yml` | Production stack (app + PostgreSQL, named volumes for db data and uploads) |
 | `docker-compose.dev.yml` | Dev stack with bind-mounted source and hot-reload |
 | `docker-compose.test.yml` | Test watcher stack with ephemeral PostgreSQL |
-| `.env.example` | Template for production secrets |
+| `.env.example` | Template for the production stack's `.env`: image pin, db settings and secrets |
+| `deploy/env/kendo-app.env.example` | Template for the app settings (`kendo-app.env`), shared with the Quadlet deployment |
 | `.env.dev` | Dev defaults (safe to commit) |
 | `.env.test` | Test defaults (safe to commit) |
 

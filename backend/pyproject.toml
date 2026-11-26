@@ -36,6 +36,7 @@ dependencies = [
     "click>=8.5.0",
     "Mako>=1.4.3",
     "pyasn1>=0.6.5",
+    "markdown-it-py>=4.2.0",
 ]
 
 [dependency-groups]
@@ -50,6 +51,7 @@ dev = [
     "ruff==0.17.3",
     "greenlet>=3.5.6",
     "playwright>=1.64.1",
+    "ty==0.0.107",
 ]
 # The docs site (mkdocs.yml, .github/workflows/docs.yml). Pinned like the
 # backend: a theme release must not change the site unreviewed.
@@ -68,6 +70,9 @@ markers = [
     # reports them without gating on them -- see .github/workflows/backend-tests.yml
     # and docs/auth-timing-calibration.md.
     "timing_sensitive: asserts on measured wall-clock latency",
+    # e2e tests that exercise the guided tour (#609); every other browser test
+    # starts with it marked as seen (conftest.py).
+    "tour: lets the guided tour start on first sign-in",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

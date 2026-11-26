@@ -26,9 +26,10 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_MEMBER
 from app.auth.models import AccountClaims
+from app.dependencies import get_uow
 from app.main import app
 from app.members.dependencies import get_member_repo
-from tests.fake_repositories import InMemoryMemberRepository
+from tests.fake_repositories import InMemoryMemberRepository, RecordingUnitOfWork
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -197,6 +198,31 @@ async def test_put_my_member_updates_first_name(member_repo) -> None:
 
     assert response.status_code == 200
     assert response.json()["first_name"] == "UpdatedFirst"
+
+
+class _VanishingMemberRepository(InMemoryMemberRepository):
+    """The record is found, then deleted by someone else before the update."""
+
+    async def update(
+        self, member_id: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        return None
+
+
+async def test_put_my_member_gone_before_the_update_returns_404() -> None:
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    repo = _VanishingMemberRepository([_seed_record()])
+    app.dependency_overrides[get_member_repo] = lambda: repo
+    uow = RecordingUnitOfWork()
+    app.dependency_overrides[get_uow] = lambda: uow
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.put("/accounts/me/member", json={"first_name": "New"})
+
+    assert response.status_code == 404
+    assert uow.commits == 0
 
 
 async def test_put_my_member_updates_surname(member_repo) -> None:
@@ -534,7 +560,7 @@ async def test_put_my_member_explicit_null_clears_dob(member_repo) -> None:
     """An explicit JSON null for dob must clear the stored date of birth.
 
     dob is clearable via explicit null on this self-service route, matching
-    the admin route's _CLEARABLE_FIELDS semantics — unlike first-save
+    the admin route's semantics (#585) — unlike first-save
     onboarding, where a missing/null dob is still rejected with 422.
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -577,7 +603,7 @@ async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
     """An explicit null for first_name must not clear the stored value.
 
     first_name is required-by-domain on this route (unlike display_name/dob/
-    emergency_contact_*), so a null there means "leave alone", not "wipe".
+    emergency_contact_*), so a null there is refused with 422 (#585).
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     await member_repo.add(_seed_record(first_name="Taro"))
@@ -589,11 +615,11 @@ async def test_put_my_member_explicit_null_first_name_does_not_wipe_value(
             "/accounts/me/member",
             json={"first_name": None, "display_name": "Taro-san"},
         )
+        stored = await c.get("/accounts/me/member")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["first_name"] == "Taro"
-    assert body["display_name"] == "Taro-san"
+    assert response.status_code == 422
+    assert stored.json()["first_name"] == "Taro"
+    assert stored.json()["display_name"] != "Taro-san"
 
 
 async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
@@ -610,8 +636,8 @@ async def test_put_my_member_explicit_null_surname_does_not_wipe_value(
             "/accounts/me/member",
             json={"surname": None, "display_name": "Taro-san"},
         )
+        stored = await c.get("/accounts/me/member")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["surname"] == "Yamada"
-    assert body["display_name"] == "Taro-san"
+    assert response.status_code == 422
+    assert stored.json()["surname"] == "Yamada"
+    assert stored.json()["display_name"] != "Taro-san"

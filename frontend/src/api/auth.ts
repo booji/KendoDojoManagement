@@ -225,7 +225,12 @@ export const performPasskeyAdd = async (recoveryToken?: string): Promise<Registe
   return res.json() as Promise<RegisterResponse>
 }
 
-export const performPasskeyLogin = async (email: string): Promise<LoginResponse> => {
+// null when the browser does not report how the authenticator was attached.
+export type PasskeyLoginResult = LoginResponse & {
+  authenticatorAttachment: AuthenticatorAttachment | null
+}
+
+export const performPasskeyLogin = async (email: string): Promise<PasskeyLoginResult> => {
   const options = await loginPasskeyBegin(email)
 
   const publicKey: PublicKeyCredentialRequestOptions = {
@@ -256,7 +261,11 @@ export const performPasskeyLogin = async (email: string): Promise<LoginResponse>
     type: cred.type,
   }
 
-  return loginPasskeyComplete(email, credentialData)
+  const result = await loginPasskeyComplete(email, credentialData)
+  return {
+    ...result,
+    authenticatorAttachment: (cred.authenticatorAttachment ?? null) as AuthenticatorAttachment | null,
+  }
 }
 
 export const redeemRecoveryCode = async (

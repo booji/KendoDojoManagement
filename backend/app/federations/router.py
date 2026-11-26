@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -69,11 +70,11 @@ async def list_federations(
 
 @router.get("/federations/{federation_id}")
 async def get_federation(
-    federation_id: str,
+    federation_id: uuid.UUID,
     _claims: _Member,
     repo: _Repo,
 ) -> FederationResponse:
-    record = await repo.get(federation_id)
+    record = await repo.get(str(federation_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"
@@ -83,14 +84,13 @@ async def get_federation(
 
 @router.put("/federations/{federation_id}")
 async def update_federation(
-    federation_id: str,
+    federation_id: uuid.UUID,
     payload: FederationUpdate,
     _claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> FederationResponse:
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
-    record = await repo.update(federation_id, data)
+    record = await repo.update(str(federation_id), payload.changes())
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"
@@ -101,12 +101,12 @@ async def update_federation(
 
 @router.delete("/federations/{federation_id}")
 async def deactivate_federation(
-    federation_id: str,
+    federation_id: uuid.UUID,
     _claims: _Admin,
     repo: _Repo,
     uow: _UoW,
 ) -> FederationResponse:
-    record = await repo.deactivate(federation_id)
+    record = await repo.deactivate(str(federation_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Federation not found"

@@ -5,13 +5,23 @@ No live Docker required — these inspect files on disk.
 
 import os
 import re as _re
+import subprocess
 import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
-from tests.deploy_contract import CAPABILITIES_ADDED_BACK, SECRETS
+from tests.deploy_contract import (
+    CAPABILITIES_ADDED_BACK,
+    GENERATED_ENV_FILES,
+    PUBLISHED_IMAGE,
+    RELEASE_PIN,
+    SECRETS,
+    container_env,
+    names_a_registry,
+    read_env_file,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -116,14 +126,40 @@ REQUIRED_APP_ENV_VARS = [
 
 @pytest.mark.parametrize("var_name", REQUIRED_APP_ENV_VARS)
 def test_compose_app_service_env_includes(var_name: str):
-    compose = load_compose()
-    app_env: dict = compose["services"]["app"].get("environment", {})
-    # environment can be a dict or a list of "KEY=VALUE" strings
-    if isinstance(app_env, list):
-        keys = [entry.split("=")[0] for entry in app_env]
-    else:
-        keys = list(app_env.keys())
-    assert var_name in keys, f"app service environment must include {var_name}"
+    app_env = _container_env(load_compose()["services"]["app"])
+    assert var_name in app_env, f"app service environment must include {var_name}"
+
+
+@pytest.mark.parametrize("service", ["app", "migrate"])
+def test_compose_app_image_reads_the_app_settings_quadlet_reads(service: str):
+    """#603: the one example both deployments write their app settings from.
+    Every key in it reaches the container, so a new one needs no compose
+    change. The upload paths are pinned over it in the compose file."""
+    spec = load_compose()["services"][service]
+    assert spec.get("env_file") == "kendo-app.env", spec
+    example = read_env_file(ROOT / GENERATED_ENV_FILES["kendo-app.env"])
+    env = _container_env(spec)
+    assert example.keys() <= env.keys(), example.keys() - env.keys()
+
+
+# What the compose file interpolates, and the secrets setup.sh turns into
+# mounted files. Anything else in .env would be an app setting no container
+# reads (#603): those live in kendo-app.env.
+COMPOSE_ENV_KEYS = {
+    "KENDO_IMAGE",
+    "TZ",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_DB",
+    "MIGRATION_DATABASE_URL",
+    "DATABASE_URL",
+    "JWT_SECRET",
+    "SETUP_TOKEN",
+}
+
+
+def test_env_example_holds_only_what_compose_interpolates_and_the_secrets():
+    assert read_env_file(ENV_EXAMPLE).keys() == COMPOSE_ENV_KEYS
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +184,16 @@ def test_compose_db_service_env_includes(var_name: str):
     assert var_name in keys, f"db service environment must include {var_name}"
 
 
+def test_compose_db_timezone_defaults_to_the_apps():
+    """An .env without TZ must not leave the db on another zone than the app,
+    whose TZ comes from the shared example (Europe/London, as in Quadlet)."""
+    db_tz = str(load_compose()["services"]["db"]["environment"]["TZ"])
+    default = _re.fullmatch(r"\$\{TZ:-([^}]*)\}", db_tz)
+    assert default, db_tz
+    app_tz = read_env_file(ROOT / GENERATED_ENV_FILES["kendo-app.env"])["TZ"]
+    assert default.group(1) == app_tz == read_env_file(ENV_EXAMPLE)["TZ"]
+
+
 # ---------------------------------------------------------------------------
 # .env.example — all required variable names present
 # ---------------------------------------------------------------------------
@@ -156,8 +202,6 @@ REQUIRED_ENV_EXAMPLE_VARS = [
     "DATABASE_URL",
     "JWT_SECRET",
     "SETUP_TOKEN",
-    "JWT_EXPIRE_MINUTES",
-    "COOKIE_SECURE",
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "POSTGRES_DB",
@@ -419,17 +463,6 @@ DEV_HOST = "dojo.localhost"
 DEV_ORIGIN = "https://dojo.localhost:8443"
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        values[key.strip()] = value.strip()
-    return values
-
-
 def test_dev_compose_has_a_proxy_on_the_edge_network_only():
     proxy = load_dev_compose()["services"].get("proxy")
     assert proxy, "docker-compose.dev.yml must define a 'proxy' service (Traefik)"
@@ -525,7 +558,7 @@ DEV_ENV_EXPECTATIONS = {
 
 @pytest.mark.parametrize("key,expected", sorted(DEV_ENV_EXPECTATIONS.items()))
 def test_env_dev_matches_the_proxied_origin(key: str, expected: str):
-    assert _read_env_file(ENV_DEV).get(key) == expected
+    assert read_env_file(ENV_DEV).get(key) == expected
 
 
 def test_dev_backend_and_frontend_keep_their_direct_ports():
@@ -544,7 +577,7 @@ def test_selfhost_app_publishes_no_port_and_trusts_the_forwarded_header():
         "the quick self-host's app must not publish a port once the proxy fronts "
         f"it — an unproxied route makes TRUST_PROXY_XFF spoofable. Got: {app.get('ports')}"
     )
-    assert app["environment"]["TRUST_PROXY_XFF"] == "${TRUST_PROXY_XFF:-true}"
+    assert _container_env(app)["TRUST_PROXY_XFF"] == "true"
 
 
 def test_selfhost_has_a_proxy_on_the_edge_network_only():
@@ -645,6 +678,26 @@ def test_prod_traefik_health_checks_the_app(path: Path):
 
 
 # ---------------------------------------------------------------------------
+# docker-compose.yml — the stack comes back after a crash, OOM or reboot (#582)
+# ---------------------------------------------------------------------------
+
+
+def test_compose_long_running_services_come_back_on_their_own():
+    """Every service declares a restart policy: `always` unless it is a
+    one-shot job that says `"no"`. `always`, not `unless-stopped`: an older
+    Podman's podman-restart.service starts only `always` containers at boot."""
+    services = load_compose()["services"]
+    policies = {name: svc.get("restart") for name, svc in services.items()}
+    long_running = {name for name, policy in policies.items() if policy != "no"}
+    assert long_running >= {"app", "proxy", "db"}, policies
+    for name in long_running:
+        assert policies[name] == "always", (
+            f"{name} must set `restart: always`, or the dojo stays offline "
+            "after an OOM kill or a reboot (#582)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # docker-compose.yml — migrations run before the app, not inside it (#391)
 # ---------------------------------------------------------------------------
 
@@ -683,13 +736,31 @@ def test_app_container_does_not_run_migrations():
 # ADR-0004)
 # ---------------------------------------------------------------------------
 
-PUBLISHED_IMAGE = "ghcr.io/booji/kendodojomanagement"
-MAJOR_PIN = f"{PUBLISHED_IMAGE}:1"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 QUADLET_UNITS = [
     ROOT / "deploy" / "quadlet" / "kendo-app.container",
     ROOT / "deploy" / "quadlet" / "kendo-migrate.container",
     ROOT / "deploy" / "quadlet" / "kendo-ip-retention.container",
 ]
+
+
+BUNDLE_FILES = [
+    ROOT / "setup.sh",
+    ROOT / "entrypoint.sh",
+    COMPOSE_FILE,
+    ENV_EXAMPLE,
+    *sorted(p for p in (ROOT / "deploy").rglob("*") if p.is_file()),
+]
+
+
+@pytest.mark.parametrize("path", BUNDLE_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_shipped_files_name_only_the_current_pin(path: Path):
+    """No stale tag in what an operator runs or reads: before 1.0 a `:1` pin
+    names an image that does not exist yet, and `:0` one that is never pushed."""
+    pins = _re.findall(
+        rf"{_re.escape(PUBLISHED_IMAGE)}:[0-9]+(?:\.[0-9]+)*", path.read_text()
+    )
+    assert set(pins) <= {RELEASE_PIN}, pins
 
 
 @pytest.mark.parametrize("service", ["app", "migrate"])
@@ -698,11 +769,33 @@ def test_compose_runs_the_published_image_and_never_builds(service: str):
     quietly rebuild from a context they no longer have."""
     spec = load_compose()["services"][service]
     assert "build" not in spec, spec
-    assert spec["image"] == f"${{KENDO_IMAGE:-{MAJOR_PIN}}}", spec["image"]
+    assert spec["image"] == f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", spec["image"]
+
+
+@pytest.mark.parametrize(
+    "image, qualified",
+    [
+        ("postgres:16-alpine", False),
+        ("library/postgres:16-alpine", False),
+        ("${KENDO_IMAGE:-kendodojo:latest}", False),
+        ("docker.io/library/postgres:16-alpine", True),
+        ("localhost/kendodojo:latest", True),
+        (f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", True),
+    ],
+)
+def test_names_a_registry_rejects_short_names(image: str, qualified: bool):
+    assert names_a_registry(image) is qualified
+
+
+def test_every_compose_image_names_its_registry():
+    """A short name resolves through the host's search registries, and on
+    RHEL-family hosts that is registry.access.redhat.com first (#634)."""
+    images = {name: spec["image"] for name, spec in load_compose()["services"].items()}
+    assert all(names_a_registry(i) for i in images.values()), images
 
 
 def test_env_example_pins_the_same_image_as_the_compose_default():
-    assert f"\nKENDO_IMAGE={MAJOR_PIN}\n" in ENV_EXAMPLE.read_text()
+    assert f"\nKENDO_IMAGE={RELEASE_PIN}\n" in ENV_EXAMPLE.read_text()
 
 
 @pytest.mark.parametrize("unit", QUADLET_UNITS, ids=lambda p: p.name)
@@ -710,7 +803,7 @@ def test_quadlet_units_run_the_published_image(unit: Path):
     """Every app-image unit, always the same tag: the migration chain and the code that
     runs against it have to come from one artefact."""
     text = unit.read_text()
-    assert f"\nImage={MAJOR_PIN}\n" in text, text
+    assert f"\nImage={RELEASE_PIN}\n" in text, text
     assert "Image=localhost/kendodojo" not in text, text
 
 
@@ -749,9 +842,118 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
     assert 'ARG KENDO_IMAGE_REF=""' in stage, stage
     assert "/bundle/.image-tag" in stage, stage
 
-    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
-    assert "KENDO_IMAGE_REF=" in release, release
-    assert "${v%%.*}" in release, "a release must stamp the major tag it documents"
+    release = RELEASE_WORKFLOW.read_text()
+    assert "KENDO_IMAGE_REF=${{ steps.pin.outputs.ref }}" in release, release
+
+
+def test_release_image_reports_its_exact_version():
+    """Admin Settings shows the Version the image was built from (#556): the
+    exact tag, `0.1.5`, never the pin `0.1`. Any other build reports `dev`."""
+    stage = _prod_stage()
+    # Empty, so `dev` lives only in the router: an unset or empty
+    # KENDO_VERSION reports `dev` there.
+    assert "\nARG KENDO_VERSION=\n" in stage, stage
+    assert "ENV KENDO_VERSION=$KENDO_VERSION" in stage, stage
+
+    [build] = [s for s in _release_steps() if s.get("id") == "build"]
+    args = build["with"]["build-args"].splitlines()
+    assert "KENDO_VERSION=${{ steps.meta.outputs.version }}" in args, args
+
+
+def _release_steps() -> list[dict]:
+    jobs = yaml.safe_load(RELEASE_WORKFLOW.read_text())["jobs"]
+    return [step for job in jobs.values() for step in job["steps"]]
+
+
+def _pin_for(version: str, tmp_path: Path) -> str:
+    """Run release.yml's own pin step for the version metadata-action emits."""
+    [step] = [s for s in _release_steps() if s.get("id") == "pin"]
+    script = step["run"].replace("${{ steps.meta.outputs.version }}", version)
+    out = tmp_path / "github_output"
+    out.touch()
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        env={**os.environ, "GITHUB_OUTPUT": str(out)},
+        check=True,
+    )
+    return dict(line.split("=", 1) for line in out.read_text().splitlines())["ref"]
+
+
+def _shipped_pin_check(ref: str) -> subprocess.CompletedProcess:
+    """Run release.yml's own check that the shipped files name REF."""
+    [step] = [s for s in _release_steps() if s.get("id") == "pin-check"]
+    return subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=ROOT,
+        env={**os.environ, "REF": ref},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_release_publishes_when_the_shipped_files_name_its_pin():
+    result = _shipped_pin_check(RELEASE_PIN)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_release_checks_the_pin_before_pushing_and_never_for_a_prerelease():
+    """An rc is pushed under its exact tag, which no shipped file names."""
+    steps = _release_steps()
+    ids = [s.get("id") for s in steps]
+    assert ids.index("pin") < ids.index("pin-check") < ids.index("build"), ids
+    check = steps[ids.index("pin-check")]
+    assert check["if"] == "${{ !contains(github.ref_name, '-') }}", check
+
+
+def test_release_refuses_a_pin_the_shipped_files_do_not_name():
+    """A new Release line that missed a file must not publish: an operator
+    would extract a bundle, or read a page, that pulls the old line. The
+    failure names every such file."""
+    result = _shipped_pin_check(f"{PUBLISHED_IMAGE}:99")
+    assert result.returncode != 0, result.stdout
+    pages = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    stale = {
+        path.relative_to(ROOT).as_posix()
+        for path in [*BUNDLE_FILES, *pages]
+        if RELEASE_PIN in path.read_text(errors="ignore")
+    }
+    assert stale
+    missed = {path for path in stale if path not in result.stdout}
+    assert not missed, result.stdout
+
+
+@pytest.mark.parametrize(
+    ("version", "pin"),
+    [
+        # Before 1.0 the minor stands in for the major (ADR-0009): a :0 pin
+        # would hand every 0.x Breaking change to `pull && up -d`.
+        ("0.1.0", "0.1"),
+        ("0.3.1", "0.3"),
+        # From 1.0 the major, with no edit to the workflow (ADR-0004).
+        ("1.2.0", "1"),
+        ("2.0.5", "2"),
+        # A prerelease rehearses one exact image, never a moving tag.
+        ("0.1.0-rc1", "0.1.0-rc1"),
+        ("1.0.0-rc1", "1.0.0-rc1"),
+    ],
+)
+def test_release_bakes_the_pin_its_series_documents(version, pin, tmp_path):
+    assert _pin_for(version, tmp_path) == f"{PUBLISHED_IMAGE}:{pin}"
+
+
+def test_release_never_pushes_a_moving_zero_tag():
+    """metadata-action emits `0` for {{major}} on a 0.x version unless the
+    entry is disabled (its README's "Major version zero"), and `:0` would carry
+    every 0.x Breaking change. 0.Y and 0.Y.Z still publish."""
+    [meta] = [s for s in _release_steps() if s.get("id") == "meta"]
+    tags = meta["with"]["tags"].splitlines()
+    assert "type=semver,pattern={{version}}" in tags, tags
+    assert "type=semver,pattern={{major}}.{{minor}}" in tags, tags
+    [major] = [t for t in tags if "pattern={{major}}," in t or t.endswith("{{major}}")]
+    assert major == (
+        "type=semver,pattern={{major}},"
+        "enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}"
+    ), major
 
 
 # ---------------------------------------------------------------------------
@@ -761,19 +963,7 @@ def test_bundle_carries_the_tag_it_was_extracted_from():
 
 
 def _container_env(service: dict) -> dict[str, str]:
-    """What the container actually sees: its env_file entries, overridden by
-    its environment: block — the env_file half is what #483 slipped through."""
-    env_files = service.get("env_file", [])
-    if isinstance(env_files, str):
-        env_files = [env_files]
-    merged: dict[str, str] = {}
-    for entry in env_files:
-        path = entry["path"] if isinstance(entry, dict) else entry
-        merged |= _read_env_file(ROOT / path)
-    env = service.get("environment", {})
-    if isinstance(env, list):
-        return merged | dict(entry.split("=", 1) for entry in env)
-    return merged | {k: str(v) for k, v in env.items()}
+    return container_env(service, ROOT, GENERATED_ENV_FILES)
 
 
 @pytest.mark.parametrize(
@@ -792,7 +982,7 @@ def test_compose_app_never_sees_the_superuser_login(load, service: str):
         "POSTGRES_PASSWORD",
     ):
         assert superuser_var not in names, env
-    assert "migration_database_url" not in spec.get("secrets", []), spec
+    assert not any("migration_database_url" in str(v) for v in spec.get("volumes", []))
     assert "POSTGRES_PASSWORD" not in env.get("DATABASE_URL", ""), env
 
 
@@ -802,7 +992,7 @@ def test_dev_backend_still_gets_every_app_setting_from_env_dev():
     env = _container_env(load_dev_compose()["services"]["backend"])
     wanted = {
         key
-        for key in _read_env_file(ENV_DEV)
+        for key in read_env_file(ENV_DEV)
         if not key.startswith("POSTGRES_") and key != "MIGRATION_DATABASE_URL"
     }
     assert wanted <= env.keys(), wanted - env.keys()
@@ -818,21 +1008,45 @@ def test_compose_migrate_gets_both_logins(load):
 # ---------------------------------------------------------------------------
 # Prod secrets are mounted files, not environment (#462)
 # ---------------------------------------------------------------------------
-# Compose mounts a file-backed secret at /run/secrets/<name>; setup.sh writes
-# the files under ./secrets.
+# Each secret is a file under ./secrets, written by setup.sh, bind-mounted at
+# /run/secrets/<name>. A bind mount and not a top-level `secrets:` entry: that
+# takes no SELinux relabel option on docker compose or podman-compose before
+# 1.5.0 (#635).
 
 
 @pytest.mark.parametrize("service", sorted(SECRETS))
 def test_compose_secrets_are_mounted_files(service: str):
-    compose = load_compose()
-    spec = compose["services"][service]
+    spec = load_compose()["services"][service]
     env = _container_env(spec)
     for var in SECRETS[service]:
         name = var.lower()
         assert var not in env, f"{service} still passes {var} as environment"
         assert env.get(f"{var}_FILE") == f"/run/secrets/{name}", env
-        assert name in spec.get("secrets", []), spec
-        assert compose["secrets"][name] == {"file": f"./secrets/{name}"}
+        mount = f"./secrets/{name}:/run/secrets/{name}:ro,z"
+        assert mount in spec.get("volumes", []), spec
+
+
+def _host_bind_mounts(compose: dict) -> dict[str, list[str]]:
+    """Each service's short-syntax volumes whose source is a host path."""
+    return {
+        name: [v for v in spec.get("volumes", []) if str(v).startswith((".", "/", "~"))]
+        for name, spec in compose["services"].items()
+    }
+
+
+def test_every_host_bind_mount_is_relabelled_for_selinux():
+    """Files setup.sh writes in the install directory are labelled
+    user_home_t, which container_t cannot read on an enforcing host (#635).
+    `z`, shared: migrate and app read the same secret files."""
+    compose = load_compose()
+    mounts = _host_bind_mounts(compose)
+    assert any(mounts.values()), mounts
+    unlabelled = {
+        name: [v for v in vols if not {"z", "Z"} & set(v.split(":")[-1].split(","))]
+        for name, vols in mounts.items()
+    }
+    assert not any(unlabelled.values()), unlabelled
+    assert "secrets" not in compose, "top-level secrets take no relabel option"
 
 
 def test_dev_backend_waits_for_migrate():
@@ -842,13 +1056,11 @@ def test_dev_backend_waits_for_migrate():
     assert deps.get("migrate", {}).get("condition") == "service_completed_successfully"
 
 
-@pytest.mark.parametrize(
-    "env_file", [".env.example", ".env.prod.example", ".env.dev", ".env.test"]
-)
+@pytest.mark.parametrize("env_file", [".env.example", ".env.dev", ".env.test"])
 def test_env_files_split_the_app_and_migration_logins(env_file: str):
     from sqlalchemy.engine.url import make_url
 
-    values = _read_env_file(ROOT / env_file)
+    values = read_env_file(ROOT / env_file)
     assert make_url(values["DATABASE_URL"]).username == "kendo_app"
     migration = make_url(values["MIGRATION_DATABASE_URL"])
     assert migration.username == values["POSTGRES_USER"]

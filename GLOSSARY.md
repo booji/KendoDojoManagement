@@ -58,7 +58,7 @@ Setting a **Member's** **Membership Status** to inactive. The **Member** is kept
 _Avoid_: Delete, remove, archive
 
 **Federation Number**:
-A **Member's** identifier with a national kendo federation.
+A **Member's** identifier with a kendo federation: a national one, or a continental body such as the EKF, which numbers every European dan grade holder alongside their national federation.
 _Avoid_: Licence number, membership number
 
 **Federation Membership**:
@@ -113,6 +113,13 @@ _Avoid_: Class, training, practice
 A recurring rule that generates **Sessions** on a fixed schedule.
 _Avoid_: Recurring session, schedule
 
+**Series**:
+The **Sessions** one **Session Template** generates, taken together. A Series is extended or cancelled as a whole, through its template.
+_Avoid_: Recurring sessions
+
+**Slot**:
+The date a **Session Template** generated a **Session** for. A Session keeps its Slot when it is moved to another date, so its **Series** still counts that date as covered.
+
 **Ad-hoc Session**:
 A one-off **Session** created directly, not from a **Session Template**.
 _Avoid_: Extra session, special session
@@ -127,6 +134,14 @@ _Avoid_: Session category, class type
 
 **Cancellation**:
 Marking a specific **Session** as not taking place.
+
+**Reinstatement**:
+Undoing a **Cancellation**, so the **Session** takes place again. Reinstating one **Session** of a cancelled **Series** leaves the rest cancelled.
+_Avoid_: Uncancel, restore
+
+**Calendar Feed**:
+The subscription of upcoming **Sessions**, without **Cancellations**, that anyone with its link can add to their own calendar app. Calendar apps show it under the dojo's name.
+_Avoid_: iCal, ICS feed
 
 ### Attendance
 
@@ -145,6 +160,18 @@ _Avoid_: Check-in token, sign-in code
 **Admin Override**:
 An **Admin** adding or removing a **Member's** **Attendance** after the fact.
 _Avoid_: Manual attendance, correction
+
+**Attendance Rate**:
+The share of held **Sessions** in a period that a **Member** attended, counting only from the later of the period's start and the day they joined. A **Session** under **Cancellation** is not held.
+_Avoid_: Consistency, attendance %
+
+**Attendance Streak**:
+A run of consecutive weeks, Monday to Sunday, in each of which a **Member** attended at least one **Session**. A week with no held **Sessions** neither breaks nor extends it.
+_Avoid_: Run, streak
+
+**Absent Member**:
+A **Member** with no **Attendance** in the last 14 days, including one who joined more than 14 days ago and has never attended. A state read from **Attendance**, not a **Membership Status**: nobody sets it, and it ends at their next **Attendance**.
+_Avoid_: Lapsed, inactive, missing
 
 ### Settings
 
@@ -181,12 +208,24 @@ The rootless Podman and Quadlet setup, with TLS termination, secrets and automat
 _Avoid_: The Quadlet thing, systemd deploy
 
 **Release image**:
-The published application container, pinned by its major version. The app and nothing else: it holds no operator configuration.
+The published application container, pinned by its **Release line**. The app and nothing else: it holds no operator configuration.
 _Avoid_: The container, the GHCR image, the build
 
 **Deployment bundle**:
 The configuration a host needs beside the **Release image**, extracted from the image itself so the two are always on the same version.
 _Avoid_: The repo files, the deploy directory, the checkout
+
+**Release line**:
+The series of releases an operator pins to and upgrades within without a **Breaking change**: `0.3` before 1.0, `1` after. Only the latest Release line is supported.
+_Avoid_: Major, version, branch
+
+**Version**:
+The exact release an install is running, such as `0.1.5` or `0.2.0-rc.1`; a build that is not a release is `dev`. One **Release line** holds many Versions.
+_Avoid_: Release line, build, tag
+
+**Breaking change**:
+A change an operator cannot take by the routine upgrade alone: it needs a manual step, or it cannot be undone by returning to the previous **Release image**. The REST API is not part of this promise; it ships with its only client.
+_Avoid_: Major change, incompatible change
 
 ## Relationships
 
@@ -196,6 +235,7 @@ _Avoid_: The repo files, the deploy directory, the checkout
 - A **Member** holds exactly one current **Grade** and accumulates a **Grade History** over time.
 - **Grades** progress in strict order: Mukyū, 6-kyū to 1-kyū, then 1-dan to 8-dan.
 - A **Session** is either generated from a **Session Template** or created as an **Ad-hoc Session**.
+- A generated **Session** covers one **Slot** of its **Series**, and no two Sessions cover the same Slot.
 - A **Session** has one or more **Segments**, and each **Segment** carries one or more **Session Types**, so one evening's keiko can be both Kihon and Keiko.
 - **Attendance** at a **Session** is a collection of **Check-ins** by **Members** and named **Visitors**.
 - A **Session** has exactly one **Check-in Link**, and it never changes.
@@ -213,5 +253,6 @@ _Avoid_: The repo files, the deploy directory, the checkout
 - **"Session"** is a training event. Signed-in state is an **Auth Session**, always qualified.
 - **"Grading"** has meant both the event where grades are awarded and the act of awarding one. Say **Session Type** Grading for the event and **Promotion** for the act.
 - **"Guest"** and **"Visitor"** were used interchangeably. Say **Visitor**.
+- **"Inactive"** is a **Membership Status** someone sets. A **Member** who has stopped turning up is an **Absent Member**, never "inactive" or "lapsed".
 - **"Rank"** and **"Grade"**: say **Grade**, in line with kendo federation terminology.
 - **"Production"** meant two different stacks, both supported production paths. Never use it to tell them apart: say **Quick self-host** or **Hardened deployment**.

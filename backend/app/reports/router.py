@@ -5,12 +5,13 @@ import io
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth.guards import REQUIRE_ADMIN
 from app.auth.models import AccountClaims
 from app.core.security_logger import log_admin_event
+from app.members.models import MembershipStatus
 from app.reports.dependencies import get_report_repo
 from app.reports.repository import AbstractReportRepository
 
@@ -60,12 +61,62 @@ async def attendance_report(
     return {"sessions": sessions, "member_rates": member_rates}
 
 
-@router.get("/members")
-async def members_report(
+@router.get("/grades")
+async def grade_distribution(
+    claims: _Admin,
+    repo: _ReportRepo,
+    # Literal-typed, so FastAPI answers 422 for any value that is not a known
+    # Membership Status.
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.grade_distribution(status)
+
+
+@router.get("/headcount")
+async def headcount(
+    date_from: date,
+    date_to: date,
     claims: _Admin,
     repo: _ReportRepo,
 ) -> list[dict[str, Any]]:
-    return await repo.members_report()
+    _validate_date_range(date_from, date_to)
+    return await repo.headcount(date_from.isoformat(), date_to.isoformat())
+
+
+@router.get("/attendance-rates")
+async def top_attendance_rates(
+    date_from: date,
+    date_to: date,
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    """Top 10 Attendance Rates over the range, among Members with at least 4
+    eligible held Sessions in it."""
+    _validate_date_range(date_from, date_to)
+    return await repo.top_attendance_rates(
+        date_from.isoformat(), date_to.isoformat(), status
+    )
+
+
+@router.get("/streaks")
+async def attendance_streaks(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    """Top 10 Attendance Streaks this year. Takes no date range: a streak
+    always covers 1 January to today."""
+    return await repo.attendance_streaks(status, date.today())
+
+
+@router.get("/absent-members")
+async def absent_members(
+    claims: _Admin,
+    repo: _ReportRepo,
+    status: Annotated[list[MembershipStatus], Query()] = ["active"],
+) -> list[dict[str, Any]]:
+    return await repo.absent_members(status, date.today())
 
 
 @router.get("/attendance/csv")
@@ -105,7 +156,14 @@ async def members_csv(
     log_admin_event("report_exported", claims.sub, report="members")
     output = io.StringIO()
     writer = csv.DictWriter(
-        output, fieldnames=["member_id", "display_name", "join_date", "current_grade"]
+        output,
+        fieldnames=[
+            "member_id",
+            "display_name",
+            "join_date",
+            "current_grade",
+            "grade_number",
+        ],
     )
     writer.writeheader()
     writer.writerows(_sanitize_row(r) for r in members)
