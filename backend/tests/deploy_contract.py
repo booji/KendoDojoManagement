@@ -98,3 +98,14 @@ def container_env(
     if isinstance(env, list):
         return merged | dict(entry.split("=", 1) for entry in env)
     return merged | {k: str(v) for k, v in env.items()}
+
+
+def names_a_registry(image: str) -> bool:
+    """Whether an image reference names its registry (#634). A short name
+    such as postgres:16-alpine is resolved through the host's search
+    registries, and on RHEL-family hosts registry.access.redhat.com comes
+    first. A Compose `${VAR:-default}` is judged by its default."""
+    if image.startswith("${") and ":-" in image:
+        image = image.split(":-", 1)[1].removesuffix("}")
+    first, slash, _ = image.partition("/")
+    return bool(slash) and ("." in first or ":" in first or first == "localhost")
