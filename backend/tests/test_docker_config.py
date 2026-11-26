@@ -19,6 +19,7 @@ from tests.deploy_contract import (
     RELEASE_PIN,
     SECRETS,
     container_env,
+    names_a_registry,
     read_env_file,
 )
 
@@ -771,6 +772,28 @@ def test_compose_runs_the_published_image_and_never_builds(service: str):
     assert spec["image"] == f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", spec["image"]
 
 
+@pytest.mark.parametrize(
+    "image, qualified",
+    [
+        ("postgres:16-alpine", False),
+        ("library/postgres:16-alpine", False),
+        ("${KENDO_IMAGE:-kendodojo:latest}", False),
+        ("docker.io/library/postgres:16-alpine", True),
+        ("localhost/kendodojo:latest", True),
+        (f"${{KENDO_IMAGE:-{RELEASE_PIN}}}", True),
+    ],
+)
+def test_names_a_registry_rejects_short_names(image: str, qualified: bool):
+    assert names_a_registry(image) is qualified
+
+
+def test_every_compose_image_names_its_registry():
+    """A short name resolves through the host's search registries, and on
+    RHEL-family hosts that is registry.access.redhat.com first (#634)."""
+    images = {name: spec["image"] for name, spec in load_compose()["services"].items()}
+    assert all(names_a_registry(i) for i in images.values()), images
+
+
 def test_env_example_pins_the_same_image_as_the_compose_default():
     assert f"\nKENDO_IMAGE={RELEASE_PIN}\n" in ENV_EXAMPLE.read_text()
 
@@ -959,7 +982,7 @@ def test_compose_app_never_sees_the_superuser_login(load, service: str):
         "POSTGRES_PASSWORD",
     ):
         assert superuser_var not in names, env
-    assert "migration_database_url" not in spec.get("secrets", []), spec
+    assert not any("migration_database_url" in str(v) for v in spec.get("volumes", []))
     assert "POSTGRES_PASSWORD" not in env.get("DATABASE_URL", ""), env
 
 
@@ -985,21 +1008,45 @@ def test_compose_migrate_gets_both_logins(load):
 # ---------------------------------------------------------------------------
 # Prod secrets are mounted files, not environment (#462)
 # ---------------------------------------------------------------------------
-# Compose mounts a file-backed secret at /run/secrets/<name>; setup.sh writes
-# the files under ./secrets.
+# Each secret is a file under ./secrets, written by setup.sh, bind-mounted at
+# /run/secrets/<name>. A bind mount and not a top-level `secrets:` entry: that
+# takes no SELinux relabel option on docker compose or podman-compose before
+# 1.5.0 (#635).
 
 
 @pytest.mark.parametrize("service", sorted(SECRETS))
 def test_compose_secrets_are_mounted_files(service: str):
-    compose = load_compose()
-    spec = compose["services"][service]
+    spec = load_compose()["services"][service]
     env = _container_env(spec)
     for var in SECRETS[service]:
         name = var.lower()
         assert var not in env, f"{service} still passes {var} as environment"
         assert env.get(f"{var}_FILE") == f"/run/secrets/{name}", env
-        assert name in spec.get("secrets", []), spec
-        assert compose["secrets"][name] == {"file": f"./secrets/{name}"}
+        mount = f"./secrets/{name}:/run/secrets/{name}:ro,z"
+        assert mount in spec.get("volumes", []), spec
+
+
+def _host_bind_mounts(compose: dict) -> dict[str, list[str]]:
+    """Each service's short-syntax volumes whose source is a host path."""
+    return {
+        name: [v for v in spec.get("volumes", []) if str(v).startswith((".", "/", "~"))]
+        for name, spec in compose["services"].items()
+    }
+
+
+def test_every_host_bind_mount_is_relabelled_for_selinux():
+    """Files setup.sh writes in the install directory are labelled
+    user_home_t, which container_t cannot read on an enforcing host (#635).
+    `z`, shared: migrate and app read the same secret files."""
+    compose = load_compose()
+    mounts = _host_bind_mounts(compose)
+    assert any(mounts.values()), mounts
+    unlabelled = {
+        name: [v for v in vols if not {"z", "Z"} & set(v.split(":")[-1].split(","))]
+        for name, vols in mounts.items()
+    }
+    assert not any(unlabelled.values()), unlabelled
+    assert "secrets" not in compose, "top-level secrets take no relabel option"
 
 
 def test_dev_backend_waits_for_migrate():

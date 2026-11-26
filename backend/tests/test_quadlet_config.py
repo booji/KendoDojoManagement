@@ -22,6 +22,7 @@ from tests.deploy_contract import (
     PUBLISHED_IMAGE,
     QUADLET_UNITS,
     SECRETS,
+    names_a_registry,
 )
 
 # ---------------------------------------------------------------------------
@@ -98,6 +99,18 @@ def _all_container_files() -> list[str]:
 # ---------------------------------------------------------------------------
 # 1 & 2 & 3 — network segmentation
 # ---------------------------------------------------------------------------
+
+
+def test_every_quadlet_image_names_its_registry():
+    """No short names: Podman would resolve them through the host's search
+    registries (#634)."""
+    images = {
+        name: unit["Container"]["Image"]
+        for name, unit in load_units().items()
+        if "Image" in unit.get("Container", {})
+    }
+    assert images, "no Image= found in deploy/quadlet"
+    assert all(names_a_registry(i) for v in images.values() for i in v), images
 
 
 def test_db_is_only_on_the_backend_network():
