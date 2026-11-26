@@ -167,3 +167,24 @@ def test_tour_waits_for_the_device_passkey_offer(page: Page) -> None:
 
     dialog.get_by_role("button", name="Not now").click()
     expect(_popover_title(page)).to_have_text("Dashboard")
+
+
+def test_tour_waits_until_onboarding_is_complete(page: Page) -> None:
+    # #636: a first sign-in with no profile is redirected to the onboarding
+    # form, which the tour must not cover; it starts once the form is done.
+    page.set_viewport_size(DESKTOP)
+    authenticate(page, "member", with_profile=False)
+    page.goto(BASE_URL)
+
+    expect(page).to_have_url(f"{BASE_URL}/onboarding")
+    expect(page.get_by_label("First name", exact=False)).to_be_visible()
+    page.wait_for_timeout(500)
+    expect(page.locator(".driver-popover")).to_have_count(0)
+
+    page.get_by_label("First name", exact=False).fill("Jane")
+    page.get_by_label("Surname", exact=False).fill("Smith")
+    page.get_by_label("Date of birth", exact=False).fill("1990-06-15")
+    page.get_by_role("button", name="Save and continue").click()
+
+    expect(page).to_have_url(f"{BASE_URL}/")
+    expect(_popover_title(page)).to_have_text("Dashboard")

@@ -35,7 +35,7 @@ import PasskeyRegisterPage from "@/pages/PasskeyRegisterPage"
 import SessionDetailPage from "@/pages/SessionDetailPage"
 import OnboardingPage from "@/pages/OnboardingPage"
 
-type LayoutContext = { user: AccountClaims }
+type LayoutContext = { user: AccountClaims; offerOpen: boolean }
 
 // Wraps authenticated routes — fetches current user and renders AppShell.
 // Redirects to /login on auth failure.
@@ -73,22 +73,21 @@ const AuthenticatedLayout = () => {
 
   return (
     <AppShell role={user.role}>
-      <Outlet context={{ user } satisfies LayoutContext} />
+      <Outlet context={{ user, offerOpen } satisfies LayoutContext} />
       <DevicePasskeyPrompt onClose={() => setOfferOpen(false)} />
-      <GuidedTour role={user.role} paused={offerOpen} />
     </AppShell>
   )
 }
 
 // Wraps admin-only routes — redirects non-admins to /.
 const RequireAdmin = () => {
-  const { user } = useOutletContext<LayoutContext>()
-  return user.role === "admin" ? <Outlet context={{ user } satisfies LayoutContext} /> : <Navigate to="/" replace />
+  const context = useOutletContext<LayoutContext>()
+  return context.user.role === "admin" ? <Outlet context={context} /> : <Navigate to="/" replace />
 }
 
 // Wraps profile-required routes — redirects to /onboarding if profile is incomplete.
 const RequireProfile = () => {
-  const { user } = useOutletContext<LayoutContext>()
+  const context = useOutletContext<LayoutContext>()
   const [ready, setReady] = useState(false)
   const [redirect, setRedirect] = useState(false)
 
@@ -111,7 +110,13 @@ const RequireProfile = () => {
 
   if (!ready) return null
   if (redirect) return <Navigate to="/onboarding" replace />
-  return <Outlet context={{ user } satisfies LayoutContext} />
+  // The tour starts only past the profile gate, never over onboarding (#636).
+  return (
+    <>
+      <Outlet context={context} />
+      <GuidedTour role={context.user.role} paused={context.offerOpen} />
+    </>
+  )
 }
 
 const App = () => (
