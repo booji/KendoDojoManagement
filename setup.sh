@@ -241,7 +241,7 @@ run_check() {
       # The one BYO step setup.sh cannot do on Compose: docker-compose.yml is
       # the operator's to edit (--quadlet writes a drop-in instead).
       [ "$mode" = quadlet ] || grep -q '^[^#]*/etc/traefik/certs' docker-compose.yml 2>/dev/null ||
-        fail "docker-compose.yml does not mount deploy/certs into the proxy — add \`- ./deploy/certs:/etc/traefik/certs:ro\` to its volumes."
+        fail "docker-compose.yml does not mount deploy/certs into the proxy — add \`- ./deploy/certs:/etc/traefik/certs:ro,z\` to its volumes."
     else
       fail "No certificate is configured (TLS was skipped), so Traefik serves its self-signed default. Re-run $rerun and pick 1-3."
     fi
@@ -295,6 +295,23 @@ run_check() {
       ok "podman-restart.service is enabled — the stack comes back after a reboot"
     else
       fail "podman-restart.service is not enabled, so the stack stays down after a reboot — run: systemctl --user enable podman-restart.service"
+    fi
+  fi
+
+  # On an enforcing host a bind mount with no z/Z relabel leaves the container
+  # unable to read the user_home_t file behind it, so `up` fails (#635).
+  if [ "$mode" != quadlet ] && [ -f docker-compose.yml ] && command -v selinuxenabled >/dev/null && selinuxenabled; then
+    local mount bare
+    bare=$(sed -e 's/#.*//' -e 's/[[:space:]"]*$//' docker-compose.yml |
+           sed -n 's/^[[:space:]]*-[[:space:]]*"\{0,1\}\([.~/][^:]*:.*\)/\1/p' |
+           grep -vE ':([^:]*,)?[zZ](,[^:]*)?$' || true)
+    # A top-level file secret is a bind mount that takes no relabel option.
+    ! grep -q '^secrets:' docker-compose.yml || bare+=${bare:+$'\n'}"the top-level secrets: files"
+    if [ -z "$bare" ]; then ok "Every bind mount in docker-compose.yml is relabelled for SELinux"
+    else
+      while IFS= read -r mount; do
+        fail "SELinux will block the containers from reading $mount — add ,z to its options (or take the release's docker-compose.yml)"
+      done <<< "$bare"
     fi
   fi
 
@@ -1014,7 +1031,7 @@ case $tls_choice in
        echo "  The bind mount for them is already in place (the 20-byo-cert.conf drop-in)."
      else
        echo "Still outstanding: put cert.pem and key.pem in deploy/certs/, and add"
-       echo "      - ./deploy/certs:/etc/traefik/certs:ro"
+       echo "      - ./deploy/certs:/etc/traefik/certs:ro,z"
        echo "  to the proxy service's volumes in docker-compose.yml."
      fi ;;
   4) echo "Still outstanding: no certificate is configured. Traefik will serve its own"
