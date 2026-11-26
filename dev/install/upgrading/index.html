@@ -1783,7 +1783,15 @@ sed<span class="w"> </span>-n<span class="w"> </span><span class="s1">'s/^Image=
 
 <span class="c1"># Restart onto it: kendo-migrate migrates, then the app starts.</span>
 systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-migrate<span class="w"> </span>kendo-app
+
+<span class="c1"># Make sure Traefik is running. It needs kendo-app (Requires=), so systemd</span>
+<span class="c1"># stops it whenever the app stops or fails to start, and restarting the app</span>
+<span class="c1"># does not start it again. When Traefik is already running, this does nothing.</span>
+systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-traefik
 </code></pre></div>
+<p>Without that last line, a restart that failed once (say <code>kendo-migrate</code>
+stopped on an error you then fixed) leaves the app running but the site
+unreachable: the browser reports it cannot connect (#628).</p>
 <p>Then, from your admin account, read what <code>kendo-migrate</code> did: the revision the
 schema started at, each one applied, and the one it is at now (#606). On a
 failure it says why. <code>kendo</code> cannot read the journal itself

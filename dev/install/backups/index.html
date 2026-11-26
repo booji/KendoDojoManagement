@@ -1888,6 +1888,9 @@ ls<span class="w"> </span>-lh<span class="w"> </span>~/backups
 <span class="w">  </span>~/backups/kendo-YYYYmmdd-HHMMSS.dump.age<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>~/backups/kendo-uploads-YYYYmmdd-HHMMSS.tar.age
 systemctl<span class="w"> </span>--user<span class="w"> </span>restart<span class="w"> </span>kendo-migrate<span class="w"> </span>kendo-app
+<span class="c1"># Stopping kendo-app stopped Traefik too, which needs it (Requires=); restarting</span>
+<span class="c1"># the app does not bring it back, so start it (#628).</span>
+systemctl<span class="w"> </span>--user<span class="w"> </span>start<span class="w"> </span>kendo-traefik
 </code></pre></div>
 <p>On the Compose stack, from the install directory. Its database container and uploads volume are project-scoped, so name them (a failed <code>setup.sh upgrade</code> prints this command with them filled in):</p>
 <div class="highlight"><pre><span></span><code>podman-compose<span class="w"> </span>stop<span class="w"> </span>app
