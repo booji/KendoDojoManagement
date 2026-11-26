@@ -790,6 +790,8 @@ GREEN_HOST = {
     "getent": 'echo "203.0.113.7     STREAM $2"',
     "hostname": "echo 192.168.1.5 203.0.113.7",
     "ss": "exit 0",
+    # Not enforcing, so the SELinux relabel check is skipped unless asked for.
+    "selinuxenabled": "exit 1",
     # Every unit enabled, none failed.
     "systemctl": 'case "$*" in *is-failed*) exit 1 ;; esac',
 }
@@ -941,10 +943,44 @@ def test_check_follows_a_byo_certificate_to_its_files_and_mount(tmp_path):
     (home / "docker-compose.yml").write_text(
         compose.replace(
             "      - traefik_acme:/acme\n",
-            "      - traefik_acme:/acme\n      - ./deploy/certs:/etc/traefik/certs:ro\n",
+            "      - traefik_acme:/acme\n      - ./deploy/certs:/etc/traefik/certs:ro,z\n",
         )
     )
     assert check(home, env).returncode == 0
+
+
+def test_setup_prints_the_byo_mount_relabelled_for_selinux(tmp_path):
+    home = bundle(tmp_path)
+    out = run(home, DOMAIN, "3")
+    assert BYO_MOUNT in out.stdout
+
+
+def test_check_on_selinux_flags_a_bind_mount_with_no_relabel(tmp_path):
+    """A docker-compose.yml from before #635: container_t cannot read the
+    user_home_t files setup.sh wrote, and the stack fails at `up`."""
+    home = bundle(tmp_path)
+    shutil.copy(ROOT / "docker-compose.yml", home)
+    run(home, *ANSWERS)
+    selinux = host_env(tmp_path, selinuxenabled="exit 0")
+    assert check(home, selinux).returncode == 0
+
+    compose = home / "docker-compose.yml"
+    compose.write_text(
+        compose.read_text().replace(
+            "/etc/traefik/dynamic:ro,z", "/etc/traefik/dynamic:ro"
+        )
+    )
+    out = check(home, selinux)
+
+    assert out.returncode == 1
+    assert "./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro" in out.stdout
+
+    compose.write_text(
+        compose.read_text()
+        + "secrets:\n  jwt_secret:\n    file: ./secrets/jwt_secret\n"
+    )
+    assert "the top-level secrets: files" in check(home, selinux).stdout
+    assert check(home, host_env(tmp_path)).returncode == 0
 
 
 def test_check_warns_that_a_staging_certificate_is_untrusted(tmp_path):
@@ -1413,7 +1449,7 @@ def test_a_failed_upgrade_names_the_encrypted_backup_and_the_key_it_needs(
     assert "backup key" in out.stderr
 
 
-BYO_MOUNT = "      - ./deploy/certs:/etc/traefik/certs:ro\n"
+BYO_MOUNT = "      - ./deploy/certs:/etc/traefik/certs:ro,z\n"
 
 
 def with_byo_mount(compose: str) -> str:

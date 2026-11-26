@@ -52,8 +52,8 @@ services:
     # file reads, so .env as a whole never reaches the app (ADR-0007).
     env_file: kendo-app.env
     environment:
-      # Secrets are files mounted from ./secrets (see `secrets:` below), named
-      # here by <NAME>_FILE — never values in the environment (#462).
+      # Secrets are files bind-mounted from ./secrets (see `volumes:` below),
+      # named here by <NAME>_FILE — never values in the environment (#462).
       # DATABASE_URL is the restricted app user's login (ADR-0007), never the
       # superuser's: the app refuses to start as a superuser, and
       # migration_database_url is given to `migrate` alone so its password
@@ -68,12 +68,18 @@ services:
       # cannot shadow the built SPA.
       STATIC_DIR: /app/uploads/logos
       STATIC_BACKGROUNDS_DIR: /app/uploads/backgrounds
-    secrets:
-      - database_url
-      - jwt_secret
-      - setup_token
+    # Secrets as read-only bind mounts, not a top-level `secrets:` block:
+    # that takes no SELinux relabel option, and on an enforcing host the
+    # container cannot read a file setup.sh wrote (#635). `z`, not `Z`:
+    # migrate reads database_url too. The files are 0644 in a 0700 directory:
+    # a bind mount keeps its host mode, and the app's uid 1001 is not the host
+    # user who owns them. ./setup.sh writes them from .env, on every run and on
+    # `./setup.sh upgrade`; edit .env and re-run it rather than editing them.
     volumes:
       - static_uploads:/app/uploads
+      - ./secrets/database_url:/run/secrets/database_url:ro,z
+      - ./secrets/jwt_secret:/run/secrets/jwt_secret:ro,z
+      - ./secrets/setup_token:/run/secrets/setup_token:ro,z
     depends_on:
       db:
         condition: service_healthy
@@ -105,9 +111,9 @@ services:
     environment:
       DATABASE_URL_FILE: /run/secrets/database_url
       MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
-    secrets:
-      - database_url
-      - migration_database_url
+    volumes:
+      - ./secrets/database_url:/run/secrets/database_url:ro,z
+      - ./secrets/migration_database_url:/run/secrets/migration_database_url:ro,z
     entrypoint: ["python", "-m", "app.db.bootstrap"]
     restart: "no"
     depends_on:
@@ -136,8 +142,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/selfhost/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro
+      # `z` relabels them for SELinux, as on every bind mount here (#635).
+      - ./deploy/traefik/selfhost/traefik.yml:/etc/traefik/traefik.yml:ro,z
+      - ./deploy/traefik/selfhost/dynamic:/etc/traefik/dynamic:ro,z
       - traefik_acme:/acme
       # No container runtime socket: the file provider needs none, and the
       # label provider's socket mount is what deploy/quadlet deliberately
@@ -187,22 +194,6 @@ networks:
   backend:
     driver_opts:
       isolate: "true"
-
-# Mounted read-only at /run/secrets/<name> in the services that list them, so
-# no secret sits in a container's environment (#462). ./setup.sh writes these
-# files from .env, on every run and on `./setup.sh upgrade`; edit .env and
-# re-run it rather than editing them. The directory is 0700 and the files
-# 0644: a file-backed secret is a bind mount that keeps its host mode, and the
-# app's uid 1001 is not the host user who owns it.
-secrets:
-  database_url:
-    file: ./secrets/database_url
-  migration_database_url:
-    file: ./secrets/migration_database_url
-  jwt_secret:
-    file: ./secrets/jwt_secret
-  setup_token:
-    file: ./secrets/setup_token
 
 volumes:
   postgres_data:
