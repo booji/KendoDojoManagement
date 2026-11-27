@@ -808,7 +808,8 @@ ANSWERS = (DOMAIN, "1", "1", "admin@shinbukan.org")
 GREEN_HOST = {
     "podman": 'case "$1 $2" in "secret inspect") [ -f "$PODMAN_STATE/$3" ] ;; esac',
     "sysctl": "echo 80",
-    "firewall-cmd": "echo ssh http https",
+    "firewall-cmd": 'case "$*" in *--get-*) echo public ;; *) echo ssh http https ;; esac',
+    "ip": 'echo "default via 203.0.113.1 dev eth0 proto static"',
     "id": '[ "$1" = -un ] && echo kendo; exit 0',
     "loginctl": "echo Linger=yes",
     "getent": 'echo "203.0.113.7     STREAM $2"',
@@ -1300,7 +1301,7 @@ FORWARDS = (
 def forwarding_firewalld(forwards: str = FORWARDS) -> str:
     return (
         'case "$*" in *--list-forward-ports*) printf "%s\\n" '
-        f'"{forwards}" ;; *) echo ssh http https ;; esac'
+        f'"{forwards}" ;; *--get-*) echo public ;; *) echo ssh http https ;; esac'
     )
 
 
@@ -1329,6 +1330,53 @@ def test_check_quadlet_port_forward_needs_no_sysctl_but_both_forwards(tmp_path):
     assert one_missing.returncode == 1
     assert "FAIL  firewalld is not forwarding 80/443 to 8080/8443" in one_missing.stdout
     assert "--add-forward-port=port=443:proto=tcp:toport=8443" in one_missing.stdout
+
+
+def zoned_firewalld(public_zone: str | None) -> str:
+    """firewalld with the rules in `public`, eth0's zone, and nothing in
+    `home`, the default zone; eth0 in no zone at all when `public_zone` is
+    None."""
+    zone_of_eth0 = f"echo {public_zone}" if public_zone else "echo no zone; exit 2"
+    return f"""case "$*" in
+  *--get-zone-of-interface=eth0*) {zone_of_eth0} ;;
+  *--get-default-zone*) echo home ;;
+  *--zone=public*--list-services*) echo ssh http https ;;
+  *--zone=public*--list-forward-ports*) printf "%s\\n" "{FORWARDS}" ;;
+  *--list-services*) echo ssh ;;
+esac"""
+
+
+def test_check_quadlet_port_forward_reads_the_public_interfaces_zone(tmp_path):
+    # #575: the rules that let traffic in are those of the zone the public
+    # interface (the default route's) is in, which need not be the default zone.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    out = check(
+        host.src,
+        host_env(tmp_path, firewall_cmd=zoned_firewalld("public")),
+        "--quadlet",
+    )
+
+    assert out.returncode == 0, out.stdout
+
+
+def test_check_quadlet_port_forward_falls_back_to_the_default_zone(tmp_path):
+    # An interface firewalld has not placed is in the default zone, so that is
+    # the zone checked, and the zone the printed fixes add to.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    out = check(
+        host.src, host_env(tmp_path, firewall_cmd=zoned_firewalld(None)), "--quadlet"
+    )
+
+    assert out.returncode == 1
+    assert "sudo firewall-cmd --zone=home --permanent --add-service=http" in out.stdout
+    assert (
+        "sudo firewall-cmd --zone=home --permanent"
+        " --add-forward-port=port=80:proto=tcp:toport=8080" in out.stdout
+    )
 
 
 def test_check_quadlet_port_forward_looks_at_the_ports_podman_binds(tmp_path):

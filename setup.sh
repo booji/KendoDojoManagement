@@ -43,7 +43,6 @@ units=$HOME/.config/containers/systemd
 port_forward_dropin=$units/kendo-traefik.container.d/30-port-forward.conf
 port_forward=""
 [ "$mode" != quadlet ] || [ ! -f "$port_forward_dropin" ] || port_forward=1
-forward_cmd="sudo firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toport=8080 --add-forward-port=port=443:proto=tcp:toport=8443 && sudo firewall-cmd --reload"
 
 if [ "$mode" = quadlet ]; then
   required=(deploy/env/kendo-app.env.example "$hardened/traefik.yml"
@@ -105,22 +104,34 @@ detect_prerequisites() {
     "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
     "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
 
+  # The rules that let traffic in are those of the public (default-route)
+  # interface's zone, which need not be the default zone; an interface firewalld
+  # has not placed is in the default zone. Checked there, and fixed there.
+  fw_zone=""
+  if command -v firewall-cmd >/dev/null; then
+    fw_iface=$(ip route show default 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }' || true)
+    fw_zone=$(firewall-cmd --get-zone-of-interface="$fw_iface" 2>/dev/null) ||
+      fw_zone=$(firewall-cmd --get-default-zone 2>/dev/null) || fw_zone=""
+  fi
+  fw="firewall-cmd${fw_zone:+ --zone=$fw_zone}"
+  forward_cmd="sudo $fw --permanent --add-forward-port=port=80:proto=tcp:toport=8080 --add-forward-port=port=443:proto=tcp:toport=8443 && sudo firewall-cmd --reload"
+
   # Both firewalls answer root alone (polkit for firewalld), and check runs as
   # `kendo`: a refused query says nothing about the rules (#576).
   if command -v firewall-cmd >/dev/null; then
-    if ! fw_services=$(firewall-cmd --list-services 2>/dev/null); then
+    if ! fw_services=$(firewall-cmd ${fw_zone:+"--zone=$fw_zone"} --list-services 2>/dev/null); then
+      fw_unseen="firewalld reports its rules only to root — from an admin account, check that \`sudo $fw --list-services\` includes http and https"
       if [ -z "$port_forward" ]; then
-        unverified+=("firewalld reports its rules only to root — from an admin account, check that \`sudo firewall-cmd --list-services\` includes http and https.")
+        unverified+=("$fw_unseen.")
       else
-        unverified+=("firewalld reports its rules only to root — from an admin account, check that \`sudo firewall-cmd --list-services\` includes http and https, and that \`sudo firewall-cmd --list-forward-ports\` forwards 80 to 8080 and 443 to 8443; if not:"$'\n      '"$forward_cmd")
+        unverified+=("$fw_unseen, and that \`sudo $fw --list-forward-ports\` forwards 80 to 8080 and 443 to 8443; if not:"$'\n      '"$forward_cmd")
       fi
     else
       printf '%s\n' "$fw_services" | grep -qw https || need \
         "firewalld is not allowing http/https." \
-        "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
-      # The default zone's, as the commands printed here add them to.
+        "sudo $fw --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
       if [ -n "$port_forward" ]; then
-        fw_forwards=$(firewall-cmd --list-forward-ports 2>/dev/null || true)
+        fw_forwards=$(firewall-cmd ${fw_zone:+"--zone=$fw_zone"} --list-forward-ports 2>/dev/null || true)
         printf '%s\n' "$fw_forwards" | grep -q '^port=80:proto=tcp:toport=8080:' &&
           printf '%s\n' "$fw_forwards" | grep -q '^port=443:proto=tcp:toport=8443:' || need \
           "firewalld is not forwarding 80/443 to 8080/8443, where Traefik listens." "$forward_cmd"
