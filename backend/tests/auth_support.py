@@ -10,7 +10,7 @@ cleanup removes it again.
 from __future__ import annotations
 
 from app.auth.dependencies import get_auth_session_repo
-from app.auth.models import AccountClaims, AuthSessionKind
+from app.auth.schemas import AccountClaims, AuthSessionKind
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
 

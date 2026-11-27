@@ -18,11 +18,11 @@ from app.federations.schemas import FederationUpdate
 from app.member_federations.db_models import MemberFederation
 from app.member_federations.schemas import MemberFederationUpdate
 from app.members.db_models import Member
-from app.members.models import SelfUpdateMemberRequest, UpdateMemberRequest
+from app.members.schemas import SelfUpdateMemberRequest, UpdateMemberRequest
 from app.sessions.db_models import SessionInstance, SessionTemplate
-from app.sessions.models import SessionInstanceUpdate, SessionTemplateUpdate
-from app.settings.models import DojoSettings
+from app.sessions.schemas import SessionInstanceUpdate, SessionTemplateUpdate
 from app.settings.router import DojoSettingsUpdate
+from app.settings.schemas import DojoSettings
 
 
 @pytest.mark.parametrize(

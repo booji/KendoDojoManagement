@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.auth.models import LenientEmail
+from app.auth.schemas import LenientEmail
 from app.core.partial_update import PartialUpdate
 
 MembershipStatus = Literal["active", "inactive", "suspended", "archived"]

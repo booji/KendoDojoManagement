@@ -32,7 +32,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.sessions.ical import build_ical
-from app.sessions.models import SegmentCreate
+from app.sessions.schemas import SegmentCreate
 from app.sessions.service import generate_instances
 
 

@@ -8,7 +8,7 @@ from app.auth.auth_session_repository import AbstractAuthSessionRepository
 from app.auth.auth_sessions import resolve_auth_session
 from app.auth.db_models import Account
 from app.auth.dependencies import get_auth_session_repo
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 

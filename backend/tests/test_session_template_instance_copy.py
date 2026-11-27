@@ -30,7 +30,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,

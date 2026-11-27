@@ -47,20 +47,6 @@ from app.auth.invite_service import (
     mint_invite,
 )
 from app.auth.member_directory import member_directory_for
-from app.auth.models import (
-    AccountClaims,
-    InviteCreateRequest,
-    InviteListItem,
-    InviteMintResponse,
-    InviteRedeemBeginRequest,
-    InviteRedeemCompleteRequest,
-    LenientEmail,
-    PasskeyAddCompleteRequest,
-    PasskeyBeginRequest,
-    PasskeyLoginCompleteRequest,
-    PasskeyRegisterCompleteRequest,
-    PasskeyRegisterCompleteResponse,
-)
 from app.auth.passkey_repository import AbstractPasskeyRepository
 from app.auth.passkey_service import (
     add_passkey_begin,
@@ -86,6 +72,20 @@ from app.auth.recovery_service import (
     hash_codes,
     is_admin_token_valid,
     match_secret,
+)
+from app.auth.schemas import (
+    AccountClaims,
+    InviteCreateRequest,
+    InviteListItem,
+    InviteMintResponse,
+    InviteRedeemBeginRequest,
+    InviteRedeemCompleteRequest,
+    LenientEmail,
+    PasskeyAddCompleteRequest,
+    PasskeyBeginRequest,
+    PasskeyLoginCompleteRequest,
+    PasskeyRegisterCompleteRequest,
+    PasskeyRegisterCompleteResponse,
 )
 from app.auth.session_cookie import (
     clear_session_cookie,

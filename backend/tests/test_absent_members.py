@@ -20,7 +20,7 @@ from sqlalchemy import insert
 
 from app.attendance.db_models import Attendance
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.members.repository import SqlMemberRepository
 from app.sessions.repository import SqlSessionInstanceRepository

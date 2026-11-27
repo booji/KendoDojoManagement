@@ -17,7 +17,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.attendance.repository import SqlAttendanceRepository
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.members.repository import SqlMemberRepository
 from app.sessions.repository import SqlSessionInstanceRepository

@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.admin_directory import AbstractAdminDirectory, SqlAdminDirectory

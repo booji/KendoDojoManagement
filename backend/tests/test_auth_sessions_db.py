@@ -252,7 +252,7 @@ async def test_signing_out_everywhere_deletes_every_row_of_the_account(
 
 async def _put_status(member_id: str, status: str) -> int:
     from app.auth.guards import REQUIRE_ADMIN
-    from app.auth.models import AccountClaims
+    from app.auth.schemas import AccountClaims
 
     app.dependency_overrides[REQUIRE_ADMIN] = lambda: AccountClaims(
         sub="acting-admin", email="acting@dojo.test", role="admin"

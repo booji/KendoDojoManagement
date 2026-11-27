@@ -25,7 +25,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import StubDojoSettingsRepository

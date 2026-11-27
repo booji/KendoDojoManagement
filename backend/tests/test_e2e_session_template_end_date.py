@@ -29,7 +29,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import Page, expect
 
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from tests.e2e_support import (
     complete_onboarding,
     login_as,

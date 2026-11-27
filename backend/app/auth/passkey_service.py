@@ -12,7 +12,7 @@ from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential, RecoveryCode
 from app.auth.member_directory import member_directory_for
-from app.auth.models import (
+from app.auth.schemas import (
     PasskeyCredentialResponse,
     PasskeyLoginCompleteRequest,
     PasskeyRegisterCompleteRequest,

@@ -11,7 +11,7 @@ from app.auth.accounts import delete_account
 from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import end_every_auth_session
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.core.security_logger import changed_fields, log_admin_event
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
@@ -23,13 +23,13 @@ from app.members.admin_directory import AbstractAdminDirectory
 from app.members.db_models import BARRED_FROM_SIGN_IN
 from app.members.dependencies import get_admin_directory, get_member_repo
 from app.members.erasure import build_erasure_plan, can_erase
-from app.members.models import (
+from app.members.repository import AbstractMemberRepository
+from app.members.schemas import (
     CreateMemberRequest,
     MemberListItem,
     MemberResponse,
     UpdateMemberRequest,
 )
-from app.members.repository import AbstractMemberRepository
 
 router = APIRouter(tags=["members"])
 

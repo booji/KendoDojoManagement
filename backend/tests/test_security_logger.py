@@ -33,7 +33,7 @@ from app.auth.dependencies import (
     get_recovery_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 
 pytestmark = pytest.mark.usefixtures("security_events_to_caplog")

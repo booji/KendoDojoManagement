@@ -503,7 +503,7 @@ async def test_setup_stays_claimed_after_the_only_admin_deletes_their_only_passk
     instance is still claimed: a leaked SETUP_TOKEN must not make it claimable
     (ADR-0003, #589)."""
     from app.auth.db_models import RecoveryCode
-    from app.auth.models import AccountClaims
+    from app.auth.schemas import AccountClaims
     from tests.auth_support import sign_in
 
     session = db_client

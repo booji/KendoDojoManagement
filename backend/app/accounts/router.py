@@ -8,14 +8,14 @@ from pydantic import BaseModel
 from app.accounts.dependencies import get_account_prefs_repo
 from app.accounts.preferences_repository import AbstractAccountPrefsRepo, Theme
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.auth.session_cookie import set_theme_cookie
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_member_repo
-from app.members.models import MemberResponse, SelfUpdateMemberRequest
 from app.members.repository import AbstractMemberRepository
 from app.members.router import _to_response
+from app.members.schemas import MemberResponse, SelfUpdateMemberRequest
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 

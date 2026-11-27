@@ -15,13 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.auth.accounts import account_for_email
 from app.auth.attempt_repository import SqlAttemptRepository
 from app.auth.member_directory import SqlMemberDirectory
-from app.auth.models import LenientEmail
 from app.auth.recovery_repository import SqlAdminTokenRepository
 from app.auth.recovery_service import (
     admin_token_expiry,
     generate_admin_token_plaintext,
     hash_admin_token,
 )
+from app.auth.schemas import LenientEmail
 from app.config import read_secret
 
 app = typer.Typer()

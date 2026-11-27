@@ -31,7 +31,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
@@ -510,7 +510,7 @@ async def test_member_cannot_create_session_with_segments(
 
 def test_segment_read_model_dump_has_no_coach_notes() -> None:
     """SegmentRead no longer carries a `coach_notes` field at all."""
-    from app.sessions.models import SegmentRead
+    from app.sessions.schemas import SegmentRead
 
     segment = SegmentRead(
         id="seg-1",
@@ -527,7 +527,7 @@ def test_segment_read_ignores_extra_coach_notes_key() -> None:
     """Passing a stray `coach_notes=` to SegmentRead must not surface on the
     model — Pydantic's default `extra='ignore'` behaviour, since the field no
     longer exists on the schema."""
-    from app.sessions.models import SegmentRead
+    from app.sessions.schemas import SegmentRead
 
     segment = SegmentRead(
         id="seg-1",
@@ -542,14 +542,14 @@ def test_segment_read_ignores_extra_coach_notes_key() -> None:
 
 def test_segment_create_has_no_coach_notes_field() -> None:
     """SegmentCreate no longer declares a `coach_notes` field."""
-    from app.sessions.models import SegmentCreate
+    from app.sessions.schemas import SegmentCreate
 
     assert "coach_notes" not in SegmentCreate.model_fields
 
 
 def test_segment_read_has_no_coach_notes_field() -> None:
     """SegmentRead no longer declares a `coach_notes` field."""
-    from app.sessions.models import SegmentRead
+    from app.sessions.schemas import SegmentRead
 
     assert "coach_notes" not in SegmentRead.model_fields
 
@@ -558,7 +558,7 @@ def test_segment_create_ignores_extra_coach_notes_key() -> None:
     """Passing `coach_notes=` into SegmentCreate must not raise and must not
     surface as an attribute — the field is gone, so it is treated as an
     ignored extra key."""
-    from app.sessions.models import SegmentCreate
+    from app.sessions.schemas import SegmentCreate
 
     segment = SegmentCreate(
         start_time="19:00",
@@ -573,7 +573,7 @@ def test_segment_create_ignores_extra_coach_notes_key() -> None:
 def test_segment_create_title_still_present_and_normalized() -> None:
     """Segment `title` is unaffected by the coach_notes removal — still
     present, still whitespace-trimmed/None-coerced as before."""
-    from app.sessions.models import SegmentCreate
+    from app.sessions.schemas import SegmentCreate
 
     segment = SegmentCreate(
         start_time="19:00",
@@ -586,7 +586,7 @@ def test_segment_create_title_still_present_and_normalized() -> None:
 
 def test_segment_read_title_still_present() -> None:
     """Segment `title` remains on SegmentRead."""
-    from app.sessions.models import SegmentRead
+    from app.sessions.schemas import SegmentRead
 
     assert "title" in SegmentRead.model_fields
     segment = SegmentRead(
@@ -616,7 +616,7 @@ def test_session_instance_segment_db_model_has_no_coach_notes_column() -> None:
 
 def test_session_template_create_coach_notes_still_round_trips() -> None:
     """Session-level coach_notes on the template is untouched by this issue."""
-    from app.sessions.models import SegmentCreate, SessionTemplateCreate
+    from app.sessions.schemas import SegmentCreate, SessionTemplateCreate
 
     template = SessionTemplateCreate(
         title="Tuesday Keiko",
@@ -631,7 +631,7 @@ def test_session_template_create_coach_notes_still_round_trips() -> None:
 
 
 def test_session_template_read_coach_notes_still_round_trips() -> None:
-    from app.sessions.models import SessionTemplateRead
+    from app.sessions.schemas import SessionTemplateRead
 
     template = SessionTemplateRead(
         id="tmpl-1",
@@ -647,7 +647,7 @@ def test_session_template_read_coach_notes_still_round_trips() -> None:
 
 
 def test_session_template_update_coach_notes_still_present() -> None:
-    from app.sessions.models import SessionTemplateUpdate
+    from app.sessions.schemas import SessionTemplateUpdate
 
     assert "coach_notes" in SessionTemplateUpdate.model_fields
     update = SessionTemplateUpdate(coach_notes="Updated note")
@@ -655,7 +655,7 @@ def test_session_template_update_coach_notes_still_present() -> None:
 
 
 def test_session_instance_create_coach_notes_still_round_trips() -> None:
-    from app.sessions.models import SegmentCreate, SessionInstanceCreate
+    from app.sessions.schemas import SegmentCreate, SessionInstanceCreate
 
     instance = SessionInstanceCreate(
         title="Tuesday Keiko",
@@ -669,7 +669,7 @@ def test_session_instance_create_coach_notes_still_round_trips() -> None:
 
 
 def test_session_instance_read_coach_notes_still_round_trips() -> None:
-    from app.sessions.models import SessionInstanceRead
+    from app.sessions.schemas import SessionInstanceRead
 
     instance = SessionInstanceRead(
         id="inst-1",
@@ -683,7 +683,7 @@ def test_session_instance_read_coach_notes_still_round_trips() -> None:
 
 
 def test_session_instance_update_coach_notes_still_present() -> None:
-    from app.sessions.models import SessionInstanceUpdate
+    from app.sessions.schemas import SessionInstanceUpdate
 
     assert "coach_notes" in SessionInstanceUpdate.model_fields
     update = SessionInstanceUpdate(coach_notes="Updated note")
@@ -699,13 +699,13 @@ def test_session_instance_update_coach_notes_still_present() -> None:
 
 
 def test_segment_create_has_no_note_field() -> None:
-    from app.sessions.models import SegmentCreate
+    from app.sessions.schemas import SegmentCreate
 
     assert "note" not in SegmentCreate.model_fields
 
 
 def test_segment_read_has_no_note_field() -> None:
-    from app.sessions.models import SegmentRead
+    from app.sessions.schemas import SegmentRead
 
     assert "note" not in SegmentRead.model_fields
 
@@ -713,7 +713,7 @@ def test_segment_read_has_no_note_field() -> None:
 def test_segment_models_ignore_a_stray_note_key() -> None:
     """An un-reloaded SPA posting `note` is discarded, not rejected: the
     models keep Pydantic's default extra='ignore'."""
-    from app.sessions.models import SegmentCreate, SegmentRead
+    from app.sessions.schemas import SegmentCreate, SegmentRead
 
     created = SegmentCreate(
         start_time="19:00",

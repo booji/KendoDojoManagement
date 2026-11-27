@@ -41,7 +41,7 @@ from app.auth.db_models import (
     RecoveryAttempt,
     RecoveryCode,
 )
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import SQLAlchemyUnitOfWork
 from app.dependencies import get_uow
 from app.main import app
