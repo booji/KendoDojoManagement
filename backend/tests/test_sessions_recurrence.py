@@ -234,7 +234,8 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
 
 async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
     """GET /sessions without params must return only future (today or later) sessions
-    AND each returned instance must include the new info/coach_notes fields
+    AND each returned instance must include the new info field (coach_notes is
+    admin-only and absent from a member's response, #619)
     (new fields required by issue #50).
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
@@ -289,8 +290,9 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
         assert "info" in session, (
             f"Field 'info' missing from session {session.get('id')}"
         )
-        assert "coach_notes" in session, (
-            f"Field 'coach_notes' missing from session {session.get('id')}"
+        # A member's read model has no coach_notes at all (#619).
+        assert "coach_notes" not in session, (
+            f"Admin-only 'coach_notes' reached a member in {session.get('id')}"
         )
         assert "checkin_link" in session, (
             f"Field 'checkin_link' missing from session {session.get('id')}"

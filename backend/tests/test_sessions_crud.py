@@ -3,7 +3,8 @@ Tests for issue #51 — Session CRUD endpoints.
 
 Acceptance criteria:
   1. GET /sessions/{id} returns 404 for unknown IDs, 200 with correct payload otherwise
-  2. coach_notes is null in GET /sessions/{id} response for member-role requests
+  2. a member's GET /sessions and GET /sessions/{id} responses carry no
+     coach_notes key at all (#619); an admin's carry the real value
   3. PUT /sessions/{id} updates only the addressed instance; a sibling is unchanged
   4. PATCH /sessions/templates/{id} regenerates future instances from updated template;
      past instances unchanged
@@ -176,10 +177,10 @@ async def test_get_session_instance_admin_sees_coach_notes(instance_repo) -> Non
     assert body["coach_notes"] == "Focus on men-uchi today"
 
 
-async def test_get_session_instance_member_sees_null_coach_notes(
+async def test_get_session_instance_member_response_has_no_coach_notes_key(
     instance_repo,
 ) -> None:
-    """Member GET /sessions/{id} must return coach_notes as null even when stored value is non-null."""
+    """Member GET /sessions/{id} must omit coach_notes entirely, not send null (#619)."""
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     inst = await _seed_instance(
         instance_repo, coach_notes="Secret notes for admin only"
@@ -189,8 +190,35 @@ async def test_get_session_instance_member_sees_null_coach_notes(
     ) as c:
         response = await c.get(f"/sessions/{inst['id']}")
     assert response.status_code == 200
-    body = response.json()
-    assert body["coach_notes"] is None
+    assert "coach_notes" not in response.json()
+
+
+async def test_list_sessions_admin_sees_coach_notes(instance_repo) -> None:
+    """Admin GET /sessions must include the real coach_notes value."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _admin_override
+    await _seed_instance(instance_repo, coach_notes="Focus on men-uchi today")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/sessions")
+    assert response.status_code == 200
+    assert [s["coach_notes"] for s in response.json()] == ["Focus on men-uchi today"]
+
+
+async def test_list_sessions_member_response_has_no_coach_notes_key(
+    instance_repo,
+) -> None:
+    """Member GET /sessions must omit coach_notes entirely, not send null (#619)."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+    await _seed_instance(instance_repo, coach_notes="Secret notes for admin only")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        response = await c.get("/sessions")
+    assert response.status_code == 200
+    sessions = response.json()
+    assert len(sessions) == 1
+    assert "coach_notes" not in sessions[0]
 
 
 # ---------------------------------------------------------------------------

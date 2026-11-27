@@ -29,6 +29,7 @@ from app.sessions.repository import (
 )
 from app.sessions.schemas import (
     GenerateRequest,
+    MemberSessionInstanceRead,
     SegmentCreate,
     SessionInstanceCreate,
     SessionInstanceRead,
@@ -65,6 +66,19 @@ def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
     record = SessionInstanceRead.model_validate(raw).model_dump()
     record["checkin_link"] = checkin_link(record["id"])
     return record
+
+
+def _read_as(
+    claims: AccountClaims, record: dict[str, Any]
+) -> SessionInstanceRead | MemberSessionInstanceRead:
+    """The normalized Session in the read model of the caller's audience."""
+    model = SessionInstanceRead if claims.role == "admin" else MemberSessionInstanceRead
+    return model.model_validate(_normalize_instance(record))
+
+
+# The admin model first: it subclasses the member one, so this order keeps a
+# serializer from matching an admin instance by the narrower parent schema.
+_SessionInstanceReadAs = SessionInstanceRead | MemberSessionInstanceRead
 
 
 def _normalize_template(raw: dict[str, Any]) -> dict[str, Any]:
@@ -368,12 +382,6 @@ async def reinstate_session_instance(
     return _normalize_instance(record)
 
 
-def _strip_coach_notes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # Strip the session-level coach_notes — admin-only, must never reach a
-    # non-admin member.
-    return [{**r, "coach_notes": None} for r in records]
-
-
 def _strip_cancelled(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [r for r in records if not r.get("cancelled")]
 
@@ -392,7 +400,7 @@ async def _enrich_with_attendance(
     return [{**r, **summary[r["id"]]} for r in rows]
 
 
-@router.get("/sessions")
+@router.get("/sessions", response_model=list[_SessionInstanceReadAs])
 async def list_upcoming_sessions(
     claims: _Member,
     repo: _InstRepo,
@@ -400,19 +408,17 @@ async def list_upcoming_sessions(
     current_member_id: _CurrentMemberId,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
-) -> list[dict[str, Any]]:
+) -> list[_SessionInstanceReadAs]:
     is_admin = claims.role == "admin"
 
-    async def _finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _finalize(rows: list[dict[str, Any]]) -> list[_SessionInstanceReadAs]:
         # The caller's Member id, not their Account id: attendance is keyed by
         # member however it was recorded (#340).
         enriched = await _enrich_with_attendance(
             rows, attendance_repo, current_member_id
         )
-        normalized = [_normalize_instance(r) for r in enriched]
-        if is_admin:
-            return normalized
-        return _strip_coach_notes(_strip_cancelled(normalized))
+        visible = enriched if is_admin else _strip_cancelled(enriched)
+        return [_read_as(claims, r) for r in visible]
 
     if from_date is not None and to_date is not None:
         return await _finalize(await repo.list_in_range(from_date, to_date))
@@ -420,22 +426,19 @@ async def list_upcoming_sessions(
     return await _finalize(await repo.list_upcoming())
 
 
-@router.get("/sessions/{instance_id}")
+@router.get("/sessions/{instance_id}", response_model=_SessionInstanceReadAs)
 async def get_session_instance(
     instance_id: uuid.UUID,
     claims: _Member,
     repo: _InstRepo,
-) -> dict[str, Any]:
+) -> _SessionInstanceReadAs:
     record = await repo.get(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session instance not found",
         )
-    result = _normalize_instance(record)
-    if claims.role != "admin":
-        result["coach_notes"] = None
-    return result
+    return _read_as(claims, record)
 
 
 @router.put("/sessions/{instance_id}")
