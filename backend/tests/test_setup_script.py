@@ -1190,6 +1190,19 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     assert "not as `kendo`" not in out.stdout
 
 
+def test_check_quadlet_fails_on_a_podman_too_old_for_the_units(tmp_path):
+    # The units use keys Quadlet learned in 5.0 (Entrypoint=, drop-ins); an
+    # older generator skips a unit it cannot parse, and nothing else says why.
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    old = 'case "$1 $2" in "--version ") echo "podman version 4.9.3" ;; esac'
+
+    out = check(host.src, host_env(tmp_path, podman=old), "--quadlet")
+
+    assert out.returncode == 1
+    assert "FAIL  Podman 4.9.3 is too old for the Quadlet units" in out.stdout
+
+
 def test_check_quadlet_says_prerequisites_are_fixed_from_an_admin_account(tmp_path):
     # `kendo` has no sudo: the fix is run from another account (#576).
     host = Host(tmp_path)

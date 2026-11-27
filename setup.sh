@@ -96,7 +96,17 @@ detect_prerequisites() {
   outstanding=() unverified=()
   need() { outstanding+=("$1"$'\n      '"$2"); }
 
-  command -v podman >/dev/null || need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
+  if ! command -v podman >/dev/null; then
+    need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
+  elif [ "$mode" = quadlet ]; then
+    # The units use keys Quadlet learned in 5.0 (Entrypoint=, drop-ins); an older
+    # generator skips a unit it cannot parse and says so only in the journal.
+    podman_version=$(podman --version 2>/dev/null | awk '{ print $NF }')
+    case $podman_version in
+      [0-4].*) need "Podman $podman_version is too old for the Quadlet units — they need 5.0 or later." \
+        "move to a release that ships Podman 5: AlmaLinux/RHEL 10, Debian 13 or a current Fedora" ;;
+    esac
+  fi
 
   # The port forward keeps ports < 1024 privileged: Traefik binds 8080/8443.
   port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)

@@ -44,7 +44,7 @@ This protects the disk while it is powered off, not a running host. Backups leav
 
 ```bash
 sudo dnf install -y podman   # AlmaLinux 10 ships Podman 5.x
-podman --version             # confirm >= 4.4 (Quadlet); 5.x expected
+podman --version             # confirm >= 5.0: the units use Entrypoint= and drop-ins
 ```
 
 ### 1.2 Allow rootless binding of ports 80/443
@@ -470,9 +470,9 @@ does not close it.
 
 The above is written for AlmaLinux 10. On Debian/Ubuntu the shape is identical; the differences:
 
-- **Podman version.** Debian 12 ships Podman **4.3** — too old for Quadlet. Install ≥4.4 from the [Kubic/OCI repo](https://build.opensuse.org/package/show/devel:kubic:libcontainers:stable/podman) or use Ubuntu 24.04 (Podman 4.9). Ubuntu 24.10+/newer is smoother.
+- **Podman version.** The units need Podman **5.0** or later: `Entrypoint=` and every `.container.d/` drop-in (DNS-01, bring-your-own cert, the port forward, container limits) arrived in 5.0, and an older Quadlet skips a unit it cannot parse. Debian 12 (4.3) and Ubuntu 24.04 (4.9) are too old; use Debian 13 or Ubuntu 25.04 and later, which ship 5.4. `./setup.sh check --quadlet` fails on an older Podman.
 - **No SELinux** (AppArmor instead) — the `:Z` volume labels are harmless no-ops; leave them.
-- **Low ports / firewall.** `net.ipv4.ip_unprivileged_port_start` works the same via `/etc/sysctl.d/`. Use `ufw` instead of `firewalld` for the redirect alternative.
+- **Low ports / firewall.** `net.ipv4.ip_unprivileged_port_start` works the same via `/etc/sysctl.d/`. The port forward that `setup.sh --quadlet` offers needs `firewalld`; on a `ufw` host use the sysctl.
 - **User/linger/machinectl** — `useradd`, `loginctl enable-linger`, and `machinectl shell` all work identically (systemd-based).
 
 > TODO (future): validate and expand this section against a real Debian/Ubuntu host, and consider a GHCR-published image so these hosts skip the build toolchain.
