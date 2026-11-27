@@ -8,8 +8,9 @@
 # and which survives re-copying this unit on upgrade (#412).
 #
 # Binding 80/443 as a rootless user requires:
-#   net.ipv4.ip_unprivileged_port_start=80, or the firewalld redirect from
-#   8080/8443 (docs/deployment.md §1.2)
+#   net.ipv4.ip_unprivileged_port_start=80, or the firewalld redirect to
+#   8080/8443, whose 30-port-forward.conf drop-in (setup.sh --quadlet) replaces
+#   the two PublishPort= lines below (docs/deployment.md §1.2, #575)
 [Unit]
 Description=Kendo Traefik
 Requires=kendo-app.service
