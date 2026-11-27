@@ -221,6 +221,16 @@ async def test_list_sessions_member_response_has_no_coach_notes_key(
     assert "coach_notes" not in sessions[0]
 
 
+@pytest.mark.parametrize("path", ["/api/sessions", "/api/sessions/{instance_id}"])
+def test_session_reads_document_both_audiences_models(path: str) -> None:
+    """The routes serialize per audience themselves, so OpenAPI is all that
+    states the two shapes: each read route documents both (#619)."""
+    schema = app.openapi()["paths"][path]["get"]["responses"]["200"]["content"]
+    refs = str(schema["application/json"]["schema"])
+    assert "#/components/schemas/SessionInstanceRead" in refs
+    assert "#/components/schemas/MemberSessionInstanceRead" in refs
+
+
 # ---------------------------------------------------------------------------
 # AC3 — PUT /sessions/{id}: updates only the addressed instance
 # ---------------------------------------------------------------------------

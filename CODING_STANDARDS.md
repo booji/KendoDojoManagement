@@ -82,8 +82,10 @@ A field one audience must not see is kept out by that audience's response
 model, never by blanking or deleting a key before returning a dict. The route
 declares the model (`response_model` or a typed return), so a field the model
 does not list cannot be sent. The iCal feed's `_PUBLIC_FIELDS` allowlist
-(`app/sessions/ical.py`) is the reference; the REST session routes still strip
-`coach_notes` by hand, pending #619.
+(`app/sessions/ical.py`) and `MemberSessionInstanceRead` are the references. A
+`response_model` union does not choose by audience, so a route serving two
+audiences serializes with the model it chose and returns that response
+(`app/sessions/router.py`).
 
 ### Admin Audit Events
 An Admin's write to member personal data or Dojo settings, and every export,

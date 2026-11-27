@@ -6,6 +6,7 @@ from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import JSONResponse
 
 from app import config
 from app.attendance.dependencies import get_attendance_repo
@@ -68,17 +69,17 @@ def _normalize_instance(raw: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def _read_as(
-    claims: AccountClaims, record: dict[str, Any]
-) -> SessionInstanceRead | MemberSessionInstanceRead:
-    """The normalized Session in the read model of the caller's audience."""
-    model = SessionInstanceRead if claims.role == "admin" else MemberSessionInstanceRead
+# For OpenAPI only: a response_model union does not choose by role. It accepts
+# any dict as the admin model, so a returned dict would carry the coach_notes
+# it holds to a member, and gain "coach_notes": null when it holds none.
+_AudienceSessionRead = SessionInstanceRead | MemberSessionInstanceRead
+
+
+def _read_as(is_admin: bool, record: dict[str, Any]) -> _AudienceSessionRead:
+    """Only the caller's audience model decides what leaves: the route serializes
+    the result itself rather than through its role-blind response_model (#619)."""
+    model = SessionInstanceRead if is_admin else MemberSessionInstanceRead
     return model.model_validate(_normalize_instance(record))
-
-
-# The admin model first: it subclasses the member one, so this order keeps a
-# serializer from matching an admin instance by the narrower parent schema.
-_SessionInstanceReadAs = SessionInstanceRead | MemberSessionInstanceRead
 
 
 def _normalize_template(raw: dict[str, Any]) -> dict[str, Any]:
@@ -400,7 +401,7 @@ async def _enrich_with_attendance(
     return [{**r, **summary[r["id"]]} for r in rows]
 
 
-@router.get("/sessions", response_model=list[_SessionInstanceReadAs])
+@router.get("/sessions", response_model=list[_AudienceSessionRead])
 async def list_upcoming_sessions(
     claims: _Member,
     repo: _InstRepo,
@@ -408,17 +409,19 @@ async def list_upcoming_sessions(
     current_member_id: _CurrentMemberId,
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
-) -> list[_SessionInstanceReadAs]:
+) -> JSONResponse:
     is_admin = claims.role == "admin"
 
-    async def _finalize(rows: list[dict[str, Any]]) -> list[_SessionInstanceReadAs]:
+    async def _finalize(rows: list[dict[str, Any]]) -> JSONResponse:
         # The caller's Member id, not their Account id: attendance is keyed by
         # member however it was recorded (#340).
         enriched = await _enrich_with_attendance(
             rows, attendance_repo, current_member_id
         )
         visible = enriched if is_admin else _strip_cancelled(enriched)
-        return [_read_as(claims, r) for r in visible]
+        return JSONResponse(
+            [_read_as(is_admin, r).model_dump(mode="json") for r in visible]
+        )
 
     if from_date is not None and to_date is not None:
         return await _finalize(await repo.list_in_range(from_date, to_date))
@@ -426,19 +429,21 @@ async def list_upcoming_sessions(
     return await _finalize(await repo.list_upcoming())
 
 
-@router.get("/sessions/{instance_id}", response_model=_SessionInstanceReadAs)
+@router.get("/sessions/{instance_id}", response_model=_AudienceSessionRead)
 async def get_session_instance(
     instance_id: uuid.UUID,
     claims: _Member,
     repo: _InstRepo,
-) -> _SessionInstanceReadAs:
+) -> JSONResponse:
     record = await repo.get(str(instance_id))
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session instance not found",
         )
-    return _read_as(claims, record)
+    return JSONResponse(
+        _read_as(claims.role == "admin", record).model_dump(mode="json")
+    )
 
 
 @router.put("/sessions/{instance_id}")

@@ -234,9 +234,9 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
 
 async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
     """GET /sessions without params must return only future (today or later) sessions
-    AND each returned instance must include the new info field (coach_notes is
-    admin-only and absent from a member's response, #619)
-    (new fields required by issue #50).
+    AND each returned instance must include info, a field issue #50 added.
+    coach_notes, added with it, is admin-only and absent from a member's
+    response (#619).
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     instance_repo = InMemorySessionInstanceRepository()
