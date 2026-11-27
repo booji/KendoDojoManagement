@@ -36,7 +36,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
 from tests.fake_repositories import (
@@ -348,7 +348,7 @@ async def test_changing_dojo_default_affects_session_without_override(
 
 
 def test_session_instance_update_accepts_none_override_minutes() -> None:
-    from app.sessions.models import SessionInstanceUpdate
+    from app.sessions.schemas import SessionInstanceUpdate
 
     payload = SessionInstanceUpdate(
         checkin_window_before_minutes=None, checkin_window_after_minutes=None
@@ -359,7 +359,7 @@ def test_session_instance_update_accepts_none_override_minutes() -> None:
 
 @pytest.mark.parametrize("value", [0, 30, 1440])
 def test_session_instance_update_accepts_valid_override_minutes(value: int) -> None:
-    from app.sessions.models import SessionInstanceUpdate
+    from app.sessions.schemas import SessionInstanceUpdate
 
     payload = SessionInstanceUpdate(
         checkin_window_before_minutes=value, checkin_window_after_minutes=value
@@ -374,7 +374,7 @@ def test_session_instance_update_rejects_negative_override_minutes(
 ) -> None:
     from pydantic import ValidationError
 
-    from app.sessions.models import SessionInstanceUpdate
+    from app.sessions.schemas import SessionInstanceUpdate
 
     with pytest.raises(ValidationError):
         SessionInstanceUpdate(checkin_window_before_minutes=value)
@@ -386,7 +386,7 @@ def test_session_instance_update_rejects_over_max_override_minutes(
 ) -> None:
     from pydantic import ValidationError
 
-    from app.sessions.models import SessionInstanceUpdate
+    from app.sessions.schemas import SessionInstanceUpdate
 
     with pytest.raises(ValidationError):
         SessionInstanceUpdate(checkin_window_after_minutes=value)

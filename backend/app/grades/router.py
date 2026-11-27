@@ -7,11 +7,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.grades.dependencies import get_grade_repo
-from app.grades.models import (
+from app.grades.repository import AbstractGradeRepository
+from app.grades.schemas import (
     CurrentGradeResponse,
     Grade,
     GradeHistoryEntry,
@@ -19,7 +20,6 @@ from app.grades.models import (
     SetGradeRequest,
     SetGradeResponse,
 )
-from app.grades.repository import AbstractGradeRepository
 from app.members.dependencies import get_member_repo
 from app.members.repository import AbstractMemberRepository
 

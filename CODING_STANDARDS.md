@@ -37,8 +37,7 @@ Each feature is a package under `backend/app/<feature>/`, split by layer:
 - `dependencies.py`: the `Depends` providers that wire the above together
 
 `schemas.py` follows the common FastAPI convention, where `models` would read as
-database tables. Six older features still name the file `models.py`, pending
-the rename in #617; new code uses `schemas.py`. Extra modules (`service.py`,
+database tables. Extra modules (`service.py`,
 `erasure.py`, `checkin_window.py`) are fine when they hide real logic; do not
 add one only to forward calls.
 

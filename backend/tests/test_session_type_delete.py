@@ -27,7 +27,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.dependencies import get_uow
 from app.main import app
 from app.sessions.dependencies import (

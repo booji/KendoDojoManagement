@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 
 _ADMIN = AccountClaims(sub=str(uuid.uuid4()), email="a@dojo.test", role="admin")

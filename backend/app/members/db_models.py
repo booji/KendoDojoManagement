@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, CheckConstraint, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import IsoDate, UUIDBase, UUIDType
-from app.members.models import MembershipStatus
+from app.members.schemas import MembershipStatus
 
 # Who may sign in, and keep using an Auth Session they already hold (#484):
 # a Member whose Membership Status is neither of these. `inactive` keeps

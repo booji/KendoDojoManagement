@@ -18,7 +18,7 @@ from sqlalchemy import insert, select
 
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from tests.account_support import seed_account
 

@@ -22,7 +22,7 @@ from typing import Any
 
 from app import config
 from app.auth.auth_session_repository import AbstractAuthSessionRepository
-from app.auth.models import AccountClaims, AuthSessionKind
+from app.auth.schemas import AccountClaims, AuthSessionKind
 
 _RECOVERY_LIFETIME = timedelta(minutes=15)
 

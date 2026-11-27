@@ -35,12 +35,12 @@ from app.auth.auth_session_repository import AbstractAuthSessionRepository
 from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.dependencies import get_auth_session_repo
-from app.auth.models import (
+from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
+from app.auth.schemas import (
     AccountClaims,
     PasskeyRegisterCompleteRequest,
     SetupBeginRequest,
 )
-from app.auth.passkey_service import register_passkey_begin, register_passkey_complete
 from app.auth.session_cookie import set_session_cookie
 from app.core.security_logger import log_security_event
 from app.db.unit_of_work import AbstractUnitOfWork

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.attendance.db_models import Attendance
 from app.members.db_models import Member
-from app.members.models import member_name
+from app.members.schemas import member_name
 from app.sessions.db_models import SessionInstance
 from app.sessions.envelope import session_time_envelope
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.members.models import MembershipStatus, member_name
+from app.members.schemas import MembershipStatus, member_name
 
 # An Absent Member has no Attendance in this many days (GLOSSARY.md).
 _ABSENT_AFTER = timedelta(days=14)
@@ -211,8 +211,8 @@ class SqlReportRepository(AbstractReportRepository):
     async def members_report(self) -> list[dict[str, Any]]:
         from sqlalchemy import select
 
-        from app.grades.models import Grade
         from app.grades.repository import SqlGradeRepository
+        from app.grades.schemas import Grade
         from app.members.db_models import Member
 
         members_result = await self._session.execute(select(Member))
@@ -250,8 +250,8 @@ class SqlReportRepository(AbstractReportRepository):
 
         from sqlalchemy import select
 
-        from app.grades.models import Grade
         from app.grades.repository import SqlGradeRepository
+        from app.grades.schemas import Grade
         from app.members.db_models import Member
 
         result = await self._session.execute(

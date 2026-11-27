@@ -32,7 +32,7 @@ from app.auth.accounts import account_for_email, may_sign_in
 from app.auth.db_models import Account, PasskeyCredential
 from app.auth.invite_repository import AbstractInviteRepository, SqlInviteRepository
 from app.auth.member_directory import member_directory_for
-from app.auth.models import (
+from app.auth.schemas import (
     InviteCreateRequest,
     InviteRedeemCompleteRequest,
     PasskeyRegisterCompleteResponse,

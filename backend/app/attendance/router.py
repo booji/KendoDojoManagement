@@ -10,18 +10,18 @@ from app.attendance.dependencies import (
     get_attendance_repo,
     get_session_instance_repo,
 )
-from app.attendance.models import (
+from app.attendance.repository import (
+    AbstractAttendanceRepository,
+    AbstractSessionInstanceRepository,
+)
+from app.attendance.schemas import (
     AddVisitorRequest,
     AttendanceRead,
     MarkAttendedRequest,
     MemberAttendanceRead,
 )
-from app.attendance.repository import (
-    AbstractAttendanceRepository,
-    AbstractSessionInstanceRepository,
-)
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_current_member_id

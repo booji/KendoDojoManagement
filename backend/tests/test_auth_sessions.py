@@ -20,7 +20,7 @@ from app.auth.auth_sessions import (
     slid_expiry,
     start_auth_session,
 )
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
 _MEMBER = AccountClaims(sub="member-uuid", email="member@dojo.test", role="member")

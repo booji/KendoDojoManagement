@@ -11,7 +11,7 @@ from app import config
 from app.attendance.dependencies import get_attendance_repo
 from app.attendance.repository import AbstractAttendanceRepository
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.dependencies import get_uow
 from app.members.dependencies import get_current_member_id
@@ -22,7 +22,12 @@ from app.sessions.dependencies import (
     get_session_type_repo,
 )
 from app.sessions.ical import build_ical, feed_url_name
-from app.sessions.models import (
+from app.sessions.repository import (
+    AbstractSessionInstanceRepository,
+    AbstractSessionTemplateRepository,
+    AbstractSessionTypeRepository,
+)
+from app.sessions.schemas import (
     GenerateRequest,
     SegmentCreate,
     SessionInstanceCreate,
@@ -35,11 +40,6 @@ from app.sessions.models import (
     SessionTypeCreate,
     SessionTypeRead,
     SessionTypeUpdate,
-)
-from app.sessions.repository import (
-    AbstractSessionInstanceRepository,
-    AbstractSessionTemplateRepository,
-    AbstractSessionTypeRepository,
 )
 from app.settings.dependencies import get_dojo_settings_repo
 from app.settings.repository import AbstractDojoSettingsRepository

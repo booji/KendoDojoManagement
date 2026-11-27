@@ -18,7 +18,7 @@ from urllib.parse import quote
 import httpx
 from playwright.sync_api import Page, expect
 
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.sessions.ical import feed_url_name
 from tests.e2e_support import (
     complete_onboarding,

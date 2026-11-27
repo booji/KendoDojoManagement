@@ -21,7 +21,7 @@ from sqlalchemy import func, insert, select, update
 from app.auth.auth_session_repository import SqlAuthSessionRepository
 from app.auth.auth_sessions import start_auth_session
 from app.auth.db_models import PasskeyCredential
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account
