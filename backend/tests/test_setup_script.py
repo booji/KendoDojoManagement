@@ -464,10 +464,13 @@ class Host:
             "SYSTEMCTL_LOG": str(self.systemctl_log),
         }
 
-    def run(self, *answers: str, expect: int = 0) -> subprocess.CompletedProcess:
+    def run(
+        self, *answers: str, ports: str = "1", expect: int = 0
+    ) -> subprocess.CompletedProcess:
+        """`ports` answers the first question, how Traefik gets 80/443 (#575)."""
         result = subprocess.run(
             ["bash", str(self.src / "setup.sh"), "--quadlet"],
-            input="".join(f"{a}\n" for a in answers),
+            input="".join(f"{a}\n" for a in (ports, *answers)),
             capture_output=True,
             text=True,
             cwd=self.src,
@@ -728,6 +731,27 @@ def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
             "Image=ghcr.io/booji/kendodojomanagement:0.1.0-rc1"
             in (host.units() / unit).read_text()
         ), unit
+
+
+PORT_FORWARD = "kendo-traefik.container.d/30-port-forward.conf"
+
+
+def test_quadlet_port_forward_publishes_traefik_on_unprivileged_ports(tmp_path):
+    # #575: the hardened alternative to the sysctl keeps ports < 1024
+    # privileged. A drop-in, because an upgrade re-copies the unit; the empty
+    # PublishPort= clears its 80:80 / 443:443 rather than adding to them.
+    host = Host(tmp_path)
+    out = host.run(*ANSWERS, ports="2")
+
+    dropin = (host.units() / PORT_FORWARD).read_text()
+    publish = [ln for ln in dropin.splitlines() if ln.startswith("PublishPort=")]
+    assert publish == ["PublishPort=", "PublishPort=8080:80", "PublishPort=8443:443"]
+    # Printed for an admin account to run, never run: it needs root.
+    assert (
+        "sudo firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toport=8080"
+        " --add-forward-port=port=443:proto=tcp:toport=8443" in out.stdout
+    )
+    assert "ip_unprivileged_port_start" not in out.stdout
 
 
 def test_quadlet_without_podman_prints_every_prerequisite_and_writes_nothing(tmp_path):
@@ -1268,6 +1292,77 @@ def test_check_only_warns_when_firewalld_will_not_report_without_root(tmp_path):
     )
 
 
+FORWARDS = (
+    "port=80:proto=tcp:toport=8080:toaddr=\nport=443:proto=tcp:toport=8443:toaddr="
+)
+
+
+def forwarding_firewalld(forwards: str = FORWARDS) -> str:
+    return (
+        'case "$*" in *--list-forward-ports*) printf "%s\\n" '
+        f'"{forwards}" ;; *) echo ssh http https ;; esac'
+    )
+
+
+def test_check_quadlet_port_forward_needs_no_sysctl_but_both_forwards(tmp_path):
+    # #575: on this path the < 1024 restriction is the point, so the sysctl is
+    # not outstanding; the two forward-port rules are what make 80/443 work.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    green = check(
+        host.src,
+        host_env(tmp_path, sysctl="echo 1024", firewall_cmd=forwarding_firewalld()),
+        "--quadlet",
+    )
+    assert green.returncode == 0, green.stdout
+    assert "ip_unprivileged_port_start" not in green.stdout
+
+    one_missing = check(
+        host.src,
+        host_env(
+            tmp_path,
+            firewall_cmd=forwarding_firewalld("port=80:proto=tcp:toport=8080:toaddr="),
+        ),
+        "--quadlet",
+    )
+    assert one_missing.returncode == 1
+    assert "FAIL  firewalld is not forwarding 80/443 to 8080/8443" in one_missing.stdout
+    assert "--add-forward-port=port=443:proto=tcp:toport=8443" in one_missing.stdout
+
+
+def test_check_quadlet_port_forward_looks_at_the_ports_podman_binds(tmp_path):
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+    taken = (
+        'case "$*" in *":8443"*) echo "LISTEN 0 511 0.0.0.0:8443 0.0.0.0:* '
+        'users:((\\"java\\",pid=812,fd=6))" ;; esac'
+    )
+
+    out = check(
+        host.src,
+        host_env(tmp_path, ss=taken, firewall_cmd=forwarding_firewalld()),
+        "--quadlet",
+    )
+
+    assert out.returncode == 1
+    assert "ok    :8080 is free" in out.stdout
+    assert "FAIL  :8443 is taken by java" in out.stdout
+    assert ":80 " not in out.stdout
+
+
+def test_quadlet_rerun_keeps_the_port_forward_and_can_go_back(tmp_path):
+    # The drop-in is the record: a re-run defaults to it, so pressing Enter
+    # through an upgrade's re-run never reverts to the sysctl.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+    host.run(*ANSWERS, ports="")
+    assert (host.units() / PORT_FORWARD).exists()
+
+    host.run(*ANSWERS, ports="1")
+    assert not (host.units() / PORT_FORWARD).exists()
+
+
 # ---------------------------------------------------------------- upgrade ---
 # `./setup.sh upgrade` (#414): back up, pull, recreate — and on failure, the
 # exact restore for the backup just taken. podman and podman-compose are
@@ -1573,7 +1668,7 @@ def test_install_offers_a_backup_key_and_a_rerun_keeps_it(tmp_path):
 
     # At a terminal, as an operator would be: script(1) gives setup.sh a pty.
     command = f"bash {host.src / 'setup.sh'} --quadlet"
-    answers = ("dojo.example.com", "1", "1", "admin@example.com", "", secret[-6:])
+    answers = ("1", "dojo.example.com", "1", "1", "admin@example.com", "", secret[-6:])
     out = subprocess.run(
         ["script", "-qec", command, "/dev/null"],
         input="".join(f"{a}\n" for a in answers),

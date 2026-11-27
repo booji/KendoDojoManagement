@@ -49,19 +49,27 @@ podman --version             # confirm >= 4.4 (Quadlet); 5.x expected
 
 ### 1.2 Allow rootless binding of ports 80/443
 
-Rootless containers can't bind ports <1024 by default. Write the one-line sysctl drop-in:
+Rootless containers can't bind ports <1024 by default. There are two ways round it; `setup.sh --quadlet` asks which one you took (§2-4), and `./setup.sh check --quadlet` checks the one you chose.
+
+**1) The sysctl** (setup.sh's default). Write the one-line sysctl drop-in:
 
 ```bash
 echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf
 sudo sysctl --system
 ```
 
-> **Trade-off:** any unprivileged process may now bind ports ≥80 — fine on a single-purpose appliance. **Hardened alternative** (keeps the <1024 restriction): leave the sysctl out, set Traefik to publish `8080:80`/`8443:443`, and add a firewalld redirect:
-> ```bash
-> sudo firewall-cmd --permanent --add-forward-port=port=443:proto=tcp:toport=8443
-> sudo firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toport=8080
-> sudo firewall-cmd --reload
-> ```
+> **Trade-off:** any unprivileged process may now bind ports ≥80 — fine on a single-purpose appliance.
+
+**2) The firewalld port forward** (hardened: keeps the <1024 restriction). Leave the sysctl out and redirect 80/443 to 8080/8443:
+
+```bash
+sudo firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toport=8080 --add-forward-port=port=443:proto=tcp:toport=8443
+sudo firewall-cmd --reload
+```
+
+Answer `2` to setup.sh's first question and it publishes Traefik on `8080:80`/`8443:443` with a `30-port-forward.conf` drop-in in `~/.config/containers/systemd/kendo-traefik.container.d/` — no edit to the unit, so taking a new unit from a release does not revert it, and a re-run of setup.sh offers the same answer again. It prints the `firewall-cmd` line above whenever it cannot see both rules (as `kendo` it usually cannot: firewalld answers root alone), and never runs it.
+
+The client IP survives the forward with Podman 5's default port forwarder, `pasta`, so `TRUST_PROXY_XFF` rate limiting (§6) still sees each visitor. With `slirp4netns`/`rootlessport` every connection would arrive from one internal address and all visitors would share one rate-limit bucket.
 
 ### 1.3 Open the firewall
 
@@ -114,7 +122,7 @@ podman run --rm ghcr.io/booji/kendodojomanagement:0.1 init | tar -x
 ./setup.sh --quadlet
 ```
 
-`setup.sh --quadlet` asks for the domain, the TLS option and the ACME
+`setup.sh --quadlet` asks how Traefik gets 80/443 (§1.2), the domain, the TLS option and the ACME
 challenge, then does every mechanical step that used to be three sections of
 transcription here:
 
