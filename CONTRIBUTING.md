@@ -3,6 +3,12 @@
 Thanks for helping. The [contributing docs](docs/contributing/) cover the dev stack, the tests and the TDD workflow; this page is the branch
 and pull request rules.
 
+For now, only the repository's collaborators can open pull requests (the
+repository's pull request permission is set to collaborators only). Anyone can
+open an [issue](https://github.com/booji/KendoDojoManagement/issues): report a
+bug, propose a change or ask a question there. The rest of this page is for
+collaborators.
+
 ## Branches
 
 - Branch from `develop` and open your pull request against `develop`. It is
@@ -26,9 +32,8 @@ with `GH013: Repository rule violations`.
 | `v*` tags | Only the maintainer creates, moves or deletes one. | the maintainer |
 
 Every change, the maintainer's included, reaches `develop` or `main` as a
-green pull request. No approval count is required: only accounts with write
-access can merge, and a first-time contributor's fork PR runs its checks only
-after the maintainer approves it.
+green pull request. No approval count is required: only collaborators can
+open or merge a pull request.
 
 ## Pull request titles
 
