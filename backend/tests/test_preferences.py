@@ -19,7 +19,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.accounts.dependencies import get_account_prefs_repo
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 
 # ---------------------------------------------------------------------------

@@ -27,7 +27,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.settings.dependencies import get_dojo_settings_repo
 from tests.fake_repositories import (

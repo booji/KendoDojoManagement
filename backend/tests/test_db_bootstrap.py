@@ -219,7 +219,7 @@ async def test_database_already_at_head_stays_at_head(
         import app.member_federations.db_models  # noqa: F401
         import app.members.db_models  # noqa: F401
         import app.sessions.db_models  # noqa: F401
-        import app.settings.models  # noqa: F401
+        import app.settings.schemas  # noqa: F401
         from app.db.base import Base
 
         async with engine.begin() as conn:
@@ -287,7 +287,7 @@ async def test_legacy_database_at_current_schema_needs_stamp_head(
         import app.member_federations.db_models  # noqa: F401
         import app.members.db_models  # noqa: F401
         import app.sessions.db_models  # noqa: F401
-        import app.settings.models  # noqa: F401
+        import app.settings.schemas  # noqa: F401
         from app.db.base import Base
 
         async with engine.begin() as conn:

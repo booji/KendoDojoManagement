@@ -23,7 +23,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.sessions.dependencies import (
     get_session_instance_repo,
@@ -234,8 +234,9 @@ async def test_list_sessions_with_date_range(type_repo, instance_repo) -> None:
 
 async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
     """GET /sessions without params must return only future (today or later) sessions
-    AND each returned instance must include the new info/coach_notes fields
-    (new fields required by issue #50).
+    AND each returned instance must include info, a field issue #50 added.
+    coach_notes, added with it, is admin-only and absent from a member's
+    response (#619).
     """
     app.dependency_overrides[REQUIRE_MEMBER] = _member_override
     instance_repo = InMemorySessionInstanceRepository()
@@ -289,8 +290,9 @@ async def test_list_sessions_no_params_returns_upcoming(type_repo) -> None:
         assert "info" in session, (
             f"Field 'info' missing from session {session.get('id')}"
         )
-        assert "coach_notes" in session, (
-            f"Field 'coach_notes' missing from session {session.get('id')}"
+        # A member's read model has no coach_notes at all (#619).
+        assert "coach_notes" not in session, (
+            f"Admin-only 'coach_notes' reached a member in {session.get('id')}"
         )
         assert "checkin_link" in session, (
             f"Field 'checkin_link' missing from session {session.get('id')}"

@@ -25,7 +25,7 @@ import app.grades.db_models  # noqa: F401
 import app.member_federations.db_models  # noqa: F401
 import app.members.db_models  # noqa: F401
 import app.sessions.db_models  # noqa: F401
-import app.settings.models  # noqa: F401
+import app.settings.schemas  # noqa: F401
 from app.accounts.router import router as accounts_router
 from app.attendance.router import router as attendance_router
 from app.auth.attempt_repository import SqlAttemptRepository

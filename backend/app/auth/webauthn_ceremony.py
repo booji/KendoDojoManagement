@@ -69,7 +69,7 @@ from webauthn.helpers.structs import (
 )
 
 from app import config
-from app.auth.models import PasskeyCredentialResponse
+from app.auth.schemas import PasskeyCredentialResponse
 
 # Rule 1 and 2, in one object used by every registration ceremony, real and
 # decoy alike.
@@ -139,7 +139,7 @@ def to_authentication_credential(
 
 
 # RFC 5321 caps an address at 254 octets and email_validator enforces that
-# (app.auth.models.LenientEmail), so every real invitee address fits inside
+# (app.auth.schemas.LenientEmail), so every real invitee address fits inside
 # this width with room to pad. Both invite outcomes are padded to it; see
 # `invite_begin`.
 _INVITE_NAME_OCTETS = 254

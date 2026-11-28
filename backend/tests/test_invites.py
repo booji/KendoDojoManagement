@@ -59,7 +59,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, insert, select, update
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.members.db_models import Member
 from tests.account_support import seed_account, seed_member

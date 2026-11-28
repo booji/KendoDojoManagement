@@ -67,7 +67,7 @@ def cookies_for():
 
     No DB is involved: see ``tests.auth_support.sign_in``.
     """
-    from app.auth.models import AccountClaims
+    from app.auth.schemas import AccountClaims
     from tests.auth_support import sign_in
 
     def _make(claims: "AccountClaims") -> dict[str, str]:
@@ -124,7 +124,7 @@ def _default_current_member_id():
     from fastapi import Depends
 
     from app.auth.guards import REQUIRE_MEMBER
-    from app.auth.models import AccountClaims
+    from app.auth.schemas import AccountClaims
     from app.main import app
     from app.members.dependencies import get_current_member_id
 

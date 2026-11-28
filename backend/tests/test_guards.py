@@ -18,7 +18,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER, require_role
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from tests.fake_repositories import InMemoryAuthSessionRepository
 
 _ADMIN = AccountClaims(sub="admin-uuid", email="admin@dojo.test", role="admin")

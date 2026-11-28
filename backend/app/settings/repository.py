@@ -58,7 +58,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
     async def get(self) -> dict[str, Any]:
         from sqlalchemy import select
 
-        from app.settings.models import DojoSettings
+        from app.settings.schemas import DojoSettings
 
         result = await self._session.execute(select(DojoSettings).limit(1))
         row = result.scalar_one_or_none()
@@ -93,7 +93,7 @@ class SqlDojoSettingsRepository(AbstractDojoSettingsRepository):
     async def update(self, data: dict[str, Any]) -> dict[str, Any]:
         from sqlalchemy import select
 
-        from app.settings.models import DojoSettings
+        from app.settings.schemas import DojoSettings
 
         result = await self._session.execute(select(DojoSettings).limit(1))
         row = result.scalar_one_or_none()

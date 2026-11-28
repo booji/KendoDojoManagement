@@ -37,6 +37,13 @@ hardened=deploy/traefik
 kendo=$HOME/kendo
 units=$HOME/.config/containers/systemd
 
+# How rootless Traefik gets 80/443 on --quadlet (#575): the sysctl, or a
+# firewalld forward from 80/443 to 8080/8443. The drop-in is the record of the
+# choice: an upgrade re-copies the unit and leaves its drop-ins alone.
+port_forward_dropin=$units/kendo-traefik.container.d/30-port-forward.conf
+port_forward=""
+[ "$mode" != quadlet ] || [ ! -f "$port_forward_dropin" ] || port_forward=1
+
 if [ "$mode" = quadlet ]; then
   required=(deploy/env/kendo-app.env.example "$hardened/traefik.yml"
             "$hardened/dynamic/kendo.yml" "$hardened/dynamic/byo-cert.yml.example"
@@ -89,23 +96,60 @@ detect_prerequisites() {
   outstanding=() unverified=()
   need() { outstanding+=("$1"$'\n      '"$2"); }
 
-  command -v podman >/dev/null || need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
+  if ! command -v podman >/dev/null; then
+    need "Podman is not installed." "sudo dnf install -y podman   # or: sudo apt install -y podman"
+  elif [ "$mode" = quadlet ]; then
+    # The units use keys Quadlet learned in 5.0 (Entrypoint=, drop-ins); an older
+    # generator skips a unit it cannot parse and says so only in the journal.
+    podman_version=$(podman --version 2>/dev/null | awk '{ print $NF }')
+    case $podman_version in
+      [0-4].*) need "Podman $podman_version is too old for the Quadlet units — they need 5.0 or later." \
+        "move to a release that ships Podman 5: AlmaLinux/RHEL 10, Debian 13 or a current Fedora" ;;
+    esac
+  fi
 
+  # The port forward keeps ports < 1024 privileged: Traefik binds 8080/8443.
   port_start=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
-  [ "$port_start" -le 80 ] 2>/dev/null || need \
+  [ -n "$port_forward" ] || [ "$port_start" -le 80 ] 2>/dev/null || need \
     "Rootless Podman cannot bind 80/443 (net.ipv4.ip_unprivileged_port_start=$port_start)." \
     "echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/99-kendo-rootless-ports.conf && sudo sysctl --system"
+
+  # The rules that let traffic in are those of the public (default-route)
+  # interface's zone, which need not be the default zone; an interface firewalld
+  # has not placed is in the default zone. Checked there, and fixed there.
+  fw_zone=""
+  if command -v firewall-cmd >/dev/null; then
+    fw_iface=$(ip route show default 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }' || true)
+    fw_zone=$(firewall-cmd --get-zone-of-interface="$fw_iface" 2>/dev/null) ||
+      fw_zone=$(firewall-cmd --get-default-zone 2>/dev/null) || fw_zone=""
+  fi
+  fw="firewall-cmd${fw_zone:+ --zone=$fw_zone}"
+  forward_cmd="sudo $fw --permanent --add-forward-port=port=80:proto=tcp:toport=8080 --add-forward-port=port=443:proto=tcp:toport=8443 && sudo firewall-cmd --reload"
 
   # Both firewalls answer root alone (polkit for firewalld), and check runs as
   # `kendo`: a refused query says nothing about the rules (#576).
   if command -v firewall-cmd >/dev/null; then
-    if ! fw_services=$(firewall-cmd --list-services 2>/dev/null); then
-      unverified+=("firewalld reports its rules only to root — from an admin account, check that \`sudo firewall-cmd --list-services\` includes http and https.")
+    if ! fw_services=$(firewall-cmd ${fw_zone:+"--zone=$fw_zone"} --list-services 2>/dev/null); then
+      fw_unseen="firewalld reports its rules only to root — from an admin account, check that \`sudo $fw --list-services\` includes http and https"
+      if [ -z "$port_forward" ]; then
+        unverified+=("$fw_unseen.")
+      else
+        unverified+=("$fw_unseen, and that \`sudo $fw --list-forward-ports\` forwards 80 to 8080 and 443 to 8443; if not:"$'\n      '"$forward_cmd")
+      fi
     else
       printf '%s\n' "$fw_services" | grep -qw https || need \
         "firewalld is not allowing http/https." \
-        "sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+        "sudo $fw --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload"
+      if [ -n "$port_forward" ]; then
+        fw_forwards=$(firewall-cmd ${fw_zone:+"--zone=$fw_zone"} --list-forward-ports 2>/dev/null || true)
+        printf '%s\n' "$fw_forwards" | grep -q '^port=80:proto=tcp:toport=8080:' &&
+          printf '%s\n' "$fw_forwards" | grep -q '^port=443:proto=tcp:toport=8443:' || need \
+          "firewalld is not forwarding 80/443 to 8080/8443, where Traefik listens." "$forward_cmd"
+      fi
     fi
+  elif [ -n "$port_forward" ]; then
+    need "firewalld is not installed, and the port forward from 80/443 to Traefik needs it." \
+      "sudo dnf install -y firewalld && sudo systemctl enable --now firewalld && $forward_cmd"
   elif command -v ufw >/dev/null; then
     if ! ufw_status=$(ufw status 2>/dev/null); then
       unverified+=("ufw reports its rules only to root — from an admin account, check that \`sudo ufw status\` allows 80/443.")
@@ -336,9 +380,10 @@ run_check() {
   # Permission to bind is the sysctl prerequisite below; this is the other half,
   # something already listening. After an upgrade the stack itself holds both
   # ports, through rootless Podman's port forwarder.
-  local port holder
+  local port holder ports="80 443"
+  [ -z "$port_forward" ] || ports="8080 8443"
   if command -v ss >/dev/null; then
-    for port in 80 443; do
+    for port in $ports; do
       holder=$(ss -ltnpH "sport = :$port" 2>/dev/null || true)
       case $holder in
         '') ok ":$port is free" ;;
@@ -349,7 +394,7 @@ run_check() {
       esac
     done
   else
-    warn "No \`ss\` here to tell whether 80/443 are already taken."
+    warn "No \`ss\` here to tell whether ${ports/ //} are already taken."
   fi
 
   # Backups (#500, #502): warnings only — an unencrypted, on-host backup is
@@ -652,6 +697,19 @@ esac
 
 echo "KendoDojoManagement — $([ "$mode" = quadlet ] && echo "hardened (Quadlet)" || echo "quick self-host") setup"
 echo
+
+if [ "$mode" = quadlet ]; then
+  cat <<'MENU'
+How Traefik receives ports 80/443 (docs/deployment.md §1.2):
+  1) sysctl: let any unprivileged process bind ports >= 80
+  2) firewalld port forward: Traefik binds 8080/8443, firewalld redirects 80/443 to them
+MENU
+  while :; do
+    ask ports_choice "Choice" "$([ -n "$port_forward" ] && echo 2 || echo 1)"
+    case $ports_choice in 1) port_forward=""; break ;; 2) port_forward=1; break ;; *) echo "  Answer 1 or 2." ;; esac
+  done
+  echo
+fi
 
 while :; do
   ask domain "Public domain the browser will use (bare host, no https://)"
@@ -981,6 +1039,20 @@ Environment=${dns_var}_FILE=/run/secrets/dns_token
 Secret=kendo_dns_token,type=mount,target=dns_token
 DROPIN
     echo "  wrote $dropin/10-dns-01.conf"
+  fi
+  if [ -n "$port_forward" ]; then
+    cat > "$port_forward_dropin" <<'DROPIN'
+# Traefik behind a firewalld forward from 80/443, written by setup.sh --quadlet
+# (#575). The empty PublishPort= clears the unit's 80:80 and 443:443 (a drop-in
+# appends otherwise); needs Podman 5.0+, as every Quadlet drop-in does.
+[Container]
+PublishPort=
+PublishPort=8080:80
+PublishPort=8443:443
+DROPIN
+    echo "  wrote $port_forward_dropin"
+  else
+    rm -f "$port_forward_dropin"
   fi
   if [ "$tls_choice" = 3 ]; then
     mkdir -p "$kendo/traefik/certs"

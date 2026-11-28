@@ -27,7 +27,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 from app.members.dependencies import get_current_member_id
 from app.sessions.envelope import envelope_bounds

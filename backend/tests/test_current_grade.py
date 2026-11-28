@@ -15,7 +15,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.grades.repository import SqlGradeRepository
 from app.main import app
 from app.members.repository import SqlMemberRepository

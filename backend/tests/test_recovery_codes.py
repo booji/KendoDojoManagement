@@ -29,7 +29,7 @@ from httpx import ASGITransport, AsyncClient
 # ---------------------------------------------------------------------------
 # These imports succeed already (they exist in the codebase)
 from app.auth.guards import REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.main import app
 
 # Code format: three 4-char alphanumeric segments separated by hyphens

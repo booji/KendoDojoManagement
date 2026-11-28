@@ -464,10 +464,13 @@ class Host:
             "SYSTEMCTL_LOG": str(self.systemctl_log),
         }
 
-    def run(self, *answers: str, expect: int = 0) -> subprocess.CompletedProcess:
+    def run(
+        self, *answers: str, ports: str = "1", expect: int = 0
+    ) -> subprocess.CompletedProcess:
+        """`ports` answers the first question, how Traefik gets 80/443 (#575)."""
         result = subprocess.run(
             ["bash", str(self.src / "setup.sh"), "--quadlet"],
-            input="".join(f"{a}\n" for a in answers),
+            input="".join(f"{a}\n" for a in (ports, *answers)),
             capture_output=True,
             text=True,
             cwd=self.src,
@@ -730,6 +733,27 @@ def test_quadlet_pins_the_units_to_the_tag_the_bundle_came_from(tmp_path):
         ), unit
 
 
+PORT_FORWARD = "kendo-traefik.container.d/30-port-forward.conf"
+
+
+def test_quadlet_port_forward_publishes_traefik_on_unprivileged_ports(tmp_path):
+    # #575: the hardened alternative to the sysctl keeps ports < 1024
+    # privileged. A drop-in, because an upgrade re-copies the unit; the empty
+    # PublishPort= clears its 80:80 / 443:443 rather than adding to them.
+    host = Host(tmp_path)
+    out = host.run(*ANSWERS, ports="2")
+
+    dropin = (host.units() / PORT_FORWARD).read_text()
+    publish = [ln for ln in dropin.splitlines() if ln.startswith("PublishPort=")]
+    assert publish == ["PublishPort=", "PublishPort=8080:80", "PublishPort=8443:443"]
+    # Printed for an admin account to run, never run: it needs root.
+    assert (
+        "sudo firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toport=8080"
+        " --add-forward-port=port=443:proto=tcp:toport=8443" in out.stdout
+    )
+    assert "ip_unprivileged_port_start" not in out.stdout
+
+
 def test_quadlet_without_podman_prints_every_prerequisite_and_writes_nothing(tmp_path):
     # Detection stays "detect and print, never escalate" (#412) even on the one
     # path that cannot continue: the operator is owed the whole list, not just
@@ -784,7 +808,8 @@ ANSWERS = (DOMAIN, "1", "1", "admin@shinbukan.org")
 GREEN_HOST = {
     "podman": 'case "$1 $2" in "secret inspect") [ -f "$PODMAN_STATE/$3" ] ;; esac',
     "sysctl": "echo 80",
-    "firewall-cmd": "echo ssh http https",
+    "firewall-cmd": 'case "$*" in *--get-*) echo public ;; *) echo ssh http https ;; esac',
+    "ip": 'echo "default via 203.0.113.1 dev eth0 proto static"',
     "id": '[ "$1" = -un ] && echo kendo; exit 0',
     "loginctl": "echo Linger=yes",
     "getent": 'echo "203.0.113.7     STREAM $2"',
@@ -1165,6 +1190,19 @@ def test_check_fails_an_outstanding_prerequisite_with_the_command_that_fixes_it(
     assert "not as `kendo`" not in out.stdout
 
 
+def test_check_quadlet_fails_on_a_podman_too_old_for_the_units(tmp_path):
+    # The units use keys Quadlet learned in 5.0 (Entrypoint=, drop-ins); an
+    # older generator skips a unit it cannot parse, and nothing else says why.
+    host = Host(tmp_path)
+    host.run(*ANSWERS)
+    old = 'case "$1 $2" in "--version ") echo "podman version 4.9.3" ;; esac'
+
+    out = check(host.src, host_env(tmp_path, podman=old), "--quadlet")
+
+    assert out.returncode == 1
+    assert "FAIL  Podman 4.9.3 is too old for the Quadlet units" in out.stdout
+
+
 def test_check_quadlet_says_prerequisites_are_fixed_from_an_admin_account(tmp_path):
     # `kendo` has no sudo: the fix is run from another account (#576).
     host = Host(tmp_path)
@@ -1266,6 +1304,124 @@ def test_check_only_warns_when_firewalld_will_not_report_without_root(tmp_path):
     assert "from an admin account, check that `sudo firewall-cmd --list-services`" in (
         out.stdout
     )
+
+
+FORWARDS = (
+    "port=80:proto=tcp:toport=8080:toaddr=\nport=443:proto=tcp:toport=8443:toaddr="
+)
+
+
+def forwarding_firewalld(forwards: str = FORWARDS) -> str:
+    return (
+        'case "$*" in *--list-forward-ports*) printf "%s\\n" '
+        f'"{forwards}" ;; *--get-*) echo public ;; *) echo ssh http https ;; esac'
+    )
+
+
+def test_check_quadlet_port_forward_needs_no_sysctl_but_both_forwards(tmp_path):
+    # #575: on this path the < 1024 restriction is the point, so the sysctl is
+    # not outstanding; the two forward-port rules are what make 80/443 work.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    green = check(
+        host.src,
+        host_env(tmp_path, sysctl="echo 1024", firewall_cmd=forwarding_firewalld()),
+        "--quadlet",
+    )
+    assert green.returncode == 0, green.stdout
+    assert "ip_unprivileged_port_start" not in green.stdout
+
+    one_missing = check(
+        host.src,
+        host_env(
+            tmp_path,
+            firewall_cmd=forwarding_firewalld("port=80:proto=tcp:toport=8080:toaddr="),
+        ),
+        "--quadlet",
+    )
+    assert one_missing.returncode == 1
+    assert "FAIL  firewalld is not forwarding 80/443 to 8080/8443" in one_missing.stdout
+    assert "--add-forward-port=port=443:proto=tcp:toport=8443" in one_missing.stdout
+
+
+def zoned_firewalld(public_zone: str | None) -> str:
+    """firewalld with the rules in `public`, eth0's zone, and nothing in
+    `home`, the default zone; eth0 in no zone at all when `public_zone` is
+    None."""
+    zone_of_eth0 = f"echo {public_zone}" if public_zone else "echo no zone; exit 2"
+    return f"""case "$*" in
+  *--get-zone-of-interface=eth0*) {zone_of_eth0} ;;
+  *--get-default-zone*) echo home ;;
+  *--zone=public*--list-services*) echo ssh http https ;;
+  *--zone=public*--list-forward-ports*) printf "%s\\n" "{FORWARDS}" ;;
+  *--list-services*) echo ssh ;;
+esac"""
+
+
+def test_check_quadlet_port_forward_reads_the_public_interfaces_zone(tmp_path):
+    # #575: the rules that let traffic in are those of the zone the public
+    # interface (the default route's) is in, which need not be the default zone.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    out = check(
+        host.src,
+        host_env(tmp_path, firewall_cmd=zoned_firewalld("public")),
+        "--quadlet",
+    )
+
+    assert out.returncode == 0, out.stdout
+
+
+def test_check_quadlet_port_forward_falls_back_to_the_default_zone(tmp_path):
+    # An interface firewalld has not placed is in the default zone, so that is
+    # the zone checked, and the zone the printed fixes add to.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+
+    out = check(
+        host.src, host_env(tmp_path, firewall_cmd=zoned_firewalld(None)), "--quadlet"
+    )
+
+    assert out.returncode == 1
+    assert "sudo firewall-cmd --zone=home --permanent --add-service=http" in out.stdout
+    assert (
+        "sudo firewall-cmd --zone=home --permanent"
+        " --add-forward-port=port=80:proto=tcp:toport=8080" in out.stdout
+    )
+
+
+def test_check_quadlet_port_forward_looks_at_the_ports_podman_binds(tmp_path):
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+    taken = (
+        'case "$*" in *":8443"*) echo "LISTEN 0 511 0.0.0.0:8443 0.0.0.0:* '
+        'users:((\\"java\\",pid=812,fd=6))" ;; esac'
+    )
+
+    out = check(
+        host.src,
+        host_env(tmp_path, ss=taken, firewall_cmd=forwarding_firewalld()),
+        "--quadlet",
+    )
+
+    assert out.returncode == 1
+    assert "ok    :8080 is free" in out.stdout
+    assert "FAIL  :8443 is taken by java" in out.stdout
+    assert ":80 " not in out.stdout
+
+
+def test_quadlet_rerun_keeps_the_port_forward_and_can_go_back(tmp_path):
+    # The drop-in is the record: a re-run defaults to it, so pressing Enter
+    # through an upgrade's re-run never reverts to the sysctl.
+    host = Host(tmp_path)
+    host.run(*ANSWERS, ports="2")
+    host.run(*ANSWERS, ports="")
+    assert (host.units() / PORT_FORWARD).exists()
+
+    host.run(*ANSWERS, ports="1")
+    assert not (host.units() / PORT_FORWARD).exists()
 
 
 # ---------------------------------------------------------------- upgrade ---
@@ -1573,7 +1729,7 @@ def test_install_offers_a_backup_key_and_a_rerun_keeps_it(tmp_path):
 
     # At a terminal, as an operator would be: script(1) gives setup.sh a pty.
     command = f"bash {host.src / 'setup.sh'} --quadlet"
-    answers = ("dojo.example.com", "1", "1", "admin@example.com", "", secret[-6:])
+    answers = ("1", "dojo.example.com", "1", "1", "admin@example.com", "", secret[-6:])
     out = subprocess.run(
         ["script", "-qec", command, "/dev/null"],
         input="".join(f"{a}\n" for a in answers),

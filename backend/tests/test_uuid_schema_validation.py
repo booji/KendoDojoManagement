@@ -27,7 +27,7 @@ from app.attendance.dependencies import (
     get_session_instance_repo as get_att_session_instance_repo,
 )
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.dependencies import get_uow
 from app.grades.dependencies import get_grade_repo
 from app.main import app
@@ -134,7 +134,7 @@ def test_mark_attended_request_rejects_non_uuid_member_id() -> None:
     """MarkAttendedRequest.member_id typed as uuid.UUID must raise ValidationError
     when given a plain non-UUID string.  Currently it is `str`, so this passes —
     the test fails (no exception raised) until the fix is applied."""
-    from app.attendance.models import MarkAttendedRequest
+    from app.attendance.schemas import MarkAttendedRequest
 
     with pytest.raises(ValidationError):
         MarkAttendedRequest(member_id="not-a-uuid")

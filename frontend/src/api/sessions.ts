@@ -31,7 +31,8 @@ export type SessionInstance = {
   template_id: string | null
   cancelled: boolean
   info: string | null
-  coach_notes: string | null
+  // Admin-only: absent from a member's response, never sent as null (#619).
+  coach_notes?: string | null
   // The session's one check-in link: tokenless, stable, built by the backend.
   checkin_link: string
   checkin_window_before_minutes: number | null

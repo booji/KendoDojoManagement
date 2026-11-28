@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.grades.db_models import GradeHistory
 from app.members.db_models import Member
-from app.members.models import member_name
+from app.members.schemas import member_name
 
 
 class AbstractGradeRepository(ABC):

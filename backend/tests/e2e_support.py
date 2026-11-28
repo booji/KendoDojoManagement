@@ -31,7 +31,7 @@ from sqlalchemy.pool import NullPool
 from app.attendance.db_models import Attendance
 from app.auth.accounts import delete_account
 from app.auth.db_models import Account
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.grades.db_models import GradeHistory
 from app.member_federations.db_models import MemberFederation
 from app.members.db_models import Member

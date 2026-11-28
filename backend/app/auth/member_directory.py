@@ -24,8 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.unit_of_work import AbstractUnitOfWork
 from app.members.db_models import BARRED_FROM_SIGN_IN, MAY_SIGN_IN, Member
-from app.members.models import MembershipStatus
 from app.members.repository import SqlMemberRepository
+from app.members.schemas import MembershipStatus
 
 __all__ = [
     "MAY_SIGN_IN",

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import field_validator
 
 from app.auth.guards import REQUIRE_ADMIN, REQUIRE_MEMBER
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.core.partial_update import PartialUpdate
 from app.core.security_logger import changed_fields, log_admin_event
 from app.db.unit_of_work import AbstractUnitOfWork

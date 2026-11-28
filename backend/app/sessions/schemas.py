@@ -249,7 +249,10 @@ class SessionInstanceCreate(BaseModel):
         return None if v is None else str(v)
 
 
-class SessionInstanceRead(BaseModel):
+class MemberSessionInstanceRead(BaseModel):
+    """A Session as a member reads it: an allowlist, so an admin-only field
+    added to SessionInstanceRead cannot reach a member by omission (#619)."""
+
     id: str
     title: str
     date: str
@@ -259,7 +262,6 @@ class SessionInstanceRead(BaseModel):
     cancelled: bool = False
     location: str | None = None
     info: str | None = None
-    coach_notes: str | None = None
     # The session's one check-in link (#191). Public, tokenless and stable;
     # filled in by the read path, which owns the origin.
     checkin_link: str | None = None
@@ -268,6 +270,12 @@ class SessionInstanceRead(BaseModel):
     attendance_count: int = 0
     is_checked_in: bool = False
     segments: list[SegmentRead] = []
+
+
+class SessionInstanceRead(MemberSessionInstanceRead):
+    """A Session as an admin reads it: the member shape plus admin-only fields."""
+
+    coach_notes: str | None = None
 
 
 class GenerateRequest(BaseModel):

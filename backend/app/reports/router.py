@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth.guards import REQUIRE_ADMIN
-from app.auth.models import AccountClaims
+from app.auth.schemas import AccountClaims
 from app.core.security_logger import log_admin_event
-from app.members.models import MembershipStatus
+from app.members.schemas import MembershipStatus
 from app.reports.dependencies import get_report_repo
 from app.reports.repository import AbstractReportRepository
 
