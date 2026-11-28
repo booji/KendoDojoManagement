@@ -90,13 +90,14 @@ async def _seed_session(
     *,
     cancelled: bool = False,
     title: str | None = None,
+    start_time: str = "19:00",
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
         "title": title or "Keiko",
         "date": session_date,
         "segments": [
             {
-                "start_time": "19:00",
+                "start_time": start_time,
                 "duration_minutes": 90,
                 "type_ids": [_TYPE_ID],
             }
@@ -139,6 +140,29 @@ async def test_range_query_returns_sessions_within_date_range(
     assert all("2099-06-01" <= s["date"] <= "2099-06-30" for s in sessions), (
         f"Some sessions outside range: {[s['date'] for s in sessions]}"
     )
+
+
+async def test_sessions_are_listed_in_date_and_time_order(
+    type_repo, template_repo, instance_repo
+) -> None:
+    """Sessions come back earliest first, whatever order they were stored in."""
+    app.dependency_overrides[REQUIRE_MEMBER] = _member_override
+
+    await _seed_session(instance_repo, "2099-06-20", title="Third")
+    await _seed_session(instance_repo, "2099-06-10", title="Second", start_time="20:00")
+    await _seed_session(instance_repo, "2099-06-10", title="First", start_time="12:00")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test/api"
+    ) as c:
+        range_response = await c.get(
+            "/sessions", params={"from": "2099-06-01", "to": "2099-06-30"}
+        )
+        upcoming_response = await c.get("/sessions")
+
+    for response in (range_response, upcoming_response):
+        assert response.status_code == 200
+        assert [s["title"] for s in response.json()] == ["First", "Second", "Third"]
 
 
 async def test_range_query_response_has_required_fields(
