@@ -419,9 +419,11 @@ async def list_upcoming_sessions(
             rows, attendance_repo, current_member_id
         )
         visible = enriched if is_admin else _strip_cancelled(enriched)
-        return JSONResponse(
-            [_read_as(is_admin, r).model_dump(mode="json") for r in visible]
-        )
+        reads = [_read_as(is_admin, r).model_dump(mode="json") for r in visible]
+        # Earliest first. The repositories return storage order, and the
+        # calendar and Sessions page group in arrival order (#644).
+        reads.sort(key=lambda s: (s["date"], s["start_time"]))
+        return JSONResponse(reads)
 
     if from_date is not None and to_date is not None:
         return await _finalize(await repo.list_in_range(from_date, to_date))
